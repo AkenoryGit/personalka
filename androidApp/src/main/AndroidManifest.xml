@@ -14,8 +14,13 @@
         android:theme="@style/Theme.Personalka"
         tools:targetApi="31">
 
+        <!-- configChanges: сложение и разложение Fold, поворот и смена размера окна не пересоздают экран —
+             Compose перекладывает его сам, открытый раздел и прокрутка не теряются (ТЗ 5.1).
+             Смена темы (uiMode) пересоздаёт окно: так обновляются цвета системных панелей;
+             состояние при этом сохранено через rememberSaveable. -->
         <activity
             android:name="com.akenory.personalka.android.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
