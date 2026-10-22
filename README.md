@@ -9,4 +9,8 @@
 - [Макеты](docs/mockups/README.md) — экраны этапа 0 в светлой и тёмной теме.
 - [Ход работ](PROGRESS.md) — где остановились и что дальше.
 
-Кода пока нет: он появится на шаге 0.10.
+## Сборка
+
+Каждый push собирает проект в GitHub Actions: тесты, проверки Android и APK. Свежий APK из ветки `main` — в релизе [«Последняя сборка»](https://github.com/AkenoryGit/personalka/releases/tag/latest-build); он ставится поверх прежней версии, данные сохраняются.
+
+Локально: `./gradlew check :androidApp:assembleDebug` (нужна Java 21 и Android SDK).

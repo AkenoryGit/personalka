@@ -18,6 +18,18 @@
 | [`docs/mockups/`](docs/mockups/README.md) | Макеты по страницам: картинки, исходники с холста, решения шагов 0.3–0.8 |
 | [`docs/mockups/design-system/`](docs/mockups/design-system/README.md) | Палитра, шрифты, отступы, элементы; готовые `theme/Color.kt` и `theme/Theme.kt` |
 | [`docs/mockups/icon/`](docs/mockups/icon/README.md) | Иконка: SVG и готовые ресурсы Android в `res/` |
+| `shared/domain`, `shared/data`, `shared/ui` | Общий код (ТЗ 2.2); тема — `shared/ui/.../ui/theme/` |
+| `androidApp`, `server`, `tools/import` | Приложение Android, сервер, утилита импорта; `iosApp` — с шага 5.1 |
+| [`gradle/libs.versions.toml`](gradle/libs.versions.toml) | Все версии: Kotlin, AGP, Compose, библиотеки |
+| [`.github/workflows/build.yml`](.github/workflows/build.yml) | Сборка при каждом push: тесты, lint, APK |
+
+## Сборка
+
+- **Команда:** `./gradlew check :androidApp:assembleDebug` — тесты всех модулей, lint и APK.
+- **В облачной сессии Claude** Maven Central и Google Maven закрыты, Gradle здесь не собирает. Код проверяется в GitHub Actions: push в ветку шага, ожидание `gh run view <id> --json status,conclusion`, ошибки — `gh run view <id> --log-failed`. В `main` — только зелёная сборка.
+- **APK:** артефакт каждой сборки; для `main` — ещё релиз «Последняя сборка» с постоянной ссылкой `releases/download/latest-build/personalka.apk`.
+- **Подпись:** отладочный ключ лежит в `androidApp/debug.keystore`, поэтому каждая новая сборка ставится поверх прежней с сохранением данных. Номер версии — номер сборки в Actions.
+- **Общий код** в `commonMain` — только общий Kotlin, без `java.*` и Android: iOS-цели добавятся на шаге 5.1.
 
 ## Как работаем
 
