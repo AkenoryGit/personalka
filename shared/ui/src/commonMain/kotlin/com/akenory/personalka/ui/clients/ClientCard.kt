@@ -150,14 +150,17 @@ fun ClientCard(
                 if (client.status == ClientStatus.ARCHIVED) {
                     MenuAction("Вернуть из архива", PIcons.Unarchive, {
                         close()
-                        scope.launch { clients.setArchived(clientId, false) }
+                        scope.launch { clients.unarchive(clientId) }
                         messages.show("$name — снова среди активных")
                     })
                 } else {
                     MenuAction("В архив", PIcons.Archive, {
                         close()
-                        scope.launch { clients.setArchived(clientId, true) }
-                        messages.showUndo("$name в архиве") { scope.launch { clients.setArchived(clientId, false) } }
+                        // Сообщение — когда запись прошла: «Отменить» возвращает и места в группах (4.4).
+                        scope.launch {
+                            val undo = clients.archive(clientId) ?: return@launch
+                            messages.showUndo("$name в архиве") { scope.launch { clients.undoArchive(undo) } }
+                        }
                     })
                 }
                 HorizontalDivider(color = PersonalkaTheme.colors.divider)

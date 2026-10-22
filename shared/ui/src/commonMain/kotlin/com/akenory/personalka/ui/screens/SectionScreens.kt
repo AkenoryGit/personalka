@@ -30,11 +30,14 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.groups.GroupRoute
+import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
@@ -50,7 +53,7 @@ import kotlinx.datetime.LocalDateTime
 /**
  * Экраны разделов. С шага 1.5 — заготовки: заголовок и пустой экран с тем, в каком шаге раздел появится.
  * Каждый следующий шаг заменяет свою заготовку настоящим экраном: «Ещё → Настройки» — с шага 1.6,
- * «Клиенты» — с шага 1.7.
+ * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8.
  *
  * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
  */
@@ -62,6 +65,7 @@ fun SectionScreen(
     versionName: String,
     settings: SettingsRepository,
     clients: ClientRepository,
+    groups: GroupRepository,
     messages: MessageState,
     scope: CoroutineScope,
 ) {
@@ -87,10 +91,10 @@ fun SectionScreen(
             text = "Месяц, выплаты, коллеги и год — этап 3.",
         )
         Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
-            if (SettingsRoute.isSettings(route)) {
-                SettingsScreen(route, shell, settings, messages, scope, onBack)
-            } else {
-                MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
+            when {
+                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, messages, scope, onBack)
+                GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
+                else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }
         }
     }
@@ -104,7 +108,8 @@ enum class MoreItem(
     val heading: String,
     val text: String,
 ) {
-    GROUPS("groups", "Группы", PIcons.Groups, "Здесь будут группы", "Состав по датам и дети «на раз» — шаг 1.8."),
+    // У «Групп» с шага 1.8 свой экран (ui/groups), заготовка не показывается.
+    GROUPS("groups", "Группы", PIcons.Groups, "Группы", "Состав с датами."),
     SLOTS("slots", "Свободные слоты", PIcons.EventAvailable, "Здесь будут свободные окна", "Поиск окон за период — шаг 4.3."),
     RECONCILE("reconcile", "Сверка с 1С", PIcons.FactCheck, "Здесь будет сверка с 1С", "Отчёт клуба против календаря — шаги 4.1 и 4.2."),
     // У «Настроек» с шага 1.6 свой экран (ui/settings), заготовка не показывается.

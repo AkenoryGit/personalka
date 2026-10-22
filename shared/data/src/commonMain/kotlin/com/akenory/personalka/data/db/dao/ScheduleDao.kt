@@ -58,6 +58,9 @@ interface ScheduleDao {
     @Query("SELECT * FROM series_client WHERE seriesId = :seriesId AND clientId = :clientId")
     suspend fun seriesClientRow(seriesId: String, clientId: String): SeriesClientEntity?
 
+    @Query("SELECT COUNT(*) FROM series WHERE groupId = :groupId AND deletedAt IS NULL")
+    suspend fun seriesCountOfGroup(groupId: String): Int
+
     @Query("DELETE FROM series_client WHERE clientId = :clientId")
     suspend fun eraseSeriesClientsOf(clientId: String)
 }

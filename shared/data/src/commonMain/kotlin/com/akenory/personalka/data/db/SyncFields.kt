@@ -22,6 +22,9 @@ data class SyncFields(
     /** Поля после мягкого удаления в момент [now]. */
     fun deleted(now: Long): SyncFields = copy(updatedAt = now, version = version + 1, deletedAt = now)
 
+    /** Запись снова действует: убранная связь вернулась, удалённое участие ожило. */
+    fun restored(now: Long): SyncFields = copy(updatedAt = now, version = version + 1, deletedAt = null)
+
     companion object {
         /** Поля новой записи тренера [coachId], созданной в момент [now]. */
         fun new(coachId: String, now: Long): SyncFields = SyncFields(coachId, createdAt = now, updatedAt = now)

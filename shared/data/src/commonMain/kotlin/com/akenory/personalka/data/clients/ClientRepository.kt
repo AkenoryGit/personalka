@@ -5,10 +5,13 @@ import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.ClientRelationEntity
+import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.groups.member
+import com.akenory.personalka.data.groups.syncGroupTrainings
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ClientDraft
@@ -18,6 +21,8 @@ import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.client.RelativeLink
 import com.akenory.personalka.domain.client.ScheduleLine
 import com.akenory.personalka.domain.client.StoredRelation
+import com.akenory.personalka.domain.group.GroupRules
+import com.akenory.personalka.domain.group.MemberChange
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.RelationKind
@@ -29,6 +34,9 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.minus
+
+/** Что вернуть по «Отменить» после «В архив»: места в группах, какими они были до архива. */
+data class ArchiveUndo(val clientId: String, val memberships: List<GroupMemberEntity>)
 
 /** Строка списка клиентов (5.8): клиент, постоянное расписание и ближайшая тренировка. */
 data class ClientRow(val client: ClientEntity, val schedule: List<ScheduleLine>, val next: LocalDateTime?)
@@ -148,13 +156,62 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     }
 
     /**
-     * «В архив» и обратно (5.9). Клиент в архиве остаётся в связях и истории.
+     * «В архив» (5.9): клиент остаётся в связях и истории, из групп уходит через состав (4.4) — последний день
+     * в группе вчерашний, в будущих тренировках групп его больше не ждут; прошлое не меняется. Возвращает то,
+     * что вернёт «Отменить» ([undoArchive]); клиента нет или он уже в архиве — `null`.
+     *
      * Серии архивного клиента заканчиваются — это шаг 1.13, где серии пишутся в базу (4.4).
      */
-    suspend fun setArchived(id: String, archived: Boolean) {
+    suspend fun archive(id: String): ArchiveUndo? {
+        val now = clock()
+        val lastDay = ClubTime.today(now).minus(1, DateTimeUnit.DAY)
+        var undo: ArchiveUndo? = null
+        db.withWriteTransaction {
+            val client = clients.client(id)
+            if (client == null || client.status == ClientStatus.ARCHIVED) return@withWriteTransaction
+            clients.upsertClient(client.copy(sync = client.sync.touched(now), status = ClientStatus.ARCHIVED))
+            val memberships = clients.membershipsOf(id)
+            val changed = mutableListOf<GroupMemberEntity>()
+            memberships.groupBy { it.groupId }.forEach { (groupId, mine) ->
+                val before = clients.membersOf(groupId).map { it.member() }
+                mine.forEach { m ->
+                    val change = GroupRules.leave(listOf(m.member()), lastDay).firstOrNull() ?: return@forEach
+                    when (change) {
+                        is MemberChange.End -> clients.upsertGroupMember(m.copy(sync = m.sync.touched(now), toDate = change.lastDay))
+                        is MemberChange.Remove -> clients.upsertGroupMember(m.copy(sync = m.sync.deleted(now)))
+                    }
+                    changed += m
+                }
+                db.syncGroupTrainings(groupId, before, now)
+            }
+            undo = ArchiveUndo(id, changed)
+        }
+        return undo
+    }
+
+    /** «Отменить» после «В архив»: клиент снова действующий, места в группах — как были. */
+    suspend fun undoArchive(undo: ArchiveUndo) {
+        val now = clock()
+        db.withWriteTransaction {
+            val client = clients.client(undo.clientId) ?: return@withWriteTransaction
+            clients.upsertClient(client.copy(sync = client.sync.touched(now), status = ClientStatus.ACTIVE))
+            undo.memberships.groupBy { it.groupId }.forEach { (groupId, old) ->
+                val before = clients.membersOf(groupId).map { it.member() }
+                old.forEach { m ->
+                    val current = clients.groupMember(m.id) ?: return@forEach
+                    clients.upsertGroupMember(m.copy(sync = current.sync.touched(now).copy(deletedAt = m.sync.deletedAt)))
+                }
+                db.syncGroupTrainings(groupId, before, now)
+            }
+        }
+    }
+
+    /** «Вернуть из архива» из меню: клиент снова в списке; в группы его возвращают через состав. */
+    suspend fun unarchive(id: String) {
         val client = clients.client(id) ?: return
-        val status = if (archived) ClientStatus.ARCHIVED else ClientStatus.ACTIVE
-        if (client.status != status) clients.upsertClient(client.copy(sync = client.sync.touched(clock()), status = status))
+        if (client.status != ClientStatus.ACTIVE) {
+            clients.upsertClient(client.copy(sync = client.sync.touched(clock()), status = ClientStatus.ACTIVE))
+        }
     }
 
     /**
@@ -445,6 +502,3 @@ private fun StoredRelation.toEntity(id: String, sync: SyncFields) = ClientRelati
     labelA = labelA,
     labelB = labelB,
 )
-
-/** Запись снова действует: убранная связь вернулась, удалённое участие ожило при объединении. */
-private fun SyncFields.restored(now: Long): SyncFields = touched(now).copy(deletedAt = null)

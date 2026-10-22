@@ -30,10 +30,13 @@ object ClientFormat {
     fun sex(sex: Sex): String = if (sex == Sex.MALE) "Мужской" else "Женский"
 
     /** «Вт, Чт 10:00 · ПТ ББ». */
-    fun schedule(line: ScheduleLine): String {
+    fun schedule(line: ScheduleLine): String = "${daysTime(line)}$DOT${line.typeShort}${NBSP}${line.placeShort}"
+
+    /** Дни и время серии без типа и места: «Вт, Чт 10:00». */
+    fun daysTime(line: ScheduleLine): String {
         val days = DateFormat.WEEK.filter { it in line.weekdays }
             .joinToString(", ") { DateFormat.weekdayShort(it).replaceFirstChar { c -> c.uppercaseChar() } }
-        return "$days${NBSP}${DateFormat.time(line.start)}$DOT${line.typeShort}${NBSP}${line.placeShort}"
+        return "$days${NBSP}${DateFormat.time(line.start)}"
     }
 
     /** Все серии клиента через «;», по первому дню недели; нет серий — `null`. */

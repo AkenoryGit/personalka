@@ -61,7 +61,7 @@ class SettingsUiTest {
 
     @Test
     fun listShowsPlacesAndTypesLikeMockup() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         openPlacesAndTypes()
 
         onNodeWithText("Большой бассейн").assertIsDisplayed()
@@ -74,7 +74,7 @@ class SettingsUiTest {
 
     @Test
     fun editTypeAndSeeNewLine() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         openPlacesAndTypes()
 
         onNodeWithTag(typeRowTag("ПТ")).performClick()
@@ -90,7 +90,7 @@ class SettingsUiTest {
 
     @Test
     fun newTypeFromSettings() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         openPlacesAndTypes()
 
         onNodeWithTag(ADD_TYPE_TAG).performClick()
@@ -107,7 +107,7 @@ class SettingsUiTest {
 
     @Test
     fun archiveTypeAndUndo() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         openPlacesAndTypes()
 
         onNodeWithTag(typeRowTag("Кинезио")).performScrollTo().performClick()
@@ -121,7 +121,7 @@ class SettingsUiTest {
 
     @Test
     fun placesReorderAndAdd() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         openPlacesAndTypes()
 
         // «Выше» у ДБ — то же, что перетащить его на первое место (так же работает TalkBack).
@@ -148,7 +148,7 @@ class SettingsUiTest {
     @Test
     fun typeFormSurvivesUnfolding() = runComposeUiTest {
         var width by mutableStateOf(folded)
-        setContent { Box(Modifier.size(width, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(width, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         openPlacesAndTypes()
         onNodeWithTag(ADD_TYPE_TAG).performClick()
         onNodeWithTag(TYPE_NAME_TAG).performTextInput("Аквааэробика")

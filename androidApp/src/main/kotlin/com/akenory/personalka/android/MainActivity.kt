@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
                 versionName = BuildConfig.VERSION_NAME,
                 settings = app.settings,
                 clients = app.clients,
+                groups = app.groups,
                 backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
             )
         }

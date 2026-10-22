@@ -51,7 +51,7 @@ class FirstRunUiTest {
 
     @Test
     fun nameThenPlacesAndTypesThenCalendar() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
 
         awaitNode(hasText("Начать на телефоне"))
         onNodeWithText("Войти").assertDoesNotExist()
@@ -105,7 +105,7 @@ class FirstRunUiTest {
 
     @Test
     fun doneNeedsAPlaceAndAType() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         awaitNode(hasText("Начать на телефоне"))
         onNodeWithText("Начать на телефоне").performClick()
         onNodeWithTag(LAST_NAME_TAG).performTextInput("Соколов")
@@ -123,7 +123,7 @@ class FirstRunUiTest {
     @Test
     fun newTypeShowsWhatIsMissing() = runComposeUiTest {
         var width by mutableStateOf(folded)
-        setContent { Box(Modifier.size(width, height)) { App("0.1.0", settings, TestData.clientsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(width, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), clock = TestData.clock) } }
         awaitNode(hasText("Начать на телефоне"))
         onNodeWithText("Начать на телефоне").performClick()
         onNodeWithTag(LAST_NAME_TAG).performTextInput("Соколов")

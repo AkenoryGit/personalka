@@ -45,6 +45,13 @@ interface ClientDao {
     @Query("SELECT * FROM client_group WHERE id = :id")
     suspend fun group(id: String): GroupEntity?
 
+    /** Группы тренера (5.10). Порядок — в коде. */
+    @Query("SELECT * FROM client_group WHERE deletedAt IS NULL")
+    fun observeGroups(): Flow<List<GroupEntity>>
+
+    @Query("SELECT * FROM client_group WHERE deletedAt IS NULL")
+    suspend fun groups(): List<GroupEntity>
+
     @Upsert
     suspend fun upsertGroupMember(item: GroupMemberEntity)
 
@@ -64,6 +71,17 @@ interface ClientDao {
 
     @Query("SELECT * FROM group_member WHERE clientId = :clientId AND deletedAt IS NULL")
     suspend fun membershipsOf(clientId: String): List<GroupMemberEntity>
+
+    /** Состав всех групп с датами, и ушедшие: число детей в списке групп, состав в карточке (5.10). */
+    @Query("SELECT * FROM group_member WHERE deletedAt IS NULL")
+    fun observeAllMembers(): Flow<List<GroupMemberEntity>>
+
+    /** Все записи состава группы с датами. */
+    @Query("SELECT * FROM group_member WHERE groupId = :groupId AND deletedAt IS NULL")
+    suspend fun membersOf(groupId: String): List<GroupMemberEntity>
+
+    @Query("SELECT * FROM group_member WHERE id = :id")
+    suspend fun groupMember(id: String): GroupMemberEntity?
 
     @Query("DELETE FROM group_member WHERE clientId = :clientId")
     suspend fun eraseMembershipsOf(clientId: String)

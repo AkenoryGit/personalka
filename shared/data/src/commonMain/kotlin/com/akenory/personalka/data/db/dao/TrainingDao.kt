@@ -51,6 +51,23 @@ interface TrainingDao {
     @Query("SELECT * FROM training WHERE seriesId = :seriesId AND deletedAt IS NULL ORDER BY start")
     suspend fun trainingsOfSeries(seriesId: String): List<TrainingEntity>
 
+    /** Тренировки группы по времени, отменённые тоже (5.10). */
+    @Query("SELECT * FROM training WHERE groupId = :groupId AND deletedAt IS NULL ORDER BY start")
+    suspend fun trainingsOfGroup(groupId: String): List<TrainingEntity>
+
+    @Query("SELECT * FROM training WHERE groupId = :groupId AND deletedAt IS NULL ORDER BY start")
+    fun observeTrainingsOfGroup(groupId: String): Flow<List<TrainingEntity>>
+
+    /** Участие детей в тренировках группы: посещаемость в карточке группы. */
+    @Query(
+        """
+        SELECT p.* FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        WHERE t.groupId = :groupId AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        """
+    )
+    fun observeParticipationsOfGroup(groupId: String): Flow<List<ParticipationEntity>>
+
     @Upsert
     suspend fun upsertParticipation(item: ParticipationEntity)
 

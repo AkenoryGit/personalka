@@ -133,10 +133,11 @@ class ClientRepositoryTest {
     @Test
     fun archiveAndBack(): Unit = runBlocking {
         val id = create("Захаров", "Никита")
-        repo.setArchived(id, true)
+        assertNotNull(repo.archive(id))
         assertEquals(ClientStatus.ARCHIVED, client(id).status)
         assertEquals(listOf(ClientStatus.ARCHIVED), repo.rows(now).first().map { it.client.status })
-        repo.setArchived(id, false)
+        assertNull(repo.archive(id), "Второй раз в архив не убирается")
+        repo.unarchive(id)
         assertEquals(ClientStatus.ACTIVE, client(id).status)
     }
 
@@ -210,7 +211,7 @@ class ClientRepositoryTest {
         val artem = create("Ковалёв", "Артём", Sex.MALE)
         val alisa = create("Ковалёва", "Алиса", Sex.FEMALE)
         repo.addRelation(artem, alisa, RelationRole(RelationKind.SIBLING))
-        repo.setArchived(alisa, true)
+        repo.archive(alisa)
         val row = repo.relatives(artem, today).first().single()
         assertEquals(ClientStatus.ARCHIVED, row.relative.status)
     }

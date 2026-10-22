@@ -63,7 +63,7 @@ class ClientsUiTest {
     private fun all() = runBlocking { clients.rows(TestData.now).first() }
 
     private fun ComposeUiTest.show(width: () -> androidx.compose.ui.unit.Dp = { folded }) {
-        setContent { Box(Modifier.size(width(), height)) { App("0.1.0", settings, clients, clock = TestData.clock) } }
+        setContent { Box(Modifier.size(width(), height)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), clock = TestData.clock) } }
         awaitNode(hasTestTag(navTag(Section.CLIENTS)))
         onNodeWithTag(navTag(Section.CLIENTS)).performClick()
     }
@@ -196,7 +196,7 @@ class ClientsUiTest {
         openCard("Захаров Никита")
 
         menu("В архив")
-        onNodeWithText("Захаров Никита в архиве").assertIsDisplayed()
+        awaitNode(hasText("Захаров Никита в архиве"))
         awaitNode(hasText("В архиве"))
         onNodeWithText("Отменить").performClick()
         waitUntil(timeoutMillis = 5_000) { all().single { it.client.id == id }.client.status == ClientStatus.ACTIVE }

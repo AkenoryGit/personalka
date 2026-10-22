@@ -10,9 +10,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.screens.SectionScreen
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.setup.FirstRun
@@ -30,6 +32,7 @@ import kotlinx.coroutines.flow.map
  *
  * @param settings тренер, места и типы в базе телефона.
  * @param clients клиенты и родственники в базе телефона (шаг 1.7).
+ * @param groups группы и их состав (шаг 1.8).
  * @param backHandler «Назад» системы. Платформа передаёт свой обработчик (на Android — `BackHandler`
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
  *   «Назад» закрывает открытый экран, иначе ведёт на «Главную»; с «Главной» приложение сворачивается.
@@ -40,6 +43,7 @@ fun App(
     versionName: String,
     settings: SettingsRepository,
     clients: ClientRepository,
+    groups: GroupRepository,
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     clock: () -> Long = ::systemMillis,
 ) {
@@ -64,7 +68,7 @@ fun App(
                         todoCount = 0,
                         onNewTraining = { messages.show(NEW_TRAINING_LATER) },
                         immersive = when (shell.section) {
-                            Section.MORE -> SettingsRoute.isForm(shell.top(Section.MORE))
+                            Section.MORE -> shell.top(Section.MORE).let { SettingsRoute.isForm(it) || GroupRoute.isForm(it) }
                             Section.CLIENTS -> ClientRoute.isForm(shell.top(Section.CLIENTS))
                             else -> false
                         },
@@ -76,6 +80,7 @@ fun App(
                             versionName = versionName,
                             settings = settings,
                             clients = clients,
+                            groups = groups,
                             messages = messages,
                             scope = scope,
                         )

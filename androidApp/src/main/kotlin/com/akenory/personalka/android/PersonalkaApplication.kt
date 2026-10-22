@@ -4,6 +4,7 @@ import android.app.Application
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.personalkaDatabase
+import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.settings.SettingsRepository
 
 /**
@@ -14,4 +15,5 @@ class PersonalkaApplication : Application() {
     val database: PersonalkaDatabase by lazy { personalkaDatabase(this) }
     val settings: SettingsRepository by lazy { SettingsRepository(database, System::currentTimeMillis) }
     val clients: ClientRepository by lazy { ClientRepository(database, System::currentTimeMillis) }
+    val groups: GroupRepository by lazy { GroupRepository(database, System::currentTimeMillis) }
 }
