@@ -39,11 +39,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -68,26 +74,36 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akenory.personalka.data.calendar.CalendarTraining
+import com.akenory.personalka.data.calendar.CalendarZone
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.BlockRows
+import com.akenory.personalka.domain.calendar.CalendarBadge
+import com.akenory.personalka.domain.calendar.CalendarBadges
 import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.DayLayoutRules
 import com.akenory.personalka.domain.calendar.DaySpan
+import com.akenory.personalka.domain.calendar.DayZoneRules
 import com.akenory.personalka.domain.calendar.GridHours
 import com.akenory.personalka.domain.calendar.GridView
+import com.akenory.personalka.domain.calendar.ZoneKind
+import com.akenory.personalka.domain.calendar.ZonePlace
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.training.TrainingTime
+import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.TypeColor
+import com.akenory.personalka.ui.theme.dutyFill
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
+import kotlin.math.floor
+import kotlin.math.sqrt
 
 const val CALENDAR_GRID_TAG = "calendar-grid"
 const val CALENDAR_PAGER_TAG = "calendar-pager"
@@ -105,7 +121,10 @@ private val EPOCH = LocalDate(1970, 1, 1)
 /** Листать можно до конца 2099 года. */
 internal val PAGE_COUNT: Int = pageOf(LocalDate(2100, 1, 1))
 
-/** Блок, как его видит тест и TalkBack: строки текста и место в колонке дня, dp от её левого и верхнего края. */
+/**
+ * Блок, как его видит тест и TalkBack: строки текста, видимые значки и место в колонке дня, dp от её левого
+ * и верхнего края.
+ */
 @Immutable
 data class BlockInfo(
     val id: String,
@@ -116,15 +135,27 @@ data class BlockInfo(
     val width: Float,
     val height: Float,
     val cancelled: Boolean,
+    val badges: List<CalendarBadge> = emptyList(),
 )
 
 /** Метка «+N», как её видит тест: подпись и скрытые тренировки. */
 @Immutable
 data class MoreInfo(val label: String, val ids: List<String>, val x: Float, val y: Float, val width: Float, val height: Float)
 
-/** Блоки и метки «+N» колонки дня. */
+/**
+ * Зона, как её видит тест: подпись, дорожка полоски, минуты суток и место в колонке дня — dp от верхнего края,
+ * в пределах сетки. Во всю ширину колонки, под тренировками.
+ */
 @Immutable
-data class DayBlocks(val blocks: List<BlockInfo>, val more: List<MoreInfo>)
+data class ZoneInfo(val place: ZonePlace, val label: String, val y: Float, val height: Float) {
+    val id: String get() = place.zone.id
+    val kind: ZoneKind get() = place.zone.kind
+    val lane: Int get() = place.lane
+}
+
+/** Блоки, метки «+N» и зоны колонки дня; зоны — в порядке рисования, снизу вверх. */
+@Immutable
+data class DayBlocks(val blocks: List<BlockInfo>, val more: List<MoreInfo>, val zones: List<ZoneInfo> = emptyList())
 
 val CalendarBlocks = SemanticsPropertyKey<DayBlocks>("CalendarBlocks")
 var SemanticsPropertyReceiver.calendarBlocks by CalendarBlocks
@@ -185,6 +216,8 @@ class DayGridState(top: Float, hourDp: Float) {
  * дней. Всё рисуется на Canvas, а прокрутка только сдвигает готовую картинку: блоки при ней не перерисовываются.
  *
  * @param itemsOf тренировки дня, отменённые тоже.
+ * @param zonesOf дежурства и запреты дня.
+ * @param onZone нажатие на полоску или видимую часть зоны.
  * @param onZoomEnd щипок закончен — масштаб пора запомнить.
  */
 @Composable
@@ -194,8 +227,10 @@ internal fun DayGrid(
     hours: GridHours,
     now: LocalDateTime,
     itemsOf: (LocalDate) -> List<CalendarTraining>,
+    zonesOf: (LocalDate) -> List<CalendarZone>,
     onOpen: (CalendarTraining) -> Unit,
     onMore: (List<CalendarTraining>) -> Unit,
+    onZone: (CalendarZone) -> Unit,
     onZoomEnd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -247,7 +282,7 @@ internal fun DayGrid(
                 key = { it },
             ) { page ->
                 val date = dateOfPage(page)
-                DayColumn(date, itemsOf(date), hours, hourDp, now, scrollPx, onOpen, onMore)
+                DayColumn(date, itemsOf(date), zonesOf(date), hours, hourDp, now, scrollPx, onOpen, onMore, onZone)
             }
         }
     }
@@ -312,19 +347,21 @@ private fun TimeColumn(hours: GridHours, hourDp: Float, scrollPx: () -> Float) {
 }
 
 /**
- * Колонка дня. Слои снизу вверх (ТЗ 5.3): фон дня и приглушённое прошлое → линии сетки → тренировки → линия «сейчас».
- * Дежурства и запреты встанут между фоном и линиями в шаге 1.10.
+ * Колонка дня. Слои снизу вверх (ТЗ 5.3): фон дня и приглушённое прошлое → дежурства → запреты и полоски зон →
+ * линии сетки → тренировки со значками → линия «сейчас».
  */
 @Composable
 private fun DayColumn(
     date: LocalDate,
     items: List<CalendarTraining>,
+    zones: List<CalendarZone>,
     hours: GridHours,
     hourDp: Float,
     now: LocalDateTime,
     scrollPx: () -> Float,
     onOpen: (CalendarTraining) -> Unit,
     onMore: (List<CalendarTraining>) -> Unit,
+    onZone: (CalendarZone) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val measurer = rememberTextMeasurer()
@@ -333,16 +370,28 @@ private fun DayColumn(
         meta = MaterialTheme.typography.bodySmall.copy(lineHeight = 16.sp).tabular(),
         more = MaterialTheme.typography.labelMedium.tabular(),
     )
+    val icons = BadgeIcons(
+        ruble = rememberVectorPainter(PIcons.BadgeRuble),
+        warning = rememberVectorPainter(PIcons.BadgeWarning),
+        layers = rememberVectorPainter(PIcons.BadgeLayers),
+        check = rememberVectorPainter(PIcons.BadgeCheck),
+    )
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val widthDp = maxWidth.value
-        val day = remember(items, widthDp, hours, hourDp) { dayBlocks(items, widthDp, hours, hourDp) }
+        val day = remember(items, zones, widthDp, hours, hourDp) { dayBlocks(items, zones, widthDp, hours, hourDp) }
         val byId = remember(items) { items.associateBy { it.id } }
-        // Строки блоков измеряются один раз: щипок меняет высоту блоков, а ширину и строки — редко.
+        val zoneById = remember(zones) { zones.associateBy { it.kind to it.id } }
+        // Строки блоков и подписи зон измеряются один раз: щипок меняет высоту блоков, а ширину и строки — редко.
         val texts = remember(items, widthDp, colors, styles) { HashMap<String, List<TextLayoutResult>>() }
+        val labels = remember(zones, widthDp, colors, styles) { HashMap<String, TextLayoutResult>() }
         val currentDay by rememberUpdatedState(day)
         val currentById by rememberUpdatedState(byId)
+        val currentZones by rememberUpdatedState(zoneById)
+        val currentHours by rememberUpdatedState(hours)
+        val currentHourDp by rememberUpdatedState(hourDp)
         val currentOpen by rememberUpdatedState(onOpen)
         val currentMore by rememberUpdatedState(onMore)
+        val currentZone by rememberUpdatedState(onZone)
 
         Canvas(
             Modifier
@@ -359,20 +408,38 @@ private fun DayColumn(
                         when {
                             block != null -> currentById[block.id]?.let(currentOpen)
                             more != null -> currentMore(more.ids.mapNotNull { currentById[it] })
+                            else -> {
+                                // Полоски — у самого края, правее — видимая часть зоны.
+                                val strip = Dimens.zoneStrip.value
+                                val lane = if (x < DayZoneRules.LANES * strip) (x / strip).toInt() else null
+                                val minute = currentHours.startMinute + y * 60f / currentHourDp
+                                DayZoneRules.at(currentDay.zones.map { it.place }, minute, lane)
+                                    ?.let { currentZones[it.zone.kind to it.zone.id] }
+                                    ?.let(currentZone)
+                            }
                         }
                     }
                 }
                 .semantics {
                     calendarBlocks = day
-                    contentDescription = DateFormat.short(date) + day.blocks.joinToString("") { "; " + it.lines.joinToString(", ") }
+                    contentDescription = DateFormat.short(date) +
+                        day.zones.joinToString("") { zone -> zoneById[zone.kind to zone.id]?.let { "; ${it.title}: ${it.text}" }.orEmpty() } +
+                        day.blocks.joinToString("") { "; " + it.lines.joinToString(", ") }
                 }
                 .testTag(calendarDayTag(date)),
         ) {
-            drawGrid(date, hours, hourDp, now, colors)
+            drawBackground(date, hours, hourDp, now, colors)
+            drawZones(day.zones, zoneById, colors)
+            day.zones.forEach { zone ->
+                val info = zoneById[zone.kind to zone.id] ?: return@forEach
+                val label = labels.getOrPut("${zone.kind}/${zone.id}") { measureLabel(measurer, zone, styles.name) }
+                drawZoneLabel(zone, info, label, colors)
+            }
+            drawLines(hours, hourDp, colors)
             day.blocks.forEach { block ->
                 val training = byId[block.id] ?: return@forEach
                 val lines = texts.getOrPut("${block.id}/${block.rows}") { measureLines(measurer, block, training.cancelled, styles) }
-                drawBlock(block, training, lines, colors)
+                drawBlock(block, training, lines, icons, colors)
             }
             day.more.forEach { drawMore(it, measurer, styles.more, colors) }
             if (date == now.date) drawNow(hours, hourDp, now, colors)
@@ -383,6 +450,10 @@ private fun DayColumn(
 @Immutable
 private data class BlockStyles(val name: TextStyle, val meta: TextStyle, val more: TextStyle)
 
+/** Значки блока (ТЗ 5.3): «₽», треугольник «поверх запрета», «слои» дежурства, галочка; точка дневника рисуется кругом. */
+@Stable
+private class BadgeIcons(val ruble: Painter, val warning: Painter, val layers: Painter, val check: Painter)
+
 /** Отступы блока от рамки цвета (1 dp зазора уже вычтен): слева за полосой 9 dp, сверху 4 dp, у одной строки — 3. */
 private val BLOCK_GAP = 1.dp
 private val BLOCK_RADIUS = 5.dp
@@ -391,11 +462,37 @@ private val TEXT_END = 6.dp
 private val TEXT_TOP = 4.dp
 private val TEXT_TOP_ONE = 3.dp
 
+/** Значки (макет «Блоки, значки, наложения»): кружок 16 dp в 3 dp от угла, через 2 dp; имени — на 18 dp меньше за каждый. */
+private val BADGE_EDGE = 3.dp
+private val BADGE_GAP = 2.dp
+private val BADGE_ICON = 12.dp
+private val BADGE_DOT = 6.dp
+private val BADGE_ROOM = 18.dp
+
+/** Подписи зон: у запрета — слева на плашке цвета фона, у дежурства — справа (макет «День»). */
+private val LABEL_TOP = 4.dp
+private val LABEL_START = 12.dp
+private val LABEL_END = 10.dp
+private val LABEL_PAD = 4.dp
+private val LABEL_RADIUS = 4.dp
+
+/** Полоска запрета: штриховка цветом рамок 2 dp через 4 dp и край 1 dp — читается не хуже 3 : 1 (макет). */
+private val STRIP_HATCH_STROKE = 2.dp
+private val STRIP_HATCH_STEP = 4.dp
+private val STRIP_EDGE = 1.dp
+
 /**
- * Блоки дня в dp от левого и верхнего края колонки: раскладка наложений и строки по высоте — правила `shared/domain`.
- * Тренировки начинаются в 8 dp от края — там полоски зон (1.10) — и кончаются в 8 dp от правого.
+ * Блоки и зоны дня в dp от левого и верхнего края колонки: раскладка наложений, строки по высоте, значки и полоски
+ * зон — правила `shared/domain`. Тренировки начинаются в 8 dp от края — там полоски зон — и кончаются в 8 dp
+ * от правого. Зоны обрезаются по часам сетки.
  */
-internal fun dayBlocks(items: List<CalendarTraining>, widthDp: Float, hours: GridHours, hourDp: Float): DayBlocks {
+internal fun dayBlocks(
+    items: List<CalendarTraining>,
+    zones: List<CalendarZone>,
+    widthDp: Float,
+    hours: GridHours,
+    hourDp: Float,
+): DayBlocks {
     val inset = Dimens.blockInset.value
     val inner = (widthDp - 2 * inset).coerceAtLeast(0f)
     val spans = items.map { it.span() }
@@ -418,6 +515,7 @@ internal fun dayBlocks(items: List<CalendarTraining>, widthDp: Float, hours: Gri
             width = place.span * column,
             height = height,
             cancelled = training.cancelled,
+            badges = CalendarBadges.visible(training.badges, rows),
         )
     }
     val more = layout.more.map { m ->
@@ -431,7 +529,14 @@ internal fun dayBlocks(items: List<CalendarTraining>, widthDp: Float, hours: Gri
             height = CalendarGrid.heightDp(m.end - m.start, hourDp),
         )
     }
-    return DayBlocks(blocks, more)
+    val labelOf = zones.associate { (it.kind to it.id) to it.label }
+    val placed = DayZoneRules.lanes(zones.map { it.span }).mapNotNull { place ->
+        val from = maxOf(place.zone.start, hours.startMinute)
+        val to = minOf(place.zone.end, hours.endMinute)
+        if (to <= from) return@mapNotNull null
+        ZoneInfo(place, labelOf[place.zone.kind to place.zone.id].orEmpty(), y(from), CalendarGrid.heightDp(to - from, hourDp))
+    }
+    return DayBlocks(blocks, more, placed)
 }
 
 /** Минуты тренировки в её дне; через полночь — до конца дня. */
@@ -451,24 +556,42 @@ private fun CalendarTraining.lines(rows: BlockRows): List<String> = when (rows) 
     BlockRows.ONE -> listOf(CalendarFormat.oneLine(title, start))
 }
 
+/** Строки блока; первой — имени — справа оставлено место под значки. */
 private fun DrawScope.measureLines(measurer: TextMeasurer, block: BlockInfo, cancelled: Boolean, styles: BlockStyles): List<TextLayoutResult> {
-    val width = (block.width.dp - BLOCK_GAP * 2 - TEXT_START - TEXT_END).toPx().toInt().coerceAtLeast(0)
+    val width = (block.width.dp - BLOCK_GAP * 2 - TEXT_START - TEXT_END).toPx()
     val decoration = if (cancelled) TextDecoration.LineThrough else null
     return block.lines.mapIndexed { i, line ->
         val style = if (i == 0) styles.name else styles.meta
+        val room = if (i == 0) BADGE_ROOM.toPx() * block.badges.size else 0f
         measurer.measure(
             text = line,
             style = style.copy(textDecoration = decoration),
             overflow = TextOverflow.Ellipsis,
             softWrap = false,
             maxLines = 1,
-            constraints = Constraints(maxWidth = width),
+            constraints = Constraints(maxWidth = (width - room).toInt().coerceAtLeast(0)),
         )
     }
 }
 
-/** Фон дня, приглушённое прошлое (только фон), линии каждый час и пунктир на получасе. */
-private fun DrawScope.drawGrid(date: LocalDate, hours: GridHours, hourDp: Float, now: LocalDateTime, colors: PersonalkaColors) {
+/** Подпись зоны в одну строку: у дежурства — справа, у запрета — слева, на плашке. */
+private fun DrawScope.measureLabel(measurer: TextMeasurer, zone: ZoneInfo, style: TextStyle): TextLayoutResult {
+    val room = when (zone.kind) {
+        ZoneKind.DUTY -> Dimens.blockInset * 2 + LABEL_END
+        ZoneKind.RESTRICTION -> LABEL_START + LABEL_PAD * 2 + Dimens.blockInset
+    }
+    return measurer.measure(
+        text = zone.label,
+        style = style,
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
+        maxLines = 1,
+        constraints = Constraints(maxWidth = (size.width - room.toPx()).toInt().coerceAtLeast(0)),
+    )
+}
+
+/** Фон дня: приглушённое прошлое — только фон, блоки сохраняют цвета. */
+private fun DrawScope.drawBackground(date: LocalDate, hours: GridHours, hourDp: Float, now: LocalDateTime, colors: PersonalkaColors) {
     val hourPx = hourDp.dp.toPx()
     val past = when {
         date < now.date -> size.height
@@ -476,6 +599,81 @@ private fun DrawScope.drawGrid(date: LocalDate, hours: GridHours, hourDp: Float,
         else -> ((ClubTime.minuteOfDay(now) - hours.startMinute) * hourPx / 60f).coerceIn(0f, size.height)
     }
     if (past > 0f) drawRect(colors.pastTint, size = Size(size.width, past))
+}
+
+/**
+ * Зоны во всю ширину дня (ТЗ 5.3): дежурство — сплошной фон цвета своего типа на 20 %, запрет — штриховка 45°
+ * линиями 1,5 dp через 8 dp. Затем полоски 4 dp у левого края, каждой зоне своя: дежурство — сплошная полоса типа,
+ * запрет — частая штриховка цветом рамок. Зоны идут в порядке рисования: дежурства под запретами.
+ */
+private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, String>, CalendarZone>, colors: PersonalkaColors) {
+    fun rect(zone: ZoneInfo, left: Float, right: Float) = Rect(left, zone.y.dp.toPx(), right, (zone.y + zone.height).dp.toPx())
+    fun type(zone: ZoneInfo) = TypeColor.of(byId[zone.kind to zone.id]?.color)
+    zones.forEach { zone ->
+        val area = rect(zone, 0f, size.width)
+        when (zone.kind) {
+            ZoneKind.DUTY -> drawRect(dutyFill(type(zone), colors), area.topLeft, area.size)
+            ZoneKind.RESTRICTION -> hatch(area, colors.hatch, Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
+        }
+    }
+    val strip = Dimens.zoneStrip.toPx()
+    zones.forEach { zone ->
+        val area = rect(zone, zone.lane * strip, (zone.lane + 1) * strip)
+        when (zone.kind) {
+            ZoneKind.DUTY -> drawRect(type(zone).tone(colors.isDark).stripe, area.topLeft, area.size)
+            ZoneKind.RESTRICTION -> {
+                hatch(area, colors.outline, STRIP_HATCH_STROKE.toPx(), STRIP_HATCH_STEP.toPx())
+                val edge = STRIP_EDGE.toPx()
+                drawRect(colors.outline, Offset(area.right - edge, area.top), Size(edge, area.height))
+            }
+        }
+    }
+}
+
+/**
+ * Штриховка «/» под 45°: линии [stroke] через [step] по перпендикуляру. Линии — x + y = const от края колонки,
+ * поэтому у соседних зон они продолжают друг друга.
+ */
+private fun DrawScope.hatch(area: Rect, color: Color, stroke: Float, step: Float) {
+    if (area.width <= 0f || area.height <= 0f) return
+    val period = step * sqrt(2f)
+    clipRect(area.left, area.top, area.right, area.bottom) {
+        var c = floor((area.left + area.top) / period) * period
+        val last = area.right + area.bottom + period
+        while (c < last) {
+            // Концы с запасом на толщину: срез линии под 45° не оставляет зазоров у краёв зоны.
+            drawLine(color, Offset(c - area.bottom - stroke, area.bottom + stroke), Offset(c - area.top + stroke, area.top - stroke), stroke)
+            c += period
+        }
+    }
+}
+
+/** Подпись зоны вверху, под тренировками: «Дежурство · ББ» справа, «ДБ · групповая тренировка» слева на плашке. */
+private fun DrawScope.drawZoneLabel(zone: ZoneInfo, info: CalendarZone, label: TextLayoutResult, colors: PersonalkaColors) {
+    val top = zone.y.dp.toPx() + LABEL_TOP.toPx()
+    if (zone.label.isEmpty() || top + label.size.height > (zone.y + zone.height).dp.toPx()) return
+    when (zone.kind) {
+        ZoneKind.DUTY -> {
+            val text = TypeColor.of(info.color).tone(colors.isDark).text
+            drawText(label, color = text, topLeft = Offset(size.width - LABEL_END.toPx() - label.size.width, top))
+        }
+        ZoneKind.RESTRICTION -> {
+            val pad = LABEL_PAD.toPx()
+            val left = LABEL_START.toPx()
+            drawRoundRect(
+                colors.surface,
+                topLeft = Offset(left, top),
+                size = Size(label.size.width + pad * 2, label.size.height.toFloat()),
+                cornerRadius = CornerRadius(LABEL_RADIUS.toPx()),
+            )
+            drawText(label, color = colors.textMuted, topLeft = Offset(left + pad, top))
+        }
+    }
+}
+
+/** Линии каждый час и пунктир на получасе — над зонами, под тренировками. */
+private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: PersonalkaColors) {
+    val hourPx = hourDp.dp.toPx()
     val stroke = 1.dp.toPx()
     val dash = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx()))
     for (i in 0..hours.count) {
@@ -492,7 +690,7 @@ private fun DrawScope.drawGrid(date: LocalDate, hours: GridHours, hourDp: Float,
  * Блок (ТЗ 5.3): фон — светлый тон цвета типа, слева полоса 3 dp, текст тёмным тоном того же цвета (в тёмной теме
  * наоборот); вокруг — зазор 1 dp цвета фона. Отменённая — серая и зачёркнутая, текст без прозрачности.
  */
-private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, lines: List<TextLayoutResult>, colors: PersonalkaColors) {
+private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, lines: List<TextLayoutResult>, icons: BadgeIcons, colors: PersonalkaColors) {
     val gap = BLOCK_GAP.toPx()
     val rect = Rect(
         left = block.x.dp.toPx() + gap,
@@ -514,6 +712,39 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, li
             drawText(line, color = text, topLeft = Offset(rect.left + TEXT_START.toPx(), y))
             y += line.size.height
         }
+        drawBadges(block.badges, rect, icons, colors)
+    }
+}
+
+/**
+ * Значки в правом верхнем углу (ТЗ 5.3) слева направо по важности, в кружках 16 dp цвета фона: «₽» янтарный,
+ * треугольник фиолетовый, точка дневника оранжевая, «слои» серые, галочка зелёная.
+ */
+private fun DrawScope.drawBadges(badges: List<CalendarBadge>, rect: Rect, icons: BadgeIcons, colors: PersonalkaColors) {
+    if (badges.isEmpty()) return
+    val badge = Dimens.badge.toPx()
+    val gap = BADGE_GAP.toPx()
+    val icon = BADGE_ICON.toPx()
+    var left = rect.right - BADGE_EDGE.toPx() - badges.size * badge - (badges.size - 1) * gap
+    val top = rect.top + BADGE_EDGE.toPx()
+    badges.forEach { kind ->
+        val center = Offset(left + badge / 2, top + badge / 2)
+        drawCircle(colors.surface, radius = badge / 2, center = center)
+        val (painter, tint) = when (kind) {
+            CalendarBadge.CHARGED -> icons.ruble to colors.charged
+            CalendarBadge.OVER_RESTRICTION -> icons.warning to colors.over
+            CalendarBadge.NO_DIARY -> null to colors.accentGraphic
+            CalendarBadge.OVER_DUTY -> icons.layers to colors.textMuted
+            CalendarBadge.DONE -> icons.check to colors.done
+        }
+        if (painter == null) {
+            drawCircle(tint, radius = BADGE_DOT.toPx() / 2, center = center)
+        } else {
+            translate(center.x - icon / 2, center.y - icon / 2) {
+                with(painter) { draw(Size(icon, icon), colorFilter = ColorFilter.tint(tint)) }
+            }
+        }
+        left += badge + gap
     }
 }
 

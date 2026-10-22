@@ -21,6 +21,14 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedule_block WHERE locationId = :locationId AND deletedAt IS NULL")
     suspend fun blocksAt(locationId: String): List<ScheduleBlockEntity>
 
+    /** Действующие запреты, свои и клуба: штриховка календаря (5.3). */
+    @Query("SELECT * FROM schedule_block WHERE deletedAt IS NULL")
+    fun observeBlocks(): Flow<List<ScheduleBlockEntity>>
+
+    /** То же разово: пересчёт флага «поверх запрета» (4.5). */
+    @Query("SELECT * FROM schedule_block WHERE deletedAt IS NULL")
+    suspend fun blocks(): List<ScheduleBlockEntity>
+
     @Upsert
     suspend fun upsertSeries(item: SeriesEntity)
 

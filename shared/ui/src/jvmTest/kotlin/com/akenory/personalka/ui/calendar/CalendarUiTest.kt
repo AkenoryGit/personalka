@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -32,17 +35,23 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ParticipationEntity
+import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.calendar.BlockRows
+import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.GridHours
+import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.NEW_TRAINING_LATER
@@ -51,11 +60,15 @@ import com.akenory.personalka.ui.SAMPLE_ON
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.components.PANEL_TAG
+import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.shell.FAB_TAG
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import com.akenory.personalka.ui.theme.LightColors
+import com.akenory.personalka.ui.theme.TypeColor
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -65,7 +78,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * «Календарь», вид «День» (шаг 1.9, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
+ * «Календарь», вид «День» (шаги 1.9, 1.10, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
  * формы ещё нет (1.13). Окно тестов на компьютере — 1024 × 768, поэтому экран ниже, чем у Fold, и сетке
  * остаётся 768 − панель 72 − шапка 56 − неделя 64 = 576 dp; что видно при той же высоте, что у Fold, —
  * в `CalendarGridTest`.
@@ -93,6 +106,9 @@ class CalendarUiTest {
         place: String = "ББ",
         date: LocalDate = today,
         status: TrainingStatus = TrainingStatus.PLANNED,
+        overRestriction: Boolean = false,
+        fact: String? = null,
+        charged: Boolean = false,
     ): String = runBlocking {
         val (h, m) = time.split(':').map { it.toInt() }
         val coach = db.coachDao().currentCoach()!!.id
@@ -106,13 +122,37 @@ class CalendarUiTest {
                 start = LocalDateTime(date, LocalTime(h, m)),
                 durationMin = minutes,
                 status = status,
+                overRestriction = overRestriction,
+                fact = fact,
             ),
         )
         names.forEach { name ->
             val (last, first) = name.split(' ')
             val client = clients.create(ClientDraft(last, first))
-            db.trainingDao().upsertParticipation(ParticipationEntity(Ids.newId(millis++), SyncFields.new(coach, millis++), id, client))
+            val participation = ParticipationEntity(Ids.newId(millis++), SyncFields.new(coach, millis++), id, client)
+            db.trainingDao().upsertParticipation(if (charged) participation.copy(status = ParticipationStatus.CANCELLED_CHARGED) else participation)
         }
+        id
+    }
+
+    /** Запрет клуба «Групповая тренировка» по вт и чт. */
+    private fun restriction(place: String, from: String, to: String): String = runBlocking {
+        fun time(text: String) = text.split(':').map { it.toInt() }.let { (h, m) -> LocalTime(h, m) }
+        val coach = db.coachDao().currentCoach()!!.id
+        val id = Ids.newId(millis++)
+        db.scheduleDao().upsertBlock(
+            ScheduleBlockEntity(
+                id = id,
+                sync = SyncFields.new(coach, millis++),
+                scope = Scope.CLUB,
+                locationId = settings.places.first().single { it.shortName == place }.id,
+                reason = "Групповая тренировка",
+                weekdays = setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY),
+                startTime = time(from),
+                endTime = time(to),
+                validFrom = LocalDate(2026, 9, 1),
+            ),
+        )
         id
     }
 
@@ -135,6 +175,11 @@ class CalendarUiTest {
         waitUntil(timeoutMillis = 5_000) {
             exists(calendarDayTag(date)) && day(date).blocks.size == count
         }
+    }
+
+    /** Ждать, пока в дне будет [count] зон. */
+    private fun ComposeUiTest.awaitZones(count: Int, date: LocalDate = today) {
+        waitUntil(timeoutMillis = 5_000) { exists(calendarDayTag(date)) && day(date).zones.size == count }
     }
 
     private fun ComposeUiTest.exists(tag: String): Boolean = onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
@@ -378,5 +423,133 @@ class CalendarUiTest {
         onNodeWithTag(FAB_TAG).performClick()
         onNodeWithText(SAMPLE_OFF).performClick()
         awaitBlocks(0)
+    }
+
+    @Test
+    fun restrictionVisibleUnderTraining() = runComposeUiTest {
+        restriction("ДБ", "17:00", "18:00")
+        training("17:00", 50, "Орлов Максим", place = "ДБ", overRestriction = true)
+        openCalendar()
+        awaitBlocks(1)
+        awaitZones(1)
+
+        // Проверка шага: запрет 17:00–18:00 лежит под тренировкой 17:00 — та же высота, полоска у края.
+        val zone = day().zones.single()
+        val block = day().blocks.single()
+        assertEquals(ZoneKind.RESTRICTION, zone.kind)
+        assertEquals(s("ДБ · групповая тренировка"), zone.label)
+        assertEquals(0, zone.lane)
+        near(640f, zone.y, "Верх запрета")
+        near(64f, zone.height, "Высота запрета")
+        near(zone.y, block.y, "Тренировка на запрете")
+        assertEquals(listOf(CalendarBadge.OVER_RESTRICTION), block.badges)
+
+        // На картинке: у края — полоска цвета рамок, справа от блока и под ним — штриховка, а сам блок её закрывает.
+        val image = onNodeWithTag(CALENDAR_GRID_TAG).captureToImage().toPixelMap()
+        val d = density.density
+        val scrolled = grid()[SemanticsProperties.VerticalScrollAxisRange].value() / d
+        fun pixel(x: Float, y: Float): Color = image[((48f + x) * d).toInt(), ((y - scrolled) * d).toInt()]
+        fun close(a: Color, b: Color) = abs(a.red - b.red) + abs(a.green - b.green) + abs(a.blue - b.blue) < 0.04f
+        assertTrue(close(LightColors.outline, pixel(3.5f, zone.y + 20f)), "Полоска запрета: ${pixel(3.5f, zone.y + 20f)}")
+        // Справа от блока, между линиями сетки, — хоть одна точка штриховки на фоне.
+        val margin = (357..363).flatMap { x -> (zone.y.toInt() + 4..zone.y.toInt() + 28).map { y -> pixel(x.toFloat(), y.toFloat()) } }
+        assertTrue(margin.any { !close(LightColors.surface, it) }, "Штриховки справа от блока нет")
+        // Низ блока без текста — ровный цвет блока: штриховка под ним.
+        val blockColor = TypeColor.BLUE.light.block
+        val inside = (150..330 step 10).flatMap { x -> listOf(pixel(x.toFloat(), block.y + block.height - 6f), pixel(x.toFloat(), block.y + block.height - 4f)) }
+        assertTrue(inside.all { close(blockColor, it) }, "Штриховка поверх блока: ${inside.firstOrNull { !close(blockColor, it) }}")
+    }
+
+    @Test
+    fun tapOnRestrictionShowsItAndSkipsDay() = runComposeUiTest {
+        restriction("ДБ", "17:00", "18:00")
+        training("17:00", 50, "Орлов Максим", place = "ДБ", overRestriction = true)
+        openCalendar()
+        awaitZones(1)
+        val zone = day().zones.single()
+
+        // Нажатие на полоску у края — окно запрета.
+        tapDay(2f, zone.y + 30f)
+        onNodeWithTag(PANEL_TAG).assertIsDisplayed()
+        onNodeWithText(ZoneFormat.RESTRICTION).assertIsDisplayed()
+        onNodeWithText("ДБ 17:00–18:00 — групповая тренировка").assertIsDisplayed()
+        onNodeWithText("Каждый вт и чт").assertIsDisplayed()
+
+        // «Пропустить этот день»: запрет исчезает, флаг тренировки пересчитан — треугольника нет.
+        onNodeWithText(SKIP_DAY).performClick()
+        onNodeWithTag(PANEL_TAG).assertDoesNotExist()
+        onNodeWithText(ZoneFormat.skipped(today)).assertIsDisplayed()
+        awaitZones(0)
+        waitUntil(timeoutMillis = 5_000) { day().blocks.single().badges.isEmpty() }
+
+        // «Отменить» — запрет и треугольник на месте.
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        awaitZones(1)
+        waitUntil(timeoutMillis = 5_000) { day().blocks.single().badges == listOf(CalendarBadge.OVER_RESTRICTION) }
+    }
+
+    @Test
+    fun dutyIsFillWithTrainingsOverIt() = runComposeUiTest {
+        training("11:00", 240, type = "Деж")
+        training("06:00", 60, type = "Деж")
+        training("14:00", 50, "Никитин Артём", status = TrainingStatus.DONE, fact = "Кроль 8 × 25 м")
+        openCalendar()
+        awaitBlocks(1)
+        awaitZones(2)
+
+        // Дежурства — не блоки, а заливка; раннее расширяет сетку, как тренировка.
+        assertTrue(day().zones.all { it.kind == ZoneKind.DUTY })
+        waitUntil(timeoutMillis = 5_000) { grid()[CalendarHours] == GridHours(6, 23) }
+        assertEquals(listOf(CalendarBadge.OVER_DUTY), day().blocks.single().badges)
+
+        // Нажатие на видимую часть дежурства — справа от блока. Пропустить у дежурства нечего.
+        val duty = day().zones.single { it.y > 0f && it.height > 200f }
+        tapDay(360f, duty.y + duty.height - 20f)
+        onNodeWithText("Дежурство").assertIsDisplayed()
+        onNodeWithText("ББ 11:00–15:00 — дежурство").assertIsDisplayed()
+        onNodeWithText(SKIP_DAY).assertDoesNotExist()
+    }
+
+    @Test
+    fun badgesByHeightAndImportance() = runComposeUiTest {
+        training("09:00", 60, "Морозов Даниил", status = TrainingStatus.DONE)
+        training("11:00", 50, "Ковалёв Иван", status = TrainingStatus.DONE)
+        training("13:00", 50, "Зайцева Мария", status = TrainingStatus.CANCELLED, charged = true)
+        training("15:00", 50, "Белова Ева", status = TrainingStatus.DONE, fact = "Кроль 8 × 25 м")
+        openCalendar()
+        awaitBlocks(4)
+
+        // 60 минут — до двух значков: точка дневника и галочка; 50 минут — один, самый важный.
+        assertEquals(
+            listOf(
+                listOf(CalendarBadge.NO_DIARY, CalendarBadge.DONE),
+                listOf(CalendarBadge.NO_DIARY),
+                listOf(CalendarBadge.CHARGED),
+                listOf(CalendarBadge.DONE),
+            ),
+            day().blocks.sortedBy { it.y }.map { it.badges },
+        )
+    }
+
+    @Test
+    fun sampleZonesAndBadges() = runComposeUiTest {
+        openCalendar()
+        onNodeWithTag(FAB_TAG).performClick()
+        onNodeWithText(SAMPLE_ON).performClick()
+        awaitBlocks(17)
+        awaitZones(2)
+        val byName = day().blocks.associate { it.lines.first() to it.badges }
+        assertEquals(listOf(CalendarBadge.NO_DIARY), byName["Ковалёв / Ковалёва"])
+        assertEquals(listOf(CalendarBadge.CHARGED), byName[s("Зайцева_М.")])
+        assertEquals(listOf(CalendarBadge.OVER_DUTY), byName[s("Никитин_А.")])
+        assertEquals(listOf(CalendarBadge.OVER_RESTRICTION), byName[s("Орлов_М.")])
+
+        // Запрет примера пропускается только в памяти и возвращается «Отменить».
+        val restriction = day().zones.single { it.kind == ZoneKind.RESTRICTION }
+        tapDay(2f, restriction.y + 30f)
+        onNodeWithText(SKIP_DAY).performClick()
+        awaitZones(1)
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        awaitZones(2)
     }
 }

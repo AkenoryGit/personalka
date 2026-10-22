@@ -7,6 +7,12 @@ import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.calendar.CalendarBadge.CHARGED
+import com.akenory.personalka.domain.calendar.CalendarBadge.DONE
+import com.akenory.personalka.domain.calendar.CalendarBadge.NO_DIARY
+import com.akenory.personalka.domain.calendar.CalendarBadge.OVER_DUTY
+import com.akenory.personalka.domain.calendar.CalendarBadge.OVER_RESTRICTION
+import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupDraft
@@ -17,6 +23,7 @@ import com.akenory.personalka.domain.reference.ReferenceRules
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -28,7 +35,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Тренировки календаря в базе (шаг 1.9, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Имена придуманы. */
+/** Тренировки, значки и зоны календаря в базе (шаги 1.9, 1.10, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Имена придуманы. */
 class CalendarRepositoryTest {
     private lateinit var db: PersonalkaDatabase
     private val now = LocalDateTime(2026, 10, 20, 15, 40)
@@ -44,7 +51,7 @@ class CalendarRepositoryTest {
         db = inMemoryPersonalkaDatabase()
         settings = SettingsRepository(db) { millis }
         settings.completeFirstRun(CoachName("Соколов", "Андрей"), ReferenceRules.defaultPlaces, ReferenceRules.defaultTypes)
-        calendar = CalendarRepository(db)
+        calendar = CalendarRepository(db) { millis }
         clients = ClientRepository(db) { millis++ }
         groups = GroupRepository(db) { millis++ }
     }
@@ -70,8 +77,11 @@ class CalendarRepositoryTest {
         groupId: String? = null,
         status: TrainingStatus = TrainingStatus.PLANNED,
         statuses: List<ParticipationStatus> = clientIds.map { ParticipationStatus.EXPECTED },
+        fact: String? = null,
+        overRestriction: Boolean = false,
     ): String {
-        val t = Samples.training(typeId(type), placeId(place), start).copy(durationMin = minutes, groupId = groupId, status = status)
+        val t = Samples.training(typeId(type), placeId(place), start)
+            .copy(durationMin = minutes, groupId = groupId, status = status, fact = fact, overRestriction = overRestriction)
         db.trainingDao().upsertTraining(t)
         clientIds.forEachIndexed { i, id ->
             val p = Samples.participation(t.id, id)
@@ -85,6 +95,19 @@ class CalendarRepositoryTest {
     private suspend fun client(last: String, first: String) = clients.create(ClientDraft(last, first))
 
     private suspend fun day(date: LocalDate = tuesday) = calendar.trainings(date, date.plus(1, DateTimeUnit.DAY)).first()
+
+    private suspend fun zones(date: LocalDate = tuesday) = calendar.zones(date, date.plus(1, DateTimeUnit.DAY)).first()
+
+    private fun at(date: LocalDate, h: Int, m: Int = 0) = LocalDateTime(date, LocalTime(h, m))
+
+    /** Запрет ДБ 17:00–18:00 «Групповая тренировка» по вт и чт с 01.09.2026, без пропусков. */
+    private suspend fun groupRestriction(): String {
+        val block = Samples.block(placeId("ДБ")).copy(skipDates = emptyList())
+        db.scheduleDao().upsertBlock(block)
+        return block.id
+    }
+
+    private suspend fun flag(id: String) = db.trainingDao().training(id)!!.overRestriction
 
     @Test
     fun titlesTypePlaceAndColor(): Unit = runBlocking {
@@ -162,5 +185,105 @@ class CalendarRepositoryTest {
         val stored = db.coachDao().settings(coach.id)!!
         db.coachDao().upsertSettings(stored.copy(workDayStart = LocalTime(8, 0), workDayEnd = LocalTime(21, 0)))
         assertEquals(WorkHours(LocalTime(8, 0), LocalTime(21, 0)), calendar.workHours.first())
+    }
+
+    @Test
+    fun badgesFromStatusesFlagsDiaryAndDuty(): Unit = runBlocking {
+        val morozov = client("Морозов", "Даниил")
+        val zaitseva = client("Зайцева", "Мария")
+        training("ПТ", "ББ", at(tuesday, 8), clientIds = listOf(morozov), status = TrainingStatus.DONE, fact = "Кроль 8 × 25 м")
+        training("ПТ", "ББ", at(tuesday, 9), clientIds = listOf(morozov), status = TrainingStatus.DONE)
+        training(
+            "ПТ", "ББ", at(tuesday, 10), clientIds = listOf(zaitseva), status = TrainingStatus.CANCELLED,
+            statuses = listOf(ParticipationStatus.CANCELLED_CHARGED),
+        )
+        // Дежурство ББ 11:00–15:00; тренировка в ДБ поверх него — тоже накладка: тренер дежурит, где бы ни стояла.
+        training("Деж", "ББ", at(tuesday, 11), minutes = 240)
+        training("ПТ", "ДБ", at(tuesday, 12), clientIds = listOf(morozov))
+        training("ПТ", "ДБ", at(tuesday, 17), clientIds = listOf(morozov), overRestriction = true)
+
+        assertEquals(
+            listOf(listOf(DONE), listOf(NO_DIARY, DONE), listOf(CHARGED), listOf(OVER_DUTY), listOf(OVER_RESTRICTION)),
+            day().map { it.badges },
+        )
+
+        // Дневник выключен в настройках — точки нет; отменённое дежурство накладкой не считается.
+        val coach = db.coachDao().currentCoach()!!
+        db.coachDao().upsertSettings(db.coachDao().settings(coach.id)!!.copy(diaryEnabled = false))
+        val duty = db.trainingDao().trainingsBetween(at(tuesday, 11), at(tuesday, 12)).single()
+        db.trainingDao().upsertTraining(duty.copy(status = TrainingStatus.CANCELLED))
+        assertEquals(listOf(listOf(DONE), listOf(DONE), listOf(CHARGED), emptyList(), listOf(OVER_RESTRICTION)), day().map { it.badges })
+    }
+
+    @Test
+    fun zonesOfDays(): Unit = runBlocking {
+        val restriction = Samples.block(placeId("ДБ"))
+        db.scheduleDao().upsertBlock(restriction)
+        training("Деж", "ББ", at(tuesday, 11), minutes = 240)
+        // Отменённое дежурство и удалённый запрет не видны.
+        training("Деж", "ББ", at(tuesday, 19), minutes = 120, status = TrainingStatus.CANCELLED)
+        val gone = Samples.block(placeId("ББ"))
+        db.scheduleDao().upsertBlock(gone.copy(sync = gone.sync.deleted(millis)))
+
+        val (duty, hatched) = zones()
+        assertEquals(ZoneKind.DUTY, duty.kind)
+        assertEquals(11 * 60 to 15 * 60, duty.start to duty.end)
+        assertEquals("Дежурство", duty.title)
+        assertEquals("ББ 11:00–15:00 — дежурство", duty.text)
+        assertEquals("Дежурство · ББ", duty.label)
+        assertEquals("slate", duty.color)
+
+        assertEquals(ZoneKind.RESTRICTION, hatched.kind)
+        assertEquals(restriction.id, hatched.id)
+        assertEquals(tuesday, hatched.date)
+        assertEquals("Запрет", hatched.title)
+        assertEquals("ДБ 17:00–18:00 — групповая тренировка", hatched.text)
+        assertEquals("ДБ · групповая тренировка", hatched.label)
+        assertEquals("Каждый вт и чт", hatched.repeat)
+
+        // Неделя: запрет во вт 20.10 и вт 27.10, чт 22.10 пропущен; дежурство — одно.
+        val week = calendar.zones(tuesday, LocalDate(2026, 10, 28)).first()
+        assertEquals(
+            listOf(tuesday to ZoneKind.DUTY, tuesday to ZoneKind.RESTRICTION, LocalDate(2026, 10, 27) to ZoneKind.RESTRICTION),
+            week.map { it.date to it.kind },
+        )
+    }
+
+    @Test
+    fun skipDayRecalculatesFutureFlagsAndUndo(): Unit = runBlocking {
+        val id = groupRestriction()
+        val today = training("ПТ", "ДБ", at(tuesday, 17), overRestriction = true)
+        val nextWeek = training("ПТ", "ДБ", at(LocalDate(2026, 10, 27), 17), overRestriction = true)
+        // Прошлая сохраняет флаг, с которым прошла.
+        val past = training("ПТ", "ДБ", at(LocalDate(2026, 10, 13), 17), overRestriction = true)
+
+        calendar.skipRestrictionDay(id, tuesday)
+        assertEquals(listOf(tuesday), db.scheduleDao().block(id)!!.skipDates)
+        assertTrue(zones().isEmpty())
+        assertEquals(listOf(false, true, true), listOf(flag(today), flag(nextWeek), flag(past)))
+        // Повторное нажатие ничего не меняет.
+        val version = db.scheduleDao().block(id)!!.sync.version
+        calendar.skipRestrictionDay(id, tuesday)
+        assertEquals(version, db.scheduleDao().block(id)!!.sync.version)
+
+        // «Отменить» — запрет снова в этот день, флаг вернулся.
+        calendar.unskipRestrictionDay(id, tuesday)
+        assertEquals(emptyList(), db.scheduleDao().block(id)!!.skipDates)
+        assertEquals(1, zones().size)
+        assertEquals(listOf(true, true, true), listOf(flag(today), flag(nextWeek), flag(past)))
+    }
+
+    @Test
+    fun recalcSamePlaceOnlyNeverDuty(): Unit = runBlocking {
+        val id = groupRestriction()
+        // Флаги расходятся с запретами: в ББ запрета нет, дежурство с запретами не сверяется, а чт 22.10 в ДБ — под ним.
+        val otherPlace = training("ПТ", "ББ", at(tuesday, 17), overRestriction = true)
+        val duty = training("Деж", "ДБ", at(tuesday, 17), minutes = 60, overRestriction = true)
+        val samePlace = training("ПТ", "ДБ", at(LocalDate(2026, 10, 22), 17))
+        assertEquals(DayOfWeek.THURSDAY, LocalDate(2026, 10, 22).dayOfWeek)
+
+        // Любое изменение запретов пересчитывает флаг будущих: пропущен чт 29.10.
+        calendar.skipRestrictionDay(id, LocalDate(2026, 10, 29))
+        assertEquals(listOf(false, false, true), listOf(flag(otherPlace), flag(duty), flag(samePlace)))
     }
 }

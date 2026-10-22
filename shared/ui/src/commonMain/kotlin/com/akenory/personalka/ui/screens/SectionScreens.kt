@@ -85,7 +85,7 @@ fun SectionScreen(
             heading = "Здесь будет ближайшая тренировка",
             text = "И список «Нужно сделать». Появится в шаге 1.16.",
         )
-        Section.CALENDAR -> CalendarScreen(calendar, prefs, now, sample, onOpen = { messages.show(TRAINING_CARD_LATER) })
+        Section.CALENDAR -> CalendarScreen(calendar, prefs, now, sample, messages, scope, onOpen = { messages.show(TRAINING_CARD_LATER) })
         Section.CLIENTS -> ClientsScreen(shell, clients, messages, scope, now)
         Section.SALARY -> Placeholder(
             title = "Зарплата",

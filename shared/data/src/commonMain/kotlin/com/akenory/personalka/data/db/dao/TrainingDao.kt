@@ -48,6 +48,10 @@ interface TrainingDao {
     )
     fun observeTrainingsBetween(from: LocalDateTime, to: LocalDateTime): Flow<List<TrainingEntity>>
 
+    /** Тренировки, которые начнутся позже [from], отменённые тоже: пересчёт флага «поверх запрета» (4.5). */
+    @Query("SELECT * FROM training WHERE start > :from AND deletedAt IS NULL ORDER BY start")
+    suspend fun trainingsAfter(from: LocalDateTime): List<TrainingEntity>
+
     /** Участие клиентов в тренировках, которые начинаются в промежутке [from, to): имена в блоках календаря (5.3). */
     @Query(
         """

@@ -19,7 +19,7 @@ class PersonalkaApplication : Application() {
     val settings: SettingsRepository by lazy { SettingsRepository(database, System::currentTimeMillis) }
     val clients: ClientRepository by lazy { ClientRepository(database, System::currentTimeMillis) }
     val groups: GroupRepository by lazy { GroupRepository(database, System::currentTimeMillis) }
-    val calendar: CalendarRepository by lazy { CalendarRepository(database) }
+    val calendar: CalendarRepository by lazy { CalendarRepository(database, System::currentTimeMillis) }
 
     /** Настройки этого телефона: масштаб календаря. */
     val prefs: DevicePrefs by lazy { devicePrefs(this) }
