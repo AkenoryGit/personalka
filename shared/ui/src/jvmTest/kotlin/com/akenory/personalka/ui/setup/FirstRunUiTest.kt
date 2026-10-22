@@ -140,7 +140,7 @@ class FirstRunUiTest {
         onNodeWithTag(TYPE_NAME_TAG).performTextInput("Группа")
         onNodeWithText("Такой тип уже есть").assertIsDisplayed()
         onNodeWithTag(colorTag("green")).performScrollTo().performClick()
-        onNodeWithText("Этот цвет уже у типа «Группа»").assertIsDisplayed()
+        onNodeWithText("Этот цвет уже у типа «Группа»").performScrollTo().assertIsDisplayed()
 
         // Разложили Fold: набранное не пропало.
         width = unfolded

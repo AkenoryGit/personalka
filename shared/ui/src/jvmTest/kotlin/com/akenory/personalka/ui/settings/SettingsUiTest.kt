@@ -65,7 +65,8 @@ class SettingsUiTest {
 
         onNodeWithText("Большой бассейн").assertIsDisplayed()
         onNodeWithText("Тренажёрный зал").assertIsDisplayed()
-        onNodeWithText(s("Персональная · 50_мин · как ПТ")).assertIsDisplayed()
+        // Та же строка у гидрореабилитации и кинезио — проверяется строка ПТ.
+        onNodeWithTag(typeRowTag("ПТ")).assertTextContains(s("Персональная · 50_мин · как ПТ"))
         onNodeWithTag(typeRowTag("Дежурство")).performScrollTo()
         onNodeWithText("Дежурство · за час").assertIsDisplayed()
     }
