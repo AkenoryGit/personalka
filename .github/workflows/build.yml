@@ -48,11 +48,12 @@ jobs:
         run: |
           APK=androidApp/build/outputs/apk/debug/androidApp-debug.apk
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          set +e
           {
-            "$BT/aapt2" dump badging "$APK" | grep -E "^(package|application-label|application:|sdkVersion|targetSdkVersion|launchable-activity)"
-            echo "allowBackup: $("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" | grep -o 'allowBackup.*' | head -1)"
-            "$BT/apksigner" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)"
-            echo "Размер: $(du -k "$APK" | cut -f1) КБ"
+            "$BT/aapt2" dump badging "$APK" | grep -E "^(package:|application-label:|application:|sdkVersion:|targetSdkVersion:|launchable-activity:)"
+            "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" | grep -E "allowBackup|dataExtractionRules|android:icon|roundIcon"
+            "$BT/apksigner" verify --print-certs "$APK" 2>&1 | grep -iE "certificate (DN|SHA-256)|error|warning" | head -6
+            echo "build-tools: $(basename "$BT"), размер APK: $(du -k "$APK" | cut -f1) КБ"
           } > apk-info.txt
 
       - name: Итоги в отметки
