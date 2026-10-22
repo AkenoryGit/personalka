@@ -50,7 +50,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.akenory.personalka.domain.format.DurationFormat
 import com.akenory.personalka.domain.format.TypeFormat
 import com.akenory.personalka.domain.model.PayUnit
 import com.akenory.personalka.domain.model.TrainingKind
@@ -199,7 +198,7 @@ fun TypeEditor(
                 }
                 ChoiceChip(
                     text = if (customDuration == null && draft.durationMin !in ReferenceRules.DURATION_CHIPS) {
-                        DurationFormat.short(draft.durationMin)
+                        draft.durationMin.toString()
                     } else {
                         "Своя"
                     },

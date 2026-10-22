@@ -61,7 +61,7 @@ object TypeFormat {
         val parts = if (type.kind == TrainingKind.DUTY) {
             listOf(kind(type.kind), pay)
         } else {
-            listOf(kind(type.kind), DurationFormat.short(type.durationMin), pay)
+            listOf(kind(type.kind), DurationFormat.minutes(type.durationMin), pay)
         }
         return parts.joinToString(DOT)
     }
@@ -79,7 +79,7 @@ object TypeFormat {
             type.kind == TrainingKind.GROUP -> "до " + RuText.count(max, "клиента", "клиентов", "клиентов")
             else -> RuText.count(max, "клиент", "клиента", "клиентов")
         }
-        return DurationFormat.short(type.durationMin) + DOT + clients
+        return DurationFormat.minutes(type.durationMin) + DOT + clients
     }
 
     /** Строка «Мест и типов» в настройках: «3 места · 9 типов». */

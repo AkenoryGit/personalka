@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.reference
 
+import com.akenory.personalka.domain.format.DurationFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TypeFormat
 import com.akenory.personalka.domain.model.PayUnit
@@ -169,6 +170,7 @@ class ReferenceRulesTest {
         assertEquals(s("30_мин · 1_клиент"), TypeFormat.setupLine(type("Грудничковое")))
         assertEquals(s("45_мин · до 8_клиентов"), TypeFormat.setupLine(type("Группа").copy(durationMin = 45, maxClients = 8)))
 
+        assertEquals(s("90_мин"), DurationFormat.minutes(90), "У типа длительность минутами, а не «1 ч 30 мин»")
         assertEquals(s("3_места · 9_типов"), TypeFormat.placesAndTypes(3, 9))
         assertEquals(s("1_место · 1_тип"), TypeFormat.placesAndTypes(1, 1))
         assertEquals(
