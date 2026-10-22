@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
@@ -36,6 +37,7 @@ import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.calendar.BlockRows
+import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.GridHours
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.DateFormat
@@ -63,7 +65,9 @@ import kotlin.test.assertTrue
 
 /**
  * «Календарь», вид «День» (шаг 1.9, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
- * формы ещё нет (1.13). Сложенный Fold — 412 × 960: сетке остаётся 960 − панель 72 − шапка 56 − неделя 64 = 768 dp.
+ * формы ещё нет (1.13). Окно тестов на компьютере — 1024 × 768, поэтому экран ниже, чем у Fold, и сетке
+ * остаётся 768 − панель 72 − шапка 56 − неделя 64 = 576 dp; что видно при той же высоте, что у Fold, —
+ * в `CalendarGridTest`.
  */
 @OptIn(ExperimentalTestApi::class)
 class CalendarUiTest {
@@ -146,9 +150,30 @@ class CalendarUiTest {
     private fun near(expected: Float, actual: Float, what: String) =
         assertTrue(abs(expected - actual) < 0.5f, "$what: ждали $expected, получили $actual")
 
-    /** Нажать в колонке дня на точку [x], [y] dp от её левого и верхнего края. */
-    private fun ComposeUiTest.tapDay(x: Float, y: Float, date: LocalDate = today) {
-        onNodeWithTag(calendarDayTag(date)).performTouchInput { click(Offset(x.dp.toPx(), y.dp.toPx())) }
+    /** Высота сетки на экране, dp. */
+    private fun ComposeUiTest.gridHeight(): Float = onNodeWithTag(CALENDAR_GRID_TAG).fetchSemanticsNode().size.height / density.density
+
+    /** Верх сетки при открытии в 15:40 — по правилу `shared/domain` для этой высоты экрана. */
+    private fun ComposeUiTest.openTop(): Float = CalendarGrid.open(TestData.now.time, GridHours(7, 23), gridHeight()).top
+
+    /**
+     * Нажать на день в точку [x], [y] dp от левого и верхнего края всей колонки дня. Колонка выше экрана и сдвинута
+     * прокруткой, поэтому нажатие идёт в сетку: колонка времени 48 dp слева, прокрутка вычитается.
+     */
+    private fun ComposeUiTest.tapDay(x: Float, y: Float) {
+        val scrolled = grid()[SemanticsProperties.VerticalScrollAxisRange].value() / density.density
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { click(Offset((48f + x).dp.toPx(), (y - scrolled).dp.toPx())) }
+    }
+
+    /** Выбранные дни строки недели — для понятного сообщения, если тест упадёт. */
+    private fun ComposeUiTest.selectedDays(): List<String> =
+        onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes()
+            .mapNotNull { it.config.getOrNull(SemanticsProperties.TestTag) }
+            .filter { it.startsWith("week-") }
+
+    private fun ComposeUiTest.assertSelected(date: LocalDate, what: String) {
+        val pager = onNodeWithTag(CALENDAR_PAGER_TAG).fetchSemanticsNode().config.getOrNull(SemanticsProperties.HorizontalScrollAxisRange)
+        assertEquals(listOf(weekDayTag(date)), selectedDays(), "$what; листание: ${pager?.value?.invoke()} из ${pager?.maxValue?.invoke()}")
     }
 
     @Test
@@ -160,8 +185,9 @@ class CalendarUiTest {
         onNodeWithTag(weekDayTag(LocalDate(2026, 10, 25))).assertIsDisplayed()
         assertEquals(GridHours(7, 23), grid()[CalendarHours])
         assertEquals(64f, grid()[CalendarHour])
-        // В 15:40 «сейчас − 1 час» упирается в конец часов работы: виден 11:00–23:00.
-        near(660f, topMinute(), "Верх сетки")
+        // В 15:40 «сейчас − 1 час» упирается в конец часов работы: в 576 dp — 14:00–23:00, на Fold — 11:00–23:00.
+        near(openTop(), topMinute(), "Верх сетки")
+        near(840f, openTop(), "Верх сетки в окне теста")
     }
 
     @Test
@@ -237,9 +263,9 @@ class CalendarUiTest {
         training("16:00", 50, "Белова Ева", date = LocalDate(2026, 10, 21))
         openCalendar()
 
-        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { swipeLeft() }
+        onNodeWithTag(CALENDAR_PAGER_TAG).performTouchInput { swipeLeft() }
         waitForIdle()
-        onNodeWithTag(weekDayTag(LocalDate(2026, 10, 21))).assertIsSelected()
+        assertSelected(LocalDate(2026, 10, 21), "Свайп влево — следующий день")
         awaitBlocks(1, LocalDate(2026, 10, 21))
 
         onNodeWithTag(weekDayTag(LocalDate(2026, 10, 19))).performClick()
@@ -253,9 +279,9 @@ class CalendarUiTest {
         // С воскресенья свайп ведёт в понедельник следующей недели: строка недели — уже 26.10–01.11.
         onNodeWithTag(weekDayTag(LocalDate(2026, 10, 25))).performClick()
         waitForIdle()
-        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { swipeLeft() }
+        onNodeWithTag(CALENDAR_PAGER_TAG).performTouchInput { swipeLeft() }
         waitForIdle()
-        onNodeWithTag(weekDayTag(LocalDate(2026, 10, 26))).assertIsSelected()
+        assertSelected(LocalDate(2026, 10, 26), "Свайп с воскресенья")
         onNodeWithTag(weekDayTag(LocalDate(2026, 11, 1))).assertIsDisplayed()
         onNodeWithTag(weekDayTag(today)).assertDoesNotExist()
     }
@@ -264,6 +290,7 @@ class CalendarUiTest {
     fun scrollStaysInsideGrid() = runComposeUiTest {
         openCalendar()
         val bottom = topMinute()
+        near(openTop(), bottom, "Верх при открытии")
         onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { swipeDown() }
         waitForIdle()
         assertTrue(topMinute() < bottom, "Прокрутка вверх, к утру")
@@ -275,8 +302,8 @@ class CalendarUiTest {
         onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { swipeUp(durationMillis = 100) }
         onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { swipeUp(durationMillis = 100) }
         waitForIdle()
-        // Дальше конца часов работы не уезжает.
-        near(660f, topMinute(), "Конец сетки")
+        // Дальше конца часов работы не уезжает: внизу экрана — 23:00.
+        near(1380f - gridHeight() * 60f / 64f, topMinute(), "Конец сетки")
     }
 
     @Test

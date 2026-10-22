@@ -280,6 +280,8 @@ class ClientsUiTest {
 
         onNodeWithTag(relativeRowTag("Ковалёва Алиса")).performTouchInput { longClick() }
         onNodeWithText("Изменить связь").performClick()
+        // Форма связи читает родственника из базы — дождаться её.
+        awaitNode(hasText("Двоюродная сестра"))
         onNodeWithText("Двоюродная сестра").performClick()
         onNodeWithText("Сохранить").performClick()
         awaitNode(hasText("Двоюродная сестра"))

@@ -90,6 +90,7 @@ import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 
 const val CALENDAR_GRID_TAG = "calendar-grid"
+const val CALENDAR_PAGER_TAG = "calendar-pager"
 
 /** Колонка дня в сетке: блоки дня в ней рисуются на Canvas, поэтому тесты и TalkBack видят их через [CalendarBlocks]. */
 fun calendarDayTag(date: LocalDate) = "calendar-day-$date"
@@ -242,7 +243,7 @@ internal fun DayGrid(
             TimeColumn(hours, hourDp, scrollPx)
             HorizontalPager(
                 state = pager,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.weight(1f).fillMaxHeight().testTag(CALENDAR_PAGER_TAG),
                 key = { it },
             ) { page ->
                 val date = dateOfPage(page)
