@@ -1,7 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // Экраны Compose и дизайн-система (ТЗ 2.2). Тема — из шага 0.2 без изменений.
-// JVM-цель (шаг 1.5) — только для тестов экранов на компьютере: runComposeUiTest без телефона и эмулятора.
+// JVM-цель (шаг 1.5) — только для тестов экранов на компьютере: runComposeUiTest без телефона и эмулятора;
+// база в тестах экранов — та же Room в памяти, что в тестах shared/data.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -40,6 +41,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":shared:domain"))
+            // Экраны читают и пишут базу через репозитории слоя данных (с шага 1.6).
+            api(project(":shared:data"))
             api(libs.compose.runtime)
             api(libs.compose.foundation)
             api(libs.compose.ui)

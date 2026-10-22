@@ -5,6 +5,7 @@
     <!-- Данные клиентов не уходят в облачную копию Google: копии — только свои, зашифрованные (ТЗ 7.6, 10.3).
          allowBackup — для Android 10–11, dataExtractionRules — для Android 12+. -->
     <application
+        android:name="com.akenory.personalka.android.PersonalkaApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"

@@ -71,6 +71,7 @@ fun AppShell(
     messages: MessageState,
     todoCount: Int,
     onNewTraining: () -> Unit,
+    immersive: Boolean = false,
     content: @Composable (Section) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
@@ -85,10 +86,12 @@ fun AppShell(
 
     BoxWithConstraints(Modifier.fillMaxSize().background(colors.bg)) {
         val wide = maxWidth >= WideFrom
+        // Форма во весь экран (конструктор типа) на сложенном прячет нижнюю панель; на разложенном боковая остаётся.
+        val showBottomNav = !wide && !immersive
         val contentPadding = if (wide) {
             PaddingValues(start = safeStart + RailWidth, top = safeTop, end = safeEnd, bottom = safeBottom)
         } else {
-            PaddingValues(start = safeStart, top = safeTop, end = safeEnd, bottom = safeBottom + NavBarHeight)
+            PaddingValues(start = safeStart, top = safeTop, end = safeEnd, bottom = safeBottom + if (showBottomNav) NavBarHeight else 0.dp)
         }
 
         // Содержимое — всегда первым и на одном месте: при смене ширины меняется только отступ.
@@ -108,7 +111,7 @@ fun AppShell(
                 onSelect = shell::select,
                 modifier = Modifier.align(Alignment.CenterStart),
             )
-        } else {
+        } else if (showBottomNav) {
             BottomNav(
                 selected = shell.section,
                 todoCount = todoCount,
@@ -156,11 +159,11 @@ private fun NewTrainingButton(onClick: () -> Unit, modifier: Modifier = Modifier
 }
 
 /**
- * Верхняя панель экрана: заголовок 22 sp слева; у открытого поверх экрана — «Назад».
+ * Верхняя панель экрана: заголовок 22 sp слева; у открытого поверх экрана — «Назад», у формы — «Закрыть» (✕).
  * Действия справа (индикатор синхронизации, «…») добавят экраны, которым они нужны.
  */
 @Composable
-fun TopBar(title: String, modifier: Modifier = Modifier, onBack: (() -> Unit)? = null) {
+fun TopBar(title: String, modifier: Modifier = Modifier, onBack: (() -> Unit)? = null, close: Boolean = false) {
     val colors = PersonalkaTheme.colors
     Row(
         modifier = modifier
@@ -172,7 +175,11 @@ fun TopBar(title: String, modifier: Modifier = Modifier, onBack: (() -> Unit)? =
     ) {
         if (onBack != null) {
             IconButton(onClick = onBack) {
-                Icon(PIcons.ArrowBack, contentDescription = "Назад", tint = colors.text)
+                Icon(
+                    imageVector = if (close) PIcons.Close else PIcons.ArrowBack,
+                    contentDescription = if (close) "Закрыть" else "Назад",
+                    tint = colors.text,
+                )
             }
             Spacer(Modifier.width(4.dp))
         }

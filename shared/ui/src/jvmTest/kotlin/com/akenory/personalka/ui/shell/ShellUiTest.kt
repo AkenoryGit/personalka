@@ -14,7 +14,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
@@ -29,9 +31,13 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.NEW_TRAINING_LATER
+import com.akenory.personalka.ui.TestData
+import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
+import com.akenory.personalka.ui.settings.PLACES_ROW_TAG
+import com.akenory.personalka.ui.settings.PROFILE_ROW_TAG
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
@@ -50,10 +56,15 @@ class ShellUiTest {
     private val height = 740.dp
     private val now = LocalDateTime(2026, 10, 20, 15, 40)
     private val clock: () -> Long = { ClubTime.toMillis(now) }
+    private val settings = TestData.ready()
+
+    /** Оболочка видна, когда база ответила, что тренер есть. */
+    private fun ComposeUiTest.awaitShell() = awaitNode(hasTestTag(navTag(Section.HOME)))
 
     @Test
     fun homeOpensFirstWithTodayInTitle() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", clock = clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clock = clock) } }
+        awaitShell()
 
         onNodeWithTag(navTag(Section.HOME)).assertIsSelected()
         onNodeWithText(DateFormat.header(now.date)).assertIsDisplayed()
@@ -63,7 +74,8 @@ class ShellUiTest {
     @Test
     fun foldedHasBottomBarUnfoldedHasRail() = runComposeUiTest {
         var width by mutableStateOf(folded)
-        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", clock = clock) } }
+        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", settings = settings, clock = clock) } }
+        awaitShell()
 
         val home = onNodeWithTag(navTag(Section.HOME)).getBoundsInRoot()
         val more = onNodeWithTag(navTag(Section.MORE)).getBoundsInRoot()
@@ -81,11 +93,13 @@ class ShellUiTest {
     @Test
     fun foldingAndUnfoldingKeepsOpenScreen() = runComposeUiTest {
         var width by mutableStateOf(folded)
-        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", clock = clock) } }
+        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", settings = settings, clock = clock) } }
+        awaitShell()
 
         onNodeWithTag(navTag(Section.MORE)).performClick()
         onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
-        onNodeWithText(MoreItem.SETTINGS.heading).assertIsDisplayed()
+        awaitNode(hasTestTag(PROFILE_ROW_TAG))
+        onNodeWithTag(PLACES_ROW_TAG).assertIsDisplayed()
         onNodeWithContentDescription("Назад").assertIsDisplayed()
 
         // Разложили: список «Ещё» слева, «Настройки» справа, «Назад» не нужен.
@@ -93,13 +107,13 @@ class ShellUiTest {
         waitForIdle()
         onNodeWithTag(navTag(Section.MORE)).assertIsSelected()
         onNodeWithTag(moreRowTag(MoreItem.GROUPS)).assertIsDisplayed()
-        onNodeWithText(MoreItem.SETTINGS.heading).assertIsDisplayed()
+        onNodeWithTag(PROFILE_ROW_TAG).assertIsDisplayed()
         onNodeWithContentDescription("Назад").assertDoesNotExist()
 
         // Сложили обратно: снова «Настройки» с «Назад», а «Назад» ведёт к списку.
         width = folded
         waitForIdle()
-        onNodeWithText(MoreItem.SETTINGS.heading).assertIsDisplayed()
+        onNodeWithTag(PROFILE_ROW_TAG).assertIsDisplayed()
         onNodeWithContentDescription("Назад").performClick()
         onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).assertIsDisplayed()
     }
@@ -138,7 +152,8 @@ class ShellUiTest {
 
     @Test
     fun sectionsRememberTheirScreens() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", clock = clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clock = clock) } }
+        awaitShell()
 
         onNodeWithTag(navTag(Section.MORE)).performClick()
         onNodeWithTag(moreRowTag(MoreItem.GROUPS)).performClick()
@@ -161,11 +176,13 @@ class ShellUiTest {
             Box(Modifier.size(folded, height)) {
                 App(
                     versionName = "0.1.0",
+                    settings = settings,
                     backHandler = { e, back -> SideEffect { enabled = e; onBack = back } },
                     clock = clock,
                 )
             }
         }
+        awaitShell()
         runOnIdle { assertFalse(enabled, "С «Главной» «Назад» отдаётся системе") }
 
         onNodeWithTag(navTag(Section.MORE)).performClick()
@@ -180,7 +197,8 @@ class ShellUiTest {
 
     @Test
     fun plusOnlyOnHomeAndCalendar() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", clock = clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clock = clock) } }
+        awaitShell()
 
         onNodeWithTag(FAB_TAG).performClick()
         onNodeWithText(NEW_TRAINING_LATER).assertIsDisplayed()

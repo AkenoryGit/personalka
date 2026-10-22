@@ -29,23 +29,36 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.ui.components.EmptyState
+import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.settings.SettingsRoute
+import com.akenory.personalka.ui.settings.SettingsScreen
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.ShellState
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.LocalDate
 
 /**
- * Экраны разделов на шаге 1.5 — заготовки: заголовок и пустой экран с тем, в каком шаге раздел появится.
- * Каждый следующий шаг заменяет свою заготовку настоящим экраном.
+ * Экраны разделов. С шага 1.5 — заготовки: заголовок и пустой экран с тем, в каком шаге раздел появится.
+ * Каждый следующий шаг заменяет свою заготовку настоящим экраном; «Ещё → Настройки» — с шага 1.6.
  */
 @Composable
-fun SectionScreen(section: Section, shell: ShellState, today: LocalDate, versionName: String) {
+fun SectionScreen(
+    section: Section,
+    shell: ShellState,
+    today: LocalDate,
+    versionName: String,
+    settings: SettingsRepository,
+    messages: MessageState,
+    scope: CoroutineScope,
+) {
     when (section) {
         Section.HOME -> Placeholder(
             title = DateFormat.header(today),
@@ -71,7 +84,13 @@ fun SectionScreen(section: Section, shell: ShellState, today: LocalDate, version
             heading = "Здесь будут заработок и выплаты",
             text = "Месяц, выплаты, коллеги и год — этап 3.",
         )
-        Section.MORE -> MoreScreen(shell, versionName)
+        Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
+            if (SettingsRoute.isSettings(route)) {
+                SettingsScreen(route, shell, settings, messages, scope, onBack)
+            } else {
+                MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
+            }
+        }
     }
 }
 
@@ -86,7 +105,8 @@ enum class MoreItem(
     GROUPS("groups", "Группы", PIcons.Groups, "Здесь будут группы", "Состав по датам и дети «на раз» — шаг 1.8."),
     SLOTS("slots", "Свободные слоты", PIcons.EventAvailable, "Здесь будут свободные окна", "Поиск окон за период — шаг 4.3."),
     RECONCILE("reconcile", "Сверка с 1С", PIcons.FactCheck, "Здесь будет сверка с 1С", "Отчёт клуба против календаря — шаги 4.1 и 4.2."),
-    SETTINGS("settings", "Настройки", PIcons.Settings, "Здесь будут настройки", "Профиль, места и типы — шаг 1.6, деньги — шаг 3.6."),
+    // У «Настроек» с шага 1.6 свой экран (ui/settings), заготовка не показывается.
+    SETTINGS("settings", "Настройки", PIcons.Settings, "Настройки", "Профиль, места и типы."),
     // «Клуб» — только администратору (ТЗ 5.1). Администратор бывает только с сервером (этап 2),
     // а выключенное не показывается (10.7), поэтому пункта пока нет.
 }
@@ -95,39 +115,43 @@ internal fun moreRowTag(item: MoreItem) = "more-${item.route}"
 
 /**
  * «Ещё»: на узком экране — список, пункт открывается поверх с «Назад»; на широком — список слева
- * и открытый пункт справа (ТЗ 5.1). Прокрутка списка поднята над веткой «широкий / узкий» и переживает
- * сложение и разложение.
+ * и открытый пункт справа (ТЗ 5.1). У пункта бывают вложенные экраны («Настройки» → «Места и типы» →
+ * тип): справа виден верхний, «Назад» ведёт к предыдущему.
+ *
+ * Открытый экран при сложении и разложении стоит на одном месте дерева — в правой части ряда, а список
+ * слева то появляется, то нет. Поэтому форма с недописанным текстом переживает сложение, как и прокрутка
+ * списка, поднятая над веткой «широкий / узкий».
  */
 @Composable
-private fun MoreScreen(shell: ShellState, versionName: String) {
+private fun MoreScreen(
+    shell: ShellState,
+    versionName: String,
+    detail: @Composable (route: String, onBack: (() -> Unit)?) -> Unit,
+) {
     val wide = LocalWide.current
     val listScroll = rememberScrollState()
-    val open = MoreItem.entries.firstOrNull { it.route == shell.top(Section.MORE) }
+    val stack = shell.stack(Section.MORE)
+    val root = MoreItem.entries.firstOrNull { it.route == stack.firstOrNull() }
+    val top = stack.lastOrNull()
+    val back: () -> Unit = { shell.back() }
 
-    if (wide) {
-        Row(Modifier.fillMaxSize()) {
+    Row(Modifier.fillMaxSize()) {
+        if (wide || top == null) {
             MoreList(
-                selected = open,
+                selected = root,
                 scroll = listScroll,
                 versionName = versionName,
-                onOpen = { shell.replaceTop(it.route) },
-                modifier = Modifier.width(360.dp).fillMaxHeight(),
+                onOpen = { if (wide) shell.reset(it.route) else shell.open(it.route) },
+                modifier = if (wide) Modifier.width(360.dp).fillMaxHeight() else Modifier.weight(1f).fillMaxHeight(),
             )
-            VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)
+            if (wide) VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)
+        }
+        if (top != null) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                if (open != null) MoreDetail(open, onBack = null)
+                // На широком у первого экрана пункта «Назад» нет: список и так слева.
+                detail(top, if (!wide || stack.size > 1) back else null)
             }
         }
-    } else if (open == null) {
-        MoreList(
-            selected = null,
-            scroll = listScroll,
-            versionName = versionName,
-            onOpen = { shell.open(it.route) },
-            modifier = Modifier.fillMaxSize(),
-        )
-    } else {
-        MoreDetail(open, onBack = { shell.back() })
     }
 }
 
