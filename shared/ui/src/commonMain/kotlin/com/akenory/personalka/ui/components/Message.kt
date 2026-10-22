@@ -92,7 +92,7 @@ class MessageState {
         const val UNDO_LABEL = "Отменить"
 
         /** 5 секунд (ТЗ 5.20). С TalkBack система может дать больше — см. [MessageHost]. */
-        const val TIMEOUT_MS = 5_000L
+        const val TIMEOUT_MS = 4_000L
     }
 }
 

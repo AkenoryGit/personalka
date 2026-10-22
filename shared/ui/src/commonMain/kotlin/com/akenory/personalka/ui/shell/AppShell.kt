@@ -91,11 +91,17 @@ fun AppShell(
             PaddingValues(start = safeStart, top = safeTop, end = safeEnd, bottom = safeBottom + NavBarHeight)
         }
 
-        // Содержимое — всегда первым и на одном месте: при смене ширины меняется только отступ.
-        Box(Modifier.fillMaxSize().padding(contentPadding)) {
-            CompositionLocalProvider(LocalWide provides wide) {
-                holder.SaveableStateProvider(shell.section.name) {
-                    content(shell.section)
+        // ПРОВЕРОЧНАЯ ПОЛОМКА: на широком и узком экране содержимое вызывается из разных мест кода.
+        if (wide) {
+            Box(Modifier.fillMaxSize().padding(contentPadding)) {
+                CompositionLocalProvider(LocalWide provides wide) {
+                    holder.SaveableStateProvider(shell.section.name) { content(shell.section) }
+                }
+            }
+        } else {
+            Box(Modifier.fillMaxSize().padding(contentPadding)) {
+                CompositionLocalProvider(LocalWide provides wide) {
+                    holder.SaveableStateProvider(shell.section.name) { content(shell.section) }
                 }
             }
         }
