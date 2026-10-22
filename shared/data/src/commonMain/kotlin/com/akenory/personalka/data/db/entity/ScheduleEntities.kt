@@ -50,7 +50,7 @@ data class SeriesEntity(
     val validTo: LocalDate? = null,
     /** До какой даты уже созданы тренировки. */
     val generatedUntil: LocalDate,
-    /** Пропущенные даты: не создаются при продлении (4.4). */
+    /** Даты, на которых серия не создаёт тренировку: пропущенные и занятые тренировкой «Только эту» (4.4). */
     val skipDates: List<LocalDate> = emptyList(),
 )
 
