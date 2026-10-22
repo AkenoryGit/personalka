@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кабинет — Орлова Ксения</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--done:#007634;--done-container:#d0f0d5;--on-done-container:#1b5b2f;--charged:#8e5b00;--charged-container:#fce2c3;--on-charged-container:#6b4300;--error:#c22540;--on-error:#fbfaf7;color-scheme:light;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 16px/24px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--done:#64b376;--done-container:#1c3e24;--on-done-container:#c2e1c7;--charged:#cf9037;--charged-container:#48300d;--on-charged-container:#eed3b2;--error:#f26f78;--on-error:#15171a;color-scheme:dark}
+.scr *{box-sizing:border-box}
+.pg{max-width:600px;margin:0 auto;padding:0 16px 40px;display:flex;flex-direction:column;gap:28px}
+.bar{height:56px;display:flex;align-items:center;gap:10px;font:500 16px/24px var(--ff);margin-bottom:-16px}
+.lgr{stroke:var(--divider);stroke-width:2}
+.hd{display:flex;flex-direction:column;gap:2px}
+h1{margin:0 0 6px;font:500 26px/32px var(--ff)}
+h2{margin:0;font:500 20px/28px var(--ff)}
+h3{margin:0;font:500 16px/24px var(--ff)}
+p{margin:0}
+.mut{color:var(--text-muted)}
+.num{font-variant-numeric:tabular-nums}
+.sec{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border-radius:12px}
+.lst{list-style:none;margin:0;padding:0}
+.it{padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.it + .it{border-top:1px solid var(--divider)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:4px 8px;flex-wrap:wrap}
+.dt{font-weight:500;font-variant-numeric:tabular-nums}
+.f{display:flex;flex-direction:column;margin-top:8px}
+.k{font-weight:500;color:var(--text-muted)}
+.st{display:inline-flex;align-items:center;min-height:32px;padding:0 10px;border-radius:8px;font:500 16px/24px var(--ff);white-space:nowrap}
+.st.done{background:var(--done-container);color:var(--on-done-container)}
+.st.chg{background:var(--charged-container);color:var(--on-charged-container)}
+.st.cnc{background:var(--surface-alt);color:var(--text-muted)}
+.tb{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.tb th,.tb td{padding:12px 16px 12px 8px;text-align:right;font-weight:400}
+.tb thead th{color:var(--text-muted);font-weight:500;padding-bottom:4px}
+.tb tbody th{text-align:left;padding:12px 0 12px 16px}
+.tb tbody td{font:500 20px/24px var(--ff)}
+.tb tbody tr + tr > *{border-top:1px solid var(--divider)}
+.rl{display:flex;align-items:center;gap:10px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:4px;flex:none}
+.sw.done{background:var(--done)}
+.sw.cnc{background:var(--outline)}
+.sw.chg{background:var(--charged)}
+.rule{display:flex;gap:12px;padding:14px 16px;align-items:flex-start}
+.ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.rule .ic{margin-top:0;color:var(--text-muted)}
+details.mo{background:var(--surface);border-radius:12px}
+.mo > summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:56px;padding:0 12px 0 16px;cursor:pointer}
+.mo > summary::-webkit-details-marker{display:none}
+.mo > summary .mt{font-weight:500;flex:1 1 auto}
+.mo[open] > summary{border-bottom:1px solid var(--divider)}
+.mo[open] > summary .chev{transform:rotate(180deg)}
+.chev{color:var(--text-muted)}
+.stack{display:flex;flex-direction:column;gap:8px}
+.nest{padding:8px}
+.nest .mo{background:var(--surface-alt)}
+.rr{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.rr + .rr{border-top:1px solid var(--divider)}
+.ct{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.tm{font:500 20px/28px var(--ff);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chart{padding:16px;display:flex;flex-direction:column;gap:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:8px;background:var(--surface-alt);color:var(--text);text-decoration:none;font:500 16px/24px var(--ff)}
+.chip.on{background:var(--primary);color:var(--on-primary)}
+.gl{stroke:var(--divider);stroke-width:1}
+.ax{font:400 16px var(--ff);fill:var(--text-muted)}
+.ln{fill:none;stroke:var(--text-muted);stroke-width:1.5}
+.pf{fill:var(--primary)}
+.po{fill:var(--surface);stroke:var(--primary);stroke-width:2}
+.vl{font:500 16px var(--ff);fill:var(--text)}
+.lg{display:flex;flex-wrap:wrap;gap:4px 20px;color:var(--text-muted)}
+.lg span{display:inline-flex;align-items:center;gap:8px}
+.media{display:flex;align-items:center;gap:14px;padding:14px 16px;min-height:72px;color:var(--text);text-decoration:none}
+.media .ct{gap:0}
+.ft{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--divider);padding-top:20px}
+.ft a{display:inline-flex;align-items:center;min-height:44px;color:var(--text);text-decoration:underline;text-underline-offset:3px;align-self:flex-start}
+.ft a.dng{color:var(--error)}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 390px; height: 3940px">
+<div class="pg">
+
+  <div class="bar">
+    <svg width="28" height="28" viewBox="0 0 72 72" aria-hidden="true"><rect class="lgr" x="1" y="1" width="70" height="70" rx="16" fill="#F3EFE6"></rect><path d="M23 53 V21 H49 V53" fill="none" stroke="#15171A" stroke-width="8"></path><circle cx="36" cy="47" r="5" fill="#FF5A1F"></circle></svg>
+    <span>Кабинет тренировок</span>
+  </div>
+
+  <header class="hd">
+    <h1>Орлова Ксения</h1>
+    <p>Тренер: Дмитрий Дудник</p>
+    <p class="mut num">Данные на 20.10.2026, 15:41</p>
+  </header>
+
+  <section class="sec" aria-labelledby="up">
+    <h2 id="up">Ближайшие тренировки</h2>
+    <ul class="card lst">
+      <li class="it">
+        <p class="dt">чт 22.10 · 13:30</p>
+        <p>Персональная · Большой бассейн</p>
+        <div class="f"><span class="k">План</span><span>Старт с тумбочки, 4 × 25 м на спине с поворотом</span></div>
+      </li>
+      <li class="it"><p class="dt">вт 27.10 · 13:30</p><p>Персональная · Большой бассейн</p></li>
+      <li class="it"><p class="dt">чт 29.10 · 13:30</p><p>Персональная · Большой бассейн</p></li>
+      <li class="it"><p class="dt">вт 03.11 · 13:30</p><p>Персональная · Большой бассейн</p></li>
+    </ul>
+  </section>
+
+  <section class="sec" aria-labelledby="att">
+    <h2 id="att">Посещения</h2>
+    <div class="card">
+      <table class="tb">
+        <thead><tr><th scope="col"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Статус</span></th><th scope="col">Октябрь</th><th scope="col">Всего</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><span class="rl"><span class="sw done" aria-hidden="true"></span><span>Проведено</span></span></th><td>4</td><td>46</td></tr>
+          <tr><th scope="row"><span class="rl"><span class="sw cnc" aria-hidden="true"></span><span>Отменено</span></span></th><td>1</td><td>5</td></tr>
+          <tr><th scope="row"><span class="rl"><span class="sw chg" aria-hidden="true"></span><span>Отмена со списанием</span></span></th><td>1</td><td>2</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card rule">
+      <svg class="ic" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.2"></path></svg>
+      <p>Если вы предупреждаете об отмене меньше чем за 1 час до начала, тренировка считается проведённой и списывается.</p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="hist">
+    <h2 id="hist">История</h2>
+    <div class="stack">
+      <details class="mo" open>
+        <summary><span class="mt">Октябрь 2026</span><span class="mut">6 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary>
+        <ul class="lst">
+          <li class="it">
+            <div class="top"><p class="dt">вт 20.10 · 13:30</p><span class="st done">Проведено</span></div>
+            <p>Персональная · Большой бассейн</p>
+            <div class="f"><span class="k">План</span><span>Кроль 50 м: дыхание на 3 до конца дистанции</span></div>
+          </li>
+          <li class="it">
+            <div class="top"><p class="dt">чт 15.10 · 13:30</p><span class="st done">Проведено</span></div>
+            <p>Персональная · Большой бассейн</p>
+            <div class="f"><span class="k">План</span><span>Кроль: дыхание на 3, 6 × 25 м; скольжение после старта.</span></div>
+            <div class="f"><span class="k">Факт</span><span>Дыхание на 3 держит 15–20 м, дальше сбивается. Скольжение стало длиннее.</span></div>
+            <div class="f"><span class="k">Поведение</span><span>Стеснялась прыгать, после двух попыток пошло.</span></div>
+          </li>
+          <li class="it">
+            <div class="top"><p class="dt">вт 13.10 · 13:30</p><span class="st chg">Отмена со списанием</span></div>
+            <p>Персональная · Большой бассейн</p>
+            <p class="mut">Не сможет · предупредили за 40 мин</p>
+          </li>
+          <li class="it">
+            <div class="top"><p class="dt">чт 08.10 · 13:30</p><span class="st cnc">Отменено</span></div>
+            <p>Персональная · Большой бассейн</p>
+            <p class="mut">Отъезд</p>
+          </li>
+          <li class="it">
+            <div class="top"><p class="dt">вт 06.10 · 13:30</p><span class="st done">Проведено</span></div>
+            <p>Персональная · Большой бассейн</p>
+            <div class="f"><span class="k">План</span><span>На спине: ноги с доской, 4 × 25 м; поворот на спине.</span></div>
+            <div class="f"><span class="k">Факт</span><span>25 м на спине — 21,90, лучшее время. Поворот пока с остановкой у стенки.</span></div>
+            <div class="f"><span class="k">Поведение</span><span>Работала собранно, сама просила повторить.</span></div>
+          </li>
+          <li class="it">
+            <div class="top"><p class="dt">чт 01.10 · 13:30</p><span class="st done">Проведено</span></div>
+            <p>Персональная · Большой бассейн</p>
+            <div class="f"><span class="k">План</span><span>Кроль 50 м на время, разбор старта.</span></div>
+            <div class="f"><span class="k">Факт</span><span>50 м кролем — 41,20. На старте рано поднимает голову.</span></div>
+            <div class="f"><span class="k">Поведение</span><span>Внимательная, задаёт вопросы по делу.</span></div>
+          </li>
+        </ul>
+      </details>
+      <details class="mo">
+        <summary><span class="mt">Ранее</span><span class="mut">47 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary>
+        <div class="stack nest">
+          <details class="mo"><summary><span class="mt">Сентябрь 2026</span><span class="mut">9 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary></details>
+          <details class="mo"><summary><span class="mt">Август 2026</span><span class="mut">7 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary></details>
+          <details class="mo"><summary><span class="mt">Июль 2026</span><span class="mut">5 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary></details>
+          <details class="mo"><summary><span class="mt">Июнь 2026</span><span class="mut">6 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary></details>
+          <details class="mo"><summary><span class="mt">Май 2026</span><span class="mut">8 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary></details>
+          <details class="mo"><summary><span class="mt">Апрель 2026</span><span class="mut">8 тренировок</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary></details>
+          <details class="mo"><summary><span class="mt">Март 2026</span><span class="mut">4 тренировки</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary></details>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="sec" id="res" aria-labelledby="rs">
+    <h2 id="rs">Результаты</h2>
+    <h3>Личные рекорды · бассейн 25 м</h3>
+    <ul class="card lst">
+      <li class="rr"><span class="ct"><span>25 м вольный стиль</span><span class="mut">соревнования · 10.10</span></span><span class="tm">17,84</span></li>
+      <li class="rr"><span class="ct"><span>50 м вольный стиль</span><span class="mut">соревнования · 10.10</span></span><span class="tm">39,62</span></li>
+      <li class="rr"><span class="ct"><span>25 м на спине</span><span class="mut">тренировка · 06.10</span></span><span class="tm">21,90</span></li>
+      <li class="rr"><span class="ct"><span>50 м на спине</span><span class="mut">тренировка · 29.09</span></span><span class="tm">47,15</span></li>
+    </ul>
+
+    <div class="card chart">
+      <h3>Время по дистанции</h3>
+      <nav class="chips" aria-label="Дистанция">
+        <a class="chip on" href="#res" aria-current="true">50 м вольный стиль</a>
+        <a class="chip" href="#res">25 м вольный стиль</a>
+        <a class="chip" href="#res">25 м на спине</a>
+        <a class="chip" href="#res">50 м на спине</a>
+      </nav>
+      <svg viewBox="0 0 326 214" width="326" height="214" role="img" aria-label="50 м вольный стиль: с 44,10 третьего сентября до 39,62 десятого октября">
+        <line class="gl" x1="48" y1="41" x2="322" y2="41"></line>
+        <line class="gl" x1="48" y1="91" x2="322" y2="91"></line>
+        <line class="gl" x1="48" y1="141" x2="322" y2="141"></line>
+        <line class="gl" x1="221" y1="10" x2="221" y2="168" stroke-dasharray="3 3"></line>
+        <text class="ax" x="38" y="47" text-anchor="end">44</text>
+        <text class="ax" x="38" y="97" text-anchor="end">42</text>
+        <text class="ax" x="38" y="147" text-anchor="end">40</text>
+        <text class="ax" x="134" y="206" text-anchor="middle">сентябрь</text>
+        <text class="ax" x="270" y="206" text-anchor="middle">октябрь</text>
+        <polyline class="ln" points="48,38.5 136,71 148.6,89.8 224,111 280.6,150.5 312,133.5"></polyline>
+        <circle class="po" cx="48" cy="38.5" r="5"></circle>
+        <circle class="po" cx="136" cy="71" r="5"></circle>
+        <circle class="pf" cx="148.6" cy="89.8" r="6"></circle>
+        <circle class="po" cx="224" cy="111" r="5"></circle>
+        <circle class="pf" cx="280.6" cy="150.5" r="6"></circle>
+        <circle class="po" cx="312" cy="133.5" r="5"></circle>
+        <text class="vl" x="280.6" y="184" text-anchor="middle">39,62</text>
+      </svg>
+      <p class="lg">
+        <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle class="pf" cx="7" cy="7" r="6"></circle></svg>соревнования</span>
+        <span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle class="po" cx="7" cy="7" r="5"></circle></svg>тренировки</span>
+      </p>
+      <p class="mut">Чем ниже точка, тем быстрее.</p>
+    </div>
+
+    <details class="mo">
+      <summary><span class="mt">Все результаты</span><span class="mut">9</span><svg class="ic chev" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary>
+    </details>
+  </section>
+
+  <section class="sec" aria-label="Фото и видео">
+    <a class="card media" href="#">
+      <svg class="ic" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 16l-5-5-8 8"></path></svg>
+      <span class="ct"><span style="font-weight: 500">Фото и видео</span><span class="mut">Откроется Яндекс Диск</span></span>
+      <svg class="ic" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg>
+    </a>
+  </section>
+
+  <footer class="ft">
+    <p>По всем вопросам пишите тренеру напрямую.</p>
+    <p class="mut num">Согласие на обработку данных дано 05.09.2026</p>
+    <a href="#">Политика обработки персональных данных</a>
+    <a class="dng" href="KbRevoke.dc.html">Отозвать согласие</a>
+  </footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":390,"height":3940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

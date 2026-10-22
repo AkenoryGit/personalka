@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Календарь — месяц</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--accent:#ff5a1f;--on-accent:#15171a;--accent-graphic:#f55111;--done:#007634;--charged:#8e5b00;--over:#7c4dbd;--shadow-raised:0 2px 6px rgba(21,23,26,.18);--type-lime-stripe:#6a9000;--type-green-stripe:#149848;--type-teal-stripe:#00929a;--type-blue-stripe:#2d84e0;--type-indigo-stripe:#7377e1;--type-magenta-stripe:#bb59c1;--type-pink-stripe:#cf588d;--type-brown-stripe:#a2795e;--type-slate-stripe:#738497;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--accent:#ff5a1f;--on-accent:#15171a;--accent-graphic:#ff5a1f;--done:#64b376;--charged:#cf9037;--over:#ad88ea;--shadow-raised:0 2px 6px rgba(0,0,0,.5);--type-lime-stripe:#87ae39;--type-green-stripe:#52b76d;--type-teal-stripe:#2cb2bb;--type-blue-stripe:#57a1f6;--type-indigo-stripe:#8c93f4;--type-magenta-stripe:#d077d5;--type-pink-stripe:#e275a3;--type-brown-stripe:#bc957c;--type-slate-stripe:#90a0b2}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.tb{position:absolute;left:0;right:0;top:0;height:56px;display:flex;align-items:center;gap:4px;padding:0 8px;box-sizing:border-box}
+.mo{height:48px;padding:0 4px 0 8px;border:0;border-radius:12px;background:transparent;color:var(--text);font:500 17px/24px var(--ff);display:inline-flex;align-items:center}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center}
+.dd{height:36px;padding:0 4px 0 12px;border:0;border-radius:8px;background:var(--surface-alt);color:var(--text);font:500 13px/18px var(--ff);display:inline-flex;align-items:center}
+.dd .ms,.mo .ms{font-size:20px}
+.sp{flex:1 1 auto}
+.wh{position:absolute;left:0;right:0;top:56px;height:28px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));padding:0 8px;box-sizing:border-box;font:400 13px/28px var(--ff);color:var(--text-muted);text-align:center}
+.mg{position:absolute;left:0;right:0;top:84px;height:320px;background:var(--surface);display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:64px;padding:0 8px;box-sizing:border-box}
+.dc{position:relative;margin:0;padding:4px 0 0;border:0;border-top:1px solid var(--divider);background:transparent;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:0;font-family:var(--ff)}
+.dc.sel::after{content:"";position:absolute;left:2px;right:2px;top:3px;bottom:2px;border-radius:12px;background:var(--surface-alt);z-index:0}
+.dc>*{position:relative;z-index:1}
+.dn{width:28px;height:28px;border-radius:999px;display:grid;place-items:center;font:500 15px/22px var(--ff);font-variant-numeric:tabular-nums}
+.dn.td{background:var(--accent);color:var(--on-accent)}
+.dc.out .dn{color:var(--text-muted);font-weight:400}
+.ct{height:16px;margin-top:2px;font:400 12px/16px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.ds{display:flex;gap:3px;margin-top:4px;height:6px}
+.ds i{width:6px;height:6px;border-radius:999px;display:block}
+.k-blue{background:var(--type-blue-stripe)}.k-indigo{background:var(--type-indigo-stripe)}.k-lime{background:var(--type-lime-stripe)}.k-green{background:var(--type-green-stripe)}.k-pink{background:var(--type-pink-stripe)}.k-teal{background:var(--type-teal-stripe)}.k-magenta{background:var(--type-magenta-stripe)}.k-brown{background:var(--type-brown-stripe)}.k-slate{background:var(--type-slate-stripe)}.k-out{background:var(--outline)}
+.ah{position:absolute;left:0;right:0;top:404px;height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;box-sizing:border-box}
+.ah b{font:500 17px/24px var(--ff)}
+.ah span{font:400 13px/18px var(--ff);color:var(--text-muted)}
+.ls{position:absolute;left:0;right:0;top:452px;display:flex;flex-direction:column}
+.row{height:52px;display:flex;align-items:center;gap:12px;padding:0 16px;border:0;background:transparent;color:var(--text);text-align:left;font-family:var(--ff);box-sizing:border-box}
+.rt{width:44px;font:400 15px/20px var(--ff);font-variant-numeric:tabular-nums;color:var(--text)}
+.rb{width:3px;height:36px;border-radius:2px;flex:none}
+.rx{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.rx b{font:500 15px/20px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx span{font:400 13px/16px var(--ff);color:var(--text-muted)}
+.row.cx .rx b,.row.cx .rt{text-decoration:line-through;color:var(--text-muted)}
+.ri{display:flex;align-items:center;gap:6px;flex:none}
+.ri .ms{font-size:20px;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 20}
+.dot{width:8px;height:8px;border-radius:999px;background:var(--accent-graphic);display:block}
+.c-done{color:var(--done)}.c-chg{color:var(--charged)}.c-over{color:var(--over)}.c-mut{color:var(--text-muted)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:72px;display:flex;background:var(--surface);border-top:1px solid var(--divider)}
+.it{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:transparent;color:var(--text-muted);font:500 13px/16px var(--ff)}
+.pill{position:relative;width:56px;height:32px;border-radius:999px;display:grid;place-items:center}
+.it.on{color:var(--text)}
+.it.on .pill{background:var(--surface-alt)}
+.it.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.cnt{position:absolute;top:-2px;left:32px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--accent);color:var(--on-accent);font:500 13px/20px var(--ff);text-align:center;font-variant-numeric:tabular-nums}
+.fab{position:absolute;width:56px;height:56px;padding:0;border:0;border-radius:16px;background:var(--accent);color:var(--on-accent);box-shadow:var(--shadow-raised);display:grid;place-items:center}
+.fab .ms{font-size:28px}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="tb">
+    <button class="mo" type="button">Октябрь 2026<span class="ms">arrow_drop_down</span></button>
+    <span class="sp"></span>
+    <button class="ib" type="button" aria-label="Сегодня"><span class="ms">today</span></button>
+    <button class="dd" type="button">Месяц<span class="ms">arrow_drop_down</span></button>
+    <button class="dd" type="button">Все места<span class="ms">arrow_drop_down</span></button>
+  </div>
+
+  <div class="wh"><span>пн</span><span>вт</span><span>ср</span><span>чт</span><span>пт</span><span>сб</span><span>вс</span></div>
+
+  <div class="mg">
+    <button class="dc out" type="button"><span class="dn">28</span><span class="ct">7</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc out" type="button"><span class="dn">29</span><span class="ct">9</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-lime"></i><i class="k-green"></i></span></button>
+    <button class="dc out" type="button"><span class="dn">30</span><span class="ct">6</span><span class="ds"><i class="k-blue"></i><i class="k-magenta"></i><i class="k-brown"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">1</span><span class="ct">9</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">2</span><span class="ct">6</span><span class="ds"><i class="k-blue"></i><i class="k-pink"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">3</span><span class="ct">3</span><span class="ds"><i class="k-green"></i><i class="k-blue"></i></span></button>
+    <button class="dc" type="button"><span class="dn">4</span><span class="ct"></span><span class="ds"></span></button>
+
+    <button class="dc" type="button"><span class="dn">5</span><span class="ct">8</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">6</span><span class="ct">10</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-lime"></i><i class="k-green"></i></span></button>
+    <button class="dc" type="button"><span class="dn">7</span><span class="ct">7</span><span class="ds"><i class="k-blue"></i><i class="k-magenta"></i><i class="k-brown"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">8</span><span class="ct">9</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">9</span><span class="ct">5</span><span class="ds"><i class="k-blue"></i><i class="k-pink"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">10</span><span class="ct">3</span><span class="ds"><i class="k-green"></i><i class="k-blue"></i></span></button>
+    <button class="dc" type="button"><span class="dn">11</span><span class="ct"></span><span class="ds"></span></button>
+
+    <button class="dc" type="button"><span class="dn">12</span><span class="ct">7</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">13</span><span class="ct">11</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-lime"></i><i class="k-green"></i></span></button>
+    <button class="dc" type="button"><span class="dn">14</span><span class="ct">6</span><span class="ds"><i class="k-blue"></i><i class="k-magenta"></i><i class="k-brown"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">15</span><span class="ct">9</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">16</span><span class="ct">6</span><span class="ds"><i class="k-blue"></i><i class="k-pink"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">17</span><span class="ct">4</span><span class="ds"><i class="k-green"></i><i class="k-blue"></i></span></button>
+    <button class="dc" type="button"><span class="dn">18</span><span class="ct"></span><span class="ds"></span></button>
+
+    <button class="dc" type="button"><span class="dn">19</span><span class="ct">7</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc sel" type="button"><span class="dn td">20</span><span class="ct">10</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-lime"></i><i class="k-green"></i></span></button>
+    <button class="dc" type="button"><span class="dn">21</span><span class="ct">7</span><span class="ds"><i class="k-blue"></i><i class="k-magenta"></i><i class="k-brown"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">22</span><span class="ct">9</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">23</span><span class="ct">6</span><span class="ds"><i class="k-blue"></i><i class="k-pink"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">24</span><span class="ct">3</span><span class="ds"><i class="k-green"></i><i class="k-blue"></i></span></button>
+    <button class="dc" type="button"><span class="dn">25</span><span class="ct"></span><span class="ds"></span></button>
+
+    <button class="dc" type="button"><span class="dn">26</span><span class="ct">7</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">27</span><span class="ct">10</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-lime"></i><i class="k-green"></i></span></button>
+    <button class="dc" type="button"><span class="dn">28</span><span class="ct">7</span><span class="ds"><i class="k-blue"></i><i class="k-magenta"></i><i class="k-brown"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">29</span><span class="ct">9</span><span class="ds"><i class="k-blue"></i><i class="k-indigo"></i><i class="k-green"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">30</span><span class="ct">6</span><span class="ds"><i class="k-blue"></i><i class="k-pink"></i><i class="k-slate"></i></span></button>
+    <button class="dc" type="button"><span class="dn">31</span><span class="ct">3</span><span class="ds"><i class="k-green"></i><i class="k-blue"></i></span></button>
+    <button class="dc out" type="button"><span class="dn">1</span><span class="ct"></span><span class="ds"></span></button>
+  </div>
+
+  <div class="ah"><b>Вторник, 20 октября</b><span>10 тренировок</span></div>
+
+  <div class="ls">
+    <button class="row" type="button"><span class="rt">08:00</span><span class="rb k-blue"></span><span class="rx"><b>Морозов Д.</b><span>ПТ · ББ</span></span><span class="ri"><span class="ms c-done">check</span></span></button>
+    <button class="row" type="button"><span class="rt">09:00</span><span class="rb k-indigo"></span><span class="rx"><b>Ковалёв / Ковалёва</b><span>Сплит · ББ</span></span><span class="ri"><span class="dot"></span><span class="ms c-done">check</span></span></button>
+    <button class="row cx" type="button"><span class="rt">10:00</span><span class="rb k-out"></span><span class="rx"><b>Зайцева М.</b><span>ПТ · ББ · со списанием</span></span><span class="ri"><span class="ms c-chg">currency_ruble</span></span></button>
+    <button class="row" type="button"><span class="rt">10:00</span><span class="rb k-teal"></span><span class="rx"><b>Белова Е.</b><span>Грудничковое · ДБ · 30 мин</span></span><span class="ri"><span class="ms c-done">check</span></span></button>
+    <button class="row" type="button"><span class="rt">11:00</span><span class="rb k-slate"></span><span class="rx"><b>Дежурство</b><span>ББ · до 15:00</span></span><span class="ri"></span></button>
+    <button class="row" type="button"><span class="rt">12:00</span><span class="rb k-blue"></span><span class="rx"><b>Никитин А.</b><span>ПТ · ББ</span></span><span class="ri"><span class="ms c-mut">layers</span><span class="ms c-done">check</span></span></button>
+    <button class="row" type="button"><span class="rt">13:30</span><span class="rb k-blue"></span><span class="rx"><b>Орлова К.</b><span>ПТ · ББ</span></span><span class="ri"><span class="dot"></span><span class="ms c-mut">layers</span><span class="ms c-done">check</span></span></button>
+    <button class="row" type="button"><span class="rt">15:00</span><span class="rb k-blue"></span><span class="rx"><b>Соколова В.</b><span>ПТ · ДБ</span></span><span class="ri"></span></button>
+  </div>
+
+  <button class="fab" type="button" aria-label="Новая тренировка" style="left: 340px; top: 816px"><span class="ms">add</span></button>
+
+  <nav class="nav">
+    <button class="it" type="button"><span class="pill"><span class="ms">home</span><span class="cnt">3</span></span>Главная</button>
+    <button class="it on" type="button"><span class="pill"><span class="ms">calendar_month</span></span>Календарь</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">group</span></span>Клиенты</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">payments</span></span>Зарплата</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">more_horiz</span></span>Ещё</button>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

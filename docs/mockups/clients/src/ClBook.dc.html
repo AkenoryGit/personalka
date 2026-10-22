@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Записать из листа ожидания</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--scrim:#15171a66;--shadow-sheet:0 -4px 16px rgba(21,23,26,.12);--type-indigo-stripe:#7377e1;--type-lime-stripe:#6a9000;--type-green-stripe:#149848;--type-pink-stripe:#cf588d;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--scrim:#000000a3;--shadow-sheet:0 -4px 16px rgba(0,0,0,.5);--type-indigo-stripe:#8c93f4;--type-lime-stripe:#87ae39;--type-green-stripe:#52b76d;--type-pink-stripe:#e275a3}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.ab{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:4px;padding:0 4px;box-sizing:border-box}
+.ab h1{margin:0;padding-left:12px;font:500 22px/28px var(--ff);flex:1 1 auto;min-width:0}
+.scrim{position:absolute;left:0;right:0;top:0;bottom:0;background:var(--scrim)}
+.sh{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--shadow-sheet);box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden}
+.handle{width:32px;height:4px;border-radius:999px;background:var(--outline);align-self:center;margin:8px 0;flex:none}
+.hd{display:flex;align-items:center;padding:0 16px 0 4px}
+.ttl{margin:0 0 0 4px;font:500 17px/24px var(--ff);flex:1 1 auto}
+.body{position:relative;flex:1 1 auto;min-height:0;overflow:hidden}
+.pad{padding:8px 16px 16px;display:flex;flex-direction:column;gap:16px}
+.grp{display:flex;flex-direction:column;gap:6px}
+.lbl{font:500 13px/18px var(--ff);color:var(--text-muted)}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.note{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:8px;font:400 13px/18px var(--ff);background:var(--surface-alt);color:var(--text)}
+.note .ms{font-size:18px;flex:none;color:var(--text-muted)}
+.chs{display:flex;flex-wrap:wrap;gap:8px}
+.ch{height:36px;padding:0 14px;border:0;border-radius:8px;background:var(--surface-alt);color:var(--text);font:500 13px/18px var(--ff);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ch.on{background:var(--primary);color:var(--on-primary);padding-left:10px}
+.ch .ms{font-size:18px}
+.ch .tdot{width:8px;height:8px;border-radius:999px;flex:none}
+.box{min-height:56px;box-sizing:border-box;padding:0 16px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--outline);display:flex;align-items:center;gap:8px;font:400 15px/22px var(--ff);color:var(--text)}
+.box .ph{color:var(--text-muted)}
+.box .ms{font-size:20px;color:var(--text-muted);flex:none}
+.box .val{flex:1 1 auto;min-width:0}
+.box.area{align-items:flex-start;padding-top:16px;padding-bottom:16px}
+.boxes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.num{font-variant-numeric:tabular-nums}
+.fade{position:absolute;left:0;right:0;bottom:0;height:32px;background:linear-gradient(to bottom,transparent,var(--surface));pointer-events:none}
+.foot{padding:12px 16px 20px;border-top:1px solid var(--divider)}
+.btn{height:48px;padding:0 20px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;white-space:nowrap}
+.b-main{background:var(--primary);color:var(--on-primary)}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="ab"><h1>Клиенты</h1></div>
+  <div class="scrim"></div>
+
+  <div class="sh" role="dialog" aria-label="Новая тренировка" style="top: 40px">
+    <span class="handle"></span>
+    <div class="hd">
+      <button class="ib" type="button" aria-label="Закрыть"><span class="ms">close</span></button>
+      <h2 class="ttl">Новая тренировка</h2>
+    </div>
+
+    <div class="body">
+      <div class="pad">
+        <div class="note"><span class="ms">event_available</span><span>Из листа ожидания: освободилось пн 08:00. После сохранения Петров К. уйдёт из листа сам.</span></div>
+
+        <div class="grp">
+          <span class="lbl">Тип</span>
+          <div class="chs">
+            <button class="ch on" type="button" aria-pressed="true"><span class="ms">check</span>ПТ</button>
+            <button class="ch" type="button"><span class="tdot" style="background: var(--type-indigo-stripe)"></span>Сплит</button>
+            <button class="ch" type="button"><span class="tdot" style="background: var(--type-lime-stripe)"></span>Мини-группа</button>
+            <button class="ch" type="button"><span class="tdot" style="background: var(--type-green-stripe)"></span>Группа</button>
+            <button class="ch" type="button"><span class="tdot" style="background: var(--type-pink-stripe)"></span>СПТ</button>
+            <button class="ch" type="button">Ещё 3<span class="ms">expand_more</span></button>
+          </div>
+        </div>
+
+        <div class="grp">
+          <span class="lbl">Клиент</span>
+          <div class="chs">
+            <button class="ch on" type="button" aria-pressed="true"><span class="ms">check</span>Петров К.</button>
+          </div>
+        </div>
+
+        <div class="grp">
+          <span class="lbl">Место</span>
+          <div class="chs">
+            <button class="ch on" type="button" aria-pressed="true"><span class="ms">check</span>ББ</button>
+            <button class="ch" type="button">ДБ</button>
+            <button class="ch" type="button">Зал</button>
+          </div>
+        </div>
+
+        <div class="grp">
+          <span class="lbl">Когда</span>
+          <div class="boxes">
+            <div class="box"><span class="ms">calendar_today</span><span class="val num">пн 26.10.2026</span></div>
+            <div class="box"><span class="ms">schedule</span><span class="val num">08:00–08:50</span></div>
+          </div>
+        </div>
+
+        <div class="grp">
+          <span class="lbl">Длительность, мин</span>
+          <div class="chs">
+            <button class="ch" type="button">30</button>
+            <button class="ch" type="button">45</button>
+            <button class="ch on" type="button" aria-pressed="true"><span class="ms">check</span>50</button>
+            <button class="ch" type="button">60</button>
+            <button class="ch" type="button">90</button>
+            <button class="ch" type="button">Своя</button>
+          </div>
+        </div>
+
+        <div class="grp">
+          <span class="lbl">Повтор</span>
+          <div class="chs">
+            <button class="ch" type="button">Не повторять</button>
+            <button class="ch on" type="button" aria-pressed="true"><span class="ms">check</span>Каждую неделю</button>
+          </div>
+          <span class="cap">Каждый пн с 26.10, бессрочно</span>
+        </div>
+
+        <div class="grp">
+          <span class="lbl">План</span>
+          <div class="box area"><span class="val ph">Необязательно</span><span class="ms">mic</span></div>
+        </div>
+      </div>
+      <div class="fade"></div>
+    </div>
+
+    <div class="foot"><button class="btn b-main" type="button" style="width: 100%">Сохранить</button></div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

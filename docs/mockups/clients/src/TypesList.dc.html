@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Настройки — места и типы</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--accent:#ff5a1f;--on-accent:#15171a;--type-blue-stripe:#2d84e0;--type-indigo-stripe:#7377e1;--type-lime-stripe:#6a9000;--type-green-stripe:#149848;--type-pink-stripe:#cf588d;--type-slate-stripe:#738497;--type-teal-stripe:#00929a;--type-magenta-stripe:#bb59c1;--type-brown-stripe:#a2795e;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--accent:#ff5a1f;--on-accent:#15171a;--type-blue-stripe:#57a1f6;--type-indigo-stripe:#8c93f4;--type-lime-stripe:#87ae39;--type-green-stripe:#52b76d;--type-pink-stripe:#e275a3;--type-slate-stripe:#90a0b2;--type-teal-stripe:#2cb2bb;--type-magenta-stripe:#d077d5;--type-brown-stripe:#bc957c}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.ab{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:4px;padding:0 4px;box-sizing:border-box}
+.ab h1{margin:0;padding-left:4px;font:500 22px/28px var(--ff);flex:1 1 auto;min-width:0}
+.body{position:absolute;left:0;right:0;padding:8px 16px 0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.hh{display:flex;align-items:center;gap:8px;min-height:40px}
+.lbl{font:500 13px/18px var(--ff);color:var(--text-muted);flex:1 1 auto}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted)}
+.gb{background:var(--surface);border-radius:12px;overflow:hidden}
+.lr{display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px 0 16px;width:100%;border:0;background:transparent;color:var(--text);text-align:left;box-sizing:border-box;position:relative;font:400 15px/22px var(--ff)}
+.lr + .lr::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--divider)}
+.lr .ct{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.lr .ms{color:var(--text-muted);font-size:20px}
+.lr .hnd{width:48px;height:48px;display:grid;place-items:center;flex:none}
+.sn{min-width:40px;height:28px;padding:0 6px;border-radius:8px;background:var(--surface-alt);display:inline-grid;place-items:center;font:500 13px/18px var(--ff);box-sizing:border-box;flex:none}
+.tdot{width:12px;height:12px;border-radius:999px;flex:none}
+.nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font:400 13px/18px var(--ff);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{height:40px;padding:0 14px 0 10px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;white-space:nowrap}
+.btn .ms{font-size:20px}
+.b-second{background:var(--surface-alt);color:var(--text)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:72px;display:flex;background:var(--surface);border-top:1px solid var(--divider)}
+.it{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:transparent;color:var(--text-muted);font:500 13px/16px var(--ff)}
+.pill{position:relative;width:56px;height:32px;border-radius:999px;display:grid;place-items:center}
+.it.on{color:var(--text)}
+.it.on .pill{background:var(--surface-alt)}
+.it.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.cnt{position:absolute;top:-2px;left:32px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--accent);color:var(--on-accent);font:500 13px/20px var(--ff);text-align:center;font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="ab">
+    <button class="ib" type="button" aria-label="Назад"><span class="ms">arrow_back</span></button>
+    <h1>Места и типы</h1>
+  </div>
+
+  <div class="body" style="top: 64px; bottom: 72px">
+    <div class="hh"><span class="lbl">Места</span><button class="btn b-second" type="button"><span class="ms">add</span>Место</button></div>
+    <div class="gb">
+      <div class="lr"><span class="sn">ББ</span><span class="ct"><span class="nm">Большой бассейн</span></span><span class="hnd" aria-label="Перетащить"><span class="ms">drag_indicator</span></span></div>
+      <div class="lr"><span class="sn">ДБ</span><span class="ct"><span class="nm">Детский бассейн</span></span><span class="hnd" aria-label="Перетащить"><span class="ms">drag_indicator</span></span></div>
+      <div class="lr"><span class="sn">Зал</span><span class="ct"><span class="nm">Тренажёрный зал</span></span><span class="hnd" aria-label="Перетащить"><span class="ms">drag_indicator</span></span></div>
+    </div>
+
+    <div class="hh" style="margin-top: 12px"><span class="lbl">Типы тренировок</span><button class="btn b-second" type="button"><span class="ms">add</span>Новый тип</button></div>
+    <div class="gb">
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-blue-stripe)"></span><span class="ct"><span class="nm">ПТ</span><span class="sub">Персональная · 50 мин · как ПТ</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-indigo-stripe)"></span><span class="ct"><span class="nm">Сплит</span><span class="sub">Сплит · 50 мин · как ПТ</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-lime-stripe)"></span><span class="ct"><span class="nm">Мини-группа</span><span class="sub">Группа · 50 мин · за клиента</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-green-stripe)"></span><span class="ct"><span class="nm">Группа</span><span class="sub">Группа · 60 мин · за клиента</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-pink-stripe)"></span><span class="ct"><span class="nm">СПТ</span><span class="sub">Стартовая · 50 мин · бонус за блок</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-slate-stripe)"></span><span class="ct"><span class="nm">Дежурство</span><span class="sub">Дежурство · за час</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-teal-stripe)"></span><span class="ct"><span class="nm">Грудничковое</span><span class="sub">Персональная · 30 мин · как ПТ</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-magenta-stripe)"></span><span class="ct"><span class="nm">Гидрореабилитация</span><span class="sub">Персональная · 50 мин · как ПТ</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+      <button class="lr" type="button"><span class="tdot" style="background: var(--type-brown-stripe)"></span><span class="ct"><span class="nm">Кинезио</span><span class="sub">Персональная · 50 мин · как ПТ</span></span><span class="hnd"><span class="ms">chevron_right</span></span></button>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <button class="it" type="button"><span class="pill"><span class="ms">home</span><span class="cnt">3</span></span>Главная</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">calendar_month</span></span>Календарь</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">group</span></span>Клиенты</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">payments</span></span>Зарплата</button>
+    <button class="it on" type="button"><span class="pill"><span class="ms">more_horiz</span></span>Ещё</button>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

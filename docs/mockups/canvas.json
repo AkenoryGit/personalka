@@ -1,0 +1,784 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-18T15:30:00Z"
+  },
+  "title": "Персоналка — макеты",
+  "launch": {
+    "view": "canvas",
+    "page": "kabinet"
+  },
+  "pages": [
+    {
+      "id": "kalendar",
+      "name": "Календарь · 0.3"
+    },
+    {
+      "id": "trenirovka",
+      "name": "Тренировка · 0.4"
+    },
+    {
+      "id": "klienty",
+      "name": "Клиенты · 0.5"
+    },
+    {
+      "id": "glavnaya",
+      "name": "Главная и зарплата · 0.6"
+    },
+    {
+      "id": "kabinet",
+      "name": "Кабинет · 0.7"
+    }
+  ],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "День · светлая",
+      "page": "kalendar"
+    },
+    "DayDark.dc.html": {
+      "x": 492,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "День · тёмная",
+      "page": "kalendar"
+    },
+    "ThreeFolded.dc.html": {
+      "x": 984,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "3 дня · сложенный",
+      "page": "kalendar"
+    },
+    "Month.dc.html": {
+      "x": 1476,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Месяц",
+      "page": "kalendar"
+    },
+    "ThreeUnfolded.dc.html": {
+      "x": 0,
+      "y": 1320,
+      "w": 760,
+      "h": 840,
+      "title": "3 дня · разложенный",
+      "page": "kalendar"
+    },
+    "Drag.dc.html": {
+      "x": 840,
+      "y": 1320,
+      "w": 760,
+      "h": 840,
+      "title": "Перенос на другой день",
+      "page": "kalendar"
+    },
+    "ZoneSheet.dc.html": {
+      "x": 0,
+      "y": 2520,
+      "w": 412,
+      "h": 960,
+      "title": "Нажатие на запрет",
+      "page": "kalendar"
+    },
+    "HoldMenu.dc.html": {
+      "x": 492,
+      "y": 2520,
+      "w": 412,
+      "h": 960,
+      "title": "Удержание на тренировке",
+      "page": "kalendar"
+    },
+    "Blocks.dc.html": {
+      "x": 984,
+      "y": 2520,
+      "w": 760,
+      "h": 860,
+      "title": "Блоки, значки, наложения",
+      "page": "kalendar"
+    },
+    "CardNow.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "ПТ идёт · сейчас 12:20",
+      "page": "trenirovka"
+    },
+    "CardLater.dc.html": {
+      "x": 492,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Позже сегодня · меню «…»",
+      "page": "trenirovka"
+    },
+    "CardDone.dc.html": {
+      "x": 984,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Проведена, с дневником",
+      "page": "trenirovka"
+    },
+    "CardCancelled.dc.html": {
+      "x": 1476,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Отмена со списанием",
+      "page": "trenirovka"
+    },
+    "CardGroup.dc.html": {
+      "x": 1968,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Группа идёт · отметка · сб 09:04",
+      "page": "trenirovka"
+    },
+    "CardUnfolded.dc.html": {
+      "x": 2460,
+      "y": 0,
+      "w": 760,
+      "h": 840,
+      "title": "Разложенный Fold · сплит",
+      "page": "trenirovka"
+    },
+    "FormNew.dc.html": {
+      "x": 0,
+      "y": 1320,
+      "w": 412,
+      "h": 960,
+      "title": "Новая тренировка",
+      "page": "trenirovka"
+    },
+    "FormSeries.dc.html": {
+      "x": 492,
+      "y": 1320,
+      "w": 412,
+      "h": 960,
+      "title": "Изменение тренировки серии",
+      "page": "trenirovka"
+    },
+    "FormRestriction.dc.html": {
+      "x": 984,
+      "y": 1320,
+      "w": 412,
+      "h": 960,
+      "title": "Запрет",
+      "page": "trenirovka"
+    },
+    "CancelPersonal.dc.html": {
+      "x": 0,
+      "y": 2640,
+      "w": 412,
+      "h": 960,
+      "title": "Отмена ПТ · без списания",
+      "page": "trenirovka"
+    },
+    "CancelMini.dc.html": {
+      "x": 492,
+      "y": 2640,
+      "w": 412,
+      "h": 960,
+      "title": "Отмена одного в мини-группе",
+      "page": "trenirovka"
+    },
+    "CancelSnack.dc.html": {
+      "x": 984,
+      "y": 2640,
+      "w": 412,
+      "h": 960,
+      "title": "После отмены · 15:41",
+      "page": "trenirovka"
+    },
+    "CancelPlanCarry.dc.html": {
+      "x": 1476,
+      "y": 2640,
+      "w": 412,
+      "h": 960,
+      "title": "У следующей уже есть план",
+      "page": "trenirovka"
+    },
+    "DiaryPersonal.dc.html": {
+      "x": 0,
+      "y": 3960,
+      "w": 412,
+      "h": 960,
+      "title": "Дневник ПТ",
+      "page": "trenirovka"
+    },
+    "DiarySplit.dc.html": {
+      "x": 492,
+      "y": 3960,
+      "w": 412,
+      "h": 960,
+      "title": "Дневник сплита",
+      "page": "trenirovka"
+    },
+    "DiaryGroup.dc.html": {
+      "x": 984,
+      "y": 3960,
+      "w": 412,
+      "h": 960,
+      "title": "Дневник группы",
+      "page": "trenirovka"
+    },
+    "ClList.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Список · активные",
+      "page": "klienty"
+    },
+    "ClNoBooking.dc.html": {
+      "x": 492,
+      "y": 0,
+      "w": 412,
+      "h": 1300,
+      "title": "Без записи · вся прокрутка",
+      "page": "klienty"
+    },
+    "ClWaitAdd.dc.html": {
+      "x": 984,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "+ В ожидание · 6 нажатий",
+      "page": "klienty"
+    },
+    "ClBook.dc.html": {
+      "x": 1476,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Записать на освободившееся",
+      "page": "klienty"
+    },
+    "ClNew.dc.html": {
+      "x": 1968,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Новый клиент · похожий",
+      "page": "klienty"
+    },
+    "ClCard.dc.html": {
+      "x": 0,
+      "y": 1660,
+      "w": 412,
+      "h": 960,
+      "title": "Карточка · тренировки",
+      "page": "klienty"
+    },
+    "ClCardResults.dc.html": {
+      "x": 492,
+      "y": 1660,
+      "w": 412,
+      "h": 960,
+      "title": "Карточка · результаты",
+      "page": "klienty"
+    },
+    "ClCardInfo.dc.html": {
+      "x": 984,
+      "y": 1660,
+      "w": 412,
+      "h": 960,
+      "title": "Карточка · инфо, после СПТ",
+      "page": "klienty"
+    },
+    "ClCardSchedule.dc.html": {
+      "x": 1476,
+      "y": 1660,
+      "w": 412,
+      "h": 960,
+      "title": "Карточка · расписание, меню «…»",
+      "page": "klienty"
+    },
+    "ClCabinet.dc.html": {
+      "x": 1968,
+      "y": 1660,
+      "w": 412,
+      "h": 960,
+      "title": "Кабинет клиента",
+      "page": "klienty"
+    },
+    "ClUnfolded.dc.html": {
+      "x": 2460,
+      "y": 1660,
+      "w": 760,
+      "h": 840,
+      "title": "Разложенный Fold · список и карточка",
+      "page": "klienty"
+    },
+    "FrWelcome.dc.html": {
+      "x": 0,
+      "y": 2980,
+      "w": 412,
+      "h": 960,
+      "title": "Приветствие",
+      "page": "klienty"
+    },
+    "FrName.dc.html": {
+      "x": 492,
+      "y": 2980,
+      "w": 412,
+      "h": 960,
+      "title": "ФИО тренера",
+      "page": "klienty"
+    },
+    "FrSetup.dc.html": {
+      "x": 984,
+      "y": 2980,
+      "w": 412,
+      "h": 960,
+      "title": "Места и типы",
+      "page": "klienty"
+    },
+    "FrCalendar.dc.html": {
+      "x": 1476,
+      "y": 2980,
+      "w": 412,
+      "h": 960,
+      "title": "Календарь с подсказкой",
+      "page": "klienty"
+    },
+    "ClEmpty.dc.html": {
+      "x": 1968,
+      "y": 2980,
+      "w": 412,
+      "h": 960,
+      "title": "Клиенты · пусто",
+      "page": "klienty"
+    },
+    "TypesList.dc.html": {
+      "x": 0,
+      "y": 4300,
+      "w": 412,
+      "h": 960,
+      "title": "Настройки · места и типы",
+      "page": "klienty"
+    },
+    "TypeNew.dc.html": {
+      "x": 492,
+      "y": 4300,
+      "w": 412,
+      "h": 960,
+      "title": "Новый тип · вид и цвет",
+      "page": "klienty"
+    },
+    "TypeNew2.dc.html": {
+      "x": 984,
+      "y": 4300,
+      "w": 412,
+      "h": 960,
+      "title": "Новый тип · оплата и дневник",
+      "page": "klienty"
+    },
+    "ClRelInfo.dc.html": {
+      "x": 0,
+      "y": 5620,
+      "w": 412,
+      "h": 960,
+      "title": "Инфо · родственники, нажатие на «Мать»",
+      "page": "klienty"
+    },
+    "ClRelAdd.dc.html": {
+      "x": 492,
+      "y": 5620,
+      "w": 412,
+      "h": 960,
+      "title": "+ Родственник · 4 нажатия",
+      "page": "klienty"
+    },
+    "ClRelBack.dc.html": {
+      "x": 984,
+      "y": 5620,
+      "w": 412,
+      "h": 960,
+      "title": "Карточка матери · связь со второй стороны",
+      "page": "klienty"
+    },
+    "HomeDay.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "День · группа через 12 мин · 15:48",
+      "page": "glavnaya"
+    },
+    "HomeEvening.dc.html": {
+      "x": 492,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Вечер · сегодня всё · тёмная тема",
+      "page": "glavnaya"
+    },
+    "HomeMorning.dc.html": {
+      "x": 984,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "title": "Утро · зарплата не настроена, только телефон",
+      "page": "glavnaya"
+    },
+    "HomeUnfolded.dc.html": {
+      "x": 1476,
+      "y": 0,
+      "w": 760,
+      "h": 840,
+      "title": "Разложенный Fold · расписание и три блока",
+      "page": "glavnaya"
+    },
+    "PayMonth.dc.html": {
+      "x": 0,
+      "y": 1320,
+      "w": 412,
+      "h": 2400,
+      "title": "Месяц · вся прокрутка",
+      "page": "glavnaya"
+    },
+    "PayPayouts.dc.html": {
+      "x": 492,
+      "y": 1320,
+      "w": 412,
+      "h": 960,
+      "title": "Выплаты",
+      "page": "glavnaya"
+    },
+    "PayColleagues.dc.html": {
+      "x": 984,
+      "y": 1320,
+      "w": 412,
+      "h": 960,
+      "title": "Коллеги · Лена",
+      "page": "glavnaya"
+    },
+    "PayYear.dc.html": {
+      "x": 1476,
+      "y": 1320,
+      "w": 412,
+      "h": 960,
+      "title": "Год",
+      "page": "glavnaya"
+    },
+    "PayUnfolded.dc.html": {
+      "x": 1968,
+      "y": 1320,
+      "w": 760,
+      "h": 840,
+      "title": "Разложенный Fold · месяцы и октябрь",
+      "page": "glavnaya"
+    },
+    "PayAdjust.dc.html": {
+      "x": 492,
+      "y": 2640,
+      "w": 412,
+      "h": 960,
+      "title": "+ Доплата",
+      "page": "glavnaya"
+    },
+    "PayAdvance.dc.html": {
+      "x": 984,
+      "y": 2640,
+      "w": 412,
+      "h": 960,
+      "title": "Аванс 25-го · 2 нажатия",
+      "page": "glavnaya"
+    },
+    "KbCode.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Код доступа · неверный код",
+      "page": "kabinet",
+      "is_interactive": true
+    },
+    "KbConsent.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 1750,
+      "title": "Согласие · первый вход",
+      "page": "kabinet",
+      "is_interactive": true
+    },
+    "KbRevoke.dc.html": {
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Отозвать согласие?",
+      "page": "kabinet",
+      "is_interactive": true
+    },
+    "KbRevoked.dc.html": {
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Согласие отозвано",
+      "page": "kabinet"
+    },
+    "KbInvalid.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Ссылка не действует · любая причина",
+      "page": "kabinet"
+    },
+    "KbCabinet.dc.html": {
+      "x": 0,
+      "y": 2130,
+      "w": 390,
+      "h": 3940,
+      "title": "Ребёнок на ПТ · вся прокрутка",
+      "page": "kabinet",
+      "is_interactive": true
+    },
+    "KbGroup.dc.html": {
+      "x": 470,
+      "y": 2130,
+      "w": 390,
+      "h": 2140,
+      "title": "Ребёнок из группы на 12 · тёмная",
+      "page": "kabinet",
+      "is_interactive": true
+    },
+    "KbNarrow.dc.html": {
+      "x": 940,
+      "y": 2130,
+      "w": 320,
+      "h": 1140,
+      "title": "Экран 320 px · начало",
+      "page": "kabinet"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "DayDark.dc.html",
+    "ThreeFolded.dc.html",
+    "Month.dc.html",
+    "ThreeUnfolded.dc.html",
+    "Drag.dc.html",
+    "ZoneSheet.dc.html",
+    "HoldMenu.dc.html",
+    "Blocks.dc.html",
+    "CardNow.dc.html",
+    "CardLater.dc.html",
+    "CardDone.dc.html",
+    "CardCancelled.dc.html",
+    "CardGroup.dc.html",
+    "CardUnfolded.dc.html",
+    "FormNew.dc.html",
+    "FormSeries.dc.html",
+    "FormRestriction.dc.html",
+    "CancelPersonal.dc.html",
+    "CancelMini.dc.html",
+    "CancelSnack.dc.html",
+    "CancelPlanCarry.dc.html",
+    "DiaryPersonal.dc.html",
+    "DiarySplit.dc.html",
+    "DiaryGroup.dc.html",
+    "ClList.dc.html",
+    "ClNoBooking.dc.html",
+    "ClWaitAdd.dc.html",
+    "ClBook.dc.html",
+    "ClNew.dc.html",
+    "ClCard.dc.html",
+    "ClCardResults.dc.html",
+    "ClCardInfo.dc.html",
+    "ClCardSchedule.dc.html",
+    "ClCabinet.dc.html",
+    "ClUnfolded.dc.html",
+    "FrWelcome.dc.html",
+    "FrName.dc.html",
+    "FrSetup.dc.html",
+    "FrCalendar.dc.html",
+    "ClEmpty.dc.html",
+    "TypesList.dc.html",
+    "TypeNew.dc.html",
+    "TypeNew2.dc.html",
+    "ClRelInfo.dc.html",
+    "ClRelAdd.dc.html",
+    "ClRelBack.dc.html",
+    "HomeDay.dc.html",
+    "HomeEvening.dc.html",
+    "HomeMorning.dc.html",
+    "HomeUnfolded.dc.html",
+    "PayMonth.dc.html",
+    "PayPayouts.dc.html",
+    "PayColleagues.dc.html",
+    "PayYear.dc.html",
+    "PayUnfolded.dc.html",
+    "PayAdjust.dc.html",
+    "PayAdvance.dc.html",
+    "KbCode.dc.html",
+    "KbConsent.dc.html",
+    "KbRevoke.dc.html",
+    "KbRevoked.dc.html",
+    "KbInvalid.dc.html",
+    "KbCabinet.dc.html",
+    "KbGroup.dc.html",
+    "KbNarrow.dc.html"
+  ],
+  "notes": {
+    "row1": {
+      "x": 0,
+      "y": -260,
+      "text": "Сложенный Fold · вторник 20.10, сейчас 15:40",
+      "kind": "title1",
+      "maxW": 1888,
+      "page": "kalendar"
+    },
+    "row2": {
+      "x": 0,
+      "y": 1060,
+      "text": "Разложенный Fold · 3 дня",
+      "kind": "title1",
+      "maxW": 1600,
+      "page": "kalendar"
+    },
+    "row3": {
+      "x": 0,
+      "y": 2260,
+      "text": "Состояния и блоки",
+      "kind": "title1",
+      "maxW": 1744,
+      "page": "kalendar"
+    },
+    "tr1": {
+      "x": 0,
+      "y": -260,
+      "text": "Карточка тренировки · 5.4 · вт 20.10, сейчас 15:40",
+      "kind": "title1",
+      "maxW": 3220,
+      "page": "trenirovka"
+    },
+    "tr2": {
+      "x": 0,
+      "y": 1060,
+      "text": "Создание и изменение · 5.5",
+      "kind": "title1",
+      "maxW": 1396,
+      "page": "trenirovka"
+    },
+    "tr3": {
+      "x": 0,
+      "y": 2380,
+      "text": "Отмена · 5.6",
+      "kind": "title1",
+      "maxW": 1888,
+      "page": "trenirovka"
+    },
+    "tr4": {
+      "x": 0,
+      "y": 3700,
+      "text": "Дневник · 5.7",
+      "kind": "title1",
+      "maxW": 1396,
+      "page": "trenirovka"
+    },
+    "kl1": {
+      "x": 0,
+      "y": -260,
+      "text": "Список и «Без записи» · 5.8, 4.15, 4.16 · вт 20.10, 15:40",
+      "kind": "title1",
+      "maxW": 2380,
+      "page": "klienty"
+    },
+    "kl2": {
+      "x": 0,
+      "y": 1400,
+      "text": "Карточка клиента · 5.9",
+      "kind": "title1",
+      "maxW": 3220,
+      "page": "klienty"
+    },
+    "kl3": {
+      "x": 0,
+      "y": 2720,
+      "text": "Первый запуск · 5.18 · три нажатия и имя",
+      "kind": "title1",
+      "maxW": 2380,
+      "page": "klienty"
+    },
+    "kl4": {
+      "x": 0,
+      "y": 4040,
+      "text": "Конструктор типа · 3.3, 5.16",
+      "kind": "title1",
+      "maxW": 1396,
+      "page": "klienty"
+    },
+    "kl5": {
+      "x": 0,
+      "y": 5360,
+      "text": "Родственники · 4.17 · одна связь, видна с двух сторон",
+      "kind": "title1",
+      "maxW": 1396,
+      "page": "klienty"
+    },
+    "gl1": {
+      "x": 0,
+      "y": -260,
+      "text": "Главная · 5.2 · вт 20.10, сейчас 15:48",
+      "kind": "title1",
+      "maxW": 2236,
+      "page": "glavnaya"
+    },
+    "gl2": {
+      "x": 0,
+      "y": 1060,
+      "text": "Зарплата · 5.12 · октябрь по проведённым на 20.10",
+      "kind": "title1",
+      "maxW": 2728,
+      "page": "glavnaya"
+    },
+    "gl3": {
+      "x": 492,
+      "y": 2380,
+      "text": "Доплата и аванс",
+      "kind": "title1",
+      "maxW": 904,
+      "page": "glavnaya"
+    },
+    "kb1": {
+      "x": 0,
+      "y": -260,
+      "text": "Вход, согласие и отзыв · 6.1 · вт 20.10",
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "kabinet"
+    },
+    "kb2": {
+      "x": 0,
+      "y": 1870,
+      "text": "Кабинет · 6.3 · данные на 20.10, 15:41",
+      "kind": "title1",
+      "maxW": 1260,
+      "page": "kabinet"
+    }
+  },
+  "designSystems": [
+    {
+      "title": "Персоналка",
+      "namespace": "personalka",
+      "artifact": "https://claude.ai/artifact/4UJFh5unXsK26uByWtP24k",
+      "version": "1792331795-e83a",
+      "copiedAt": "2026-10-18T15:30:00Z"
+    }
+  ]
+}

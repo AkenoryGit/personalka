@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Клиенты — разложенный Fold</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--accent:#ff5a1f;--on-accent:#15171a;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--accent:#ff5a1f;--on-accent:#15171a}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.sp{flex:1 1 auto}
+.rail{position:absolute;left:0;top:0;bottom:0;width:80px;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:12px;box-sizing:border-box;border-right:1px solid var(--divider)}
+.it{flex:none;width:80px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:transparent;color:var(--text-muted);font:500 13px/16px var(--ff)}
+.pill{position:relative;width:56px;height:32px;border-radius:999px;display:grid;place-items:center}
+.it.on{color:var(--text)}
+.it.on .pill{background:var(--surface-alt)}
+.it.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.cnt{position:absolute;top:-2px;left:32px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--accent);color:var(--on-accent);font:500 13px/20px var(--ff);text-align:center;font-variant-numeric:tabular-nums}
+.ab{position:absolute;top:0;height:64px;display:flex;align-items:center;gap:4px;padding:0 4px;box-sizing:border-box}
+.ab h1{margin:0;padding-left:12px;font:500 22px/28px var(--ff);flex:1 1 auto;min-width:0}
+.srch{position:absolute;height:48px;border-radius:12px;background:var(--surface-alt);display:flex;align-items:center;gap:12px;padding:0 16px;box-sizing:border-box;color:var(--text-muted);font:400 15px/22px var(--ff)}
+.srch .ms{font-size:20px}
+.fl{position:absolute;display:flex;gap:8px;overflow:hidden;white-space:nowrap;padding:0 16px;box-sizing:border-box}
+.ch{height:36px;padding:0 14px;border:0;border-radius:8px;background:var(--surface-alt);color:var(--text);font:500 13px/18px var(--ff);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-variant-numeric:tabular-nums;flex:none}
+.ch.on{background:var(--primary);color:var(--on-primary);padding-left:10px}
+.ch .ms{font-size:18px}
+.lst{position:absolute;overflow:hidden;padding:0 16px;box-sizing:border-box}
+.gb{background:var(--surface);border-radius:12px;overflow:hidden}
+.cr{display:flex;align-items:center;gap:8px;min-height:64px;padding:8px 12px 8px 16px;width:100%;border:0;background:transparent;color:var(--text);text-align:left;box-sizing:border-box;position:relative;font:400 15px/22px var(--ff)}
+.cr + .cr::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--divider)}
+.cr.sel{background:var(--surface-alt)}
+.cr.sel::after{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:0 3px 3px 0;background:var(--primary)}
+.ct{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.nm{font:500 15px/22px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font:400 13px/18px var(--ff);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.rt{flex:none;font:400 13px/18px var(--ff);font-variant-numeric:tabular-nums;text-align:right}
+.st{height:28px;padding:0 10px 0 8px;border:0;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font:500 13px/18px var(--ff);box-sizing:border-box;white-space:nowrap;flex:none}
+.st .ms{font-size:16px}
+.st.bare{padding:0 10px}
+.st.plan{box-shadow:inset 0 0 0 1px var(--outline);color:var(--text)}
+.st.wait{background:var(--surface-alt);color:var(--text)}
+.fade{position:absolute;height:32px;background:linear-gradient(to bottom,transparent,var(--bg));pointer-events:none}
+.panel{position:absolute;top:0;bottom:0;background:var(--surface);border-left:1px solid var(--divider);box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden}
+.pad{padding:0 16px;display:flex;flex-direction:column;gap:12px}
+.who{margin:0;font:500 22px/28px var(--ff)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.lbl{font:500 13px/18px var(--ff);color:var(--text-muted)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--bg);border-radius:12px;padding:10px 2px}
+.stat{display:flex;flex-direction:column;align-items:center;text-align:center}
+.stat b{font:500 17px/24px var(--ff);font-variant-numeric:tabular-nums}
+.stat span{font:400 13px/18px var(--ff);color:var(--text-muted)}
+.btns3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.btn{height:48px;padding:0 6px;border:0;border-radius:12px;font:500 13px/18px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box;white-space:nowrap}
+.btn .ms{font-size:18px}
+.b-second{background:var(--surface-alt);color:var(--text)}
+.b-outline{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1px var(--outline)}
+.tabs{display:flex;border-bottom:1px solid var(--divider);padding:0 8px;margin-top:4px}
+.tab{flex:1 1 0;height:48px;padding:0 2px;border:0;background:transparent;color:var(--text-muted);font:500 13px/18px var(--ff);position:relative;white-space:nowrap}
+.tab.on{color:var(--text)}
+.tab.on::after{content:"";position:absolute;left:6px;right:6px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--primary)}
+.tl{display:flex;flex-direction:column}
+.tr{display:flex;gap:12px;padding:10px 0;position:relative;align-items:flex-start;min-height:56px;box-sizing:border-box;width:100%;border:0;background:transparent;color:var(--text);text-align:left;font:400 15px/22px var(--ff)}
+.tr + .tr::before{content:"";position:absolute;top:0;left:0;right:0;border-top:1px solid var(--divider)}
+.dt{width:64px;flex:none;display:flex;flex-direction:column;font:500 13px/18px var(--ff);font-variant-numeric:tabular-nums}
+.dt span{font-weight:400;color:var(--text-muted)}
+.pl{font:400 13px/18px var(--ff)}
+.tct{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 760px; height: 840px">
+
+  <nav class="rail">
+    <button class="it" type="button"><span class="pill"><span class="ms">home</span><span class="cnt">3</span></span>Главная</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">calendar_month</span></span>Календарь</button>
+    <button class="it on" type="button"><span class="pill"><span class="ms">group</span></span>Клиенты</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">payments</span></span>Зарплата</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">more_horiz</span></span>Ещё</button>
+  </nav>
+
+  <div class="ab" style="left: 80px; width: 320px">
+    <h1>Клиенты</h1>
+    <button class="ib" type="button" aria-label="Сортировка и фильтры"><span class="ms">tune</span></button>
+    <button class="ib" type="button" aria-label="Новый клиент"><span class="ms">person_add</span></button>
+  </div>
+  <div class="srch" style="left: 96px; width: 288px; top: 64px"><span class="ms">search</span><span>Фамилия или имя</span></div>
+  <div class="fl" style="left: 80px; width: 320px; top: 124px">
+    <button class="ch on" type="button" aria-pressed="true"><span class="ms">check</span>Активные · 42</button>
+    <button class="ch" type="button">Без записи · 6</button>
+    <button class="ch" type="button">Архив</button>
+  </div>
+
+  <div class="lst" style="left: 80px; width: 320px; top: 176px; bottom: 0px">
+    <div class="gb">
+      <button class="cr" type="button"><span class="ct"><span class="nm">Никитин Алексей</span><span class="sub">44 года · Вт, Чт 12:00 · ПТ ББ</span></span><span class="rt">чт 22.10</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Новикова Полина</span><span class="sub">7 лет · без расписания</span></span><span class="rt">сегодня 19:00</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Орлов Максим</span><span class="sub">10 лет · Вт 17:00 · ПТ ДБ</span></span><span class="rt">сегодня 17:00</span></button>
+      <button class="cr sel" type="button" aria-current="true"><span class="ct"><span class="nm">Орлова Ксения</span><span class="sub">11 лет · Вт, Чт 13:30 · ПТ ББ</span></span><span class="rt">чт 22.10</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Петров Кирилл</span><span class="sub">12 лет · без расписания</span></span><span class="st wait"><span class="ms">hourglass_top</span>Ждёт</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Смирнова Ирина</span><span class="sub">31 год · без расписания</span></span><span class="st wait"><span class="ms">hourglass_top</span>Ждёт</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Соколова Вера</span><span class="sub">45 лет · без расписания</span></span><span class="st plan"><span class="ms">event_busy</span>Нет записи</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Ткаченко Илья</span><span class="sub">16 лет · Ср 08:00 · ПТ ББ</span></span><span class="rt">ср 21.10</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Фёдоров Роман</span><span class="sub">29 лет · Ср 18:00 · Кинезио Зал</span></span><span class="rt">ср 21.10</span></button>
+      <button class="cr" type="button"><span class="ct"><span class="nm">Яковлева Татьяна</span><span class="sub">34 года · без расписания</span></span><span class="st plan"><span class="ms">event_busy</span>Нет записи</span></button>
+    </div>
+  </div>
+  <div class="fade" style="left: 80px; width: 320px; bottom: 0px"></div>
+
+  <aside class="panel" aria-label="Орлова Ксения" style="left: 400px; width: 360px">
+    <div style="display: flex; align-items: center; padding: 4px 4px 0 4px"><span class="sp"></span><button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button></div>
+    <div class="pad">
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-top: -8px">
+        <h2 class="who">Орлова Ксения</h2>
+        <div class="row"><span class="st plan bare">Ребёнок</span><span class="cap">11 лет · Вт, Чт 13:30 · ПТ ББ</span></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><b>46</b><span>проведено</span></div>
+        <div class="stat"><b>5</b><span>отменено</span></div>
+        <div class="stat"><b>2</b><span>со списан.</span></div>
+        <div class="stat"><b>7,4</b><span>в месяц</span></div>
+      </div>
+      <div class="btns3">
+        <button class="btn b-second" type="button"><span class="ms">add</span>Тренировка</button>
+        <button class="btn b-second" type="button"><span class="ms">add</span>Результат</button>
+        <button class="btn b-outline" type="button"><span class="ms">link</span>Кабинет</button>
+      </div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab on" type="button" role="tab" aria-selected="true">Тренировки</button>
+      <button class="tab" type="button" role="tab" aria-selected="false">Результаты</button>
+      <button class="tab" type="button" role="tab" aria-selected="false">Инфо</button>
+      <button class="tab" type="button" role="tab" aria-selected="false">Расписание</button>
+    </div>
+    <div class="pad" style="padding-top: 16px">
+      <span class="lbl">Ближайшие</span>
+      <div class="tl">
+        <button class="tr" type="button"><span class="dt">чт 22.10<span>13:30</span></span><span class="tct"><span>ПТ · ББ</span><span class="pl">План: старт с тумбочки, 4 × 25 м на спине с поворотом</span></span></button>
+        <button class="tr" type="button"><span class="dt">вт 27.10<span>13:30</span></span><span class="tct"><span>ПТ · ББ</span></span></button>
+        <button class="tr" type="button"><span class="dt">чт 29.10<span>13:30</span></span><span class="tct"><span>ПТ · ББ</span></span></button>
+        <button class="tr" type="button"><span class="dt">вт 03.11<span>13:30</span></span><span class="tct"><span>ПТ · ББ</span></span></button>
+      </div>
+    </div>
+  </aside>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":760,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

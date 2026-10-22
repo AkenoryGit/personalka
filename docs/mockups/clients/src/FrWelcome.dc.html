@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Первый запуск — приветствие</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--shadow-raised:0 2px 6px rgba(21,23,26,.18);position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--shadow-raised:0 2px 6px rgba(0,0,0,.5)}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.hero{position:absolute;left:32px;right:32px;top:240px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+.ico{width:96px;height:96px;border-radius:24px;overflow:hidden;box-shadow:var(--shadow-raised),0 0 0 1px var(--divider);display:block}
+.ico svg{display:block}
+.hero h1{margin:8px 0 0;font:500 22px/28px var(--ff)}
+.hero p{margin:0;font:400 15px/22px var(--ff);color:var(--text-muted);max-width:300px}
+.acts{position:absolute;left:16px;right:16px;bottom:32px;display:flex;flex-direction:column;gap:8px}
+.btn{height:48px;padding:0 20px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;white-space:nowrap}
+.btn .ms{font-size:20px}
+.b-main{background:var(--primary);color:var(--on-primary)}
+.b-outline{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1px var(--outline)}
+.b-text{background:transparent;color:var(--text)}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted);text-align:center;margin:-2px 0 6px}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="hero">
+    <span class="ico">
+      <svg viewBox="0 0 72 72" width="96" height="96" role="img" aria-label="Значок «Персоналки»">
+        <rect width="72" height="72" fill="#F3EFE6"></rect>
+        <path d="M23 53 V21 H49 V53" fill="none" stroke="#15171A" stroke-width="8"></path>
+        <circle cx="36" cy="47" r="5" fill="#FF5A1F"></circle>
+      </svg>
+    </span>
+    <h1>Персоналка</h1>
+    <p>Расписание, клиенты и зарплата тренера в одном телефоне. Работает и без интернета.</p>
+  </div>
+
+  <div class="acts">
+    <button class="btn b-main" type="button">Начать на телефоне</button>
+    <button class="btn b-outline" type="button">Войти</button>
+    <span class="cap">Если приложение уже работает с сервером на другом телефоне</span>
+    <button class="btn b-text" type="button"><span class="ms">settings_backup_restore</span>Восстановить из копии</button>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

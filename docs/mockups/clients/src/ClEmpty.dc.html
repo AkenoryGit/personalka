@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Клиенты — пусто</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--accent:#ff5a1f;--on-accent:#15171a;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--accent:#ff5a1f;--on-accent:#15171a}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.ab{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:4px;padding:0 4px;box-sizing:border-box}
+.ab h1{margin:0;padding-left:12px;font:500 22px/28px var(--ff);flex:1 1 auto;min-width:0}
+.empty{position:absolute;left:32px;right:32px;top:280px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.circ{width:96px;height:96px;border-radius:999px;background:var(--surface-alt);display:grid;place-items:center;color:var(--text-muted);margin-bottom:8px}
+.circ .ms{font-size:48px}
+.empty h2{margin:0;font:500 17px/24px var(--ff)}
+.empty p{margin:0;font:400 15px/22px var(--ff);color:var(--text-muted)}
+.btn{height:48px;padding:0 20px 0 16px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;white-space:nowrap;margin-top:12px}
+.btn .ms{font-size:20px}
+.b-main{background:var(--primary);color:var(--on-primary)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:72px;display:flex;background:var(--surface);border-top:1px solid var(--divider)}
+.it{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:transparent;color:var(--text-muted);font:500 13px/16px var(--ff)}
+.pill{position:relative;width:56px;height:32px;border-radius:999px;display:grid;place-items:center}
+.it.on{color:var(--text)}
+.it.on .pill{background:var(--surface-alt)}
+.it.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.cnt{position:absolute;top:-2px;left:32px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--accent);color:var(--on-accent);font:500 13px/20px var(--ff);text-align:center;font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="ab">
+    <h1>Клиенты</h1>
+    <button class="ib" type="button" aria-label="Новый клиент"><span class="ms">person_add</span></button>
+  </div>
+
+  <div class="empty">
+    <span class="circ" aria-hidden="true"><span class="ms">group</span></span>
+    <h2>Пока нет клиентов</h2>
+    <p>Добавьте первого клиента. Или введите имя прямо при создании тренировки — карточка появится сама.</p>
+    <button class="btn b-main" type="button"><span class="ms">person_add</span>Добавить клиента</button>
+  </div>
+
+  <nav class="nav">
+    <button class="it" type="button"><span class="pill"><span class="ms">home</span><span class="cnt">1</span></span>Главная</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">calendar_month</span></span>Календарь</button>
+    <button class="it on" type="button"><span class="pill"><span class="ms">group</span></span>Клиенты</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">payments</span></span>Зарплата</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">more_horiz</span></span>Ещё</button>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

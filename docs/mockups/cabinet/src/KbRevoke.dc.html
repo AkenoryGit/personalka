@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кабинет — отозвать согласие</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--text:#15171a;--text-muted:#69665e;--error:#c22540;--on-error:#fbfaf7;color-scheme:light;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 16px/24px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--text:#f3efe6;--text-muted:#98958d;--error:#f26f78;--on-error:#15171a;color-scheme:dark}
+.scr *{box-sizing:border-box}
+.pg{max-width:440px;margin:0 auto;padding:0 16px 40px;display:flex;flex-direction:column;gap:16px}
+.bar{height:56px;display:flex;align-items:center;gap:10px;font:500 16px/24px var(--ff);margin-bottom:24px}
+.lgr{stroke:var(--divider);stroke-width:2}
+.hd{display:flex;flex-direction:column;gap:2px}
+h1{margin:0 0 6px;font:500 26px/32px var(--ff)}
+p{margin:0}
+.mut{color:var(--text-muted)}
+.card{background:var(--surface);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.btns{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.btn{display:flex;align-items:center;justify-content:center;height:52px;border-radius:12px;font:500 16px/24px var(--ff);text-decoration:none;width:100%}
+.btn.dng{background:var(--error);color:var(--on-error)}
+.btn.sec{background:var(--surface-alt);color:var(--text)}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 390px; height: 844px">
+<div class="pg">
+
+  <div class="bar">
+    <svg width="28" height="28" viewBox="0 0 72 72" aria-hidden="true"><rect class="lgr" x="1" y="1" width="70" height="70" rx="16" fill="#F3EFE6"></rect><path d="M23 53 V21 H49 V53" fill="none" stroke="#15171A" stroke-width="8"></path><circle cx="36" cy="47" r="5" fill="#FF5A1F"></circle></svg>
+    <span>Кабинет тренировок</span>
+  </div>
+
+  <header class="hd">
+    <h1>Отозвать согласие?</h1>
+    <p class="mut">Орлова Ксения</p>
+  </header>
+
+  <div class="card">
+    <p>Кабинет закроется по этой ссылке — для вас и для всех, с кем вы ею делились.</p>
+    <p>Тренер удалит данные ребёнка из приложения и с сервера в течение 30 дней.</p>
+    <p class="mut">Если передумаете, напишите тренеру — он пришлёт новую ссылку.</p>
+  </div>
+
+  <form class="btns" action="#" method="post">
+    <a class="btn dng" href="KbRevoked.dc.html">Отозвать согласие</a>
+    <a class="btn sec" href="KbCabinet.dc.html">Вернуться в кабинет</a>
+  </form>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

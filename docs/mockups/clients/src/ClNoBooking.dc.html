@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Клиенты — без записи</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--accent:#ff5a1f;--on-accent:#15171a;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--accent:#ff5a1f;--on-accent:#15171a}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.sp{flex:1 1 auto}
+.ab{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:4px;padding:0 4px;box-sizing:border-box}
+.ab h1{margin:0;padding-left:12px;font:500 22px/28px var(--ff);flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srch{position:absolute;left:16px;right:16px;height:48px;border-radius:12px;background:var(--surface-alt);display:flex;align-items:center;gap:12px;padding:0 16px;box-sizing:border-box;color:var(--text-muted);font:400 15px/22px var(--ff)}
+.srch .ms{font-size:20px}
+.fl{position:absolute;left:0;right:0;display:flex;gap:8px;overflow:hidden;white-space:nowrap;padding:0 16px}
+.ch{height:36px;padding:0 14px;border:0;border-radius:8px;background:var(--surface-alt);color:var(--text);font:500 13px/18px var(--ff);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-variant-numeric:tabular-nums;flex:none}
+.ch.on{background:var(--primary);color:var(--on-primary);padding-left:10px}
+.ch .ms{font-size:18px}
+.body{position:absolute;left:0;right:0;padding:0 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px}
+.hh{display:flex;align-items:center;gap:8px;min-height:48px}
+.hh h2{margin:0;font:500 17px/24px var(--ff)}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.crd{background:var(--surface);border-radius:12px;padding:12px 8px 12px 16px;display:flex;flex-direction:column;gap:4px}
+.kv{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-right:8px}
+.nm{font:500 15px/22px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sub{font:400 13px/18px var(--ff);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.qt{font:400 13px/18px var(--ff);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.st{height:28px;padding:0 10px 0 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font:500 13px/18px var(--ff);box-sizing:border-box;white-space:nowrap;flex:none;font-variant-numeric:tabular-nums}
+.st .ms{font-size:16px}
+.st.plan{box-shadow:inset 0 0 0 1px var(--outline);color:var(--text)}
+.st.free{background:var(--primary);color:var(--on-primary)}
+.acts{display:flex;align-items:center;gap:8px;padding-top:8px}
+.btn{height:48px;padding:0 16px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;white-space:nowrap}
+.btn .ms{font-size:20px}
+.btn.s{height:40px;padding:0 14px 0 10px}
+.b-main{background:var(--primary);color:var(--on-primary)}
+.b-second{background:var(--surface-alt);color:var(--text)}
+.b-outline{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1px var(--outline)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:72px;display:flex;background:var(--surface);border-top:1px solid var(--divider)}
+.it{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:transparent;color:var(--text-muted);font:500 13px/16px var(--ff)}
+.pill{position:relative;width:56px;height:32px;border-radius:999px;display:grid;place-items:center}
+.it.on{color:var(--text)}
+.it.on .pill{background:var(--surface-alt)}
+.it.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.cnt{position:absolute;top:-2px;left:32px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--accent);color:var(--on-accent);font:500 13px/20px var(--ff);text-align:center;font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 1300px">
+
+  <div class="ab">
+    <h1>Клиенты</h1>
+    <button class="ib" type="button" aria-label="Сортировка и фильтры"><span class="ms">tune</span></button>
+    <button class="ib" type="button" aria-label="Новый клиент"><span class="ms">person_add</span></button>
+  </div>
+
+  <div class="srch" style="top: 64px"><span class="ms">search</span><span>Фамилия или имя</span></div>
+
+  <div class="fl" style="top: 124px">
+    <button class="ch" type="button">Активные · 42</button>
+    <button class="ch on" type="button" aria-pressed="true"><span class="ms">check</span>Без записи · 6</button>
+    <button class="ch" type="button">Архив</button>
+  </div>
+
+  <div class="body" style="top: 172px; bottom: 72px">
+
+    <div class="hh">
+      <h2>Ждут время</h2><span class="cap">3</span>
+      <span style="flex: 1 1 auto"></span>
+      <button class="btn s b-second" type="button"><span class="ms">add</span>В ожидание</button>
+    </div>
+
+    <div class="crd">
+      <div class="kv"><span class="nm">Петров Кирилл</span><span class="cap">ждёт 37 дней</span></div>
+      <div class="row"><span class="st free"><span class="ms">event_available</span>Освободилось пн 08:00</span><span class="cap">писали 02.10</span></div>
+      <div class="sub">постоянно · пн, ср · 07–12 · ПТ · ББ</div>
+      <div class="qt">«пн, ср на 8 или на 10, можно сплит с братом»</div>
+      <div class="acts">
+        <button class="btn b-main" type="button">Записать</button>
+        <button class="btn b-second" type="button">Найти время</button>
+        <span class="sp"></span>
+        <button class="ib" type="button" aria-label="Позвонить"><span class="ms">call</span></button>
+        <button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button>
+      </div>
+    </div>
+
+    <div class="crd">
+      <div class="kv"><span class="nm">Морозов Дмитрий</span><span class="cap">ждёт 12 дней</span></div>
+      <div class="sub">постоянно · пт · 07–10 · ПТ · ББ</div>
+      <div class="qt">«третья тренировка в неделю, к старту в декабре»</div>
+      <div class="acts">
+        <button class="btn b-second" type="button">Записать</button>
+        <button class="btn b-second" type="button">Найти время</button>
+        <span class="sp"></span>
+        <button class="ib" type="button" aria-label="Позвонить"><span class="ms">call</span></button>
+        <button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button>
+      </div>
+    </div>
+
+    <div class="crd">
+      <div class="kv"><span class="nm">Смирнова Ирина</span><span class="cap">ждёт 6 дней</span></div>
+      <div class="sub">разово до 31.10 · любой день · вечер · ПТ</div>
+      <div class="qt">«одна тренировка до отпуска, техника кроля»</div>
+      <div class="acts">
+        <button class="btn b-second" type="button">Записать</button>
+        <button class="btn b-second" type="button">Найти время</button>
+        <span class="sp"></span>
+        <button class="ib" type="button" aria-label="Позвонить"><span class="ms">call</span></button>
+        <button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button>
+      </div>
+    </div>
+
+    <div class="hh" style="margin-top: 16px; min-height: 0; padding-top: 12px">
+      <h2>Не записаны дальше</h2><span class="cap">3</span>
+    </div>
+    <div class="cap" style="margin-top: -6px; margin-bottom: 4px">Ходили за последние 14 дней, будущих тренировок нет</div>
+
+    <div class="crd">
+      <div class="kv"><span class="nm">Яковлева Татьяна</span></div>
+      <div class="row"><span class="st plan"><span class="ms">flag</span>после СПТ 12.10</span></div>
+      <div class="sub">была пн 12.10 · СПТ ББ</div>
+      <div class="acts">
+        <button class="btn b-second" type="button">Записать</button>
+        <button class="btn b-outline" type="button">Написал</button>
+        <span class="sp"></span>
+        <button class="ib" type="button" aria-label="Позвонить"><span class="ms">call</span></button>
+        <button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button>
+      </div>
+    </div>
+
+    <div class="crd">
+      <div class="kv"><span class="nm">Захаров Никита</span><span class="cap">писали 16.10</span></div>
+      <div class="sub">был пт 09.10 · ПТ ДБ</div>
+      <div class="acts">
+        <button class="btn b-second" type="button">Записать</button>
+        <button class="btn b-outline" type="button">Написал</button>
+        <span class="sp"></span>
+        <button class="ib" type="button" aria-label="Позвонить"><span class="ms">call</span></button>
+        <button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button>
+      </div>
+    </div>
+
+    <div class="crd">
+      <div class="kv"><span class="nm">Соколова Вера</span></div>
+      <div class="sub">была сегодня 15:00 · ПТ ДБ</div>
+      <div class="acts">
+        <button class="btn b-second" type="button">Записать</button>
+        <button class="btn b-outline" type="button">Написал</button>
+        <span class="sp"></span>
+        <button class="ib" type="button" aria-label="Позвонить"><span class="ms">call</span></button>
+        <button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button>
+      </div>
+    </div>
+
+  </div>
+
+  <nav class="nav">
+    <button class="it" type="button"><span class="pill"><span class="ms">home</span><span class="cnt">3</span></span>Главная</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">calendar_month</span></span>Календарь</button>
+    <button class="it on" type="button"><span class="pill"><span class="ms">group</span></span>Клиенты</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">payments</span></span>Зарплата</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">more_horiz</span></span>Ещё</button>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

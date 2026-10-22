@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Календарь — день, тёмная тема</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--accent:#ff5a1f;--on-accent:#15171a;--accent-graphic:#f55111;--done:#007634;--charged:#8e5b00;--over:#7c4dbd;--over-container:#eae0ff;--on-over-container:#583a83;--hatch:#aaabaa;--past-tint:#f3f2ef;--duty-fill:#e0e2e4;--inverse-surface:#15171a;--inverse-text:#f3efe6;--inverse-action:#ff5a1f;--scrim:#15171a66;--type-lime-block:#d9eebb;--type-lime-stripe:#6a9000;--type-lime-text:#415616;--type-green-block:#c4f2cc;--type-green-stripe:#149848;--type-green-text:#245a32;--type-teal-block:#baf0f4;--type-teal-stripe:#00929a;--type-teal-text:#0e585d;--type-blue-block:#d3e7ff;--type-blue-stripe:#2d84e0;--type-blue-text:#264f7c;--type-indigo-block:#dee3ff;--type-indigo-stripe:#7377e1;--type-indigo-text:#43477b;--type-magenta-block:#fdd5ff;--type-magenta-stripe:#bb59c1;--type-magenta-text:#67386a;--type-pink-block:#ffd9e6;--type-pink-stripe:#cf588d;--type-pink-text:#71374f;--type-brown-block:#f5e0d3;--type-brown-stripe:#a2795e;--type-brown-text:#5d483a;--type-slate-block:#dde6ef;--type-slate-stripe:#738497;--type-slate-text:#454e57;--shadow-raised:0 2px 6px rgba(21,23,26,.18);--shadow-drag:0 8px 24px rgba(21,23,26,.22);--shadow-sheet:0 -4px 16px rgba(21,23,26,.12);position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--accent:#ff5a1f;--on-accent:#15171a;--accent-graphic:#ff5a1f;--done:#64b376;--charged:#cf9037;--over:#ad88ea;--over-container:#3a2e50;--on-over-container:#ddcffa;--hatch:#696968;--past-tint:#171a1c;--duty-fill:#353a40;--inverse-surface:#f3efe6;--inverse-text:#15171a;--inverse-action:#ba3800;--scrim:#000000a3;--type-lime-block:#2e3e0d;--type-lime-stripe:#87ae39;--type-lime-text:#d0debd;--type-green-block:#154222;--type-green-stripe:#52b76d;--type-green-text:#c4e0c8;--type-teal-block:#004145;--type-teal-stripe:#2cb2bb;--type-teal-text:#bedfe1;--type-blue-block:#18395d;--type-blue-stripe:#57a1f6;--type-blue-text:#c3daf5;--type-indigo-block:#30335e;--type-indigo-stripe:#8c93f4;--type-indigo-text:#d1d5f5;--type-magenta-block:#4b294d;--type-magenta-stripe:#d077d5;--type-magenta-text:#e9cdea;--type-pink-block:#55263a;--type-pink-stripe:#e275a3;--type-pink-text:#f1ccd9;--type-brown-block:#453428;--type-brown-stripe:#bc957c;--type-brown-text:#e2d5cc;--type-slate-block:#313941;--type-slate-stripe:#90a0b2;--type-slate-text:#d3d8de;--shadow-raised:0 2px 6px rgba(0,0,0,.5);--shadow-drag:0 8px 24px rgba(0,0,0,.6);--shadow-sheet:0 -4px 16px rgba(0,0,0,.5)}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.tb{position:absolute;left:0;right:0;top:0;height:56px;display:flex;align-items:center;gap:4px;padding:0 8px;box-sizing:border-box}
+.mo{height:48px;padding:0 4px 0 8px;border:0;border-radius:12px;background:transparent;color:var(--text);font:500 17px/24px var(--ff);display:inline-flex;align-items:center}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center}
+.dd{height:36px;padding:0 4px 0 12px;border:0;border-radius:8px;background:var(--surface-alt);color:var(--text);font:500 13px/18px var(--ff);display:inline-flex;align-items:center}
+.dd .ms,.mo .ms{font-size:20px}
+.sp{flex:1 1 auto}
+.wk{position:absolute;left:0;right:0;height:64px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));padding:0 8px;box-sizing:border-box}
+.wd{margin:4px 2px;padding:0;border:0;border-radius:12px;background:transparent;color:var(--text-muted);font:400 13px/18px var(--ff);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.wd.sel{background:var(--surface-alt)}
+.nu{width:32px;height:32px;border-radius:999px;display:grid;place-items:center;font:500 17px/24px var(--ff);color:var(--text);font-variant-numeric:tabular-nums}
+.nu.td{background:var(--accent);color:var(--on-accent)}
+.gr{position:absolute;left:0;right:0;overflow:hidden;background:var(--surface)}
+.tc{position:absolute;left:0;top:0;bottom:0;width:48px}
+.tl{position:absolute;right:6px;transform:translateY(-50%);font:400 13px/18px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.col{position:absolute;top:0;bottom:0}
+.past{position:absolute;left:0;right:0;top:0;background:var(--past-tint)}
+.duty{position:absolute;left:0;right:0;background:var(--duty-fill)}
+.duty::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--type-slate-stripe)}
+.rest{position:absolute;left:0;right:0;background:repeating-linear-gradient(-45deg,var(--hatch) 0 1.5px,transparent 1.5px 8px)}
+.rest::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:repeating-linear-gradient(-45deg,var(--outline) 0 2px,transparent 2px 4px);box-shadow:inset -1px 0 0 var(--outline)}
+.zl{position:absolute;top:4px;right:10px;font:500 13px/18px var(--ff);color:var(--type-slate-text)}
+.lines{position:absolute;left:0;right:0;top:0;bottom:0}
+.hr{height:64px;box-sizing:border-box;border-top:1px solid var(--divider);position:relative}
+.hr::after{content:"";position:absolute;left:0;right:0;top:31px;border-top:1px dashed var(--divider)}
+.b{position:absolute;box-sizing:border-box;border-radius:6px;padding:4px 6px 4px 9px;overflow:hidden;border:1px solid var(--surface);background:var(--bb);color:var(--bt)}
+.b::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--bs)}
+.n{font:500 13px/16px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:18px}
+.m{font:400 13px/16px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.bgs{position:absolute;top:3px;right:3px;display:flex;gap:2px}
+.bd{width:16px;height:16px;border-radius:999px;background:var(--surface);display:grid;place-items:center}
+.bd .ms{font-size:12px;font-variation-settings:'FILL' 1,'wght' 600,'GRAD' 0,'opsz' 20}
+.dot{width:6px;height:6px;border-radius:999px;background:var(--accent-graphic)}
+.c-done{color:var(--done)}.c-chg{color:var(--charged)}.c-over{color:var(--over)}.c-mut{color:var(--text-muted)}
+.now{position:absolute;left:-4px;right:0;height:2px;background:var(--accent-graphic)}
+.now::before{content:"";position:absolute;left:0;top:-3px;width:8px;height:8px;border-radius:999px;background:var(--accent-graphic)}
+.t-blue{--bb:var(--type-blue-block);--bs:var(--type-blue-stripe);--bt:var(--type-blue-text)}
+.t-lime{--bb:var(--type-lime-block);--bs:var(--type-lime-stripe);--bt:var(--type-lime-text)}
+.t-green{--bb:var(--type-green-block);--bs:var(--type-green-stripe);--bt:var(--type-green-text)}
+.t-pink{--bb:var(--type-pink-block);--bs:var(--type-pink-stripe);--bt:var(--type-pink-text)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:72px;display:flex;background:var(--surface);border-top:1px solid var(--divider)}
+.it{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:transparent;color:var(--text-muted);font:500 13px/16px var(--ff)}
+.pill{position:relative;width:56px;height:32px;border-radius:999px;display:grid;place-items:center}
+.it.on{color:var(--text)}
+.it.on .pill{background:var(--surface-alt)}
+.it.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.cnt{position:absolute;top:-2px;left:32px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--accent);color:var(--on-accent);font:500 13px/20px var(--ff);text-align:center;font-variant-numeric:tabular-nums}
+.fab{position:absolute;width:56px;height:56px;padding:0;border:0;border-radius:16px;background:var(--accent);color:var(--on-accent);box-shadow:var(--shadow-raised);display:grid;place-items:center}
+.fab .ms{font-size:28px}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="tb">
+    <button class="mo" type="button">Октябрь 2026<span class="ms">arrow_drop_down</span></button>
+    <span class="sp"></span>
+    <button class="ib" type="button" aria-label="Сегодня"><span class="ms">today</span></button>
+    <button class="dd" type="button">День<span class="ms">arrow_drop_down</span></button>
+    <button class="dd" type="button">Все места<span class="ms">arrow_drop_down</span></button>
+  </div>
+
+  <div class="wk" style="top: 56px">
+    <button class="wd" type="button">пн<span class="nu">19</span></button>
+    <button class="wd sel" type="button">вт<span class="nu td">20</span></button>
+    <button class="wd" type="button">ср<span class="nu">21</span></button>
+    <button class="wd" type="button">чт<span class="nu">22</span></button>
+    <button class="wd" type="button">пт<span class="nu">23</span></button>
+    <button class="wd" type="button">сб<span class="nu">24</span></button>
+    <button class="wd" type="button">вс<span class="nu">25</span></button>
+  </div>
+
+  <div class="gr" style="top: 120px; height: 768px">
+    <div class="tc">
+      <span class="tl" style="top: 2px; transform: none">11:00</span>
+      <span class="tl" style="top: 64px">12:00</span>
+      <span class="tl" style="top: 128px">13:00</span>
+      <span class="tl" style="top: 192px">14:00</span>
+      <span class="tl" style="top: 256px">15:00</span>
+      <span class="tl" style="top: 320px">16:00</span>
+      <span class="tl" style="top: 384px">17:00</span>
+      <span class="tl" style="top: 448px">18:00</span>
+      <span class="tl" style="top: 512px">19:00</span>
+      <span class="tl" style="top: 576px">20:00</span>
+      <span class="tl" style="top: 640px">21:00</span>
+      <span class="tl" style="top: 704px">22:00</span>
+      <span class="tl" style="top: 766px; transform: translateY(-100%)">23:00</span>
+    </div>
+    <div class="col" style="left: 48px; right: 0px">
+      <div class="past" style="height: 298.67px"></div>
+      <div class="duty" style="top: 0px; height: 256px"><span class="zl">Дежурство · ББ</span></div>
+      <div class="rest" style="top: 384px; height: 64px"></div>
+      <div class="lines">
+        <div class="hr"></div><div class="hr"></div><div class="hr"></div><div class="hr"></div><div class="hr"></div><div class="hr"></div>
+        <div class="hr"></div><div class="hr"></div><div class="hr"></div><div class="hr"></div><div class="hr"></div><div class="hr"></div>
+      </div>
+
+      <div class="b t-blue" style="top: 64px; height: 53.33px; left: 8px; right: 8px"><div class="n">Никитин А.</div><div class="m">12:00 · ББ</div><div class="bgs"><span class="bd"><span class="ms c-mut">layers</span></span></div></div>
+      <div class="b t-blue" style="top: 160px; height: 53.33px; left: 8px; right: 8px"><div class="n">Орлова К.</div><div class="m">13:30 · ББ</div><div class="bgs"><span class="bd"><span class="dot"></span></span></div></div>
+      <div class="b t-blue" style="top: 256px; height: 53.33px; left: 8px; right: 8px"><div class="n">Соколова В.</div><div class="m">15:00 · ДБ</div></div>
+      <div class="b t-lime" style="top: 320px; height: 53.33px; left: 8px; right: 8px"><div class="n">Ильин / Лаптев / Носова</div><div class="m">16:00 · ДБ</div></div>
+      <div class="b t-blue" style="top: 384px; height: 53.33px; left: 8px; right: 8px"><div class="n">Орлов М.</div><div class="m">17:00 · ДБ</div><div class="bgs"><span class="bd"><span class="ms c-over">warning</span></span></div></div>
+      <div class="b t-green" style="top: 448px; height: 64px; left: 8px; right: 8px"><div class="n">Вт, Чт 18:00 ДБ (10)</div><div class="m">18:00–19:00</div><div class="m">Группа · ДБ</div></div>
+      <div class="b t-pink" style="top: 512px; height: 53.33px; left: 8px; right: 8px"><div class="n">Новикова П.</div><div class="m">19:00 · ББ</div></div>
+
+      <div class="now" style="top: 297.67px"></div>
+    </div>
+  </div>
+
+  <button class="fab" type="button" aria-label="Новая тренировка" style="left: 340px; top: 816px"><span class="ms">add</span></button>
+
+  <nav class="nav">
+    <button class="it" type="button"><span class="pill"><span class="ms">home</span><span class="cnt">3</span></span>Главная</button>
+    <button class="it on" type="button"><span class="pill"><span class="ms">calendar_month</span></span>Календарь</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">group</span></span>Клиенты</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">payments</span></span>Зарплата</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">more_horiz</span></span>Ещё</button>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? true) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

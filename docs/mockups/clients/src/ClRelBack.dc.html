@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Карточка родственника — обратная связь</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--accent:#ff5a1f;--on-accent:#15171a;--error:#c22540;--shadow-menu:0 4px 16px rgba(21,23,26,.16);--menu:#fbfaf7;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--accent:#ff5a1f;--on-accent:#15171a;--error:#f26f78;--shadow-menu:0 4px 16px rgba(0,0,0,.55);--menu:#2a2d31}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.sp{flex:1 1 auto}
+.ab{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:4px;padding:0 4px;box-sizing:border-box}
+.bk{height:48px;padding:0 16px 0 12px;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-flex;align-items:center;gap:8px;font:500 15px/22px var(--ff)}
+.head{position:absolute;left:0;right:0;padding:0 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px}
+.who{margin:0;font:500 22px/28px var(--ff)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.lbl{font:500 13px/18px var(--ff);color:var(--text-muted)}
+.st{height:28px;padding:0 10px;border-radius:8px;display:inline-flex;align-items:center;font:500 13px/18px var(--ff);box-sizing:border-box;white-space:nowrap;flex:none;box-shadow:inset 0 0 0 1px var(--outline);color:var(--text)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);border-radius:12px;padding:10px 4px}
+.stat{display:flex;flex-direction:column;align-items:center;text-align:center}
+.stat b{font:500 17px/24px var(--ff);font-variant-numeric:tabular-nums}
+.stat span{font:400 13px/18px var(--ff);color:var(--text-muted)}
+.btns3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.btn{height:48px;padding:0 8px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;white-space:nowrap}
+.btn .ms{font-size:20px}
+.btn.s{height:40px;padding:0 14px 0 10px}
+.b-second{background:var(--surface-alt);color:var(--text)}
+.b-outline{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1px var(--outline)}
+.tabs{position:absolute;left:0;right:0;display:flex;border-bottom:1px solid var(--divider);padding:0 8px}
+.tab{flex:1 1 0;height:48px;padding:0 4px;border:0;background:transparent;color:var(--text-muted);font:500 13px/18px var(--ff);position:relative;white-space:nowrap}
+.tab.on{color:var(--text)}
+.tab.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--primary)}
+.body{position:absolute;left:0;right:0;padding:16px 16px 0;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.gb{background:var(--surface);border-radius:12px;overflow:hidden}
+.ir{display:flex;align-items:center;gap:8px;min-height:56px;padding:8px 4px 8px 16px;position:relative;box-sizing:border-box}
+.ir + .ir::before,.rel + .rel::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--divider)}
+.ir .ct,.rel .ct{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.val{font:400 15px/22px var(--ff);font-variant-numeric:tabular-nums}
+.hh{display:flex;align-items:center;gap:8px;min-height:48px;margin-top:8px}
+.hh .lbl{flex:1 1 auto}
+.rel{display:flex;align-items:center;gap:8px;min-height:76px;padding:10px 12px 10px 16px;width:100%;border:0;background:transparent;color:var(--text);text-align:left;box-sizing:border-box;position:relative;font:400 15px/22px var(--ff)}
+.rel.pr{background:var(--surface-alt)}
+.rel .ms{color:var(--text-muted);font-size:24px}
+.nm{font:500 15px/22px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font:400 13px/18px var(--ff);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.menu{position:absolute;width:232px;padding:8px 0;border-radius:12px;background:var(--menu);box-shadow:var(--shadow-menu),0 0 0 1px var(--divider);display:flex;flex-direction:column;z-index:5}
+.mi{height:48px;padding:0 16px;border:0;background:transparent;color:var(--text);font:400 15px/22px var(--ff);display:flex;align-items:center;gap:12px;text-align:left;white-space:nowrap}
+.mi .ms{font-size:20px;color:var(--text-muted)}
+.mi.danger,.mi.danger .ms{color:var(--error)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:72px;display:flex;background:var(--surface);border-top:1px solid var(--divider)}
+.it{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:transparent;color:var(--text-muted);font:500 13px/16px var(--ff)}
+.pill{position:relative;width:56px;height:32px;border-radius:999px;display:grid;place-items:center}
+.it.on{color:var(--text)}
+.it.on .pill{background:var(--surface-alt)}
+.it.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.cnt{position:absolute;top:-2px;left:32px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--accent);color:var(--on-accent);font:500 13px/20px var(--ff);text-align:center;font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="ab">
+    <button class="bk" type="button" aria-label="Назад к карточке Ковалёва Артёма"><span class="ms">arrow_back</span>Артём</button>
+    <span class="sp"></span>
+    <button class="ib" type="button" aria-label="Ещё действия"><span class="ms">more_vert</span></button>
+  </div>
+
+  <div class="head" style="top: 64px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h1 class="who">Ковалёва Наталья</h1>
+      <div class="row"><span class="st">Взрослый</span><span class="cap">41 год · Пн, Ср 07:00 · ПТ ББ</span></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>34</b><span>проведено</span></div>
+      <div class="stat"><b>2</b><span>отменено</span></div>
+      <div class="stat"><b>0</b><span>со списанием</span></div>
+      <div class="stat"><b>4,1</b><span>в месяц</span></div>
+    </div>
+    <div class="btns3">
+      <button class="btn b-second" type="button"><span class="ms">add</span>Тренировка</button>
+      <button class="btn b-second" type="button"><span class="ms">add</span>Результат</button>
+      <button class="btn b-outline" type="button"><span class="ms">link</span>Кабинет</button>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist" style="top: 282px">
+    <button class="tab" type="button" role="tab" aria-selected="false">Тренировки</button>
+    <button class="tab" type="button" role="tab" aria-selected="false">Результаты</button>
+    <button class="tab on" type="button" role="tab" aria-selected="true">Инфо</button>
+    <button class="tab" type="button" role="tab" aria-selected="false">Расписание</button>
+  </div>
+
+  <div class="body" style="top: 331px; bottom: 72px">
+    <div class="gb">
+      <div class="ir"><span class="ct"><span class="lbl">Дата рождения</span><span class="val">23.06.1985 · 41 год</span></span></div>
+      <div class="ir"><span class="ct"><span class="lbl">Пол</span><span class="val">Женский</span></span></div>
+    </div>
+
+    <div class="hh"><span class="lbl">Родственники</span><button class="btn s b-second" type="button"><span class="ms">add</span>Родственник</button></div>
+    <div class="gb">
+      <button class="rel pr" type="button" aria-label="Сын: Ковалёв Артём, открыть карточку"><span class="ct"><span class="lbl">Сын</span><span class="nm">Ковалёв Артём</span><span class="sub">10 лет · Вт, Чт 09:00 · Сплит ББ</span></span><span class="ms">chevron_right</span></button>
+      <button class="rel" type="button" aria-label="Дочь: Ковалёва Алиса, открыть карточку"><span class="ct"><span class="lbl">Дочь</span><span class="nm">Ковалёва Алиса</span><span class="sub">12 лет · Вт, Чт 09:00 · Сплит ББ</span></span><span class="ms">chevron_right</span></button>
+    </div>
+
+    <div class="gb" style="margin-top: 8px">
+      <div class="ir"><span class="ct"><span class="lbl">Для связи · сама</span><span class="val">+7 919 922-41-08</span></span><button class="ib" type="button" aria-label="Позвонить"><span class="ms">call</span></button></div>
+    </div>
+  </div>
+
+  <div class="menu" role="menu" style="top: 588px; right: 28px">
+    <button class="mi" type="button" role="menuitem"><span class="ms">edit</span>Изменить связь</button>
+    <button class="mi danger" type="button" role="menuitem"><span class="ms">link_off</span>Убрать связь</button>
+  </div>
+
+  <nav class="nav">
+    <button class="it" type="button"><span class="pill"><span class="ms">home</span><span class="cnt">3</span></span>Главная</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">calendar_month</span></span>Календарь</button>
+    <button class="it on" type="button"><span class="pill"><span class="ms">group</span></span>Клиенты</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">payments</span></span>Зарплата</button>
+    <button class="it" type="button"><span class="pill"><span class="ms">more_horiz</span></span>Ещё</button>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Gradle и сборка
+.gradle/
+build/
+local.properties
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.fleet/
+.vscode/
+
+# Системное
+.DS_Store
+Thumbs.db
+
+# Перерисовка макетов: зависимости и рантайм холста не храним
+docs/mockups/render/node_modules/
+docs/mockups/render/dc-runtime.js
+docs/mockups/render/package*.json

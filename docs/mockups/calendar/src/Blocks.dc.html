@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Календарь — блоки, значки, наложения</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--accent-graphic:#f55111;--done:#007634;--charged:#8e5b00;--over:#7c4dbd;--type-lime-block:#d9eebb;--type-lime-stripe:#6a9000;--type-lime-text:#415616;--type-green-block:#c4f2cc;--type-green-stripe:#149848;--type-green-text:#245a32;--type-blue-block:#d3e7ff;--type-blue-stripe:#2d84e0;--type-blue-text:#264f7c;--type-indigo-block:#dee3ff;--type-indigo-stripe:#7377e1;--type-indigo-text:#43477b;--type-magenta-block:#fdd5ff;--type-magenta-stripe:#bb59c1;--type-magenta-text:#67386a;--type-pink-block:#ffd9e6;--type-pink-stripe:#cf588d;--type-pink-text:#71374f;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--accent-graphic:#ff5a1f;--done:#64b376;--charged:#cf9037;--over:#ad88ea;--type-lime-block:#2e3e0d;--type-lime-stripe:#87ae39;--type-lime-text:#d0debd;--type-green-block:#154222;--type-green-stripe:#52b76d;--type-green-text:#c4e0c8;--type-blue-block:#18395d;--type-blue-stripe:#57a1f6;--type-blue-text:#c3daf5;--type-indigo-block:#30335e;--type-indigo-stripe:#8c93f4;--type-indigo-text:#d1d5f5;--type-magenta-block:#4b294d;--type-magenta-stripe:#d077d5;--type-magenta-text:#e9cdea;--type-pink-block:#55263a;--type-pink-stripe:#e275a3;--type-pink-text:#f1ccd9}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.h{position:absolute;left:24px;font:500 17px/24px var(--ff)}
+.cap{position:absolute;font:400 13px/18px var(--ff);color:var(--text-muted)}
+.pan{position:absolute;background:var(--surface);border-radius:12px;overflow:hidden}
+.lines{position:absolute;left:0;right:0;top:0;bottom:0}
+.hr{height:64px;box-sizing:border-box;border-top:1px solid var(--divider);position:relative}
+.hr:first-child{border-top-color:transparent}
+.hr::after{content:"";position:absolute;left:0;right:0;top:31px;border-top:1px dashed var(--divider)}
+.b{position:absolute;box-sizing:border-box;border-radius:6px;padding:4px 6px 4px 9px;overflow:hidden;border:1px solid var(--surface);background:var(--bb);color:var(--bt)}
+.b::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--bs)}
+.n{font:500 13px/16px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:18px}
+.m{font:400 13px/16px var(--ff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.b.two .n{padding-right:36px}
+.b.one{padding-top:3px}
+.b.cx{--bb:var(--surface-alt);--bs:var(--outline);--bt:var(--text-muted)}
+.b.cx .n,.b.cx .m{text-decoration:line-through}
+.bgs{position:absolute;top:3px;right:3px;display:flex;gap:2px}
+.bd{width:16px;height:16px;border-radius:999px;background:var(--surface);display:grid;place-items:center}
+.bd .ms{font-size:12px;font-variation-settings:'FILL' 1,'wght' 600,'GRAD' 0,'opsz' 20}
+.dot{width:6px;height:6px;border-radius:999px;background:var(--accent-graphic)}
+.c-done{color:var(--done)}.c-chg{color:var(--charged)}.c-over{color:var(--over)}.c-mut{color:var(--text-muted)}
+.more{position:absolute;box-sizing:border-box;padding:0;border:1px solid var(--surface);border-radius:6px;background:var(--surface-alt);color:var(--text);font:500 13px/16px var(--ff);display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.t-blue{--bb:var(--type-blue-block);--bs:var(--type-blue-stripe);--bt:var(--type-blue-text)}
+.t-indigo{--bb:var(--type-indigo-block);--bs:var(--type-indigo-stripe);--bt:var(--type-indigo-text)}
+.t-lime{--bb:var(--type-lime-block);--bs:var(--type-lime-stripe);--bt:var(--type-lime-text)}
+.t-green{--bb:var(--type-green-block);--bs:var(--type-green-stripe);--bt:var(--type-green-text)}
+.t-pink{--bb:var(--type-pink-block);--bs:var(--type-pink-stripe);--bt:var(--type-pink-text)}
+.t-magenta{--bb:var(--type-magenta-block);--bs:var(--type-magenta-stripe);--bt:var(--type-magenta-text)}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 760px; height: 860px">
+
+  <div class="h" style="top: 24px">Что видно на блоке — зависит от его высоты</div>
+  <div class="cap" style="top: 50px; left: 24px">Час — 64 dp, как по умолчанию; щипком меняется от 40 до 160 dp</div>
+  <div class="pan" style="left: 24px; top: 80px; width: 712px; height: 80px">
+    <div class="b t-blue two" style="left: 8px; top: 8px; width: 224px; height: 64px"><div class="n">Морозов Д.</div><div class="m">08:00–09:00</div><div class="m">ПТ · ББ</div><div class="bgs"><span class="bd"><span class="dot"></span></span><span class="bd"><span class="ms c-done">check</span></span></div></div>
+    <div class="b t-blue" style="left: 244px; top: 8px; width: 224px; height: 53.33px"><div class="n">Морозов Д.</div><div class="m">08:00 · ББ</div><div class="bgs"><span class="bd"><span class="dot"></span></span></div></div>
+    <div class="b t-blue one" style="left: 480px; top: 8px; width: 224px; height: 32px"><div class="n">Морозов Д., 08:00</div><div class="bgs"><span class="bd"><span class="dot"></span></span></div></div>
+  </div>
+  <div class="cap" style="top: 168px; left: 32px; width: 220px">60 мин и дольше, от 56 dp: имя, время, тип · место; до двух значков</div>
+  <div class="cap" style="top: 168px; left: 268px; width: 220px">45–50 мин, 40–56 dp: имя, начало · место; один значок</div>
+  <div class="cap" style="top: 168px; left: 504px; width: 220px">30 мин, меньше 40 dp: имя и начало в одну строку</div>
+
+  <div class="h" style="top: 232px">Значки — по важности, слева направо</div>
+  <div class="cap" style="top: 258px; left: 24px">На блоке ниже 56 dp виден один значок — самый важный. Все значки с пояснениями — в карточке тренировки</div>
+  <div class="pan" style="left: 24px; top: 288px; width: 712px; height: 70px">
+    <div class="b cx" style="left: 8px; top: 8px; width: 108px; height: 53.33px"><div class="n">Зайцева М.</div><div class="m">10:00 · ББ</div><div class="bgs"><span class="bd"><span class="ms c-chg">currency_ruble</span></span></div></div>
+    <div class="b t-blue" style="left: 124px; top: 8px; width: 108px; height: 53.33px"><div class="n">Орлов М.</div><div class="m">17:00 · ДБ</div><div class="bgs"><span class="bd"><span class="ms c-over">warning</span></span></div></div>
+    <div class="b t-blue" style="left: 240px; top: 8px; width: 108px; height: 53.33px"><div class="n">Орлова К.</div><div class="m">13:30 · ББ</div><div class="bgs"><span class="bd"><span class="dot"></span></span></div></div>
+    <div class="b t-blue" style="left: 356px; top: 8px; width: 108px; height: 53.33px"><div class="n">Никитин А.</div><div class="m">12:00 · ББ</div><div class="bgs"><span class="bd"><span class="ms c-mut">layers</span></span></div></div>
+    <div class="b t-blue" style="left: 472px; top: 8px; width: 108px; height: 53.33px"><div class="n">Морозов Д.</div><div class="m">08:00 · ББ</div><div class="bgs"><span class="bd"><span class="ms c-done">check</span></span></div></div>
+    <div class="b cx" style="left: 588px; top: 8px; width: 108px; height: 53.33px"><div class="n">Захаров Н.</div><div class="m">11:00 · ДБ</div></div>
+  </div>
+  <div class="cap" style="top: 366px; left: 32px; width: 108px">Отменена со списанием</div>
+  <div class="cap" style="top: 366px; left: 148px; width: 108px">Поверх запрета</div>
+  <div class="cap" style="top: 366px; left: 264px; width: 108px">Нет дневника</div>
+  <div class="cap" style="top: 366px; left: 380px; width: 108px">Поверх дежурства</div>
+  <div class="cap" style="top: 366px; left: 496px; width: 108px">Проведено</div>
+  <div class="cap" style="top: 366px; left: 612px; width: 108px">Отменена</div>
+
+  <div class="h" style="top: 432px">Наложения</div>
+  <div class="cap" style="top: 458px; left: 24px; width: 712px">Пересекающиеся тренировки делят ширину дня поровну, но не уже 36 dp. Если колонок больше четырёх — видны три и «+N» со списком</div>
+
+  <div class="cap" style="top: 500px; left: 24px">Две пересекаются, третья — отдельно и на всю ширину</div>
+  <div class="pan" style="left: 24px; top: 524px; width: 348px; height: 160px">
+    <div class="lines"><div class="hr"></div><div class="hr"></div><div class="hr"></div></div>
+    <div class="b t-blue" style="left: 8px; top: 0px; width: 166px; height: 53.33px"><div class="n">Соколова В.</div><div class="m">16:00 · ДБ</div></div>
+    <div class="b t-blue" style="left: 174px; top: 32px; width: 166px; height: 53.33px"><div class="n">Егорова Л.</div><div class="m">16:30 · ББ</div></div>
+    <div class="b t-blue" style="left: 8px; top: 96px; width: 332px; height: 53.33px"><div class="n">Носова Е.</div><div class="m">17:30 · ДБ</div></div>
+  </div>
+
+  <div class="cap" style="top: 500px; left: 388px">Три на одно время</div>
+  <div class="pan" style="left: 388px; top: 524px; width: 348px; height: 96px">
+    <div class="lines"><div class="hr"></div><div class="hr"></div></div>
+    <div class="b t-green" style="left: 8px; top: 0px; width: 110.67px; height: 64px"><div class="n">Вт, Чт 18:00 ДБ (10)</div><div class="m">18:00–19:00</div><div class="m">Группа · ДБ</div></div>
+    <div class="b t-blue" style="left: 118.67px; top: 0px; width: 110.67px; height: 53.33px"><div class="n">Ильин Г.</div><div class="m">18:00 · ББ</div></div>
+    <div class="b t-pink" style="left: 229.33px; top: 16px; width: 110.67px; height: 53.33px"><div class="n">Новикова П.</div><div class="m">18:15 · ББ</div></div>
+  </div>
+
+  <div class="cap" style="top: 708px; left: 24px">Четыре — видны все</div>
+  <div class="pan" style="left: 24px; top: 732px; width: 348px; height: 64px">
+    <div class="lines"><div class="hr"></div></div>
+    <div class="b t-blue" style="left: 8px; top: 0px; width: 83px; height: 53.33px"><div class="n">Ткаченко И.</div><div class="m">10:00 · ББ</div></div>
+    <div class="b t-magenta" style="left: 91px; top: 0px; width: 83px; height: 53.33px"><div class="n">Яковлева Т.</div><div class="m">10:00 · ББ</div></div>
+    <div class="b t-blue" style="left: 174px; top: 0px; width: 83px; height: 53.33px"><div class="n">Захаров Н.</div><div class="m">10:00 · ДБ</div></div>
+    <div class="b t-indigo" style="left: 257px; top: 0px; width: 83px; height: 53.33px"><div class="n">Лаптев / Лаптева</div><div class="m">10:00 · ДБ</div></div>
+  </div>
+
+  <div class="cap" style="top: 708px; left: 388px">Пять — видны три и «+2»</div>
+  <div class="pan" style="left: 388px; top: 732px; width: 348px; height: 64px">
+    <div class="lines"><div class="hr"></div></div>
+    <div class="b t-blue" style="left: 8px; top: 0px; width: 97.33px; height: 53.33px"><div class="n">Ткаченко И.</div><div class="m">10:00 · ББ</div></div>
+    <div class="b t-magenta" style="left: 105.33px; top: 0px; width: 97.33px; height: 53.33px"><div class="n">Яковлева Т.</div><div class="m">10:00 · ББ</div></div>
+    <div class="b t-blue" style="left: 202.67px; top: 0px; width: 97.33px; height: 53.33px"><div class="n">Захаров Н.</div><div class="m">10:00 · ДБ</div></div>
+    <button class="more" type="button" aria-label="Ещё 2 тренировки" style="left: 300px; top: 0px; width: 40px; height: 53.33px">+2</button>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":760,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

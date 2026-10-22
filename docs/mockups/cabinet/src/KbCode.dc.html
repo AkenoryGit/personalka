@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кабинет — код доступа</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--error:#c22540;color-scheme:light;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 16px/24px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--error:#f26f78;color-scheme:dark}
+.scr *{box-sizing:border-box}
+.pg{max-width:440px;margin:0 auto;padding:0 16px 40px;display:flex;flex-direction:column;gap:16px}
+.bar{height:56px;display:flex;align-items:center;gap:10px;font:500 16px/24px var(--ff)}
+.lgr{stroke:var(--divider);stroke-width:2}
+h1{margin:0;font:500 26px/32px var(--ff)}
+p{margin:0}
+.mut{color:var(--text-muted)}
+.ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.badge{width:64px;height:64px;border-radius:999px;background:var(--surface-alt);display:grid;place-items:center;margin-top:72px}
+.frm{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.code{width:100%;height:72px;border-radius:12px;border:1px solid var(--outline);background:var(--surface);color:var(--text);font:500 32px/40px var(--ff);letter-spacing:.6em;text-indent:.6em;text-align:center;font-variant-numeric:tabular-nums;padding:0}
+.code::placeholder{color:var(--text-muted)}
+.code.err{border:2px solid var(--error)}
+.code:disabled{background:var(--surface-alt);border-color:var(--divider)}
+.msg{display:flex;gap:8px;align-items:flex-start;color:var(--error);font-weight:500}
+.btn{display:flex;align-items:center;justify-content:center;height:52px;border-radius:12px;font:500 16px/24px var(--ff);text-decoration:none;width:100%}
+.btn.main{background:var(--primary);color:var(--on-primary)}
+.btn.off{background:var(--surface-alt);color:var(--text-muted)}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 390px; height: 844px">
+<div class="pg">
+
+  <div class="bar">
+    <svg width="28" height="28" viewBox="0 0 72 72" aria-hidden="true"><rect class="lgr" x="1" y="1" width="70" height="70" rx="16" fill="#F3EFE6"></rect><path d="M23 53 V21 H49 V53" fill="none" stroke="#15171A" stroke-width="8"></path><circle cx="36" cy="47" r="5" fill="#FF5A1F"></circle></svg>
+    <span>Кабинет тренировок</span>
+  </div>
+
+  <div class="badge"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></div>
+  <h1>Введите код</h1>
+  <p>Код из 4 цифр вам сообщил тренер.</p>
+
+  <div class="frm">
+    <label class="vh" for="pin">Код доступа</label>
+    <sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}">
+      <input id="pin" class="code" type="text" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="····" value="47">
+    </sc-if>
+    <sc-if value="{{ wrong }}" hint-placeholder-val="{{ true }}">
+      <input id="pin" class="code err" type="text" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="····" value="" aria-invalid="true" aria-describedby="pinmsg">
+      <p class="msg" id="pinmsg"><svg class="ic" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.2"></path></svg><span>Неверный код. Осталось 3 попытки.</span></p>
+    </sc-if>
+    <sc-if value="{{ blocked }}" hint-placeholder-val="{{ false }}">
+      <input id="pin" class="code" type="text" inputmode="numeric" maxlength="4" placeholder="····" value="" disabled aria-describedby="pinmsg">
+      <p class="msg" id="pinmsg"><svg class="ic" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.2"></path></svg><span>Слишком много попыток. Попробуйте через 15 минут.</span></p>
+    </sc-if>
+
+    <sc-if value="{{ canGo }}" hint-placeholder-val="{{ true }}">
+      <a class="btn main" href="KbConsent.dc.html">Войти</a>
+    </sc-if>
+    <sc-if value="{{ blocked }}" hint-placeholder-val="{{ false }}">
+      <span class="btn off" aria-disabled="true">Войти</span>
+    </sc-if>
+    <p class="mut">На этом устройстве код больше не спросят 30 дней.</p>
+  </div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["Неверный код","Ввод","Блокировка"],"default":"Неверный код","tsType":"string"},"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.state ?? 'Неверный код';
+    return {
+      t: (this.props.dark ?? false) ? 'dk' : 'lt',
+      typing: s === 'Ввод',
+      wrong: s === 'Неверный код',
+      blocked: s === 'Блокировка',
+      canGo: s !== 'Блокировка'
+    };
+  }
+}
+</script>
+</body>
+</html>

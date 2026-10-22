@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Первый запуск — имя</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.ab{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:12px;padding:0 16px 0 4px;box-sizing:border-box}
+.prog{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.prog span{height:4px;border-radius:999px;background:var(--surface-alt)}
+.prog span.on{background:var(--primary)}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.pad{position:absolute;left:0;right:0;padding:0 16px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box}
+.pad h1{margin:0;font:500 22px/28px var(--ff)}
+.lbl{font:500 13px/18px var(--ff);color:var(--text-muted)}
+.box{min-height:56px;box-sizing:border-box;padding:0 16px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 2px var(--primary);display:flex;align-items:center;gap:8px;font:400 15px/22px var(--ff);color:var(--text)}
+.box.done{box-shadow:inset 0 0 0 1px var(--outline)}
+.caret{display:inline-block;width:2px;height:20px;background:var(--primary);vertical-align:-4px;margin-left:1px}
+.bar{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 20px;display:flex;gap:8px;box-sizing:border-box}
+.btn{height:48px;padding:0 20px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;white-space:nowrap;flex:1 1 auto}
+.b-main{background:var(--primary);color:var(--on-primary)}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="ab">
+    <button class="ib" type="button" aria-label="Назад"><span class="ms">arrow_back</span></button>
+    <div class="prog" role="progressbar" aria-valuemin="1" aria-valuemax="2" aria-valuenow="1" aria-label="Шаг 1 из 2"><span class="on"></span><span></span></div>
+  </div>
+
+  <div class="pad" style="top: 88px">
+    <span class="cap">Шаг 1 из 2</span>
+    <h1>Как вас зовут?</h1>
+    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 12px">
+      <label class="lbl" for="ln">Фамилия</label>
+      <div class="box done" id="ln">Дудник</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label class="lbl" for="fn">Имя</label>
+      <div class="box done" id="fn">Дмитрий</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label class="lbl" for="mn">Отчество · если есть</label>
+      <div class="box" id="mn"><span>Викторович<span class="caret"></span></span></div>
+    </div>
+    <span class="cap">Имя и фамилию родители увидят в кабинете, полное ФИО войдёт в согласие на обработку данных. Поменять можно в настройках.</span>
+  </div>
+
+  <div class="bar"><button class="btn b-main" type="button">Далее</button></div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

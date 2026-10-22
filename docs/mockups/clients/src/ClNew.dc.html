@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Новый клиент — похожий</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--primary:#15171a;--on-primary:#f3efe6;--scrim:#15171a66;--shadow-menu:0 4px 16px rgba(21,23,26,.16);position:relative;overflow:hidden;background:var(--surface);color:var(--text);font:400 15px/22px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--primary:#f3efe6;--on-primary:#15171a;--scrim:#000000a3;--shadow-menu:0 4px 16px rgba(0,0,0,.55)}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block}
+.ib{width:48px;height:48px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text);display:inline-grid;place-items:center;flex:none}
+.ab{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:4px;padding:0 4px;box-sizing:border-box}
+.ab h1{margin:0;padding-left:4px;font:500 22px/28px var(--ff);flex:1 1 auto;min-width:0}
+.pad{position:absolute;left:0;right:0;padding:8px 16px;display:flex;flex-direction:column;gap:16px;box-sizing:border-box}
+.grp{display:flex;flex-direction:column;gap:6px}
+.lbl{font:500 13px/18px var(--ff);color:var(--text-muted)}
+.cap{font:400 13px/18px var(--ff);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.box{min-height:56px;box-sizing:border-box;padding:0 16px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--outline);display:flex;align-items:center;gap:8px;font:400 15px/22px var(--ff);color:var(--text)}
+.box .ph{color:var(--text-muted)}
+.box .ms{font-size:20px;color:var(--text-muted);flex:none}
+.box .val{flex:1 1 auto;min-width:0;font-variant-numeric:tabular-nums}
+.box.focus{box-shadow:inset 0 0 0 2px var(--primary)}
+.boxes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);height:48px;padding:2px;gap:2px;border-radius:12px;background:var(--surface-alt);box-sizing:border-box}
+.seg button{border:0;border-radius:10px;background:transparent;color:var(--text);font:500 15px/22px var(--ff)}
+.seg button.on{background:var(--primary);color:var(--on-primary)}
+.bar{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 20px;background:var(--surface);border-top:1px solid var(--divider);display:flex;gap:8px;box-sizing:border-box}
+.btn{height:48px;padding:0 20px;border:0;border-radius:12px;font:500 15px/22px var(--ff);display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;white-space:nowrap}
+.b-main{background:var(--primary);color:var(--on-primary)}
+.b-text{background:transparent;color:var(--text);padding:0 12px}
+.scrim{position:absolute;left:0;right:0;top:0;bottom:0;background:var(--scrim)}
+.dlg{position:absolute;left:24px;right:24px;background:var(--surface);border-radius:20px;box-shadow:var(--shadow-menu);padding:24px 20px 16px;display:flex;flex-direction:column;gap:16px;box-sizing:border-box}
+.dlg h2{margin:0;font:500 22px/28px var(--ff)}
+.quote{padding:10px 12px;border-radius:12px;background:var(--surface-alt);display:flex;flex-direction:column;gap:2px}
+.nm{font:500 15px/22px var(--ff)}
+.txt{font:400 15px/22px var(--ff)}
+.btnsv{display:flex;flex-direction:column;gap:8px}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 412px; height: 960px">
+
+  <div class="ab">
+    <button class="ib" type="button" aria-label="Закрыть"><span class="ms">close</span></button>
+    <h1>Новый клиент</h1>
+  </div>
+
+  <div class="pad" style="top: 64px">
+    <div class="grp">
+      <span class="lbl">Фамилия</span>
+      <div class="box"><span class="val">Дельфинурова</span></div>
+    </div>
+    <div class="grp">
+      <span class="lbl">Имя</span>
+      <div class="box"><span class="val">Аделина</span></div>
+    </div>
+    <div class="grp">
+      <span class="lbl">Отчество</span>
+      <div class="box"><span class="val ph">Необязательно</span></div>
+    </div>
+    <div class="grp">
+      <span class="lbl">Пол</span>
+      <div class="seg" role="radiogroup" aria-label="Пол"><button type="button" role="radio" aria-checked="false">Мужской</button><button class="on" type="button" role="radio" aria-checked="true">Женский</button></div>
+      <span class="cap">Предложен по фамилии</span>
+    </div>
+    <div class="grp">
+      <span class="lbl">Дата рождения</span>
+      <div class="box"><span class="ms">calendar_today</span><span class="val">12.05.2017</span></div>
+      <span class="cap">9 лет · ребёнок</span>
+    </div>
+    <div class="grp">
+      <span class="lbl">Для связи</span>
+      <div class="boxes">
+        <div class="box"><span class="val ph">Кто: мама, папа…</span></div>
+        <div class="box"><span class="ms">call</span><span class="val ph">Телефон</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bar"><button class="btn b-main" type="button" style="flex: 1 1 auto">Сохранить</button></div>
+
+  <div class="scrim"></div>
+
+  <div class="dlg" role="dialog" aria-label="Похожий клиент уже есть" style="top: 300px">
+    <h2>Похожий клиент уже есть</h2>
+    <div class="quote">
+      <span class="nm">Дельфенурова Аделина</span>
+      <span class="cap">9 лет · Сб 09:00 · Группа ББ</span>
+    </div>
+    <span class="txt">Это она?</span>
+    <div class="btnsv">
+      <button class="btn b-main" type="button">Да, выбрать</button>
+      <button class="btn b-text" type="button">Нет, создать нового</button>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>

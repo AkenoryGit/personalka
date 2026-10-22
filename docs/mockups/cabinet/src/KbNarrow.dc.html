@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кабинет — узкий экран 320</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.scr{--ff:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#f3efe6;--surface:#fbfaf7;--surface-alt:#eae6dc;--divider:#dcd9d0;--outline:#86837b;--text:#15171a;--text-muted:#69665e;--done:#007634;--charged:#8e5b00;color-scheme:light;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font:400 16px/24px var(--ff);-webkit-font-smoothing:antialiased}
+.scr.dk{--bg:#15171a;--surface:#1e2124;--surface-alt:#2a2d31;--divider:#34373b;--outline:#72767c;--text:#f3efe6;--text-muted:#98958d;--done:#64b376;--charged:#cf9037;color-scheme:dark}
+.scr *{box-sizing:border-box}
+.pg{max-width:600px;margin:0 auto;padding:0 16px 40px;display:flex;flex-direction:column;gap:28px}
+.bar{height:56px;display:flex;align-items:center;gap:10px;font:500 16px/24px var(--ff);margin-bottom:-16px}
+.lgr{stroke:var(--divider);stroke-width:2}
+.hd{display:flex;flex-direction:column;gap:2px}
+h1{margin:0 0 6px;font:500 26px/32px var(--ff)}
+h2{margin:0;font:500 20px/28px var(--ff)}
+p{margin:0}
+.mut{color:var(--text-muted)}
+.num{font-variant-numeric:tabular-nums}
+.sec{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border-radius:12px}
+.lst{list-style:none;margin:0;padding:0}
+.it{padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.it + .it{border-top:1px solid var(--divider)}
+.dt{font-weight:500;font-variant-numeric:tabular-nums}
+.f{display:flex;flex-direction:column;margin-top:8px}
+.k{font-weight:500;color:var(--text-muted)}
+.tb{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.tb th,.tb td{padding:12px 16px 12px 8px;text-align:right;font-weight:400}
+.tb thead th{color:var(--text-muted);font-weight:500;padding-bottom:4px}
+.tb tbody th{text-align:left;padding:12px 0 12px 16px}
+.tb tbody td{font:500 20px/24px var(--ff)}
+.tb tbody tr + tr > *{border-top:1px solid var(--divider)}
+.rl{display:flex;align-items:center;gap:10px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:4px;flex:none}
+.sw.done{background:var(--done)}
+.sw.cnc{background:var(--outline)}
+.sw.chg{background:var(--charged)}
+.rule{display:flex;gap:12px;padding:14px 16px;align-items:flex-start}
+.ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.rule .ic{color:var(--text-muted)}
+</style>
+</helmet>
+<div class="scr {{t}}" style="width: 320px; height: 1140px">
+<div class="pg">
+
+  <div class="bar">
+    <svg width="28" height="28" viewBox="0 0 72 72" aria-hidden="true"><rect class="lgr" x="1" y="1" width="70" height="70" rx="16" fill="#F3EFE6"></rect><path d="M23 53 V21 H49 V53" fill="none" stroke="#15171A" stroke-width="8"></path><circle cx="36" cy="47" r="5" fill="#FF5A1F"></circle></svg>
+    <span>Кабинет тренировок</span>
+  </div>
+
+  <header class="hd">
+    <h1>Орлова Ксения</h1>
+    <p>Тренер: Дмитрий Дудник</p>
+    <p class="mut num">Данные на 20.10.2026, 15:41</p>
+  </header>
+
+  <section class="sec" aria-labelledby="up">
+    <h2 id="up">Ближайшие тренировки</h2>
+    <ul class="card lst">
+      <li class="it">
+        <p class="dt">чт 22.10 · 13:30</p>
+        <p>Персональная · Большой бассейн</p>
+        <div class="f"><span class="k">План</span><span>Старт с тумбочки, 4 × 25 м на спине с поворотом</span></div>
+      </li>
+      <li class="it"><p class="dt">вт 27.10 · 13:30</p><p>Персональная · Большой бассейн</p></li>
+      <li class="it"><p class="dt">чт 29.10 · 13:30</p><p>Персональная · Большой бассейн</p></li>
+      <li class="it"><p class="dt">вт 03.11 · 13:30</p><p>Персональная · Большой бассейн</p></li>
+    </ul>
+  </section>
+
+  <section class="sec" aria-labelledby="att">
+    <h2 id="att">Посещения</h2>
+    <div class="card">
+      <table class="tb">
+        <thead><tr><th scope="col"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Статус</span></th><th scope="col">Октябрь</th><th scope="col">Всего</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><span class="rl"><span class="sw done" aria-hidden="true"></span><span>Проведено</span></span></th><td>4</td><td>46</td></tr>
+          <tr><th scope="row"><span class="rl"><span class="sw cnc" aria-hidden="true"></span><span>Отменено</span></span></th><td>1</td><td>5</td></tr>
+          <tr><th scope="row"><span class="rl"><span class="sw chg" aria-hidden="true"></span><span>Отмена со списанием</span></span></th><td>1</td><td>2</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card rule">
+      <svg class="ic" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.2"></path></svg>
+      <p>Если вы предупреждаете об отмене меньше чем за 1 час до начала, тренировка считается проведённой и списывается.</p>
+    </div>
+  </section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":320,"height":1140}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { t: (this.props.dark ?? false) ? 'dk' : 'lt' };
+  }
+}
+</script>
+</body>
+</html>
