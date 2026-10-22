@@ -40,10 +40,14 @@ class Probe(private val log: KSPLogger) : SymbolProcessor {
         c.declarations.forEach { d ->
             when (d) {
                 is KSFunctionDeclaration -> {
+                    d.annotations.forEach { a -> check("$prefix fun ${d.simpleName.asString()} @${a.shortName.asString()}", a.annotationType.resolve()) }
                     check("$prefix fun ${d.simpleName.asString()} returns", d.returnType?.resolve())
                     d.parameters.forEach { p -> check("$prefix fun ${d.simpleName.asString()}(${p.name?.asString()})", p.type.resolve()) }
                 }
-                is KSPropertyDeclaration -> check("$prefix val ${d.simpleName.asString()}", d.type.resolve())
+                is KSPropertyDeclaration -> {
+                    d.annotations.forEach { a -> check("$prefix val ${d.simpleName.asString()} @${a.shortName.asString()}", a.annotationType.resolve()) }
+                    check("$prefix val ${d.simpleName.asString()}", d.type.resolve())
+                }
                 is KSClassDeclaration -> walkClass("$prefix.${d.simpleName.asString()}", d)
                 else -> Unit
             }
@@ -63,6 +67,11 @@ class Probe(private val log: KSPLogger) : SymbolProcessor {
             "com.akenory.personalka.data.db.entity.CoachSettingsEntity",
             "com.akenory.personalka.data.db.dao.TrainingDao",
             "com.akenory.personalka.data.db.dao.ClientDao",
+            "com.akenory.personalka.data.db.dao.CoachDao",
+            "com.akenory.personalka.data.db.dao.ReferenceDao",
+            "com.akenory.personalka.data.db.dao.ScheduleDao",
+            "com.akenory.personalka.data.db.entity.ClientEntity",
+            "com.akenory.personalka.data.db.entity.SeriesClientEntity",
         )
         names.forEach { name ->
             val c = resolver.getClassDeclarationByName(resolver.getKSNameFromString(name))

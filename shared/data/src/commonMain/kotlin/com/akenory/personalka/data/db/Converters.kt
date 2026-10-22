@@ -1,6 +1,6 @@
 package com.akenory.personalka.data.db
 
-import androidx.room3.TypeConverter
+import androidx.room3.ColumnTypeConverter
 import com.akenory.personalka.domain.model.TimeRange
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -16,52 +16,52 @@ import kotlinx.datetime.isoDayNumber
  */
 class Converters {
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun localDateToText(value: LocalDate): String = value.toString()
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun textToLocalDate(value: String): LocalDate = LocalDate.parse(value)
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun localTimeToText(value: LocalTime): String = value.toString()
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun textToLocalTime(value: String): LocalTime = LocalTime.parse(value)
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun localDateTimeToText(value: LocalDateTime): String = value.toString()
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun textToLocalDateTime(value: String): LocalDateTime = LocalDateTime.parse(value)
 
     /** Дни недели — номерами ISO через запятую по порядку: вт и чт → «2,4». Пусто — «». */
-    @TypeConverter
+    @ColumnTypeConverter
     fun weekdaysToText(value: Set<DayOfWeek>): String =
         value.map { it.isoDayNumber }.sorted().joinToString(",")
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun textToWeekdays(value: String): Set<DayOfWeek> =
         splitList(value).map { DayOfWeek(it.toInt()) }.toSet()
 
     /** Список дат через запятую: «2026-10-24,2026-11-07». */
-    @TypeConverter
+    @ColumnTypeConverter
     fun datesToText(value: List<LocalDate>): String = value.joinToString(",")
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun textToDates(value: String): List<LocalDate> = splitList(value).map { LocalDate.parse(it) }
 
     /** Список идентификаторов через запятую. */
-    @TypeConverter
+    @ColumnTypeConverter
     fun idsToText(value: List<String>): String = value.joinToString(",")
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun textToIds(value: String): List<String> = splitList(value)
 
     /** Промежутки времени через запятую: «07:00-12:00,18:00-21:00». */
-    @TypeConverter
+    @ColumnTypeConverter
     fun timeRangesToText(value: List<TimeRange>): String = value.joinToString(",")
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun textToTimeRanges(value: String): List<TimeRange> = splitList(value).map { TimeRange.parse(it) }
 
     private fun splitList(value: String): List<String> =

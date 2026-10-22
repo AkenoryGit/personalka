@@ -4,7 +4,7 @@ import androidx.room3.ConstructedBy
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import androidx.room3.RoomDatabaseConstructor
-import androidx.room3.TypeConverters
+import androidx.room3.ColumnTypeConverters
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.akenory.personalka.data.db.dao.ClientDao
 import com.akenory.personalka.data.db.dao.CoachDao
@@ -77,7 +77,7 @@ import kotlin.coroutines.CoroutineContext
     version = 1,
     exportSchema = true,
 )
-@TypeConverters(Converters::class)
+@ColumnTypeConverters(Converters::class)
 @ConstructedBy(PersonalkaDatabaseConstructor::class)
 abstract class PersonalkaDatabase : RoomDatabase() {
     abstract fun coachDao(): CoachDao
