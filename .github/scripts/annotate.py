@@ -64,7 +64,7 @@ def build_log(path: str) -> None:
         return
     lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
     errors = [l for l in lines if re.match(r"^(e: |ERROR:|Error:|> Task .* FAILED)", l)]
-    for line in errors[:6]:
+    for line in errors[:14]:
         emit("error", "Сборка", line[:600])
     ksp = [l for l in lines if l.startswith("w: [ksp]")]
     if ksp:
