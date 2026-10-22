@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Окно до первого кадра Compose и заставка Android 12+: кремовый фон, как у иконки (шаг 0.2). -->
+    <style name="Theme.Personalka" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>
