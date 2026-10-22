@@ -1,6 +1,8 @@
 # Сборка «Персоналки» при каждом push: тесты всех модулей, проверки Android (lint) и APK.
-# APK лежит в артефакте сборки, а для ветки main — ещё и в релизе «Последняя сборка»:
+# APK из ветки main — в релизе «Последняя сборка», ссылка постоянная:
 # https://github.com/AkenoryGit/personalka/releases/download/latest-build/personalka.apk
+# Артефакты Actions не используются: их хранилище на аккаунте общее и ограничено 500 МБ.
+# Итоги (тесты, lint, APK, ошибки) выводятся отметками — их видно через API без полного лога.
 name: Сборка
 
 on:
@@ -35,27 +37,30 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Тесты, проверки и APK
-        run: ./gradlew check :androidApp:assembleDebug --console=plain --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew check :androidApp:assembleDebug --console=plain --stacktrace 2>&1 | tee build-log.txt
 
-      - name: Отчёты при ошибке
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: reports-${{ github.run_number }}
-          path: |
-            **/build/reports/
-            **/build/test-results/
-          retention-days: 7
+      - name: Что внутри APK
+        if: success()
+        shell: bash
+        run: |
+          APK=androidApp/build/outputs/apk/debug/androidApp-debug.apk
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          {
+            "$BT/aapt2" dump badging "$APK" | grep -E "^(package|application-label|application:|sdkVersion|targetSdkVersion|launchable-activity)"
+            echo "allowBackup: $("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" | grep -o 'allowBackup.*' | head -1)"
+            "$BT/apksigner" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)"
+            echo "Размер: $(du -k "$APK" | cut -f1) КБ"
+          } > apk-info.txt
 
-      - name: APK в артефакт сборки
-        uses: actions/upload-artifact@v7
-        with:
-          name: personalka-${{ github.run_number }}
-          path: androidApp/build/outputs/apk/debug/*.apk
-          retention-days: 30
+      - name: Итоги в отметки
+        if: always()
+        run: python3 .github/scripts/annotate.py build-log.txt apk-info.txt
 
       - name: «Последняя сборка» в релизах
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: success() && github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
