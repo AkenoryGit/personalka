@@ -29,8 +29,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.icons.PIcons
@@ -43,22 +45,27 @@ import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 
 /**
  * Экраны разделов. С шага 1.5 — заготовки: заголовок и пустой экран с тем, в каком шаге раздел появится.
- * Каждый следующий шаг заменяет свою заготовку настоящим экраном; «Ещё → Настройки» — с шага 1.6.
+ * Каждый следующий шаг заменяет свою заготовку настоящим экраном: «Ещё → Настройки» — с шага 1.6,
+ * «Клиенты» — с шага 1.7.
+ *
+ * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
  */
 @Composable
 fun SectionScreen(
     section: Section,
     shell: ShellState,
-    today: LocalDate,
+    now: LocalDateTime,
     versionName: String,
     settings: SettingsRepository,
+    clients: ClientRepository,
     messages: MessageState,
     scope: CoroutineScope,
 ) {
+    val today = now.date
     when (section) {
         Section.HOME -> Placeholder(
             title = DateFormat.header(today),
@@ -72,12 +79,7 @@ fun SectionScreen(
             heading = "Здесь будет календарь",
             text = "День и неделя — шаг 1.9, месяц и список — шаг 1.12.",
         )
-        Section.CLIENTS -> Placeholder(
-            title = "Клиенты",
-            icon = PIcons.Group,
-            heading = "Здесь будет список клиентов",
-            text = "С поиском и карточкой клиента. Появится в шаге 1.7.",
-        )
+        Section.CLIENTS -> ClientsScreen(shell, clients, messages, scope, now)
         Section.SALARY -> Placeholder(
             title = "Зарплата",
             icon = PIcons.Payments,

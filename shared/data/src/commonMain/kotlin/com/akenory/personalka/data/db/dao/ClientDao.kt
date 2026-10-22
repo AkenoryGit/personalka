@@ -28,6 +28,17 @@ interface ClientDao {
     @Query("SELECT * FROM client WHERE status = :status AND deletedAt IS NULL")
     fun observeClients(status: ClientStatus): Flow<List<ClientEntity>>
 
+    /** Все клиенты — и действующие, и в архиве: список с фильтрами и проверка похожих (5.8). */
+    @Query("SELECT * FROM client WHERE deletedAt IS NULL")
+    fun observeAllClients(): Flow<List<ClientEntity>>
+
+    @Query("SELECT * FROM client WHERE id = :id")
+    fun observeClient(id: String): Flow<ClientEntity?>
+
+    /** «Удалить полностью» (3.1): данные клиента стираются сразу, без отметки об удалении. */
+    @Query("DELETE FROM client WHERE id = :id")
+    suspend fun eraseClient(id: String)
+
     @Upsert
     suspend fun upsertGroup(item: GroupEntity)
 
@@ -47,6 +58,16 @@ interface ClientDao {
     )
     suspend fun membersOn(groupId: String, date: LocalDate): List<GroupMemberEntity>
 
+    /** Состав всех групп, кто в группе на [date] или придёт позже: расписание в списке клиентов. */
+    @Query("SELECT * FROM group_member WHERE deletedAt IS NULL AND (toDate IS NULL OR toDate >= :date)")
+    fun observeMembersFrom(date: LocalDate): Flow<List<GroupMemberEntity>>
+
+    @Query("SELECT * FROM group_member WHERE clientId = :clientId AND deletedAt IS NULL")
+    suspend fun membershipsOf(clientId: String): List<GroupMemberEntity>
+
+    @Query("DELETE FROM group_member WHERE clientId = :clientId")
+    suspend fun eraseMembershipsOf(clientId: String)
+
     @Upsert
     suspend fun upsertWaitEntry(item: WaitEntryEntity)
 
@@ -55,6 +76,12 @@ interface ClientDao {
 
     @Query("SELECT * FROM wait_entry WHERE status = :status AND deletedAt IS NULL ORDER BY createdAt")
     suspend fun waitEntries(status: WaitStatus): List<WaitEntryEntity>
+
+    @Query("SELECT * FROM wait_entry WHERE clientId = :clientId AND deletedAt IS NULL")
+    suspend fun waitEntriesOf(clientId: String): List<WaitEntryEntity>
+
+    @Query("DELETE FROM wait_entry WHERE clientId = :clientId")
+    suspend fun eraseWaitEntriesOf(clientId: String)
 
     @Upsert
     suspend fun upsertRelation(item: ClientRelationEntity)
@@ -67,4 +94,31 @@ interface ClientDao {
         """
     )
     suspend fun relationsOf(clientId: String): List<ClientRelationEntity>
+
+    /** То же наблюдением: связь, добавленная в одной карточке, сразу видна во второй (4.17). */
+    @Query(
+        """
+        SELECT * FROM client_relation
+        WHERE (clientAId = :clientId OR clientBId = :clientId) AND deletedAt IS NULL
+        """
+    )
+    fun observeRelationsOf(clientId: String): Flow<List<ClientRelationEntity>>
+
+    @Query("SELECT * FROM client_relation WHERE id = :id")
+    suspend fun relation(id: String): ClientRelationEntity?
+
+    /**
+     * Запись связи пары в любом порядке, и удалённая тоже: уникальный индекс помнит удалённые записи,
+     * поэтому связь, убранную и добавленную снова, пишет та же запись.
+     */
+    @Query(
+        """
+        SELECT * FROM client_relation
+        WHERE (clientAId = :x AND clientBId = :y) OR (clientAId = :y AND clientBId = :x)
+        """
+    )
+    suspend fun relationRowsBetween(x: String, y: String): List<ClientRelationEntity>
+
+    @Query("DELETE FROM client_relation WHERE clientAId = :clientId OR clientBId = :clientId")
+    suspend fun eraseRelationsOf(clientId: String)
 }

@@ -7,8 +7,13 @@ import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.ResultEntity
 import com.akenory.personalka.data.db.entity.SptCaseEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
+import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.TrainingStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDateTime
+
+/** Ближайшая тренировка клиента — для строки списка (5.8). */
+data class NextTraining(val clientId: String, val start: LocalDateTime)
 
 /** Тренировки и дежурства, участие клиентов, результаты, стартовые тренировки (ТЗ 3.5). */
 @Dao
@@ -58,15 +63,63 @@ interface TrainingDao {
     @Query("SELECT * FROM participation WHERE trainingId = :trainingId AND deletedAt IS NULL")
     suspend fun participationsOf(trainingId: String): List<ParticipationEntity>
 
+    /** Тренировки клиента по его участию, отменённые тоже, по времени: карточка клиента (5.9). */
+    @Query(
+        """
+        SELECT t.* FROM training AS t
+        JOIN participation AS p ON p.trainingId = t.id
+        WHERE p.clientId = :clientId AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        ORDER BY t.start
+        """
+    )
+    fun observeTrainingsOfClient(clientId: String): Flow<List<TrainingEntity>>
+
+    @Query("SELECT * FROM participation WHERE clientId = :clientId AND deletedAt IS NULL")
+    fun observeParticipationsOfClient(clientId: String): Flow<List<ParticipationEntity>>
+
+    /** Участия клиента, и удалённые: пара «тренировка — клиент» уникальна и с ними (объединение, удаление). */
+    @Query("SELECT * FROM participation WHERE clientId = :clientId")
+    suspend fun participationRowsOf(clientId: String): List<ParticipationEntity>
+
+    @Query("SELECT * FROM participation WHERE trainingId = :trainingId AND clientId = :clientId")
+    suspend fun participationRow(trainingId: String, clientId: String): ParticipationEntity?
+
+    @Query("DELETE FROM participation WHERE id = :id")
+    suspend fun eraseParticipation(id: String)
+
+    @Query("DELETE FROM training WHERE id = :id")
+    suspend fun eraseTraining(id: String)
+
+    /**
+     * Ближайшая тренировка каждого клиента: начинается не раньше [from], не отменена, клиента ждут.
+     * Статусы передаются параметрами: Room хранит перечисления именами.
+     */
+    @Query(
+        """
+        SELECT p.clientId AS clientId, MIN(t.start) AS start FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        WHERE t.start >= :from AND t.status = :planned AND p.status = :expected
+          AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        GROUP BY p.clientId
+        """
+    )
+    fun observeNextTrainings(from: LocalDateTime, planned: TrainingStatus, expected: ParticipationStatus): Flow<List<NextTraining>>
+
     @Upsert
     suspend fun upsertResult(item: ResultEntity)
 
     @Query("SELECT * FROM result WHERE clientId = :clientId AND deletedAt IS NULL ORDER BY date")
     suspend fun resultsOf(clientId: String): List<ResultEntity>
 
+    @Query("DELETE FROM result WHERE clientId = :clientId")
+    suspend fun eraseResultsOf(clientId: String)
+
     @Upsert
     suspend fun upsertSptCase(item: SptCaseEntity)
 
     @Query("SELECT * FROM spt_case WHERE clientId = :clientId AND deletedAt IS NULL ORDER BY sptDate")
     suspend fun sptCasesOf(clientId: String): List<SptCaseEntity>
+
+    @Query("DELETE FROM spt_case WHERE clientId = :clientId")
+    suspend fun eraseSptCasesOf(clientId: String)
 }

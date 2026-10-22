@@ -9,7 +9,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.screens.SectionScreen
 import com.akenory.personalka.ui.settings.SettingsRoute
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.map
  * разделами (шаг 1.5). Пока база отвечает, виден только фон — это доли секунды при открытии.
  *
  * @param settings тренер, места и типы в базе телефона.
+ * @param clients клиенты и родственники в базе телефона (шаг 1.7).
  * @param backHandler «Назад» системы. Платформа передаёт свой обработчик (на Android — `BackHandler`
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
  *   «Назад» закрывает открытый экран, иначе ведёт на «Главную»; с «Главной» приложение сворачивается.
@@ -36,6 +39,7 @@ import kotlinx.coroutines.flow.map
 fun App(
     versionName: String,
     settings: SettingsRepository,
+    clients: ClientRepository,
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     clock: () -> Long = ::systemMillis,
 ) {
@@ -59,14 +63,19 @@ fun App(
                         // Счётчик дел на «Главной» появится вместе с «Нужно сделать» (шаг 1.16).
                         todoCount = 0,
                         onNewTraining = { messages.show(NEW_TRAINING_LATER) },
-                        immersive = shell.section == Section.MORE && SettingsRoute.isForm(shell.top(Section.MORE)),
+                        immersive = when (shell.section) {
+                            Section.MORE -> SettingsRoute.isForm(shell.top(Section.MORE))
+                            Section.CLIENTS -> ClientRoute.isForm(shell.top(Section.CLIENTS))
+                            else -> false
+                        },
                     ) { section ->
                         SectionScreen(
                             section = section,
                             shell = shell,
-                            today = now.date,
+                            now = now,
                             versionName = versionName,
                             settings = settings,
+                            clients = clients,
                             messages = messages,
                             scope = scope,
                         )

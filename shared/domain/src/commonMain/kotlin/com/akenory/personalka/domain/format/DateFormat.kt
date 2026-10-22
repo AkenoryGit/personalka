@@ -49,6 +49,25 @@ object DateFormat {
     /** «22.10.2026» — полная дата: рождение, согласие, другой год. */
     fun full(date: LocalDate): String = "${dayMonth(date)}.${date.year}"
 
+    /**
+     * Дата, набранная тренером: «12.05.2017», «12.5.2017», «12/05/2017» или восемь цифр подряд «12052017».
+     * Год — четырьмя цифрами; несуществующая дата (31.02) и всё остальное — `null`.
+     */
+    fun parseFull(text: String): LocalDate? {
+        val clean = text.trim()
+        val parts = if (clean.length == 8 && clean.all { it.isDigit() }) {
+            listOf(clean.substring(0, 2), clean.substring(2, 4), clean.substring(4))
+        } else {
+            clean.split('.', '/', '-', ' ', ',').filter { it.isNotEmpty() }
+        }
+        if (parts.size != 3 || parts[2].length != 4 || parts[0].length > 2 || parts[1].length > 2) return null
+        val day = parts[0].toIntOrNull() ?: return null
+        val month = parts[1].toIntOrNull() ?: return null
+        val year = parts[2].toIntOrNull() ?: return null
+        if (month !in 1..12 || day !in 1..31) return null
+        return runCatching { LocalDate(year, month, day) }.getOrNull()
+    }
+
     /** «Вторник, 20 октября» — заголовок «Главной». */
     fun header(date: LocalDate): String =
         "${weekday(date.dayOfWeek).replaceFirstChar { it.uppercaseChar() }}, ${date.day}$NBSP${MONTH_GENITIVE[date.month.number - 1]}"

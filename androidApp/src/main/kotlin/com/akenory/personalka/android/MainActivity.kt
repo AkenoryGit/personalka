@@ -15,11 +15,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Сложение и разложение Fold окно не пересоздаёт (configChanges в манифесте): Compose просто
         // перекладывает экран под новую ширину, открытый раздел и прокрутка остаются на месте.
-        val settings = (application as PersonalkaApplication).settings
+        val app = application as PersonalkaApplication
         setContent {
             App(
                 versionName = BuildConfig.VERSION_NAME,
-                settings = settings,
+                settings = app.settings,
+                clients = app.clients,
                 backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
             )
         }
