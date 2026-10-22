@@ -26,8 +26,8 @@
 ## Сборка
 
 - **Команда:** `./gradlew check :androidApp:assembleDebug` — тесты всех модулей, lint и APK.
-- **В облачной сессии Claude** Maven Central и Google Maven закрыты, Gradle здесь не собирает. Код проверяется в GitHub Actions: push в ветку шага, ожидание `gh run view <id> --json status,conclusion`, ошибки — `gh run view <id> --log-failed`. В `main` — только зелёная сборка.
-- **APK:** артефакт каждой сборки; для `main` — ещё релиз «Последняя сборка» с постоянной ссылкой `releases/download/latest-build/personalka.apk`.
+- **В облачной сессии Claude** Maven Central и Google Maven закрыты, Gradle здесь не собирает, а полный лог Actions не скачивается. Код проверяется в GitHub Actions: push в ветку шага, ожидание `gh run view <id> --json status,conclusion`, итоги — отметками сборки: `gh api repos/AkenoryGit/personalka/check-runs/<job>/annotations` (номер job — `gh run view <id> --json jobs`). Отметки пишет `.github/scripts/annotate.py`: тесты по модулям, lint, состав и подпись APK, ошибки Kotlin и Gradle. В `main` — только зелёная сборка.
+- **APK:** только в релизе «Последняя сборка» из `main`, ссылка постоянная: `releases/download/latest-build/personalka.apk`. Артефакты Actions не используются: хранилище на аккаунте общее (500 МБ) и заполнено.
 - **Подпись:** отладочный ключ лежит в `androidApp/debug.keystore`, поэтому каждая новая сборка ставится поверх прежней с сохранением данных. Номер версии — номер сборки в Actions.
 - **Общий код** в `commonMain` — только общий Kotlin, без `java.*` и Android: iOS-цели добавятся на шаге 5.1.
 
