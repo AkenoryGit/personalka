@@ -35,3 +35,4 @@ include(":shared:ui")
 include(":androidApp")
 include(":server")
 include(":tools:import")
+include(":tools:ksp-probe") // временно, отладка шага 1.1
