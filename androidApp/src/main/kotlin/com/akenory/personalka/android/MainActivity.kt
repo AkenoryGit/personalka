@@ -22,6 +22,8 @@ class MainActivity : ComponentActivity() {
                 settings = app.settings,
                 clients = app.clients,
                 groups = app.groups,
+                calendar = app.calendar,
+                prefs = app.prefs,
                 backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
             )
         }

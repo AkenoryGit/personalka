@@ -64,7 +64,7 @@ class ShellUiTest {
 
     @Test
     fun homeOpensFirstWithTodayInTitle() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), clock = clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), calendar = TestData.calendarOf(settings), clock = clock) } }
         awaitShell()
 
         onNodeWithTag(navTag(Section.HOME)).assertIsSelected()
@@ -75,7 +75,7 @@ class ShellUiTest {
     @Test
     fun foldedHasBottomBarUnfoldedHasRail() = runComposeUiTest {
         var width by mutableStateOf(folded)
-        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), clock = clock) } }
+        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), calendar = TestData.calendarOf(settings), clock = clock) } }
         awaitShell()
 
         val home = onNodeWithTag(navTag(Section.HOME)).getBoundsInRoot()
@@ -94,7 +94,7 @@ class ShellUiTest {
     @Test
     fun foldingAndUnfoldingKeepsOpenScreen() = runComposeUiTest {
         var width by mutableStateOf(folded)
-        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), clock = clock) } }
+        setContent { Box(Modifier.size(width, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), calendar = TestData.calendarOf(settings), clock = clock) } }
         awaitShell()
 
         onNodeWithTag(navTag(Section.MORE)).performClick()
@@ -153,7 +153,7 @@ class ShellUiTest {
 
     @Test
     fun sectionsRememberTheirScreens() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), clock = clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), calendar = TestData.calendarOf(settings), clock = clock) } }
         awaitShell()
 
         onNodeWithTag(navTag(Section.MORE)).performClick()
@@ -181,6 +181,7 @@ class ShellUiTest {
                     settings = settings,
                     clients = TestData.clientsOf(settings),
                     groups = TestData.groupsOf(settings),
+                    calendar = TestData.calendarOf(settings),
                     backHandler = { e, back -> SideEffect { enabled = e; onBack = back } },
                     clock = clock,
                 )
@@ -201,7 +202,7 @@ class ShellUiTest {
 
     @Test
     fun plusOnlyOnHomeAndCalendar() = runComposeUiTest {
-        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), clock = clock) } }
+        setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), calendar = TestData.calendarOf(settings), clock = clock) } }
         awaitShell()
 
         onNodeWithTag(FAB_TAG).performClick()

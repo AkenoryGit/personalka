@@ -63,7 +63,7 @@ class ClientsUiTest {
     private fun all() = runBlocking { clients.rows(TestData.now).first() }
 
     private fun ComposeUiTest.show(width: () -> androidx.compose.ui.unit.Dp = { folded }) {
-        setContent { Box(Modifier.size(width(), height)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), clock = TestData.clock) } }
+        setContent { Box(Modifier.size(width(), height)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), TestData.calendarOf(settings), clock = TestData.clock) } }
         awaitNode(hasTestTag(navTag(Section.CLIENTS)))
         onNodeWithTag(navTag(Section.CLIENTS)).performClick()
     }

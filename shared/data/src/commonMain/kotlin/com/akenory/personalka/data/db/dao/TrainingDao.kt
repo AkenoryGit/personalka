@@ -48,6 +48,16 @@ interface TrainingDao {
     )
     fun observeTrainingsBetween(from: LocalDateTime, to: LocalDateTime): Flow<List<TrainingEntity>>
 
+    /** Участие клиентов в тренировках, которые начинаются в промежутке [from, to): имена в блоках календаря (5.3). */
+    @Query(
+        """
+        SELECT p.* FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        WHERE t.start >= :from AND t.start < :to AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        """
+    )
+    fun observeParticipationsBetween(from: LocalDateTime, to: LocalDateTime): Flow<List<ParticipationEntity>>
+
     @Query("SELECT * FROM training WHERE seriesId = :seriesId AND deletedAt IS NULL ORDER BY start")
     suspend fun trainingsOfSeries(seriesId: String): List<TrainingEntity>
 

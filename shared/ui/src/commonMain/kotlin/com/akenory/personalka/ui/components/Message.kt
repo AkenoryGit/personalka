@@ -65,6 +65,11 @@ class MessageState {
         current = Message(++lastId, text, actionLabel = null, onAction = null)
     }
 
+    /** Сообщение со своей кнопкой: «Новая тренировка — в шаге 1.13» и «Показать пример». */
+    fun show(text: String, actionLabel: String, action: () -> Unit) {
+        current = Message(++lastId, text, actionLabel = actionLabel, onAction = action)
+    }
+
     /** Сообщение с «Отменить»: [undo] возвращает всё как было. */
     fun showUndo(text: String, undo: () -> Unit) {
         current = Message(++lastId, text, actionLabel = UNDO_LABEL, onAction = undo)

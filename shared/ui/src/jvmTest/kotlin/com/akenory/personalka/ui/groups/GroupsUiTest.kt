@@ -63,7 +63,7 @@ class GroupsUiTest {
     }
 
     private fun ComposeUiTest.openGroups(width: () -> Dp = { folded }) {
-        setContent { Box(Modifier.size(width(), height)) { App("0.1.0", settings, clients, groups, clock = TestData.clock) } }
+        setContent { Box(Modifier.size(width(), height)) { App("0.1.0", settings, clients, groups, TestData.calendarOf(settings), clock = TestData.clock) } }
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
         onNodeWithTag(moreRowTag(MoreItem.GROUPS)).performClick()

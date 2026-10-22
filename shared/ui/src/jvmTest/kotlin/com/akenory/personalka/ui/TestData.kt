@@ -2,7 +2,9 @@ package com.akenory.personalka.ui
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.settings.SettingsRepository
@@ -20,6 +22,8 @@ internal object TestData {
 
     private val clients = mutableMapOf<SettingsRepository, ClientRepository>()
     private val groups = mutableMapOf<SettingsRepository, GroupRepository>()
+    private val calendars = mutableMapOf<SettingsRepository, CalendarRepository>()
+    private val databases = mutableMapOf<SettingsRepository, PersonalkaDatabase>()
 
     /** До первого запуска: тренера нет. */
     fun fresh(): SettingsRepository {
@@ -27,6 +31,8 @@ internal object TestData {
         return SettingsRepository(db, clock).also {
             clients[it] = ClientRepository(db, clock)
             groups[it] = GroupRepository(db, clock)
+            calendars[it] = CalendarRepository(db)
+            databases[it] = db
         }
     }
 
@@ -35,6 +41,12 @@ internal object TestData {
 
     /** Группы той же базы, что и [settings]. */
     fun groupsOf(settings: SettingsRepository): GroupRepository = groups.getValue(settings)
+
+    /** Календарь той же базы, что и [settings]. */
+    fun calendarOf(settings: SettingsRepository): CalendarRepository = calendars.getValue(settings)
+
+    /** Сама база — записать тренировки через DAO, пока их не создать в приложении (форма — шаг 1.13). */
+    fun dbOf(settings: SettingsRepository): PersonalkaDatabase = databases.getValue(settings)
 
     /** Первый запуск пройден с местами и типами по умолчанию. */
     fun ready(): SettingsRepository = fresh().also {

@@ -29,10 +29,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.groups.GroupRepository
+import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.ui.calendar.CalendarScreen
+import com.akenory.personalka.ui.calendar.TRAINING_CARD_LATER
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
@@ -53,9 +57,10 @@ import kotlinx.datetime.LocalDateTime
 /**
  * Экраны разделов. С шага 1.5 — заготовки: заголовок и пустой экран с тем, в каком шаге раздел появится.
  * Каждый следующий шаг заменяет свою заготовку настоящим экраном: «Ещё → Настройки» — с шага 1.6,
- * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8.
+ * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8, «Календарь» — с шага 1.9.
  *
  * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
+ * @param sample показать в календаре пример дня — до шага 1.13.
  */
 @Composable
 fun SectionScreen(
@@ -66,6 +71,9 @@ fun SectionScreen(
     settings: SettingsRepository,
     clients: ClientRepository,
     groups: GroupRepository,
+    calendar: CalendarRepository,
+    prefs: DevicePrefs,
+    sample: Boolean,
     messages: MessageState,
     scope: CoroutineScope,
 ) {
@@ -77,12 +85,7 @@ fun SectionScreen(
             heading = "Здесь будет ближайшая тренировка",
             text = "И список «Нужно сделать». Появится в шаге 1.16.",
         )
-        Section.CALENDAR -> Placeholder(
-            title = DateFormat.monthYear(today),
-            icon = PIcons.CalendarMonth,
-            heading = "Здесь будет календарь",
-            text = "День и неделя — шаг 1.9, месяц и список — шаг 1.12.",
-        )
+        Section.CALENDAR -> CalendarScreen(calendar, prefs, now, sample, onOpen = { messages.show(TRAINING_CARD_LATER) })
         Section.CLIENTS -> ClientsScreen(shell, clients, messages, scope, now)
         Section.SALARY -> Placeholder(
             title = "Зарплата",

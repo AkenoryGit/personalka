@@ -38,6 +38,10 @@ interface CoachDao {
     @Query("SELECT * FROM coach_settings WHERE coachId = :coachId AND deletedAt IS NULL")
     suspend fun settings(coachId: String): CoachSettingsEntity?
 
+    /** Настройки тренера телефона наблюдением: часы сетки календаря (5.3). */
+    @Query("SELECT * FROM coach_settings WHERE deletedAt IS NULL ORDER BY createdAt LIMIT 1")
+    fun observeSettings(): Flow<CoachSettingsEntity?>
+
     @Upsert
     suspend fun upsertCategoryVersion(item: CategoryVersionEntity)
 
