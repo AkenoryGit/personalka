@@ -72,7 +72,9 @@ import kotlin.coroutines.CoroutineContext
         WaitEntryEntity::class,
         ClientRelationEntity::class,
     ],
-    version = PersonalkaDatabase.VERSION,
+    // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
+    // VERSION ниже должна совпадать — это проверяет тест.
+    version = 1,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

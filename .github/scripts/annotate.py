@@ -66,6 +66,9 @@ def build_log(path: str) -> None:
     errors = [l for l in lines if re.match(r"^(e: |ERROR:|Error:|> Task .* FAILED)", l)]
     for line in errors[:6]:
         emit("error", "Сборка", line[:600])
+    ksp = [l for l in lines if l.startswith("w: [ksp]")]
+    if ksp:
+        emit("warning", "KSP", "\n".join(dict.fromkeys(ksp))[:1500])
     for i, line in enumerate(lines):
         if line.startswith("* What went wrong:"):
             block = [l for l in lines[i + 1 : i + 14] if l.strip() and not l.startswith("* Try:")]
