@@ -8,6 +8,12 @@ compose-multiplatform = "1.12.2"
 compose-material3 = "1.12.0-alpha03"
 androidx-activity = "1.13.0"
 kotlinx-datetime = "0.8.0"
+kotlinx-coroutines = "1.11.0"
+# База (шаг 1.1): Room 3 — линия Room для Kotlin Multiplatform (пакет androidx.room3).
+# KSP 2.3.x не привязан к версии Kotlin; 2.3.10+ понимает Kotlin 2.4 и встроенный Kotlin AGP 9.
+room3 = "3.0.3"
+sqlite = "2.7.1"
+ksp = "2.3.11"
 
 android-compileSdk = "37"
 android-targetSdk = "36"
@@ -20,6 +26,10 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-mu
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-material3" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+androidx-room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
+androidx-room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 
 [plugins]
@@ -29,3 +39,5 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+androidx-room3 = { id = "androidx.room3", version.ref = "room3" }

@@ -56,6 +56,28 @@ jobs:
             echo "build-tools: $(basename "$BT"), размер APK: $(du -k "$APK" | cut -f1) КБ"
           } > apk-info.txt
 
+      # Схему базы пишет Room при сборке (shared/data/schemas). Из облачной сессии Claude Gradle не собирает,
+      # поэтому новую схему в ветку шага коммитит сама сборка. Коммит от сборки новую сборку не запускает.
+      # В main схема уже должна лежать в репозитории — иначе ошибка и APK не выпускается.
+      - name: Схема базы
+        if: success() && github.event_name == 'push'
+        shell: bash
+        run: |
+          CHANGED=$(git status --porcelain -- shared/data/schemas)
+          if [ -z "$CHANGED" ]; then
+            echo "::notice title=Схема базы::Схема в репозитории совпадает со сборкой"
+          elif [ "$GITHUB_REF_NAME" = "main" ]; then
+            echo "::error title=Схема базы::Схема в main не совпадает со сборкой: $CHANGED"
+            exit 1
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add shared/data/schemas
+            git commit -m "${GITHUB_REF_NAME#step-}: схема базы из сборки ${GITHUB_RUN_NUMBER}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            echo "::notice title=Схема базы::Новая схема закоммичена в ${GITHUB_REF_NAME}: $CHANGED"
+          fi
+
       - name: Итоги в отметки
         if: always()
         run: python3 .github/scripts/annotate.py build-log.txt apk-info.txt
