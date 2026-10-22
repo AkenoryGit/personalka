@@ -45,7 +45,6 @@ kotlin {
 dependencies {
     add("kspAndroid", libs.androidx.room3.compiler)
     add("kspJvm", libs.androidx.room3.compiler)
-    add("kspJvm", project(":tools:ksp-probe")) // временно, отладка шага 1.1
 }
 
 // Схемы версий базы хранятся в репозитории: по ним Room проверяет и строит миграции.
