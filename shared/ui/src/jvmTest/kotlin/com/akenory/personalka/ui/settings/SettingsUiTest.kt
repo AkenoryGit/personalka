@@ -53,7 +53,8 @@ class SettingsUiTest {
         onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
         awaitNode(hasTestTag(PLACES_ROW_TAG))
         onNodeWithText(s("3_места · 9_типов")).assertIsDisplayed()
-        onNodeWithText("Соколов Андрей Петрович").assertIsDisplayed()
+        // ФИО тренера приходит из своего потока базы, позже мест и типов, — его ждём, а не проверяем сразу.
+        awaitNode(hasText("Соколов Андрей Петрович"))
         onNodeWithTag(PLACES_ROW_TAG).performClick()
         awaitNode(hasTestTag(typeRowTag("ПТ")))
     }
