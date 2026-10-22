@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.entity.CategoryVersionEntity
 import com.akenory.personalka.data.db.entity.CoachEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.PaySchemeVersionEntity
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Тренер, настройки, категория и схема выплат (ТЗ 3.2).
@@ -26,6 +27,10 @@ interface CoachDao {
     /** Тренер этого телефона; пусто до первого запуска (5.18). */
     @Query("SELECT * FROM coach WHERE deletedAt IS NULL ORDER BY createdAt LIMIT 1")
     suspend fun currentCoach(): CoachEntity?
+
+    /** То же наблюдением: приложение показывает первый запуск, пока тренера нет (5.18). */
+    @Query("SELECT * FROM coach WHERE deletedAt IS NULL ORDER BY createdAt LIMIT 1")
+    fun observeCurrentCoach(): Flow<CoachEntity?>
 
     @Upsert
     suspend fun upsertSettings(item: CoachSettingsEntity)

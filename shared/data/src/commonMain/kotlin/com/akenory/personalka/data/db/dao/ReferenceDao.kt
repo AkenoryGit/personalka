@@ -23,6 +23,9 @@ interface ReferenceDao {
     @Query("SELECT * FROM location WHERE deletedAt IS NULL ORDER BY sort, name")
     fun observeLocations(): Flow<List<LocationEntity>>
 
+    @Query("SELECT * FROM location WHERE deletedAt IS NULL ORDER BY sort, name")
+    suspend fun locations(): List<LocationEntity>
+
     @Upsert
     suspend fun upsertTrainingType(item: TrainingTypeEntity)
 
@@ -32,6 +35,10 @@ interface ReferenceDao {
     /** Типы, включая архивные. */
     @Query("SELECT * FROM training_type WHERE deletedAt IS NULL")
     suspend fun trainingTypes(): List<TrainingTypeEntity>
+
+    /** Типы, включая архивные, в порядке создания: первыми — типы первого запуска в порядке ТЗ 3.3. */
+    @Query("SELECT * FROM training_type WHERE deletedAt IS NULL ORDER BY createdAt, id")
+    fun observeTrainingTypes(): Flow<List<TrainingTypeEntity>>
 
     @Upsert
     suspend fun upsertRateVersion(item: RateVersionEntity)
