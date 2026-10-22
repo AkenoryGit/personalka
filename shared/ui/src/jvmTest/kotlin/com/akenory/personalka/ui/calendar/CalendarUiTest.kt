@@ -20,6 +20,8 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -78,7 +80,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * «Календарь», вид «День» (шаги 1.9, 1.10, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
+ * «Календарь», вид «День» (шаги 1.9–1.11, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
  * формы ещё нет (1.13). Окно тестов на компьютере — 1024 × 768, поэтому экран ниже, чем у Fold, и сетке
  * остаётся 768 − панель 72 − шапка 56 − неделя 64 = 576 dp; что видно при той же высоте, что у Fold, —
  * в `CalendarGridTest`.
@@ -210,6 +212,44 @@ class CalendarUiTest {
         val scrolled = grid()[SemanticsProperties.VerticalScrollAxisRange].value() / density.density
         onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { click(Offset((48f + x).dp.toPx(), (y - scrolled).dp.toPx())) }
     }
+
+    /** Точка дня [x], [y] dp от левого и верхнего края всей колонки дня — на сетке, px (как в [tapDay]). */
+    private fun ComposeUiTest.gridPoint(x: Float, y: Float): Offset {
+        val scrolled = grid()[SemanticsProperties.VerticalScrollAxisRange].value() / density.density
+        return with(density) { Offset((48f + x).dp.toPx(), (y - scrolled).dp.toPx()) }
+    }
+
+    /** Длительное нажатие на точку дня. */
+    private fun ComposeUiTest.holdDay(x: Float, y: Float) {
+        val point = gridPoint(x, y)
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { longClick(point) }
+    }
+
+    /**
+     * Удержать точку дня [x], [y] 600 мс и вести палец на [dx], [dy] dp — четырьмя шагами, как настоящий;
+     * [release] — отпустить.
+     */
+    private fun ComposeUiTest.dragDay(x: Float, y: Float, dx: Float, dy: Float, release: Boolean = true) {
+        val point = gridPoint(x, y)
+        val shift = with(density) { Offset(dx.dp.toPx(), dy.dp.toPx()) }
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput {
+            down(point)
+            advanceEventTime(600)
+            for (i in 1..4) moveTo(point + shift * (i / 4f))
+            if (release) up()
+        }
+    }
+
+    /** Время → dp от верха колонки дня при часе 64 dp; сетка — с [fromHour]. */
+    private fun yOf(time: String, fromHour: Int = 7): Float {
+        val (h, m) = time.split(':').map { it.toInt() }
+        return (h * 60 + m - fromHour * 60) * 64f / 60f
+    }
+
+    private fun at(date: LocalDate, time: String): LocalDateTime =
+        time.split(':').map { it.toInt() }.let { (h, m) -> LocalDateTime(date, LocalTime(h, m)) }
+
+    private fun startOf(id: String): LocalDateTime = runBlocking { db.trainingDao().training(id)!!.start }
 
     /** Выбранные дни строки недели — для понятного сообщения, если тест упадёт. */
     private fun ComposeUiTest.selectedDays(): List<String> =
@@ -551,5 +591,140 @@ class CalendarUiTest {
         awaitZones(1)
         onNodeWithText(MessageState.UNDO_LABEL).performClick()
         awaitZones(2)
+    }
+
+    @Test
+    fun holdOnEmptyPlaceCreatesAtStepBelow() = runComposeUiTest {
+        openCalendar()
+        // ТЗ 5.3: время под пальцем, вниз до шага — 17:23 даёт 17:15. Форма появится в шаге 1.13.
+        holdDay(150f, yOf("17:23") + 0.5f)
+        onNodeWithText(newTrainingLater(at(today, "17:15"))).assertIsDisplayed()
+    }
+
+    @Test
+    fun holdOnTrainingOpensMenu() = runComposeUiTest {
+        val id = training("16:00", 50, "Белова Ева")
+        openCalendar()
+        awaitBlocks(1)
+        val block = day().blocks.single()
+
+        // Без сдвига — меню: «Новая тренировка на это время», «Отменить», «Копировать» (макет «Удержание на тренировке»).
+        holdDay(block.x + 40f, block.y + 20f)
+        onNodeWithText(NEW_AT_THIS_TIME).assertIsDisplayed()
+        onNodeWithText(CANCEL_TRAINING).assertIsDisplayed()
+        onNodeWithText(COPY_TRAINING).performClick()
+        awaitNode(hasText(COPIED))
+        assertEquals(50, TestData.calendarOf(settings).copied.value?.durationMin)
+
+        holdDay(block.x + 40f, block.y + 20f)
+        onNodeWithText(NEW_AT_THIS_TIME).performClick()
+        onNodeWithText(newTrainingLater(at(today, "16:00"))).assertIsDisplayed()
+        assertEquals(at(today, "16:00"), startOf(id))
+    }
+
+    @Test
+    fun dragSnapsToStepWithHintAndUndo() = runComposeUiTest {
+        val id = training("16:00", 50, "Белова Ева")
+        openCalendar()
+        awaitBlocks(1)
+        val block = day().blocks.single()
+
+        // Проверка шага: верх блока дотянули до 17:17 — начало 17:15, над пальцем подсказка с новым временем.
+        dragDay(block.x + 40f, block.y + 20f, 0f, yOf("17:17") - yOf("16:00"), release = false)
+        onNodeWithText(s("Вт_20.10 · 17:15–18:05")).assertIsDisplayed()
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { up() }
+        waitUntil(timeoutMillis = 5_000) { startOf(id) == at(today, "17:15") }
+        onNodeWithText(s("Перенесено на вт_20.10, 17:15")).assertIsDisplayed()
+
+        // «Отменить» — на прежнем месте.
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        waitUntil(timeoutMillis = 5_000) { startOf(id) == at(today, "16:00") }
+    }
+
+    @Test
+    fun dragToRightEdgeMovesToNextDay() = runComposeUiTest {
+        val id = training("16:00", 50, "Белова Ева")
+        openCalendar()
+        awaitBlocks(1)
+        val block = day().blocks.single()
+        val y = block.y + 20f + yOf("17:17") - yOf("16:00")
+
+        // Проверка шага: палец у правого края 600 мс — листается среда, блок остаётся под пальцем и встаёт на 17:15.
+        dragDay(block.x + 40f, block.y + 20f, 0f, yOf("17:17") - yOf("16:00"), release = false)
+        val edge = gridPoint(358f, y)
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { moveTo(edge) }
+        mainClock.advanceTimeBy(800)
+        waitForIdle()
+        assertSelected(LocalDate(2026, 10, 21), "Палец у правого края")
+        val middle = gridPoint(180f, y)
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput {
+            moveTo(middle)
+            up()
+        }
+        waitUntil(timeoutMillis = 5_000) { startOf(id) == at(LocalDate(2026, 10, 21), "17:15") }
+        onNodeWithText(s("Перенесено на ср_21.10, 17:15")).assertIsDisplayed()
+    }
+
+    @Test
+    fun dragUnderRestrictionAsksFirst() = runComposeUiTest {
+        restriction("ДБ", "17:00", "18:00")
+        val id = training("16:00", 50, "Орлов Максим", place = "ДБ")
+        openCalendar()
+        awaitBlocks(1)
+        val block = day().blocks.single()
+        val dy = yOf("17:15") - yOf("16:00")
+
+        // ТЗ 4.5: под запрет того же места — сначала окно; «Отмена» оставляет тренировку на месте.
+        dragDay(block.x + 40f, block.y + 20f, 0f, dy)
+        awaitNode(hasText(ZoneFormat.CONFLICT_QUESTION))
+        onNodeWithText("Детский бассейн 17:00–18:00: групповая тренировка").assertIsDisplayed()
+        onNodeWithText(ZoneFormat.CONFLICT_CANCEL).performClick()
+        assertEquals(at(today, "16:00"), startOf(id))
+
+        // «Поставить» — перенесено с флагом «поверх запрета».
+        dragDay(block.x + 40f, block.y + 20f, 0f, dy)
+        awaitNode(hasText(ZoneFormat.CONFLICT_QUESTION))
+        onNodeWithText(ZoneFormat.CONFLICT_PLACE).performClick()
+        waitUntil(timeoutMillis = 5_000) { startOf(id) == at(today, "17:15") }
+        assertTrue(runBlocking { db.trainingDao().training(id)!!.overRestriction })
+        awaitNode(hasText(s("Перенесено на вт_20.10, 17:15")))
+    }
+
+    @Test
+    fun cancelledHasMenuButDoesNotMove() = runComposeUiTest {
+        val id = training("16:00", 50, "Зайцева Мария", status = TrainingStatus.CANCELLED)
+        openCalendar()
+        awaitBlocks(1)
+        val block = day().blocks.single()
+
+        // Отменённую не тащат — сначала «Вернуть» (5.4); меню есть, но без «Отменить».
+        dragDay(block.x + 40f, block.y + 20f, 0f, 80f)
+        waitForIdle()
+        assertEquals(at(today, "16:00"), startOf(id))
+        holdDay(block.x + 40f, block.y + 20f)
+        onNodeWithText(COPY_TRAINING).assertIsDisplayed()
+        onNodeWithText(CANCEL_TRAINING).assertDoesNotExist()
+    }
+
+    @Test
+    fun sampleMovesInMemory() = runComposeUiTest {
+        openCalendar()
+        onNodeWithTag(FAB_TAG).performClick()
+        onNodeWithText(SAMPLE_ON).performClick()
+        awaitBlocks(17)
+        fun sokolova() = day().blocks.single { it.lines.first() == s("Соколова_В.") }
+
+        // Соколова В. 15:00 ДБ → 17:15: запрет примера спрашивает, как настоящий; сетка примера — с 06:00.
+        val block = sokolova()
+        near(yOf("15:00", fromHour = 6), block.y, "Соколова до переноса")
+        dragDay(block.x + 40f, block.y + 20f, 0f, yOf("17:15") - yOf("15:00"))
+        awaitNode(hasText(ZoneFormat.CONFLICT_QUESTION))
+        onNodeWithText(ZoneFormat.CONFLICT_PLACE).performClick()
+        waitUntil(timeoutMillis = 5_000) { abs(sokolova().y - yOf("17:15", fromHour = 6)) < 0.5f }
+        assertEquals(listOf(CalendarBadge.OVER_RESTRICTION), sokolova().badges)
+
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        waitUntil(timeoutMillis = 5_000) { abs(sokolova().y - yOf("15:00", fromHour = 6)) < 0.5f }
+        assertEquals(emptyList(), sokolova().badges)
     }
 }

@@ -12,6 +12,7 @@ import com.akenory.personalka.domain.calendar.CalendarBadge.DONE
 import com.akenory.personalka.domain.calendar.CalendarBadge.NO_DIARY
 import com.akenory.personalka.domain.calendar.CalendarBadge.OVER_DUTY
 import com.akenory.personalka.domain.calendar.CalendarBadge.OVER_RESTRICTION
+import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
@@ -33,9 +34,11 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Тренировки, значки и зоны календаря в базе (шаги 1.9, 1.10, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Имена придуманы. */
+/** Тренировки, значки, зоны и перенос в календаре (шаги 1.9–1.11, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Имена придуманы. */
 class CalendarRepositoryTest {
     private lateinit var db: PersonalkaDatabase
     private val now = LocalDateTime(2026, 10, 20, 15, 40)
@@ -285,5 +288,123 @@ class CalendarRepositoryTest {
         // Любое изменение запретов пересчитывает флаг будущих: пропущен чт 29.10.
         calendar.skipRestrictionDay(id, LocalDate(2026, 10, 29))
         assertEquals(listOf(false, false, true), listOf(flag(otherPlace), flag(duty), flag(samePlace)))
+    }
+
+    @Test
+    fun moveAsksBeforeRestrictionThenUndo(): Unit = runBlocking {
+        groupRestriction()
+        val client = client("Орлов", "Максим")
+        val id = training("ПТ", "ДБ", at(tuesday, 16), clientIds = listOf(client), statuses = listOf(ParticipationStatus.EXPECTED))
+        val version = db.trainingDao().training(id)!!.sync.version
+
+        // Под запрет того же места — сначала окно, в базе ничего не меняется (4.5).
+        val ask = calendar.move(id, at(tuesday, 17, 15))
+        assertEquals(MoveResult.Confirm(listOf("Детский бассейн 17:00–18:00: групповая тренировка")), ask)
+        assertEquals(at(tuesday, 16), db.trainingDao().training(id)!!.start)
+        assertEquals(version, db.trainingDao().training(id)!!.sync.version)
+
+        // «Поставить» — перенесено с флагом; клиент и статус те же.
+        val moved = assertIs<MoveResult.Moved>(calendar.move(id, at(tuesday, 17, 15), confirmed = true))
+        val stored = db.trainingDao().training(id)!!
+        assertEquals(at(tuesday, 17, 15), stored.start)
+        assertTrue(stored.overRestriction)
+        assertEquals(TrainingStatus.PLANNED, stored.status)
+        assertEquals(listOf(OVER_RESTRICTION), day().single().badges)
+        assertEquals(listOf(client), db.trainingDao().participationsOf(id).map { it.clientId })
+
+        // «Отменить» — на прежнем месте и без флага.
+        calendar.undoMove(moved.undo)
+        assertEquals(at(tuesday, 16), db.trainingDao().training(id)!!.start)
+        assertFalse(flag(id))
+    }
+
+    @Test
+    fun moveToOtherDayAndPlaceWithoutWindow(): Unit = runBlocking {
+        val restriction = groupRestriction()
+        val id = training("ПТ", "ББ", at(tuesday, 16))
+        // В ББ запрета нет — окна нет; на другой день — в той же записи.
+        assertIs<MoveResult.Moved>(calendar.move(id, at(LocalDate(2026, 10, 27), 17, 15)))
+        assertEquals(at(LocalDate(2026, 10, 27), 17, 15), db.trainingDao().training(id)!!.start)
+        assertFalse(flag(id))
+        // Уже под запретом и уходит из-под него — флаг снимается без окна.
+        val over = training("ПТ", "ДБ", at(LocalDate(2026, 10, 27), 17), overRestriction = true)
+        assertIs<MoveResult.Moved>(calendar.move(over, at(LocalDate(2026, 10, 27), 18)))
+        assertFalse(flag(over))
+        // Чт 22.10 у запрета пропущен — туда без окна, а в чт 29.10 — с окном.
+        calendar.skipRestrictionDay(restriction, LocalDate(2026, 10, 22))
+        val evening = training("ПТ", "ДБ", at(tuesday, 19))
+        assertIs<MoveResult.Confirm>(calendar.move(evening, at(LocalDate(2026, 10, 29), 17)))
+        assertIs<MoveResult.Moved>(calendar.move(evening, at(LocalDate(2026, 10, 22), 17)))
+        assertFalse(flag(evening))
+    }
+
+    @Test
+    fun cancelledAndMarkedStayPut(): Unit = runBlocking {
+        val tomorrow = at(LocalDate(2026, 10, 21), 9)
+        val cancelled = training("ПТ", "ББ", at(tuesday, 18), status = TrainingStatus.CANCELLED)
+        val done = training("ПТ", "ББ", at(LocalDate(2026, 10, 19), 9), status = TrainingStatus.DONE)
+        val group = groups.create(GroupDraft("Вт, Чт 18:00 ДБ", typeId("Группа"), placeId("ДБ")))
+        val kid = client("Ильин", "Глеб")
+        val marked = training("Группа", "ДБ", at(tuesday, 15), groupId = group, clientIds = listOf(kid), statuses = listOf(ParticipationStatus.ATTENDED))
+
+        assertEquals(MoveResult.Refused(MoveProblem.CANCELLED), calendar.move(cancelled, tomorrow))
+        assertEquals(MoveResult.Refused(MoveProblem.MARKED_IN_FUTURE), calendar.move(done, tomorrow))
+        assertEquals(MoveResult.Refused(MoveProblem.MARKED_IN_FUTURE), calendar.move(marked, tomorrow))
+        // Проведённую — в прошлом можно: исправить время задним числом.
+        assertIs<MoveResult.Moved>(calendar.move(done, at(LocalDate(2026, 10, 19), 10)))
+        // Через полночь и удалённую — нет.
+        assertEquals(MoveResult.Refused(null), calendar.move(cancelled, at(tuesday, 23, 30)))
+        assertEquals(MoveResult.Refused(null), calendar.move("нет такой", tomorrow))
+        // Отметки видны блоку: в будущее его не тащат.
+        assertEquals(mapOf(cancelled to false, marked to true), day().associate { it.id to it.marked })
+    }
+
+    @Test
+    fun seriesTrainingMovesOnlyItself(): Unit = runBlocking {
+        val client = client("Морозов", "Даниил")
+        val series = Samples.series(typeId("ПТ"), placeId("ББ"))
+        db.scheduleDao().upsertSeries(series)
+        db.scheduleDao().upsertSeriesClient(Samples.seriesClient(series.id, client))
+        val nextTuesday = LocalDate(2026, 10, 27)
+        val id = training("ПТ", "ББ", at(nextTuesday, 13, 30), clientIds = listOf(client), statuses = listOf(ParticipationStatus.EXPECTED))
+        db.trainingDao().upsertTraining(db.trainingDao().training(id)!!.copy(seriesId = series.id))
+
+        // «Только эту» (4.4): отдельная, её дата — в пропусках серии, чтобы продление не поставило вторую.
+        val moved = assertIs<MoveResult.Moved>(calendar.move(id, at(LocalDate(2026, 10, 28), 14)))
+        assertTrue(db.trainingDao().training(id)!!.seriesDetached)
+        assertEquals(listOf(nextTuesday, LocalDate(2026, 11, 3)), db.scheduleDao().series(series.id)!!.skipDates)
+        assertEquals(nextTuesday, moved.undo.seriesSkip)
+
+        // «Отменить» — снова тренировка серии на своей дате.
+        calendar.undoMove(moved.undo)
+        assertFalse(db.trainingDao().training(id)!!.seriesDetached)
+        assertEquals(listOf(LocalDate(2026, 11, 3)), db.scheduleDao().series(series.id)!!.skipDates)
+        assertEquals(at(nextTuesday, 13, 30), db.trainingDao().training(id)!!.start)
+    }
+
+    @Test
+    fun copyRemembersTypePlaceDurationAndClients(): Unit = runBlocking {
+        assertNull(calendar.copied.value)
+        val first = client("Сидоров", "Иван")
+        val second = client("Петров", "Олег")
+        val split = training("Сплит", "ББ", at(tuesday, 18), minutes = 60, clientIds = listOf(first, second))
+        assertTrue(calendar.copy(split))
+        assertEquals(TrainingCopy(typeId("Сплит"), placeId("ББ"), 60, listOf(first, second), null), calendar.copied.value)
+
+        // У группы — сама группа, не дети.
+        val group = groups.create(GroupDraft("Сб 9:00 ББ", typeId("Группа"), placeId("ББ")))
+        val lesson = training("Группа", "ББ", at(tuesday, 9), groupId = group, clientIds = listOf(first))
+        assertTrue(calendar.copy(lesson))
+        assertEquals(TrainingCopy(typeId("Группа"), placeId("ББ"), 50, emptyList(), group), calendar.copied.value)
+        assertFalse(calendar.copy("нет такой"))
+    }
+
+    @Test
+    fun dragStepFromSettings(): Unit = runBlocking {
+        assertEquals(15, calendar.dragStep.first())
+        val coach = db.coachDao().currentCoach()!!
+        val stored = db.coachDao().settings(coach.id)!!
+        db.coachDao().upsertSettings(stored.copy(dragStepMinutes = 30))
+        assertEquals(30, calendar.dragStep.first())
     }
 }

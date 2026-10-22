@@ -29,6 +29,14 @@ class ZoneFormatTest {
     }
 
     @Test
+    fun conflictLineWithFullPlaceName() {
+        // ТЗ 4.5: «Малый бассейн 17:00–18:30: групповая тренировка. Поставить всё равно?»
+        assertEquals("Малый бассейн 17:00–18:30: групповая тренировка", ZoneFormat.conflict("Малый бассейн", 17 * 60, 18 * 60 + 30, "Групповая тренировка"))
+        assertEquals("Большой бассейн 00:00–24:00", ZoneFormat.conflict("Большой бассейн", 0, 1440, ""))
+        assertEquals("Детский бассейн 09:00–10:00: ДЮСШ", ZoneFormat.conflict("Детский бассейн", 9 * 60, 10 * 60, "ДЮСШ"))
+    }
+
+    @Test
     fun reasonInPhrase() {
         assertEquals("бассейн на чистке", ZoneFormat.inPhrase("Бассейн на чистке"))
         assertEquals("ДЮСШ", ZoneFormat.inPhrase("ДЮСШ"))

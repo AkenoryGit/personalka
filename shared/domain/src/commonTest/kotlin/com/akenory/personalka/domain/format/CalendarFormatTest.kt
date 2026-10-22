@@ -39,4 +39,14 @@ class CalendarFormatTest {
         // Конец в полночь — «24:00», как во всём приложении.
         assertEquals("23:10–24:00 · ДБ", CalendarFormat.timePlace(LocalDateTime(2026, 10, 20, 23, 10), LocalDateTime(2026, 10, 21, 0, 0), "ДБ"))
     }
+
+    @Test
+    fun dragHintAndMovedMessage() {
+        val at1715 = LocalDateTime(2026, 10, 22, 17, 15)
+        // ТЗ 5.3 и макет «Перенос на другой день»: подсказка с заглавной, сообщение — посреди фразы.
+        assertEquals(s("Чт_22.10 · 17:15–18:15"), CalendarFormat.dragHint(at1715, LocalDateTime(2026, 10, 22, 18, 15)))
+        assertEquals(s("Ср_21.10 · 12:15–13:05"), CalendarFormat.dragHint(LocalDateTime(2026, 10, 21, 12, 15), LocalDateTime(2026, 10, 21, 13, 5)))
+        assertEquals(s("Перенесено на чт_22.10, 17:15"), CalendarFormat.moved(at1715))
+        assertEquals(s("вт_20.10, 10:00"), CalendarFormat.at(at10))
+    }
 }

@@ -48,6 +48,20 @@ object ZoneFormat {
         return if (validTo == null) text else "$text до ${DateFormat.full(validTo)}"
     }
 
+    /** Окно, когда тренировку ставят под запрет (4.5): вопрос и две кнопки. */
+    const val CONFLICT_QUESTION = "Поставить всё равно?"
+    const val CONFLICT_PLACE = "Поставить"
+    const val CONFLICT_CANCEL = "Отмена"
+
+    /**
+     * Запрет в окне «Поставить всё равно?» (4.5) — полным названием места, как в форме: «Малый бассейн
+     * 17:00–18:30: групповая тренировка»; без причины — «Малый бассейн 17:00–18:30».
+     */
+    fun conflict(placeName: String, startMinute: Int, endMinute: Int, reason: String): String {
+        val head = "$placeName " + DateFormat.timeRange(startMinute, endMinute)
+        return if (reason.isBlank()) head else "$head: ${inPhrase(reason)}"
+    }
+
     /** Сообщение после «Пропустить этот день»: «Запрет снят на вт 20.10». */
     fun skipped(date: LocalDate): String = "Запрет снят на ${DateFormat.short(date)}"
 

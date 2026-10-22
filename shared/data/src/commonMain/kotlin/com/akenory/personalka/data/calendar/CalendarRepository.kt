@@ -7,14 +7,18 @@ import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.groups.toSeriesTraining
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
 import com.akenory.personalka.data.restrictions.recalcRestrictionFlags
 import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.series.toSeries
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.BadgeFacts
 import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarBadges
+import com.akenory.personalka.domain.calendar.CalendarDrag
+import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.calendar.ZoneSpan
 import com.akenory.personalka.domain.client.ClientName
@@ -23,10 +27,18 @@ import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.restriction.Placement
+import com.akenory.personalka.domain.restriction.RestrictionCheck
 import com.akenory.personalka.domain.restriction.RestrictionHit
 import com.akenory.personalka.domain.restriction.RestrictionRules
+import com.akenory.personalka.domain.series.SeriesRules
+import com.akenory.personalka.domain.series.TrainingEdit
 import com.akenory.personalka.domain.training.DiaryRules
+import com.akenory.personalka.domain.training.TrainingTime
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
@@ -41,6 +53,7 @@ import kotlinx.datetime.plus
  * @param title «Иванов И.», «Петров / Сидоров», «Сб 9:00 ББ (12)».
  * @param color ключ цвета типа (`TrainingType.color`): у каждой темы свои тона.
  * @param badges значки по важности (`CalendarBadges`); сколько из них видно, решает высота блока.
+ * @param marked проведена или в ней отмечены пришедшие: в будущее её не перенести (`CalendarDrag.problem`).
  */
 data class CalendarTraining(
     val id: String,
@@ -53,6 +66,44 @@ data class CalendarTraining(
     val color: String,
     val cancelled: Boolean,
     val badges: List<CalendarBadge> = emptyList(),
+    val marked: Boolean = false,
+)
+
+/** Что вышло из переноса тренировки (5.3). */
+sealed interface MoveResult {
+    /** Перенесено; [undo] — для «Отменить». */
+    data class Moved(val undo: MoveUndo) : MoveResult
+
+    /**
+     * Новое время под запретом того же места (4.5): ничего не записано, нужно окно «Поставить всё равно?»
+     * со строкой на каждый запрет — «Малый бассейн 17:00–18:30: групповая тренировка».
+     */
+    data class Confirm(val conflicts: List<String>) : MoveResult
+
+    /** Не перенесено: [problem] — почему; `null` — тренировки уже нет или время не помещается в сутки. */
+    data class Refused(val problem: MoveProblem?) : MoveResult
+}
+
+/** Как было до переноса: время, флаг «поверх запрета», отдельность от серии и дата, которая ушла в пропуски серии. */
+data class MoveUndo(
+    val trainingId: String,
+    val start: LocalDateTime,
+    val overRestriction: Boolean,
+    val seriesDetached: Boolean,
+    val seriesId: String?,
+    val seriesSkip: LocalDate?,
+)
+
+/**
+ * Скопированная тренировка (5.3): тип, место, длительность и клиенты в порядке записи или группа. Её предложит
+ * «Вставить скопированную» в форме новой тренировки (5.5, шаг 1.13).
+ */
+data class TrainingCopy(
+    val typeId: String,
+    val locationId: String,
+    val durationMin: Int,
+    val clientIds: List<String>,
+    val groupId: String?,
 )
 
 /**
@@ -125,7 +176,7 @@ data class WorkHours(val start: LocalTime = LocalTime(7, 0), val end: LocalTime 
 
 /**
  * Календарь (ТЗ 5.3): тренировки дней с именами клиентов, типом, местом и значками; дежурства и запреты — зоны
- * под тренировками; часы сетки.
+ * под тренировками; часы сетки и шаг перетаскивания; перенос, «Копировать» и «Пропустить этот день».
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
@@ -139,6 +190,14 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     val workHours: Flow<WorkHours> = coaches.observeSettings().map { settings ->
         if (settings == null) WorkHours() else WorkHours(settings.workDayStart, settings.workDayEnd)
     }
+
+    /** Шаг перетаскивания из настроек (3.2): 5, 10, 15 или 30 минут. */
+    val dragStep: Flow<Int> = coaches.observeSettings().map { it?.dragStepMinutes ?: CalendarDrag.STEP_DEFAULT }
+
+    private val copiedState = MutableStateFlow<TrainingCopy?>(null)
+
+    /** Последняя скопированная тренировка; живёт, пока приложение открыто. */
+    val copied: StateFlow<TrainingCopy?> = copiedState.asStateFlow()
 
     /**
      * Тренировки, которые начинаются в дни с [from] по [to] не включая, по времени; отменённые тоже.
@@ -181,6 +240,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                         done = t.status == TrainingStatus.DONE,
                     ),
                 )
+                val marked = t.status == TrainingStatus.DONE || people.any { it.status == ParticipationStatus.ATTENDED }
                 t.toCalendar(
                     title = CalendarFormat.title(
                         clients = people.mapNotNull { n.clients[it.clientId]?.name() },
@@ -191,6 +251,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                     type = type,
                     place = n.places[t.locationId],
                     badges = badges,
+                    marked = marked,
                 )
             }
         }
@@ -235,6 +296,98 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     /** «Отменить» после «Пропустить этот день»: в [date] запрет снова действует. */
     suspend fun unskipRestrictionDay(restrictionId: String, date: LocalDate) = changeSkips(restrictionId) { it - date }
 
+    /**
+     * Перенос перетаскиванием на [start] (5.3): длительность и место прежние; статус, план и отметки остаются —
+     * перенос не отмена (4.2). Новое время под запретом того же места — сначала [MoveResult.Confirm] без записи,
+     * «Поставить» — тот же вызов с [confirmed]. Флаг «поверх запрета» пишется вместе с временем (4.5).
+     *
+     * Тренировка серии переносится «Только эту» (4.4): становится отдельной, её дата уходит в пропуски серии.
+     * Вопрос «Только эту / Эту и следующие» появится с записью серий в шаге 1.13 — до него серий в базе нет.
+     */
+    suspend fun move(id: String, start: LocalDateTime, confirmed: Boolean = false): MoveResult {
+        val now = clock()
+        var result: MoveResult = MoveResult.Refused(null)
+        db.withWriteTransaction {
+            val t = trainings.training(id)
+            if (t == null || t.sync.deletedAt != null || TrainingTime.problem(start, t.durationMin) != null) return@withWriteTransaction
+            val participations = trainings.participationsOf(id)
+            val marked = t.status == TrainingStatus.DONE || participations.any { it.status == ParticipationStatus.ATTENDED }
+            val problem = CalendarDrag.problem(t.status, marked, start, ClubTime.now(now))
+            if (problem != null) {
+                result = MoveResult.Refused(problem)
+                return@withWriteTransaction
+            }
+
+            val isDuty = reference.trainingType(t.typeId)?.kind == TrainingKind.DUTY
+            val restrictions = schedule.blocks().map { it.toRestriction() }
+            val after = Placement(start, t.durationMin, t.locationId, isDuty)
+            val check = RestrictionRules.check(t.placement(isDuty), after, restrictions)
+            if (check is RestrictionCheck.Confirm && !confirmed) {
+                val places = reference.locations().associateBy { it.id }
+                result = MoveResult.Confirm(
+                    check.hits.map { hit ->
+                        val r = hit.restriction
+                        ZoneFormat.conflict(places[r.locationId]?.name.orEmpty(), r.startMinute, r.endMinute, r.reason)
+                    },
+                )
+                return@withWriteTransaction
+            }
+
+            val series = t.seriesId?.let { schedule.series(it) }?.takeIf { it.sync.deletedAt == null }
+            var skip: LocalDate? = null
+            if (series != null) {
+                val before = series.toSeries(schedule.seriesClients(series.id).map { it.clientId })
+                val edit = TrainingEdit(start, t.durationMin, t.typeId, t.locationId, participations.map { it.clientId }, t.groupId)
+                val changed = SeriesRules.changeOnlyThis(before, t.toSeriesTraining(participations), edit).series.firstOrNull()
+                if (changed != null) {
+                    schedule.upsertSeries(series.copy(skipDates = changed.skipDates.sorted(), sync = series.sync.touched(now)))
+                    skip = (changed.skipDates - before.skipDates).firstOrNull()
+                }
+            }
+            trainings.upsertTraining(
+                t.copy(
+                    start = start,
+                    overRestriction = RestrictionRules.flag(after, restrictions),
+                    seriesDetached = t.seriesDetached || series != null,
+                    sync = t.sync.touched(now),
+                ),
+            )
+            result = MoveResult.Moved(MoveUndo(id, t.start, t.overRestriction, t.seriesDetached, t.seriesId, skip))
+        }
+        return result
+    }
+
+    /** «Отменить» после переноса: прежние время, флаг и отдельность от серии; дата снова у серии. */
+    suspend fun undoMove(undo: MoveUndo) {
+        val now = clock()
+        db.withWriteTransaction {
+            val t = trainings.training(undo.trainingId)
+            if (t == null || t.sync.deletedAt != null) return@withWriteTransaction
+            trainings.upsertTraining(
+                t.copy(start = undo.start, overRestriction = undo.overRestriction, seriesDetached = undo.seriesDetached, sync = t.sync.touched(now)),
+            )
+            val skip = undo.seriesSkip ?: return@withWriteTransaction
+            val series = undo.seriesId?.let { schedule.series(it) } ?: return@withWriteTransaction
+            schedule.upsertSeries(series.copy(skipDates = series.skipDates - skip, sync = series.sync.touched(now)))
+        }
+    }
+
+    /**
+     * «Копировать» в меню тренировки (5.3): запоминает тип, место, длительность и клиентов — у группы саму группу.
+     * `false` — тренировки уже нет.
+     */
+    suspend fun copy(id: String): Boolean {
+        val t = trainings.training(id)
+        if (t == null || t.sync.deletedAt != null) return false
+        val clientIds = if (t.groupId != null) {
+            emptyList()
+        } else {
+            trainings.participationsOf(id).sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }
+        }
+        copiedState.value = TrainingCopy(t.typeId, t.locationId, t.durationMin, clientIds, t.groupId)
+        return true
+    }
+
     private suspend fun changeSkips(restrictionId: String, change: (Set<LocalDate>) -> Set<LocalDate>) {
         db.withWriteTransaction {
             val block = schedule.block(restrictionId)
@@ -257,7 +410,13 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
 private fun ClientEntity.name() = ClientName(lastName, firstName, middleName)
 
-private fun TrainingEntity.toCalendar(title: String, type: TrainingTypeEntity?, place: LocationEntity?, badges: List<CalendarBadge>) = CalendarTraining(
+private fun TrainingEntity.toCalendar(
+    title: String,
+    type: TrainingTypeEntity?,
+    place: LocationEntity?,
+    badges: List<CalendarBadge>,
+    marked: Boolean,
+) = CalendarTraining(
     id = id,
     start = start,
     durationMin = durationMin,
@@ -268,4 +427,5 @@ private fun TrainingEntity.toCalendar(title: String, type: TrainingTypeEntity?, 
     color = type?.color.orEmpty(),
     cancelled = status == TrainingStatus.CANCELLED,
     badges = badges,
+    marked = marked,
 )

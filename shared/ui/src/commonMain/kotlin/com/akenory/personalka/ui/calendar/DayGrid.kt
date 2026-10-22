@@ -17,17 +17,25 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
@@ -44,17 +52,23 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ScrollAxisRange
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -79,6 +93,7 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.BlockRows
 import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarBadges
+import com.akenory.personalka.domain.calendar.CalendarDrag
 import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.DayLayoutRules
 import com.akenory.personalka.domain.calendar.DaySpan
@@ -92,6 +107,7 @@ import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
+import com.akenory.personalka.ui.theme.Motion
 import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.TypeColor
@@ -101,8 +117,10 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.coroutines.launch
 import kotlinx.datetime.plus
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 const val CALENDAR_GRID_TAG = "calendar-grid"
@@ -215,9 +233,20 @@ class DayGridState(top: Float, hourDp: Float) {
  * Сетка дня (ТЗ 5.3): колонка времени 48 dp и дни, которые листаются свайпом. Прокрутка и щипок — общие для всех
  * дней. Всё рисуется на Canvas, а прокрутка только сдвигает готовую картинку: блоки при ней не перерисовываются.
  *
+ * Жесты (шаг 1.11): длительное нажатие на пустое место — новая тренировка на время под пальцем; на тренировку —
+ * меню, а со сдвигом — перетаскивание с подсказкой, привязкой к шагу, автопрокруткой у верхнего и нижнего края
+ * и листанием дня у бокового. Жест разбирает вся сетка, а не колонка дня: при листании колонка меняется,
+ * а блок остаётся под пальцем.
+ *
  * @param itemsOf тренировки дня, отменённые тоже.
  * @param zonesOf дежурства и запреты дня.
+ * @param step шаг перетаскивания из настроек, минуты.
+ * @param menuId тренировка с открытым меню: обводка и место для [menu].
+ * @param menu меню тренировки — под её блоком.
  * @param onZone нажатие на полоску или видимую часть зоны.
+ * @param onCreate длительное нажатие на пустое место: начало новой тренировки.
+ * @param onMenu длительное нажатие на тренировку без сдвига.
+ * @param onMove тренировку перетащили на новое начало — день и время.
  * @param onZoomEnd щипок закончен — масштаб пора запомнить.
  */
 @Composable
@@ -226,11 +255,17 @@ internal fun DayGrid(
     grid: DayGridState,
     hours: GridHours,
     now: LocalDateTime,
+    step: Int,
     itemsOf: (LocalDate) -> List<CalendarTraining>,
     zonesOf: (LocalDate) -> List<CalendarZone>,
+    menuId: String?,
+    menu: @Composable (CalendarTraining) -> Unit,
     onOpen: (CalendarTraining) -> Unit,
     onMore: (List<CalendarTraining>) -> Unit,
     onZone: (CalendarZone) -> Unit,
+    onCreate: (LocalDateTime) -> Unit,
+    onMenu: (CalendarTraining) -> Unit,
+    onMove: (CalendarTraining, LocalDateTime) -> Unit,
     onZoomEnd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -238,8 +273,10 @@ internal fun DayGrid(
     val density = LocalDensity.current.density
     BoxWithConstraints(modifier.background(colors.surface).clipToBounds()) {
         val heightDp = maxHeight.value
+        val pageWidth = (maxWidth - Dimens.timeColumn).value
         val currentHours by rememberUpdatedState(hours)
         val currentHeight by rememberUpdatedState(heightDp)
+        val currentWidth by rememberUpdatedState(pageWidth)
         val currentZoomEnd by rememberUpdatedState(onZoomEnd)
         val hourDp = grid.hourDp
         // Прокрутка читается только при рисовании: при ней не пересобирается ни экран, ни блоки.
@@ -254,6 +291,87 @@ internal fun DayGrid(
             -grid.scrollBy(-delta / density, currentHours, currentHeight) * density
         }
 
+        val drag = remember { DragState() }
+        val haptic = LocalHapticFeedback.current
+        val ui = rememberCoroutineScope()
+        val currentItems by rememberUpdatedState(itemsOf)
+        val currentZones by rememberUpdatedState(zonesOf)
+        val currentStep by rememberUpdatedState(step)
+        val currentCreate by rememberUpdatedState(onCreate)
+        val currentMenu by rememberUpdatedState(onMenu)
+        val currentMove by rememberUpdatedState(onMove)
+        // Куда встанет блок: меняется раз в шаг, а не с каждым движением пальца.
+        val target by remember(drag, grid, pager) {
+            derivedStateOf {
+                val training = drag.training
+                if (training == null || !drag.moving) return@derivedStateOf null
+                val view = grid.view(currentHours, currentHeight)
+                val raw = view.top + (drag.pointer.y / density - drag.grab) / view.dpPerMinute
+                val minute = CalendarDrag.moveMinute(ClubTime.minuteOfDay(training.start), raw, training.durationMin, currentStep)
+                DragTarget(dateOfPage(pager.currentPage), minute)
+            }
+        }
+
+        /** Длительное нажатие в точке сетки [position], px. `true` — палец держит тренировку. */
+        fun hold(position: Offset): Boolean {
+            val date = dateOfPage(pager.currentPage)
+            val view = grid.view(currentHours, currentHeight)
+            val x = position.x / density - Dimens.timeColumn.value
+            val y = (view.top - currentHours.startMinute) * view.dpPerMinute + position.y / density
+            val items = currentItems(date)
+            val day = dayBlocks(items, currentZones(date), currentWidth, currentHours, grid.hourDp)
+            fun hit(left: Float, top: Float, width: Float, height: Float) = x >= left && x < left + width && y >= top && y < top + height
+            val block = day.blocks.lastOrNull { hit(it.x, it.y, it.width, it.height) }
+            val training = block?.let { b -> items.firstOrNull { it.id == b.id } }
+            if (block != null && training != null) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                drag.hold(training, date, block, position, y - block.y)
+                return true
+            }
+            // На «+N» — ничего: место занято скрытыми тренировками.
+            if (day.more.none { hit(it.x, it.y, it.width, it.height) }) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                val minute = CalendarDrag.createMinute(view.top + position.y / density / view.dpPerMinute, currentStep)
+                currentCreate(LocalDateTime(date, LocalTime(minute / 60, minute % 60)))
+            }
+            return false
+        }
+
+        /** Палец стоит или движется, пока блок тащат: [clock] — мс жеста, [dt] — с прошлого раза. `true` — палец у края. */
+        fun tick(clock: Long, dt: Long): Boolean {
+            if (!drag.moving) return false
+            val speed = CalendarDrag.autoScroll(drag.pointer.y / density, currentHeight)
+            if (speed != 0f) grid.scrollBy(speed * dt.coerceAtMost(MAX_TICK_MS) / 1000f, currentHours, currentHeight)
+            val side = CalendarDrag.side(drag.pointer.x / density - Dimens.timeColumn.value, currentWidth)
+            // Пока день листается, задержка не идёт: следующий — через 600 мс после того, как этот встал.
+            if (side != drag.edgeSide || pager.isScrollInProgress) {
+                drag.edgeSide = side
+                drag.edgeSince = clock
+            } else if (side != 0 && clock - drag.edgeSince >= CalendarDrag.EDGE_FLIP_MS) {
+                // В виде «День» задержка у бокового края листает день; блок остаётся под пальцем.
+                drag.edgeSince = clock
+                val page = (pager.currentPage + side).coerceIn(0, PAGE_COUNT - 1)
+                ui.launch { pager.animateScrollToPage(page) }
+            }
+            return speed != 0f || side != 0
+        }
+
+        fun release() {
+            val training = drag.training
+            val to = target
+            val moved = drag.moved
+            val moving = drag.moving
+            drag.reset()
+            if (training == null) return
+            when {
+                !moved -> currentMenu(training)
+                moving && to != null && to.start != training.start -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                    currentMove(training, to.start)
+                }
+            }
+        }
+
         Row(
             Modifier
                 .fillMaxSize()
@@ -261,6 +379,16 @@ internal fun DayGrid(
                     pinch(
                         onZoom = { factor, focus -> grid.zoomBy(factor, focus.y / density, currentHours, currentHeight) },
                         onEnd = { currentZoomEnd() },
+                    )
+                }
+                .pointerInput(grid, pager) {
+                    holdAndDrag(
+                        timeColumnPx = Dimens.timeColumn.toPx(),
+                        onHold = ::hold,
+                        onDrag = { drag.follow(it, CalendarDrag.MENU_SLOP_DP.dp.toPx()) },
+                        onTick = ::tick,
+                        onRelease = ::release,
+                        onCancel = { drag.reset() },
                     )
                 }
                 .scrollable(scrollState, Orientation.Vertical)
@@ -276,17 +404,278 @@ internal fun DayGrid(
                 .testTag(CALENDAR_GRID_TAG),
         ) {
             TimeColumn(hours, hourDp, scrollPx)
-            HorizontalPager(
-                state = pager,
-                modifier = Modifier.weight(1f).fillMaxHeight().testTag(CALENDAR_PAGER_TAG),
-                key = { it },
-            ) { page ->
-                val date = dateOfPage(page)
-                DayColumn(date, itemsOf(date), zonesOf(date), hours, hourDp, now, scrollPx, onOpen, onMore, onZone)
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                HorizontalPager(
+                    state = pager,
+                    modifier = Modifier.fillMaxSize().testTag(CALENDAR_PAGER_TAG),
+                    key = { it },
+                ) { page ->
+                    val date = dateOfPage(page)
+                    val held = drag.training
+                    DayColumn(
+                        date = date,
+                        items = itemsOf(date),
+                        zones = zonesOf(date),
+                        hours = hours,
+                        hourDp = hourDp,
+                        now = now,
+                        scrollPx = scrollPx,
+                        ghostId = held?.id?.takeIf { drag.moving && date == drag.from },
+                        selectedId = menuId ?: held?.id?.takeIf { !drag.moving },
+                        onOpen = onOpen,
+                        onMore = onMore,
+                        onZone = onZone,
+                    )
+                }
+                DragLayer(drag, target, grid, hours, heightDp, pageWidth)
+            }
+        }
+
+        // Меню — под блоком тренировки, как в макете «Удержание на тренировке».
+        val menuDate = dateOfPage(pager.currentPage)
+        val menuTraining = menuId?.let { id -> itemsOf(menuDate).firstOrNull { it.id == id } }
+        val menuBlock = menuTraining?.let { t ->
+            dayBlocks(itemsOf(menuDate), zonesOf(menuDate), pageWidth, hours, hourDp).blocks.firstOrNull { it.id == t.id }
+        }
+        if (menuTraining != null && menuBlock != null) {
+            val view = grid.view(hours, heightDp)
+            val top = menuBlock.y - (view.top - hours.startMinute) * view.dpPerMinute
+            Box(
+                Modifier
+                    .offset(x = Dimens.timeColumn + menuBlock.x.dp, y = top.dp)
+                    .size(menuBlock.width.dp, menuBlock.height.dp),
+            ) {
+                menu(menuTraining)
             }
         }
     }
 }
+
+/** Опрос пальца у края, пока он стоит: автопрокрутка и задержка листания идут и без движения. */
+private const val TICK_MS = 16L
+
+/** Больше этого за раз сетка не прокручивается: после паузы блок не прыгает. */
+private const val MAX_TICK_MS = 50L
+
+/** Куда встанет перетаскиваемая тренировка: день и минута начала. */
+@Immutable
+private data class DragTarget(val date: LocalDate, val minute: Int) {
+    val start: LocalDateTime get() = LocalDateTime(date, LocalTime(minute / 60, minute % 60))
+}
+
+/**
+ * Тренировка под пальцем после длительного нажатия (ТЗ 5.3). Пока сдвиг меньше 8 dp, отпускание откроет меню;
+ * дальше блок тащится — если тренировка не отменена. Палец — px в сетке, остальное — dp колонки дня, где был блок.
+ */
+@Stable
+private class DragState {
+    var training: CalendarTraining? by mutableStateOf(null)
+        private set
+
+    /** Палец сдвинулся больше чем на 8 dp: меню уже не откроется. */
+    var moved: Boolean by mutableStateOf(false)
+        private set
+
+    var pointer: Offset by mutableStateOf(Offset.Zero)
+        private set
+
+    /** День и место блока при нажатии. */
+    var from: LocalDate? = null
+        private set
+    var block: BlockInfo? = null
+        private set
+
+    /** Палец при нажатии, px в сетке. */
+    var down: Offset = Offset.Zero
+        private set
+
+    /** От верха блока до пальца, dp: блок едет вместе с пальцем, а не прыгает к нему верхом. */
+    var grab: Float = 0f
+        private set
+
+    /** У какого бокового края палец и с какого мига жеста (−1, 0, 1): задержка листания дня. */
+    var edgeSide: Int = 0
+    var edgeSince: Long = 0L
+
+    /** Блок тащится: палец сдвинулся, и тренировка не отменена — отменённую сначала возвращают. */
+    val moving: Boolean get() = moved && training?.cancelled == false
+
+    fun hold(training: CalendarTraining, date: LocalDate, block: BlockInfo, down: Offset, grab: Float) {
+        this.training = training
+        this.from = date
+        this.block = block
+        this.down = down
+        this.grab = grab
+        pointer = down
+        moved = false
+        edgeSide = 0
+    }
+
+    fun follow(position: Offset, slopPx: Float) {
+        pointer = position
+        if (!moved && (position - down).getDistance() > slopPx) moved = true
+    }
+
+    fun reset() {
+        training = null
+        moved = false
+        block = null
+        from = null
+        edgeSide = 0
+    }
+}
+
+/**
+ * Длительное нажатие и перетаскивание (ТЗ 5.3). Первые 400 мс жест ничей: сдвиг пальца — прокрутка или листание,
+ * отпускание — нажатие на блок, второй палец — щипок. Через 400 мс без сдвига жест забирается целиком: события
+ * поглощаются до прокрутки, листания и нажатия, и палец ведёт [onHold] / [onDrag] / [onRelease].
+ *
+ * [onHold] — `true`, если палец держит тренировку; иначе (новая тренировка) остаток жеста просто поглощается.
+ * [onTick] получает время жеста и шаг в мс; пока он отвечает `true` (палец у края), опрос идёт каждые 16 мс
+ * и без движения пальца — так работают автопрокрутка и задержка листания.
+ */
+private suspend fun PointerInputScope.holdAndDrag(
+    timeColumnPx: Float,
+    onHold: (Offset) -> Boolean,
+    onDrag: (Offset) -> Unit,
+    onTick: (clock: Long, dt: Long) -> Boolean,
+    onRelease: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        if (down.position.x < timeColumnPx) return@awaitEachGesture
+        val slop = viewConfiguration.touchSlop
+        val early = withTimeoutOrNull(CalendarDrag.LONG_PRESS_MS) {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id }
+                if (change == null || !change.pressed || event.changes.count { it.pressed } > 1) break
+                if ((change.position - down.position).getDistance() > slop) break
+            }
+        }
+        if (early != null) return@awaitEachGesture
+        if (!onHold(down.position)) {
+            consumeUntilUp(down.id)
+            return@awaitEachGesture
+        }
+        var clock = down.uptimeMillis + CalendarDrag.LONG_PRESS_MS
+        var last = clock
+        var ticking = false
+        var finished = false
+        try {
+            while (true) {
+                val event = if (ticking) {
+                    withTimeoutOrNull(TICK_MS) { awaitPointerEvent(PointerEventPass.Initial) }
+                } else {
+                    awaitPointerEvent(PointerEventPass.Initial)
+                }
+                if (event == null) {
+                    clock += TICK_MS
+                } else {
+                    event.changes.forEach { it.consume() }
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    if (change == null || !change.pressed) {
+                        finished = true
+                        onRelease()
+                        break
+                    }
+                    clock = maxOf(clock, change.uptimeMillis)
+                    onDrag(change.position)
+                }
+                ticking = onTick(clock, clock - last)
+                last = clock
+            }
+        } finally {
+            if (!finished) onCancel()
+        }
+    }
+}
+
+/** Жест уже обработан: всё до отпускания пальца поглощается, чтобы не стать прокруткой или нажатием. */
+private suspend fun AwaitPointerEventScope.consumeUntilUp(id: PointerId) {
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        event.changes.forEach { it.consume() }
+        if (event.changes.none { it.id == id && it.pressed }) break
+    }
+}
+
+/**
+ * Перетаскиваемый блок и подсказка над пальцем (ТЗ 5.3, макет «Перенос на другой день»): последний слой сетки,
+ * над линией «сейчас». Блок приподнят с тенью и стоит на новом времени с привязкой к шагу, подсказка —
+ * «Ср 21.10 · 12:15–13:05». Положение читается при раскладке: движение пальца ничего не пересобирает.
+ */
+@Composable
+private fun DragLayer(drag: DragState, target: DragTarget?, grid: DayGridState, hours: GridHours, heightDp: Float, widthDp: Float) {
+    val training = drag.training
+    val block = drag.block
+    if (training == null || block == null || target == null || !drag.moving) return
+    val colors = PersonalkaTheme.colors
+    val density = LocalDensity.current.density
+    val measurer = rememberTextMeasurer()
+    val styles = blockStyles()
+    val icons = badgeIcons()
+    val start = target.start
+    val moved = training.copy(start = start)
+    val lifted = block.copy(x = 0f, y = 0f, lines = moved.lines(block.rows))
+    val shadow = if (colors.isDark) Color.Black else colors.text
+    Layout(
+        content = {
+            Canvas(
+                Modifier
+                    .size(block.width.dp, block.height.dp)
+                    .graphicsLayer {
+                        scaleX = Motion.DRAG_SCALE
+                        scaleY = Motion.DRAG_SCALE
+                        shadowElevation = DRAG_ELEVATION.toPx()
+                        shape = RoundedCornerShape(BLOCK_RADIUS)
+                        ambientShadowColor = shadow
+                        spotShadowColor = shadow
+                    },
+            ) {
+                drawBlock(lifted, moved, measureLines(measurer, lifted, training.cancelled, styles), icons, colors)
+            }
+            Text(
+                text = CalendarFormat.dragHint(start, TrainingTime.end(start, training.durationMin)),
+                modifier = Modifier
+                    .background(colors.inverseSurface, RoundedCornerShape(HINT_RADIUS))
+                    .padding(horizontal = HINT_PAD_X, vertical = HINT_PAD_Y),
+                style = MaterialTheme.typography.labelMedium.tabular(),
+                color = colors.inverseText,
+                maxLines = 1,
+                softWrap = false,
+            )
+        },
+        modifier = Modifier.fillMaxSize(),
+    ) { measurables, constraints ->
+        val lifting = measurables[0].measure(Constraints())
+        val hint = measurables[1].measure(Constraints(maxWidth = constraints.maxWidth))
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            val view = grid.view(hours, heightDp)
+            // По вертикали — новое время, по горизонтали блок идёт за пальцем, не выходя из колонки.
+            val dx = drag.pointer.x / density - drag.down.x / density
+            val x = (block.x + dx).coerceIn(0f, (widthDp - block.width).coerceAtLeast(0f)) * density
+            val y = (target.minute - view.top) * view.dpPerMinute * density
+            lifting.place(x.roundToInt(), y.roundToInt())
+            val gap = HINT_GAP.toPx()
+            val hintX = (x + HINT_SHIFT.toPx()).coerceAtMost(constraints.maxWidth - hint.width - gap).coerceAtLeast(gap)
+            val above = y - gap - hint.height
+            val hintY = if (above >= 0f) above else y + lifting.height + gap
+            hint.place(hintX.roundToInt(), hintY.roundToInt())
+        }
+    }
+}
+
+/** Блок при перетаскивании приподнят (10.5): тень как у макета, 0 8 24. */
+private val DRAG_ELEVATION = 8.dp
+
+/** Подсказка над блоком: плашка `inverse-surface`, скругление 8, поля 10 × 6, в 12 dp над блоком и в 14 dp от его края. */
+private val HINT_RADIUS = 8.dp
+private val HINT_PAD_X = 10.dp
+private val HINT_PAD_Y = 6.dp
+private val HINT_GAP = 12.dp
+private val HINT_SHIFT = 14.dp
 
 /**
  * Щипок двумя пальцами (ТЗ 5.3): [onZoom] получает множитель и точку между пальцами. Пока пальцев два, их движение
@@ -348,7 +737,8 @@ private fun TimeColumn(hours: GridHours, hourDp: Float, scrollPx: () -> Float) {
 
 /**
  * Колонка дня. Слои снизу вверх (ТЗ 5.3): фон дня и приглушённое прошлое → дежурства → запреты и полоски зон →
- * линии сетки → тренировки со значками → линия «сейчас».
+ * линии сетки → тренировки со значками → линия «сейчас». Перетаскиваемый блок — над всем этим, в [DragLayer];
+ * на его старом месте — призрак [ghostId], блок под пальцем и с открытым меню [selectedId] — в обводке.
  */
 @Composable
 private fun DayColumn(
@@ -359,23 +749,16 @@ private fun DayColumn(
     hourDp: Float,
     now: LocalDateTime,
     scrollPx: () -> Float,
+    ghostId: String?,
+    selectedId: String?,
     onOpen: (CalendarTraining) -> Unit,
     onMore: (List<CalendarTraining>) -> Unit,
     onZone: (CalendarZone) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val measurer = rememberTextMeasurer()
-    val styles = BlockStyles(
-        name = MaterialTheme.typography.labelMedium.copy(lineHeight = 16.sp),
-        meta = MaterialTheme.typography.bodySmall.copy(lineHeight = 16.sp).tabular(),
-        more = MaterialTheme.typography.labelMedium.tabular(),
-    )
-    val icons = BadgeIcons(
-        ruble = rememberVectorPainter(PIcons.BadgeRuble),
-        warning = rememberVectorPainter(PIcons.BadgeWarning),
-        layers = rememberVectorPainter(PIcons.BadgeLayers),
-        check = rememberVectorPainter(PIcons.BadgeCheck),
-    )
+    val styles = blockStyles()
+    val icons = badgeIcons()
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val widthDp = maxWidth.value
         val day = remember(items, zones, widthDp, hours, hourDp) { dayBlocks(items, zones, widthDp, hours, hourDp) }
@@ -438,8 +821,13 @@ private fun DayColumn(
             drawLines(hours, hourDp, colors)
             day.blocks.forEach { block ->
                 val training = byId[block.id] ?: return@forEach
+                if (block.id == ghostId) {
+                    drawGhost(block, colors)
+                    return@forEach
+                }
                 val lines = texts.getOrPut("${block.id}/${block.rows}") { measureLines(measurer, block, training.cancelled, styles) }
                 drawBlock(block, training, lines, icons, colors)
+                if (block.id == selectedId) drawSelected(block, colors)
             }
             day.more.forEach { drawMore(it, measurer, styles.more, colors) }
             if (date == now.date) drawNow(hours, hourDp, now, colors)
@@ -450,9 +838,30 @@ private fun DayColumn(
 @Immutable
 private data class BlockStyles(val name: TextStyle, val meta: TextStyle, val more: TextStyle)
 
+/** Строки блока: имя — 13/16, время и место — цифрами одной ширины; метка «+N». */
+@Composable
+private fun blockStyles(): BlockStyles = BlockStyles(
+    name = MaterialTheme.typography.labelMedium.copy(lineHeight = 16.sp),
+    meta = MaterialTheme.typography.bodySmall.copy(lineHeight = 16.sp).tabular(),
+    more = MaterialTheme.typography.labelMedium.tabular(),
+)
+
 /** Значки блока (ТЗ 5.3): «₽», треугольник «поверх запрета», «слои» дежурства, галочка; точка дневника рисуется кругом. */
 @Stable
 private class BadgeIcons(val ruble: Painter, val warning: Painter, val layers: Painter, val check: Painter)
+
+@Composable
+private fun badgeIcons(): BadgeIcons = BadgeIcons(
+    ruble = rememberVectorPainter(PIcons.BadgeRuble),
+    warning = rememberVectorPainter(PIcons.BadgeWarning),
+    layers = rememberVectorPainter(PIcons.BadgeLayers),
+    check = rememberVectorPainter(PIcons.BadgeCheck),
+)
+
+/** Призрак перетаскиваемого блока и обводка блока под пальцем. */
+private val GHOST_STROKE = 1.5.dp
+private val GHOST_DASH = 4.dp
+private val SELECTED_STROKE = 2.dp
 
 /** Отступы блока от рамки цвета (1 dp зазора уже вычтен): слева за полосой 9 dp, сверху 4 dp, у одной строки — 3. */
 private val BLOCK_GAP = 1.dp
@@ -714,6 +1123,38 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, li
         }
         drawBadges(block.badges, rect, icons, colors)
     }
+}
+
+/** Призрак на старом месте перетаскиваемого блока: пунктир 1,5 dp цвета рамок (макет «Перенос на другой день»). */
+private fun DrawScope.drawGhost(block: BlockInfo, colors: PersonalkaColors) {
+    val stroke = GHOST_STROKE.toPx()
+    val inset = BLOCK_GAP.toPx() + stroke / 2
+    val width = block.width.dp.toPx() - inset * 2
+    val height = block.height.dp.toPx() - inset * 2
+    if (width <= 0f || height <= 0f) return
+    val dash = PathEffect.dashPathEffect(floatArrayOf(GHOST_DASH.toPx(), GHOST_DASH.toPx()))
+    drawRoundRect(
+        color = colors.outline,
+        topLeft = Offset(block.x.dp.toPx() + inset, block.y.dp.toPx() + inset),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(BLOCK_RADIUS.toPx()),
+        style = Stroke(width = stroke, pathEffect = dash),
+    )
+}
+
+/** Блок под пальцем и с открытым меню — обводка 2 dp цвета текста по его краю (макет «Удержание на тренировке»). */
+private fun DrawScope.drawSelected(block: BlockInfo, colors: PersonalkaColors) {
+    val stroke = SELECTED_STROKE.toPx()
+    val width = block.width.dp.toPx() - stroke
+    val height = block.height.dp.toPx() - stroke
+    if (width <= 0f || height <= 0f) return
+    drawRoundRect(
+        color = colors.text,
+        topLeft = Offset(block.x.dp.toPx() + stroke / 2, block.y.dp.toPx() + stroke / 2),
+        size = Size(width, height),
+        cornerRadius = CornerRadius((BLOCK_RADIUS + BLOCK_GAP).toPx()),
+        style = Stroke(width = stroke),
+    )
 }
 
 /**

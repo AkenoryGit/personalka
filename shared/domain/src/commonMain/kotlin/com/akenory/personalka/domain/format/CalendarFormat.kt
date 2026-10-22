@@ -45,4 +45,14 @@ object CalendarFormat {
 
     /** Строка тренировки в списке: «10:00–10:50 · ББ». */
     fun timePlace(start: LocalDateTime, end: LocalDateTime, place: String): String = DateFormat.timeRange(start, end) + DOT + place
+
+    /** День и время посреди фразы: «вт 22.10, 17:15». */
+    fun at(start: LocalDateTime): String = DateFormat.short(start.date) + ", " + DateFormat.time(start.time)
+
+    /** Подсказка над перетаскиваемым блоком: «Вт 22.10 · 17:15–18:15». */
+    fun dragHint(start: LocalDateTime, end: LocalDateTime): String =
+        DateFormat.short(start.date).replaceFirstChar { it.uppercaseChar() } + DOT + DateFormat.timeRange(start, end)
+
+    /** Сообщение после переноса (5.20): «Перенесено на вт 22.10, 17:15». */
+    fun moved(start: LocalDateTime): String = "Перенесено на ${at(start)}"
 }
