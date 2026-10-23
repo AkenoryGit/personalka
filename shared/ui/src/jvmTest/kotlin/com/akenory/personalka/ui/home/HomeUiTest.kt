@@ -6,6 +6,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -42,6 +44,8 @@ import com.akenory.personalka.ui.settings.PlatformFiles
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import com.akenory.personalka.ui.training.TRAINING_CARD_TAG
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DateTimeUnit
@@ -49,8 +53,6 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 /**
  * «Главная» без денег (шаг 1.16, ТЗ 5.2, макеты «День», «Вечер», «Утро», «Разложенный Fold»). «Сейчас» — вт 20.10.2026
@@ -235,7 +237,12 @@ class HomeUiTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(PAST_TAG)).fetchSemanticsNodes().isEmpty() }
         width = unfolded
         awaitNode(hasText("Скрыть прошедшие"))
-        onNodeWithText(s("Яковлева_Т.")).assertIsDisplayed()
+        // Имя есть и в пункте «Клиенты без записи» (шаг 2.4) — здесь нужна строка расписания дня.
+        onNode(hasText(s("Яковлева_Т.")) and inDaySchedule).assertIsDisplayed()
+    }
+
+    private val inDaySchedule = SemanticsMatcher("строка расписания дня") {
+        it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("home-day-") == true
     }
 
     private class Folder : BackupFolder {
