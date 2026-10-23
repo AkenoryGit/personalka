@@ -9,14 +9,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
@@ -32,6 +33,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToKey
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.runComposeUiTest
@@ -68,8 +70,8 @@ import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
-import com.akenory.personalka.ui.components.PANEL_TAG
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.PANEL_TAG
 import com.akenory.personalka.ui.shell.FAB_TAG
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
@@ -78,16 +80,16 @@ import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.training.FORM_TIME_TAG
 import com.akenory.personalka.ui.training.TRAINING_CARD_TAG
 import com.akenory.personalka.ui.training.TRAINING_FORM_TAG
+import kotlin.math.abs
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
-import kotlin.math.abs
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * «Календарь»: вид «День» (шаги 1.9–1.11), «Несколько дней», шапка и фильтр мест (шаг 1.12), «Месяц», «Список» и мини-календарь (шаг 1.12а), ТЗ 5.3. «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO,
@@ -1063,7 +1065,9 @@ class CalendarUiTest {
         waitForIdle()
         val november10 = LocalDate(2026, 11, 10)
         onNodeWithText(DateFormat.monthYear(november10)).assertIsDisplayed()
-        onNodeWithTag(miniDayTag(november10)).performClick()
+        // Нажатие действием, а не жестом: окно закрывается посреди жеста, и Compose на компьютере иногда падает
+        // с «LayoutNode … not found in RectList» (сборки 101 и 120).
+        onNodeWithTag(miniDayTag(november10)).performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
         onNodeWithTag(miniDayTag(november10)).assertDoesNotExist()
         assertSelected(november10, "День из мини-календаря")
@@ -1074,7 +1078,7 @@ class CalendarUiTest {
         onNodeWithTag(CALENDAR_MONTH_TAG).performClick()
         onNodeWithContentDescription(CalendarFormat.PREVIOUS_MONTH).performClick()
         waitForIdle()
-        onNodeWithTag(miniDayTag(LocalDate(2026, 10, 5))).performClick()
+        onNodeWithTag(miniDayTag(LocalDate(2026, 10, 5))).performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
         onNodeWithTag(monthDayTag(LocalDate(2026, 10, 5))).assertIsSelected()
         onNodeWithText(DateFormat.monthYear(today)).assertIsDisplayed()
