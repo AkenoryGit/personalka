@@ -50,6 +50,8 @@ import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.home.HomeScreen
 import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.reminders.NotificationAccess
+import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
@@ -110,6 +112,8 @@ fun SectionScreen(
     onDiary: (String) -> Unit = {},
     followup: Followup = Followup.EMPTY,
     clientList: ClientListState = rememberClientListState(),
+    reminders: Reminders? = null,
+    notifications: NotificationAccess? = null,
 ) {
     val openClient: (String) -> Unit = { id ->
         shell.select(Section.CLIENTS)
@@ -185,7 +189,7 @@ fun SectionScreen(
         )
         Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
             when {
-                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup)
+                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }

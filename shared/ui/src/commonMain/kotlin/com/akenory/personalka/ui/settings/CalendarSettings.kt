@@ -234,7 +234,7 @@ internal fun CalendarSettingsScreen(
 
 /** Значения чипами в ряд: выбранное — текущее из настроек. */
 @Composable
-private fun Chips(options: List<Int>, selected: Int, label: (Int) -> String, tag: (Int) -> String, onPick: (Int) -> Unit) {
+internal fun Chips(options: List<Int>, selected: Int, label: (Int) -> String, tag: (Int) -> String, onPick: (Int) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         options.forEach { value ->
             ChoiceChip(
@@ -248,7 +248,7 @@ private fun Chips(options: List<Int>, selected: Int, label: (Int) -> String, tag
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     Text(
         text,
         modifier = Modifier.padding(top = Dimens.space2),

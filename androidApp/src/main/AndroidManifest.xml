@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Уведомления (шаг 2.5, ТЗ 5.19): разрешение Android 13+ и будильник, который переживает перезагрузку телефона.
+         Точный будильник не нужен: сводке в 21:03 вместо 21:00 это не мешает. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Голосовой ввод в дневнике (шаг 2.1): с Android 11 приложение видит службу распознавания речи
          и её окно, только если назовёт их здесь. -->
     <queries>
@@ -40,6 +45,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Будильник напоминаний и события, после которых его надо поставить заново. -->
+        <receiver
+            android:name="com.akenory.personalka.android.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- «Поделиться копией» и календарём .ics: файл из временной папки по ссылке с правом только на чтение. -->
         <provider

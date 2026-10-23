@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Значок уведомлений в строке состояния (шаг 2.5): монограмма «П» из ic_launcher_monochrome, крупнее — без полей адаптивной иконки. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="54"
+    android:viewportHeight="54">
+    <group
+        android:translateX="-27"
+        android:translateY="-28">
+        <path
+            android:pathData="M41,71 V39 H67 V71"
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="8" />
+        <path
+            android:pathData="M49,65 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z"
+            android:fillColor="#FFFFFFFF" />
+    </group>
+</vector>

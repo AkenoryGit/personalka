@@ -11,6 +11,12 @@ import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.prefs.devicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.ui.reminders.Reminders
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Приложение: одна база на всё время жизни процесса. Окно пересоздаётся при смене темы, база — нет.
@@ -28,4 +34,24 @@ class PersonalkaApplication : Application() {
 
     /** Резервная копия (шаг 1.15): папка — выбранная тренером через системный диалог. */
     val backup: BackupRepository by lazy { BackupRepository(database, prefs, safBackupFolder(this), System::currentTimeMillis) }
+
+    /** Напоминания (шаг 2.5): проверка по будильнику ([ReminderReceiver]) и время следующей. */
+    val reminders: Reminders by lazy { Reminders(calendar, clients, backup, prefs, System::currentTimeMillis) }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    override fun onCreate() {
+        super.onCreate()
+        AndroidReminders.createChannels(this)
+        // Пока процесс жив, будильник следует за настройками и тренировками: новая тренировка сразу получает
+        // своё «Дневник сразу», выключенная сводка снимает будильник.
+        scope.launch {
+            reminders.nextCheck().collect { AndroidReminders.schedule(this@PersonalkaApplication, it) }
+        }
+    }
+
+    /** «План на день» и разрешение не видны в базе — будильник переставляется по просьбе экрана. */
+    fun remindersChanged() {
+        scope.launch { AndroidReminders.schedule(this@PersonalkaApplication, reminders.nextCheck().first()) }
+    }
 }

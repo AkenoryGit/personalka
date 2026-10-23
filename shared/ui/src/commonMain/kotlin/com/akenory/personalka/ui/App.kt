@@ -25,6 +25,9 @@ import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.home.homeTodos
+import com.akenory.personalka.ui.reminders.AppLink
+import com.akenory.personalka.ui.reminders.NotificationAccess
+import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.screens.SectionScreen
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
@@ -39,6 +42,7 @@ import com.akenory.personalka.ui.training.DiaryScreen
 import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.TrainingFormSheet
 import com.akenory.personalka.ui.training.VoiceInput
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
@@ -54,6 +58,9 @@ import kotlinx.datetime.LocalDate
  * @param prefs настройки этого телефона: масштаб календаря.
  * @param backup резервная копия и системные окна для неё (шаг 1.15); `null` — раздела «Данные» нет (тесты).
  * @param voice голосовой ввод в полях дневника (шаг 2.1); `null` — микрофонов нет.
+ * @param reminders напоминания (шаг 2.5): «План на день» в настройках; `null` — строки нет (тесты).
+ * @param notifications уведомления телефона: строка «Включить» в настройках, когда они выключены.
+ * @param link нажатое уведомление ([AppLink]): приложение открывает нужный экран и зовёт [onLink].
  * @param backHandler «Назад» системы. Платформа передаёт свой обработчик (на Android — `BackHandler`
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
  *   «Назад» закрывает открытый экран, иначе ведёт на «Главную»; с «Главной» приложение сворачивается.
@@ -69,6 +76,10 @@ fun App(
     prefs: DevicePrefs = remember { MemoryPrefs() },
     backup: BackupTools? = null,
     voice: VoiceInput? = null,
+    reminders: Reminders? = null,
+    notifications: NotificationAccess? = null,
+    link: AppLink? = null,
+    onLink: () -> Unit = {},
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     clock: () -> Long = ::systemMillis,
 ) {
@@ -112,6 +123,33 @@ fun App(
         // Прошедшие закрываются в конце (4.1): при открытии приложения и каждую минуту.
         LaunchedEffect(calendar, hasCoach, now) {
             if (hasCoach == true) calendar.cards.closeEnded()
+        }
+        // Нажатое уведомление (5.19): сводка — «Главная», «Дневник» — первая без дневника, «Группа сразу» — её карточка.
+        LaunchedEffect(link, hasCoach) {
+            if (link == null || hasCoach != true) return@LaunchedEffect
+            form = null
+            card = null
+            when (link) {
+                AppLink.Home -> {
+                    diary = null
+                    homeCard = null
+                    shell.selectRoot(Section.HOME)
+                }
+                AppLink.FirstDiary -> {
+                    // Прошедшие закрываются раньше, чем ищется первая без дневника: приложение могло быть закрыто.
+                    calendar.cards.closeEnded()
+                    val first = calendar.diaries.missing.first().firstOrNull()?.id
+                    if (first == null) shell.selectRoot(Section.HOME)
+                    diary = first
+                }
+                is AppLink.Diary -> diary = link.id
+                is AppLink.Card -> {
+                    diary = null
+                    shell.selectRoot(Section.HOME)
+                    homeCard = link.id
+                }
+            }
+            onLink()
         }
         // Автокопия в папку (7.6): при открытии приложения и раз в час — если пора.
         LaunchedEffect(backup, hasCoach, now.date, now.hour) {
@@ -172,6 +210,8 @@ fun App(
                             onDiary = { diary = it },
                             followup = followup,
                             clientList = clientList,
+                            reminders = reminders,
+                            notifications = notifications,
                         )
                     }
                     form?.let { key ->

@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.reminders.ReminderSettingsRepository
 import com.akenory.personalka.data.restrictions.RestrictionRepository
 import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.restrictions.placed
@@ -247,6 +248,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Раздел «Календарь» в настройках (5.16): часы, шаг, горизонт серий, «Отпуск», списки запретов и дежурств. */
     val settings: CalendarSettingsRepository = CalendarSettingsRepository(db, clock, forms)
+
+    /** «Дневник и напоминания» в настройках (5.16, 5.19): дневник, автоотметка, сводка, мгновенные напоминания. */
+    val reminders: ReminderSettingsRepository = ReminderSettingsRepository(db, clock)
 
     /**
      * Тренировки, которые начинаются в дни с [from] по [to] не включая, по времени; отменённые тоже.

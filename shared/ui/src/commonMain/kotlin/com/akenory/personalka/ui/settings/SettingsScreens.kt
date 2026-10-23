@@ -52,6 +52,7 @@ import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.settings.draft
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
+import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.format.TypeFormat
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.CoachName
@@ -65,6 +66,8 @@ import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.ShadeDot
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.reminders.NotificationAccess
+import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.setup.PlaceEditor
 import com.akenory.personalka.ui.setup.TypeEditor
 import com.akenory.personalka.ui.shell.ShellState
@@ -85,6 +88,7 @@ object SettingsRoute {
     const val PROFILE = "settings/profile"
     const val PLACES = "settings/places"
     const val CALENDAR = "settings/calendar"
+    const val REMINDERS = "settings/reminders"
     const val DATA = "settings/data"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
@@ -132,6 +136,8 @@ fun SettingsScreen(
     onForm: (String) -> Unit,
     onBack: (() -> Unit)?,
     backup: BackupTools? = null,
+    reminders: Reminders? = null,
+    notifications: NotificationAccess? = null,
 ) {
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
@@ -144,6 +150,7 @@ fun SettingsScreen(
     when {
         route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces.size, activeTypes.size, shell, onBack)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
+        route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
         route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close) }
         route == SettingsRoute.PROFILE -> ProfileScreen(settings, scope, messages, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
@@ -235,6 +242,7 @@ private fun SettingsHome(
 ) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
     val prefs by remember(calendar) { calendar.settings.prefs }.collectAsState(initial = null)
+    val diary by remember(calendar) { calendar.reminders.prefs }.collectAsState(initial = null)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         TopBar("Настройки", onBack = onBack)
         ListCard(Modifier.padding(horizontal = Dimens.space4)) {
@@ -257,6 +265,13 @@ private fun SettingsHome(
                 subtitle = prefs?.let { calendarSummary(it) },
                 onClick = { shell.open(SettingsRoute.CALENDAR) },
                 modifier = Modifier.testTag(CALENDAR_ROW_TAG),
+            )
+            RowDivider()
+            NavRow(
+                title = ReminderFormat.TITLE,
+                subtitle = diary?.let { reminderSummary(it) },
+                onClick = { shell.open(SettingsRoute.REMINDERS) },
+                modifier = Modifier.testTag(REMINDERS_ROW_TAG),
             )
             if (backup != null) {
                 val data by backup.repository.state.collectAsState()
