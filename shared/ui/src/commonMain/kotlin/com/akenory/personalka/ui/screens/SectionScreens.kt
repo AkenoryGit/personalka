@@ -60,6 +60,7 @@ import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import com.akenory.personalka.ui.training.TrainingFormKey
+import com.akenory.personalka.ui.training.VoiceInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -82,7 +83,7 @@ import kotlinx.datetime.LocalDateTime
  *   (раздел «Календарь» переключается) или `null` — день открыт.
  * @param onDiary открыть дневник тренировки (шаг 2.1) — экран поверх приложения.
  * @param followup «Без записи» (шаг 2.4) для «Клиентов»; [clientList] — поиск и фильтр их списка: пункт «Главной»
- *   открывает «Без записи».
+ *   открывает «Без записи»; [voice] — голосовой ввод в заметке листа ожидания.
  */
 @Composable
 fun SectionScreen(
@@ -110,6 +111,7 @@ fun SectionScreen(
     onDiary: (String) -> Unit = {},
     followup: Followup = Followup.EMPTY,
     clientList: ClientListState = rememberClientListState(),
+    voice: VoiceInput? = null,
 ) {
     val openClient: (String) -> Unit = { id ->
         shell.select(Section.CLIENTS)
@@ -176,7 +178,7 @@ fun SectionScreen(
             onWent = { onCalendarDay(null) },
             onDiary = onDiary,
         )
-        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList)
+        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice)
         Section.SALARY -> Placeholder(
             title = "Зарплата",
             icon = PIcons.Payments,

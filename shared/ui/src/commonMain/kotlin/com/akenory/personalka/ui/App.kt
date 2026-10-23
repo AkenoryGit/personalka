@@ -113,6 +113,10 @@ fun App(
         LaunchedEffect(calendar, hasCoach, now) {
             if (hasCoach == true) calendar.cards.closeEnded()
         }
+        // Лист ожидания (4.16): разовые с прошедшим сроком закрываются, закрытые старше 90 дней удаляются — раз в день.
+        LaunchedEffect(clients, hasCoach, now.date) {
+            if (hasCoach == true) clients.waitlist.tidy()
+        }
         // Автокопия в папку (7.6): при открытии приложения и раз в час — если пора.
         LaunchedEffect(backup, hasCoach, now.date, now.hour) {
             if (hasCoach == true) backup?.repository?.autoBackup()
@@ -172,6 +176,7 @@ fun App(
                             onDiary = { diary = it },
                             followup = followup,
                             clientList = clientList,
+                            voice = voice,
                         )
                     }
                     form?.let { key ->

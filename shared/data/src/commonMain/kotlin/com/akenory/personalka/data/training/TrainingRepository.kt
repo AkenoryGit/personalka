@@ -2,6 +2,7 @@ package com.akenory.personalka.data.training
 
 import androidx.room3.withWriteTransaction
 import com.akenory.personalka.data.calendar.TrainingCopy
+import com.akenory.personalka.data.clients.closeWaitForSeries
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.GroupEntity
@@ -310,6 +311,8 @@ class TrainingRepository internal constructor(
                     created.copy(created = created.created.mapIndexed { i, t -> if (i == first) t.copy(plan = plan) else t })
                 }
                 recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty = { duty })
+                // Серия для клиента закрывает его запись «постоянно» в листе ожидания (4.16).
+                if (draft.groupId == null && !duty) db.closeWaitForSeries(draft.clientIds, now)
                 result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.undo())
             }
         }

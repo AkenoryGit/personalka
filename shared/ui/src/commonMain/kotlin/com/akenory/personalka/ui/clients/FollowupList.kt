@@ -50,12 +50,17 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.FollowupRow
+import com.akenory.personalka.data.clients.WaitRow
+import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.FollowupRules
+import com.akenory.personalka.domain.client.WaitRules
+import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.OutlineButton
@@ -88,7 +93,7 @@ const val PAUSE_NOTE_TAG = "followup-pause-note"
  * справа, пометка «после СПТ 12.10», «была пн 12.10 · СПТ ББ»; «Записать», «Написал», звонок (долгое нажатие
  * копирует номер) и меню с «Пауза до…» и «Больше не ходит». Нажатие на имя открывает карточку клиента.
  *
- * Раздел «Ждут время» сверху — с листом ожидания (шаг 2.4а).
+ * Сверху — раздел «Ждут время» (4.16, шаг 2.4а): виден всегда, пустой — «Никто не ждёт»; над ним — «+ В ожидание».
  *
  * @param onForm «Записать»: форма тренировки с этим клиентом, тем же типом и местом на ближайший такой же день
  *   недели и время, что и последнее посещение.
@@ -96,20 +101,26 @@ const val PAUSE_NOTE_TAG = "followup-pause-note"
 @Composable
 internal fun FollowupList(
     followup: Followup,
+    waiting: List<WaitRow>,
     query: String,
     scroll: LazyListState,
     clients: ClientRepository,
     messages: MessageState,
     scope: CoroutineScope,
     now: LocalDateTime,
-    onOpen: (String) -> Unit,
+    nav: ClientNav,
     onForm: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = PersonalkaTheme.colors
     val today = now.date
+    val onOpen: (String) -> Unit = nav::openFromList
     val rows = followup.rows.filter { ClientRules.matches(query, it.name) }
+    val waits = waiting.filter { ClientRules.matches(query, ClientName(it.client.lastName, it.client.firstName, it.client.middleName)) }
     var pausing by rememberSaveable { mutableStateOf<String?>(null) }
+    // «Больше не ждёт» у клиента без тренировок — вопрос «Удалить и карточку?» (4.16).
+    var erasing by rememberSaveable { mutableStateOf<String?>(null) }
+    var erasingName by rememberSaveable { mutableStateOf("") }
 
     Box(modifier) {
         LazyColumn(
@@ -118,8 +129,73 @@ internal fun FollowupList(
             contentPadding = PaddingValues(start = Dimens.space4, end = Dimens.space4, bottom = Dimens.space6),
             verticalArrangement = Arrangement.spacedBy(Dimens.space2),
         ) {
+            item(key = "wait-title") {
+                Row(Modifier.padding(top = Dimens.space3), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        WaitFormat.SECTION,
+                        modifier = Modifier.semantics { heading() },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.text,
+                    )
+                    if (waits.isNotEmpty()) {
+                        Spacer(Modifier.width(Dimens.space2))
+                        Text(waits.size.toString(), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    SecondaryButton(WaitFormat.ADD, { nav.formFromList(ClientRoute.waitNew()) }, Modifier.testTag(WAIT_ADD_TAG), icon = PIcons.Add)
+                }
+            }
+            if (waits.isEmpty()) {
+                item(key = "wait-empty") {
+                    Text(
+                        if (query.isBlank()) WaitFormat.EMPTY else "Никого не нашлось",
+                        modifier = Modifier.padding(vertical = Dimens.space3),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.textMuted,
+                    )
+                }
+            }
+            items(waits, key = { "wait-" + it.entry.id }) { row ->
+                val name = CalendarFormat.client(ClientName(row.client.lastName, row.client.firstName))
+                WaitItem(
+                    row = row,
+                    today = today,
+                    onOpen = { onOpen(row.client.id) },
+                    onBook = {
+                        onForm(
+                            TrainingFormKey.new(
+                                start = WaitRules.bookingStart(row.want, now),
+                                clientId = row.client.id,
+                                weekly = row.want.series,
+                                typeId = row.entry.typeId,
+                                locationId = row.entry.locationId,
+                                waitId = row.entry.id,
+                            ),
+                        )
+                    },
+                    onContacted = {
+                        scope.launch {
+                            val before = clients.waitlist.contacted(row.entry.id) ?: return@launch
+                            messages.showUndo(FollowupFormat.contactedMessage(name)) { scope.launch { clients.waitlist.restore(before) } }
+                        }
+                    },
+                    onEdit = { nav.formFromList(ClientRoute.waitEdit(row.entry.id)) },
+                    onClose = {
+                        scope.launch {
+                            val before = clients.waitlist.close(row.entry.id) ?: return@launch
+                            if (clients.waitlist.hasTrainings(row.client.id)) {
+                                messages.showUndo(WaitFormat.closed(name)) { scope.launch { clients.waitlist.restore(before) } }
+                            } else {
+                                erasingName = name
+                                erasing = row.client.id
+                            }
+                        }
+                    },
+                    onCopied = { messages.show(FollowupFormat.PHONE_COPIED) },
+                )
+            }
             item(key = "title") {
-                Column(Modifier.padding(top = Dimens.space3, bottom = Dimens.space1)) {
+                Column(Modifier.padding(top = Dimens.space5, bottom = Dimens.space1)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             FollowupFormat.SECTION,
@@ -179,6 +255,22 @@ internal fun FollowupList(
             }
         }
 
+        val erased = erasing
+        if (erased != null) {
+            Panel(WaitFormat.ERASE_TITLE, onDismiss = { erasing = null }) {
+                Text(WaitFormat.eraseText(erasingName), style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                PanelActions(
+                    primary = WaitFormat.ERASE,
+                    onPrimary = {
+                        erasing = null
+                        scope.launch { clients.erase(erased) }
+                    },
+                    secondary = WaitFormat.KEEP,
+                    onSecondary = { erasing = null },
+                )
+            }
+        }
+
         val paused = followup.rows.firstOrNull { it.client.id == pausing }
         if (paused != null) {
             PausePanel(
@@ -215,9 +307,6 @@ private fun FollowupItem(
     onCopied: () -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
-    val uri = LocalUriHandler.current
-    @Suppress("DEPRECATION")
-    val clipboard = LocalClipboardManager.current
     val client = row.client
     val title = row.short
     val phone = client.contactPhone
@@ -274,35 +363,7 @@ private fun FollowupItem(
             SecondaryButton(FollowupFormat.BOOK, onBook, modifier = Modifier.testTag(followupBookTag(title)))
             OutlineButton(FollowupFormat.CONTACTED, onContacted, modifier = Modifier.testTag(followupContactedTag(title)))
             Spacer(Modifier.weight(1f))
-            if (phone != null) {
-                Box(
-                    Modifier
-                        .size(Dimens.touch)
-                        .clip(CircleShape)
-                        .combinedClickable(
-                            role = Role.Button,
-                            onClick = { runCatching { uri.openUri("tel:" + phone.filter { it.isDigit() || it == '+' }) } },
-                            onLongClick = {
-                                clipboard.setText(AnnotatedString(ClientFormat.phone(phone)))
-                                onCopied()
-                            },
-                        )
-                        .semantics {
-                            contentDescription = FollowupFormat.CALL
-                            role = Role.Button
-                            customActions = listOf(
-                                CustomAccessibilityAction("Скопировать номер") {
-                                    clipboard.setText(AnnotatedString(ClientFormat.phone(phone)))
-                                    onCopied()
-                                    true
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(PIcons.Call, contentDescription = null, tint = colors.text)
-                }
-            }
+            if (phone != null) CallButton(phone, onCopied)
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.testTag(followupMenuTag(title))) {
                     Icon(PIcons.MoreVert, contentDescription = "Ещё", tint = colors.text)
@@ -360,5 +421,135 @@ private fun PausePanel(row: FollowupRow, today: LocalDate, onDismiss: () -> Unit
             },
             onDismiss = { picking = false },
         )
+    }
+}
+
+const val WAIT_ADD_TAG = "wait-add"
+fun waitRowTag(name: String) = "wait-row-$name"
+fun waitBookTag(name: String) = "wait-book-$name"
+fun waitMenuTag(name: String) = "wait-menu-$name"
+
+/**
+ * Строка «Ждут время» (5.8, макет ClNoBooking): имя и «ждёт 37 дней», «писали 02.10», что ждёт, заметка одной
+ * строкой; «Записать», звонок и «⋮» с «Написал», «Изменить» и «Больше не ждёт». «Найти время» — с экраном
+ * свободных слотов (шаг 4.3): до него кнопки нет (10.7).
+ */
+@Composable
+private fun WaitItem(
+    row: WaitRow,
+    today: LocalDate,
+    onOpen: () -> Unit,
+    onBook: () -> Unit,
+    onContacted: () -> Unit,
+    onEdit: () -> Unit,
+    onClose: () -> Unit,
+    onCopied: () -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    val client = row.client
+    val title = "${client.lastName} ${client.firstName}"
+    var menu by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(colors.surface)
+            .testTag(waitRowTag(title))
+            .padding(start = Dimens.space4, end = 4.dp, top = Dimens.space3, bottom = Dimens.space2),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(end = Dimens.space3).clickable(role = Role.Button, onClick = onOpen),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(WaitFormat.waiting(WaitRules.daysWaiting(row.since, today)), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        }
+        row.entry.contactedAt?.let { at ->
+            Text(FollowupFormat.contacted(ClubTime.today(at)), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        }
+        Spacer(Modifier.size(4.dp))
+        Text(
+            WaitFormat.want(row.want, row.typeShort, row.placeShort),
+            modifier = Modifier.padding(end = Dimens.space3),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.textMuted,
+        )
+        if (row.want.note.isNotBlank()) {
+            Text(
+                WaitFormat.note(row.want.note),
+                modifier = Modifier.padding(end = Dimens.space3),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.size(Dimens.space3))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            SecondaryButton(WaitFormat.BOOK, onBook, modifier = Modifier.testTag(waitBookTag(title)))
+            Spacer(Modifier.weight(1f))
+            client.contactPhone?.let { CallButton(it, onCopied) }
+            Box {
+                IconButton(onClick = { menu = true }, modifier = Modifier.testTag(waitMenuTag(title))) {
+                    Icon(PIcons.MoreVert, contentDescription = "Ещё", tint = colors.text)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = colors.surface) {
+                    MenuAction(WaitFormat.CONTACTED, PIcons.Check, {
+                        menu = false
+                        onContacted()
+                    })
+                    MenuAction(WaitFormat.EDIT, PIcons.Edit, {
+                        menu = false
+                        onEdit()
+                    })
+                    MenuAction(WaitFormat.CLOSE, PIcons.Close, {
+                        menu = false
+                        onClose()
+                    })
+                }
+            }
+        }
+    }
+}
+
+/** Звонок (5.8): нажатие открывает набор номера, долгое — копирует номер; для TalkBack — действие «Скопировать номер». */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CallButton(phone: String, onCopied: () -> Unit) {
+    val uri = LocalUriHandler.current
+    @Suppress("DEPRECATION")
+    val clipboard = LocalClipboardManager.current
+    val copy = {
+        clipboard.setText(AnnotatedString(ClientFormat.phone(phone)))
+        onCopied()
+    }
+    Box(
+        Modifier
+            .size(Dimens.touch)
+            .clip(CircleShape)
+            .combinedClickable(
+                role = Role.Button,
+                onClick = { runCatching { uri.openUri("tel:" + phone.filter { it.isDigit() || it == '+' }) } },
+                onLongClick = copy,
+            )
+            .semantics {
+                contentDescription = FollowupFormat.CALL
+                customActions = listOf(
+                    CustomAccessibilityAction("Скопировать номер") {
+                        copy()
+                        true
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(PIcons.Call, contentDescription = null, tint = PersonalkaTheme.colors.text)
     }
 }
