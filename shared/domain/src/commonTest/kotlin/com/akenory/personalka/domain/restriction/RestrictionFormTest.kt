@@ -67,4 +67,21 @@ class RestrictionFormTest {
         // Конец периода у разового не важен.
         assertTrue(RestrictionFormRules.problems(ok.copy(validTo = LocalDate(2026, 10, 19))).isEmpty())
     }
+
+    @Test
+    fun severalPlacesInNewRestriction() {
+        val order = listOf("bb", "db", "gym")
+        val empty = RestrictionDraft(null, LocalTime(12, 0), LocalTime(13, 0), date = tuesday)
+        // Шаг 1.13д: первое выбранное в порядке мест — основное, остальные — ещё места.
+        val two = RestrictionFormRules.togglePlace(RestrictionFormRules.togglePlace(empty, "gym", order), "db", order)
+        assertEquals("db", two.locationId)
+        assertEquals(listOf("db", "gym"), two.placeIds)
+        assertEquals(listOf("gym"), RestrictionFormRules.togglePlace(two, "db", order).placeIds)
+        val all = RestrictionFormRules.toggleAll(two, order)
+        assertEquals(order, all.placeIds)
+        // Все уже выбраны — «Все места» снимает выбор, и форма просит место.
+        val none = RestrictionFormRules.toggleAll(all, order)
+        assertNull(none.locationId)
+        assertEquals(setOf(RestrictionField.PLACE), RestrictionFormRules.problems(none).keys)
+    }
 }

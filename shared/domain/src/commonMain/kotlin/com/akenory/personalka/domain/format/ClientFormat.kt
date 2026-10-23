@@ -64,6 +64,10 @@ object ClientFormat {
     const val SCHEDULE_TITLE = "Постоянное расписание"
     const val NO_SCHEDULE = "Постоянного расписания нет"
     const val ADD_TRAINING = "Тренировка"
+
+    /** Заметка «только для себя» (5.9): подпись поля и строки «Инфо», подсказка 10.3. */
+    const val NOTE = "Заметка · видна только вам"
+    const val NOTE_HINT = "Без диагнозов и сведений о здоровье"
     const val ADD_SERIES = "Серия"
     const val CHANGE_FROM = "Изменить с даты…"
     const val END_SERIES = "Завершить"

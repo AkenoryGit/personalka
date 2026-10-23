@@ -33,6 +33,8 @@ data class ClientDraft(
     val contactPhone: String = "",
     /** Ссылка на фото и видео: Яндекс Диск, Облако Mail.ru. */
     val mediaUrl: String = "",
+    /** Заметка «только для себя» (5.9): видна только тренеру, в кабинет не передаётся (6.2). */
+    val privateNote: String = "",
 ) {
     val name: ClientName get() = ClientName(lastName, firstName, middleName)
 }

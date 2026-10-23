@@ -61,6 +61,7 @@ const val CLIENT_BIRTH_TAG = "client-birth"
 const val CLIENT_CONTACT_TAG = "client-contact"
 const val CLIENT_PHONE_TAG = "client-phone"
 const val CLIENT_MEDIA_TAG = "client-media"
+const val CLIENT_NOTE_TAG = "client-note"
 
 /**
  * Новый клиент и «Изменить» (5.8, макет ClNew): фамилия и имя обязательны, остальное — по желанию. Пол
@@ -94,6 +95,7 @@ fun ClientEditor(
     var contact by rememberSaveable { mutableStateOf(initial.contactName) }
     var phone by rememberSaveable { mutableStateOf(initial.contactPhone.let { if (it.isEmpty()) it else ClientFormat.phone(it) }) }
     var media by rememberSaveable { mutableStateOf(initial.mediaUrl) }
+    var note by rememberSaveable { mutableStateOf(initial.privateNote) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var similarId by rememberSaveable { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -101,7 +103,7 @@ fun ClientEditor(
     val guess = ClientRules.guessSex(middle, last)
     val sex = if (sexChosen) chosenSex else guess?.sex
     val birthDate = DateFormat.parseFull(birth)
-    val draft = ClientDraft(last, first, middle, sex, birthDate, adult, contact, phone, media)
+    val draft = ClientDraft(last, first, middle, sex, birthDate, adult, contact, phone, media, note)
     val problems = ClientRules.problems(draft, birth, today)
     val shown = if (showErrors) problems else emptyMap()
 
@@ -206,8 +208,17 @@ fun ClientEditor(
                     value = media,
                     onValueChange = { media = it },
                     hint = "Папка на Яндекс Диске или в Облаке Mail.ru",
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                     tag = CLIENT_MEDIA_TAG,
+                )
+                Field(
+                    label = ClientFormat.NOTE,
+                    value = note,
+                    onValueChange = { note = it },
+                    hint = ClientFormat.NOTE_HINT,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    tag = CLIENT_NOTE_TAG,
+                    singleLine = false,
                 )
                 Spacer(Modifier.height(Dimens.space4))
             }

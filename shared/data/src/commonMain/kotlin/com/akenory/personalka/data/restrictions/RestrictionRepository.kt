@@ -11,8 +11,11 @@ import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
 import com.akenory.personalka.domain.restriction.RestrictionFormRules
 
-/** «Отменить» после записи запрета (5.20): каким запрет был до неё; `null` в [before] — его не было. */
-class RestrictionUndo internal constructor(internal val id: String, internal val before: ScheduleBlockEntity?)
+/**
+ * «Отменить» после записи запрета (5.20): каким был каждый запрет до неё (id → запрет); `null` — его не было.
+ * Новый запрет на несколько мест — несколько записей (шаг 1.13д).
+ */
+class RestrictionUndo internal constructor(internal val before: Map<String, ScheduleBlockEntity?>)
 
 /** Что вышло из сохранения формы запрета. */
 sealed interface RestrictionSaveResult {
@@ -37,7 +40,10 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
     /** Свой запрет для формы изменения; `null` — его нет или он клуба. */
     suspend fun stored(id: String): RestrictionDraft? = own(id)?.let { RestrictionFormRules.draftOf(it.toRestriction()) }
 
-    /** Новый запрет ([id] пусто) или изменение своего; пропущенные дни прежнего остаются. */
+    /**
+     * Новый запрет ([id] пусто) или изменение своего; пропущенные дни прежнего остаются. Новый на несколько мест
+     * ([RestrictionDraft.placeIds]) — по запрету на каждое место, одной записью и одним «Отменить».
+     */
     suspend fun save(id: String?, draft: RestrictionDraft): RestrictionSaveResult {
         val problems = RestrictionFormRules.problems(draft)
         if (problems.isNotEmpty()) return RestrictionSaveResult.Invalid(problems)
@@ -46,26 +52,32 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val before = id?.let { own(it) ?: return@withWriteTransaction }
-            val newId = before?.id ?: Ids.newId(now)
-            val r = RestrictionFormRules.toRestriction(newId, draft, before?.skipDates?.toSet().orEmpty())
-            val entity = ScheduleBlockEntity(
-                id = newId,
-                sync = before?.sync?.touched(now) ?: SyncFields.new(coach.id, now),
-                scope = Scope.COACH,
-                locationId = r.locationId,
-                reason = r.reason,
-                weekdays = r.weekdays,
-                date = r.date,
-                startTime = r.startTime,
-                endTime = r.endTime,
-                validFrom = r.validFrom,
-                validTo = r.validTo,
-                skipDates = r.skipDates.sorted(),
-            )
-            schedule.upsertBlock(entity)
+            // Изменение — одно место; новый — каждое выбранное.
+            val places = if (before != null) listOfNotNull(draft.locationId) else draft.placeIds
+            val undo = mutableMapOf<String, ScheduleBlockEntity?>()
+            places.forEachIndexed { index, placeId ->
+                val newId = before?.id ?: Ids.newId(now + index)
+                val r = RestrictionFormRules.toRestriction(newId, draft.copy(locationId = placeId), before?.skipDates?.toSet().orEmpty())
+                val entity = ScheduleBlockEntity(
+                    id = newId,
+                    sync = before?.sync?.touched(now) ?: SyncFields.new(coach.id, now),
+                    scope = Scope.COACH,
+                    locationId = r.locationId,
+                    reason = r.reason,
+                    weekdays = r.weekdays,
+                    date = r.date,
+                    startTime = r.startTime,
+                    endTime = r.endTime,
+                    validFrom = r.validFrom,
+                    validTo = r.validTo,
+                    skipDates = r.skipDates.sorted(),
+                )
+                schedule.upsertBlock(entity)
+                undo[newId] = before
+            }
             db.recalcRestrictionFlags(now)
-            val message = if (before == null) TrainingFormat.RESTRICTION_CREATED else TrainingFormat.RESTRICTION_SAVED
-            result = RestrictionSaveResult.Saved(message, RestrictionUndo(newId, before))
+            val message = if (before == null) TrainingFormat.restrictionsCreated(places.size) else TrainingFormat.RESTRICTION_SAVED
+            result = RestrictionSaveResult.Saved(message, RestrictionUndo(undo))
         }
         return result
     }
@@ -78,24 +90,25 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
             val before = own(id) ?: return@withWriteTransaction
             schedule.upsertBlock(before.copy(sync = before.sync.deleted(now)))
             db.recalcRestrictionFlags(now)
-            undo = RestrictionUndo(id, before)
+            undo = RestrictionUndo(mapOf(id to before))
         }
         return undo
     }
 
-    /** «Отменить»: запрет как был до записи — новый удаляется, изменённый и удалённый возвращаются. */
+    /** «Отменить»: запреты как были до записи — новые удаляются, изменённый и удалённый возвращаются. */
     suspend fun undo(undo: RestrictionUndo) {
         val now = clock()
         db.withWriteTransaction {
-            val current = schedule.block(undo.id) ?: return@withWriteTransaction
-            val before = undo.before
-            val restored = if (before == null) {
-                current.copy(sync = current.sync.deleted(now))
-            } else {
-                // Запись — новой версией: для синхронизации это ещё одно изменение.
-                before.copy(sync = current.sync.touched(now).copy(deletedAt = before.sync.deletedAt))
+            undo.before.forEach { (id, before) ->
+                val current = schedule.block(id) ?: return@forEach
+                val restored = if (before == null) {
+                    current.copy(sync = current.sync.deleted(now))
+                } else {
+                    // Запись — новой версией: для синхронизации это ещё одно изменение.
+                    before.copy(sync = current.sync.touched(now).copy(deletedAt = before.sync.deletedAt))
+                }
+                schedule.upsertBlock(restored)
             }
-            schedule.upsertBlock(restored)
             db.recalcRestrictionFlags(now)
         }
     }

@@ -395,6 +395,28 @@ class TrainingFormUiTest {
     }
 
     @Test
+    fun restrictionOnAllPlacesAtOnce() = runComposeUiTest {
+        openCalendar()
+        holdDay(150f, yOf("12:00") + 0.5f)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        mode(TrainingFormat.MODE_RESTRICTION)
+        awaitNode(hasText(TrainingFormat.NEW_RESTRICTION_TITLE))
+        // Место не выбрано — сохранить нельзя.
+        save()
+        onNodeWithText("Выберите место").assertIsDisplayed()
+        // Шаг 1.13д: «Все места» — по запрету на каждое место, одно «Отменить».
+        tap(FORM_ALL_PLACES_TAG)
+        onNodeWithTag(FORM_REASON_TAG).performScrollTo().performTextInput("Свои дела")
+        save()
+        awaitNode(hasText(s("Запреты созданы в 3_местах")))
+        val blocks = runBlocking { db.scheduleDao().blocks() }
+        assertEquals(3, blocks.map { it.locationId }.toSet().size)
+        assertTrue(blocks.all { it.reason == "Свои дела" && it.startTime == LocalTime(12, 0) })
+        onNodeWithText("Отменить").performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.scheduleDao().blocks().isEmpty() } }
+    }
+
+    @Test
     fun dutySeriesFromSwitchAndEditFromZone() = runComposeUiTest {
         openCalendar()
         holdDay(150f, yOf("18:00") + 0.5f)

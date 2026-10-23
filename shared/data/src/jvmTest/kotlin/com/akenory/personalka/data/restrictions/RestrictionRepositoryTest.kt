@@ -155,4 +155,23 @@ class RestrictionRepositoryTest {
         assertEquals(setOf(RestrictionField.TIME, RestrictionField.WEEKDAYS), assertIs<RestrictionSaveResult.Invalid>(result).problems.keys)
         assertEquals(emptyList(), db.scheduleDao().blocks())
     }
+
+    @Test
+    fun newRestrictionOnSeveralPlacesAndOneUndo(): Unit = runBlocking {
+        val later = training(LocalDate(2026, 10, 22), 17, 15)
+        val places = listOf(placeId("ББ"), placeId("ДБ"), placeId("Зал"))
+        // Шаг 1.13д: по запрету на каждое место, флаг пересчитан у тренировки в ДБ.
+        val draft = group().copy(locationId = places[0], otherPlaces = setOf(places[1], places[2]), reason = "Свои дела")
+        val saved = assertIs<RestrictionSaveResult.Saved>(restrictions.save(null, draft))
+        assertEquals("Запреты созданы в 3\u00A0местах", saved.message)
+        assertEquals(places.toSet(), db.scheduleDao().blocks().map { it.locationId }.toSet())
+        assertTrue(flag(later))
+        // Каждый меняется сам — в форме изменения одно место.
+        val one = db.scheduleDao().blocks().first()
+        assertEquals(emptySet(), assertNotNull(restrictions.stored(one.id)).otherPlaces)
+
+        restrictions.undo(saved.undo)
+        assertEquals(emptyList(), db.scheduleDao().blocks())
+        assertFalse(flag(later))
+    }
 }

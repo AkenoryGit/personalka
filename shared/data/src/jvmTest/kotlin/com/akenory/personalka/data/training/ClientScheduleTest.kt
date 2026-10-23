@@ -27,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Расписание в карточке клиента (шаг 1.13б, ТЗ 5.9, 4.4). «Сейчас» — вт 20.10.2026 15:40. Имена придуманы. */
 class ClientScheduleTest {
@@ -161,5 +162,50 @@ class ClientScheduleTest {
         assertEquals(before.map { it.id }, all().map { it.id })
         assertNull(forms.seriesOf(orlova).first().single().validTo)
         assertNull(db.clientDao().client(orlova)!!.pendingPlan)
+    }
+
+    @Test
+    fun archiveEndsSeriesAndUndoReturnsIt(): Unit = runBlocking {
+        val orlova = clients.create(ClientDraft("Орлова", "Ксения"))
+        val id = series(orlova, at(day(-14), 13, 30))
+        setPlan(at(day(2), 13, 30), "Старт с тумбочки")
+        val before = all()
+
+        // Шаг 1.13д: в архиве серия заканчивается сегодня, будущие тренировки удаляются, план — в отложенный.
+        val undo = clients.archive(orlova)!!
+        assertEquals(tuesday, db.scheduleDao().series(id)!!.validTo)
+        assertEquals(before.filter { it.start < at(day(1), 0) }.map { it.id }, all().map { it.id })
+        assertEquals("Старт с тумбочки", db.clientDao().client(orlova)!!.pendingPlan)
+        // Продление закончившуюся серию не вернёт.
+        assertEquals(0, forms.extendSeries())
+
+        clients.undoArchive(undo)
+        assertEquals(before.map { it.id to it.plan }.toSet(), all().map { it.id to it.plan }.toSet())
+        assertNull(db.scheduleDao().series(id)!!.validTo)
+        assertNull(db.clientDao().client(orlova)!!.pendingPlan)
+    }
+
+    @Test
+    fun archiveInSplitKeepsSeriesWithSecond(): Unit = runBlocking {
+        val orlova = clients.create(ClientDraft("Орлова", "Ксения"))
+        val belov = clients.create(ClientDraft("Белов", "Артём"))
+        val split = typeId("Сплит")
+        assertIs<SaveResult.Saved>(forms.create(TrainingDraft(at(day(2), 13, 30), split, listOf(orlova, belov), null, placeId("ББ"), 50, Repeat(tueThu))))
+
+        clients.archive(orlova)
+        // Белов занимается дальше по новой серии, Орловой в будущих тренировках нет.
+        assertEquals(listOf(belov), db.scheduleDao().seriesOfClient(belov).filter { it.validTo == null }.map { s -> db.scheduleDao().seriesClients(s.id).single().clientId })
+        val future = all().filter { it.start > at(tuesday, 15, 40) }
+        assertTrue(future.isNotEmpty())
+        assertTrue(future.all { t -> db.trainingDao().participationsOf(t.id).map { it.clientId } == listOf(belov) })
+    }
+
+    @Test
+    fun privateNoteSavedAndShownInForm(): Unit = runBlocking {
+        val id = clients.create(ClientDraft("Орлова", "Ксения", privateNote = "  Плавала в другом городе 2 года "))
+        val stored = db.clientDao().client(id)!!
+        assertEquals("Плавала в другом городе 2 года", stored.privateNote)
+        clients.update(id, ClientDraft("Орлова", "Ксения", privateNote = ""))
+        assertNull(db.clientDao().client(id)!!.privateNote)
     }
 }

@@ -22,7 +22,15 @@ data class RestrictionDraft(
     val date: LocalDate,
     /** Последний день повторения; `null` — бессрочно. */
     val validTo: LocalDate? = null,
-)
+    /**
+     * Новый запрет сразу на несколько мест (шаг 1.13д): места кроме [locationId]. Сохраняется по запрету на каждое
+     * место — дальше каждый меняется и удаляется сам. У изменения запрета всегда пусто.
+     */
+    val otherPlaces: Set<String> = emptySet(),
+) {
+    /** Все выбранные места: [locationId] первым. */
+    val placeIds: List<String> get() = listOfNotNull(locationId) + otherPlaces.filter { it != locationId }
+}
 
 /** Поля формы запрета, под которыми показывается ошибка. */
 enum class RestrictionField { PLACE, TIME, WEEKDAYS, PERIOD }
@@ -49,6 +57,24 @@ object RestrictionFormRules {
         !on -> draft.copy(weekly = false)
         draft.weekdays.isEmpty() -> draft.copy(weekly = true, weekdays = setOf(draft.date.dayOfWeek))
         else -> draft.copy(weekly = true)
+    }
+
+    /**
+     * Нажатие на чип места нового запрета: место добавляется или убирается; первым ([RestrictionDraft.locationId])
+     * становится первое выбранное в порядке мест [order].
+     */
+    fun togglePlace(draft: RestrictionDraft, id: String, order: List<String>): RestrictionDraft {
+        val now = draft.placeIds.toSet()
+        return withPlaces(draft, if (id in now) now - id else now + id, order)
+    }
+
+    /** «Все места»: выбрать все; если уже выбраны все — снять выбор. */
+    fun toggleAll(draft: RestrictionDraft, order: List<String>): RestrictionDraft =
+        withPlaces(draft, if (draft.placeIds.toSet().containsAll(order)) emptySet() else order.toSet(), order)
+
+    private fun withPlaces(draft: RestrictionDraft, ids: Set<String>, order: List<String>): RestrictionDraft {
+        val sorted = order.filter { it in ids }
+        return draft.copy(locationId = sorted.firstOrNull(), otherPlaces = sorted.drop(1).toSet())
     }
 
     /** Запрет для правил и записи; [skipDates] — пропущенные дни прежнего запрета остаются. */

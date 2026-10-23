@@ -52,6 +52,7 @@ import kotlinx.datetime.LocalTime
 
 const val FORM_END_TAG = "form-end"
 const val FORM_REASON_TAG = "form-reason"
+const val FORM_ALL_PLACES_TAG = "form-all-places"
 const val FORM_PERIOD_FROM_TAG = "form-period-from"
 
 /**
@@ -252,7 +253,7 @@ internal fun RestrictionFields(
     var showErrors by rememberSaveable(key) { mutableStateOf(false) }
     var panel by rememberSaveable(key) { mutableStateOf<String?>(null) }
 
-    // Новый — с времени нажатия на час, в первом месте; изменение — как есть.
+    // Новый — с времени нажатия на час, место не выбрано: мест может быть несколько (шаг 1.13д); изменение — как есть.
     LaunchedEffect(key, data != null, stored) {
         val loaded = data ?: return@LaunchedEffect
         if (draft != null) return@LaunchedEffect
@@ -260,7 +261,7 @@ internal fun RestrictionFields(
             stored ?: return@LaunchedEffect
         } else {
             val start = TrainingFormKey.start(key) ?: forms.suggestStart(RestrictionFormRules.DEFAULT_MINUTES)
-            RestrictionFormRules.new(start, loaded.places.firstOrNull()?.id)
+            RestrictionFormRules.new(start, null)
         }
     }
 
@@ -352,7 +353,19 @@ internal fun RestrictionFields(
     ) {
         val form = data
         if (current == null || form == null) return@FormFrame
-        PlaceChips(form.places, current.locationId, problems[RestrictionField.PLACE]) { id -> update { it.copy(locationId = id) } }
+        if (restrictionId == null) {
+            // Новый запрет — сразу на несколько мест (шаг 1.13д): по запрету на каждое.
+            val order = form.places.map { it.id }
+            ManyPlaceChips(
+                places = form.places,
+                selected = current.placeIds.toSet(),
+                error = problems[RestrictionField.PLACE],
+                onToggle = { id -> update { RestrictionFormRules.togglePlace(it, id, order) } },
+                onAll = { update { RestrictionFormRules.toggleAll(it, order) } },
+            )
+        } else {
+            PlaceChips(form.places, current.locationId, problems[RestrictionField.PLACE]) { id -> update { it.copy(locationId = id) } }
+        }
 
         SectionLabel("Время")
         TimeRow(
@@ -439,6 +452,39 @@ private fun PlaceChips(places: List<FormPlace>, selected: String?, error: String
     error?.let { ErrorText(it) }
 }
 
+/** Места нового запрета: несколько чипов сразу и «Все места», когда мест больше одного. */
+@Composable
+private fun ManyPlaceChips(
+    places: List<FormPlace>,
+    selected: Set<String>,
+    error: String?,
+    onToggle: (String) -> Unit,
+    onAll: () -> Unit,
+) {
+    SectionLabel("Место")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        if (places.size > 1) {
+            ChoiceChip(
+                text = TrainingFormat.ALL_PLACES,
+                selected = places.all { it.id in selected },
+                onClick = onAll,
+                modifier = Modifier.testTag(FORM_ALL_PLACES_TAG),
+                toggle = true,
+            )
+        }
+        places.forEach { place ->
+            ChoiceChip(
+                text = place.shortName,
+                selected = place.id in selected,
+                onClick = { onToggle(place.id) },
+                modifier = Modifier.testTag(formPlaceTag(place.id)),
+                toggle = true,
+            )
+        }
+    }
+    error?.let { ErrorText(it) }
+}
+
 /** Время «с 17:00 — до 18:00»: два поля, каждое открывает циферблат; ошибка — под обоими. */
 @Composable
 private fun TimeRow(start: LocalTime, end: LocalTime, error: String?, onStart: () -> Unit, onEnd: () -> Unit) {
@@ -479,6 +525,7 @@ private val RestrictionSaver: Saver<RestrictionDraft?, Any> = Saver(
                 d.weekdays.joinToString(",") { it.name },
                 d.date.toString(),
                 d.validTo?.toString().orEmpty(),
+                d.otherPlaces.joinToString(","),
             )
         }
     },
@@ -497,6 +544,7 @@ private val RestrictionSaver: Saver<RestrictionDraft?, Any> = Saver(
                 weekdays = v[5].split(',').filter { it.isNotEmpty() }.map(DayOfWeek::valueOf).toSet(),
                 date = LocalDate.parse(v[6]),
                 validTo = v[7].ifEmpty { null }?.let(LocalDate::parse),
+                otherPlaces = v.getOrElse(8) { "" }.split(',').filter { it.isNotEmpty() }.toSet(),
             )
         }
     },

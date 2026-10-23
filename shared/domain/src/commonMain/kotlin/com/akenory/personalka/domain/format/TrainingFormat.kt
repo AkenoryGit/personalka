@@ -57,6 +57,13 @@ object TrainingFormat {
 
     /** Сообщения после записи запрета (5.20). */
     const val RESTRICTION_CREATED = "Запрет создан"
+
+    /** «Все места» среди чипов нового запрета (шаг 1.13д). */
+    const val ALL_PLACES = "Все места"
+
+    /** Новый запрет сразу в нескольких местах: «Запреты созданы в 3 местах». */
+    fun restrictionsCreated(places: Int): String =
+        if (places == 1) RESTRICTION_CREATED else "Запреты созданы в " + RuText.count(places, "месте", "местах", "местах")
     const val RESTRICTION_SAVED = "Запрет сохранён"
     const val RESTRICTION_DELETED = "Запрет удалён"
 

@@ -196,8 +196,8 @@ class ClientScheduleUiTest {
         awaitNode(hasTestTag(clientRowTag("Орлова Ксения")))
         onNodeWithTag(clientRowTag("Орлова Ксения")).performClick()
         openSchedule()
-        // Серии при архиве пока не заканчиваются (4.4) — это ещё не сделано, см. PROGRESS.md.
-        awaitNode(hasText("ПТ · ББ · с 06.10.2026"))
+        // Серия клиента в архиве заканчивается сегодня (4.4, шаг 1.13д).
+        awaitNode(hasText("ПТ · ББ · 06.10–20.10.2026"))
         onNodeWithTag(CARD_ADD_TRAINING_TAG).assertDoesNotExist()
         onNodeWithTag(CARD_ADD_SERIES_TAG).assertDoesNotExist()
     }

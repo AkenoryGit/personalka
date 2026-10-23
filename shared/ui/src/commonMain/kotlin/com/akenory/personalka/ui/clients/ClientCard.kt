@@ -97,6 +97,7 @@ const val ADD_RELATIVE_TAG = "add-relative"
 const val DELETE_SURNAME_TAG = "delete-surname"
 fun relativeRowTag(name: String) = "relative-$name"
 const val CARD_ADD_TRAINING_TAG = "card-add-training"
+const val CARD_NOTE_TAG = "card-note"
 const val CARD_ADD_SERIES_TAG = "card-add-series"
 const val END_DAY_TAG = "end-day"
 fun cardTabTag(tab: CardTab) = "card-tab-${tab.name}"
@@ -746,7 +747,30 @@ private fun InfoTab(
                 RowDivider()
                 InfoLine("Имя в 1С", name1c)
             }
+            val note = client.privateNote
+            if (note != null) {
+                RowDivider()
+                NoteLine(note)
+            }
         }
+    }
+}
+
+/** Заметка «только для себя» (5.9): замок, подпись «Заметка · видна только вам», текст целиком. */
+@Composable
+private fun NoteLine(text: String) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = Dimens.row).testTag(CARD_NOTE_TAG)
+            .padding(horizontal = Dimens.space4, vertical = Dimens.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(ClientFormat.NOTE, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+            Text(text, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+        }
+        Spacer(Modifier.width(Dimens.space2))
+        Icon(PIcons.Lock, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 

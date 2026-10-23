@@ -12,6 +12,13 @@ import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.syncGroupTrainings
+import com.akenory.personalka.data.groups.toSeriesTraining
+import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.series.Recorder
+import com.akenory.personalka.data.series.Undo
+import com.akenory.personalka.data.series.restore
+import com.akenory.personalka.data.series.toSeries
+import com.akenory.personalka.data.series.write
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ClientDraft
@@ -27,7 +34,9 @@ import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.RelationKind
 import com.akenory.personalka.domain.model.Sex
+import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.series.SeriesRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.datetime.DateTimeUnit
@@ -35,8 +44,11 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.minus
 
-/** Что вернуть по «Отменить» после «В архив»: места в группах, какими они были до архива. */
-data class ArchiveUndo(val clientId: String, val memberships: List<GroupMemberEntity>)
+/**
+ * Что вернуть по «Отменить» после «В архив»: места в группах, какими они были до архива, и его серии
+ * с тренировками ([series], шаг 1.13д).
+ */
+class ArchiveUndo internal constructor(val clientId: String, val memberships: List<GroupMemberEntity>, internal val series: Undo?)
 
 /** Строка списка клиентов (5.8): клиент, постоянное расписание и ближайшая тренировка. */
 data class ClientRow(val client: ClientEntity, val schedule: List<ScheduleLine>, val next: LocalDateTime?)
@@ -148,7 +160,7 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         return client.id
     }
 
-    /** Правка из «Изменить». Поля, которых нет в форме (заметка, 1С, кабинет), не трогаются. */
+    /** Правка из «Изменить». Поля, которых нет в форме (1С, кабинет), не трогаются. */
     suspend fun update(id: String, draft: ClientDraft) {
         val client = clients.client(id) ?: return
         val now = clock()
@@ -157,10 +169,10 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     /**
      * «В архив» (5.9): клиент остаётся в связях и истории, из групп уходит через состав (4.4) — последний день
-     * в группе вчерашний, в будущих тренировках групп его больше не ждут; прошлое не меняется. Возвращает то,
-     * что вернёт «Отменить» ([undoArchive]); клиента нет или он уже в архиве — `null`.
-     *
-     * Серии архивного клиента заканчиваются — это шаг 1.13, где серии пишутся в базу (4.4).
+     * в группе вчерашний, в будущих тренировках групп его больше не ждут; прошлое не меняется. Его серии ПТ, сплита
+     * и СПТ заканчиваются сегодня, будущие тренировки удаляются (и сегодняшние, если ещё не начались), их планы —
+     * в отложенный план клиента; в сплите с двумя клиентами серия идёт дальше со вторым (4.4, шаг 1.13д).
+     * Возвращает то, что вернёт «Отменить» ([undoArchive]); клиента нет или он уже в архиве — `null`.
      */
     suspend fun archive(id: String): ArchiveUndo? {
         val now = clock()
@@ -184,7 +196,7 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
                 }
                 db.syncGroupTrainings(groupId, before, now)
             }
-            undo = ArchiveUndo(id, changed)
+            undo = ArchiveUndo(id, changed, endSeriesOf(id, now))
         }
         return undo
     }
@@ -195,6 +207,7 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         db.withWriteTransaction {
             val client = clients.client(undo.clientId) ?: return@withWriteTransaction
             clients.upsertClient(client.copy(sync = client.sync.touched(now), status = ClientStatus.ACTIVE))
+            undo.series?.let { db.restore(it, now) }
             undo.memberships.groupBy { it.groupId }.forEach { (groupId, old) ->
                 val before = clients.membersOf(groupId).map { it.member() }
                 old.forEach { m ->
@@ -432,6 +445,26 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         if (client.sex == null) clients.upsertClient(client.copy(sex = sex, sync = client.sync.touched(now)))
     }
 
+    /** Серии клиента в архиве (4.4): по серии за раз — отложенные планы идут ему. `null` — серий не было. */
+    private suspend fun endSeriesOf(clientId: String, now: Long): Undo? {
+        val clubNow = ClubTime.now(now)
+        val coach = coaches.currentCoach() ?: return null
+        val mine = schedule.seriesOfClient(clientId).filter { it.groupId == null && (it.validTo == null || it.validTo >= clubNow.date) }
+        if (mine.isEmpty()) return null
+        val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
+        val restrictions = schedule.blocks().map { it.toRestriction() }
+        val recorder = Recorder(db, now)
+        mine.forEach { entity ->
+            val people = schedule.seriesClients(entity.id).sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }
+            val series = entity.toSeries(people)
+            val own = trainings.trainingsOfSeries(entity.id).map { it.toSeriesTraining(trainings.participationsOf(it.id)) }
+            val changes = SeriesRules.archiveClient(clientId, listOf(series), own, clubNow) { Ids.newId(now) }
+            if (changes.isEmpty) return@forEach
+            recorder.write(db, changes, coach.id, now, restrictions, series.pattern.copy(clientIds = listOf(clientId))) { it in duties }
+        }
+        return recorder.undo()
+    }
+
     private suspend fun coachId(): String = coaches.currentCoach()?.id ?: error("Клиенты появляются после первого запуска")
 
     private fun newClient(coachId: String, now: Long, draft: ClientDraft): ClientEntity {
@@ -455,6 +488,7 @@ fun ClientEntity.draft(): ClientDraft = ClientDraft(
     contactName = contactName.orEmpty(),
     contactPhone = contactPhone.orEmpty(),
     mediaUrl = mediaUrl.orEmpty(),
+    privateNote = privateNote.orEmpty(),
 )
 
 /** Взрослый ли сегодня: с датой рождения — по возрасту, иначе как отмечено (3.5). */
@@ -470,6 +504,7 @@ private fun ClientDraft.applyTo(client: ClientEntity, today: LocalDate): ClientE
     contactName = contactName.trim().ifEmpty { null },
     contactPhone = ClientRules.normalizePhone(contactPhone).ifEmpty { null },
     mediaUrl = mediaUrl.trim().ifEmpty { null },
+    privateNote = privateNote.trim().ifEmpty { null },
 )
 
 /** Оставшаяся карточка после объединения: её поля главнее, пустые берутся из второй, заметки — обе. */
