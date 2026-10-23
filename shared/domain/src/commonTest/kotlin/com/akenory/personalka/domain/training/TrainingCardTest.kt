@@ -47,6 +47,28 @@ class TrainingCardTest {
     }
 
     @Test
+    fun guestOnce() {
+        // «Добавить на раз» (шаг 1.14а): только в группу и не в отменённую; с начала минус 15 минут — сразу «пришёл».
+        val group = pt(kind = TrainingKind.GROUP, clients = listOf("a", "b"))
+        assertTrue(TrainingCardRules.canAddGuest(group))
+        assertFalse(TrainingCardRules.canAddGuest(pt(kind = TrainingKind.SPLIT, clients = listOf("a", "b"))))
+        assertFalse(TrainingCardRules.canAddGuest(pt(TrainingStatus.CANCELLED, TrainingKind.GROUP)))
+        assertTrue(TrainingCardRules.canAddGuest(pt(TrainingStatus.DONE, TrainingKind.GROUP)))
+        assertEquals(ParticipationStatus.EXPECTED, TrainingCardRules.guestStatus(group, at(16, 44)))
+        assertEquals(ParticipationStatus.ATTENDED, TrainingCardRules.guestStatus(group, at(16, 45)))
+        assertEquals(ParticipationStatus.ATTENDED, TrainingCardRules.guestStatus(pt(TrainingStatus.DONE, TrainingKind.GROUP), at(18)))
+        // «Убрать» — только гостя и не в отменённой.
+        assertTrue(TrainingCardRules.canRemoveGuest(group, guest = true))
+        assertFalse(TrainingCardRules.canRemoveGuest(group, guest = false))
+        assertFalse(TrainingCardRules.canRemoveGuest(pt(TrainingStatus.CANCELLED, TrainingKind.GROUP), guest = true))
+
+        assertEquals("Состав · 12", TrainingCardFormat.members(12))
+        assertEquals("Состав · 12 · 1 на раз", TrainingCardFormat.members(12, 1))
+        assertEquals("Новый клиент…", TrainingCardFormat.newClient(" "))
+        assertEquals("Новый клиент: Зуева…", TrainingCardFormat.newClient("Зуева "))
+    }
+
+    @Test
     fun clientRowsAndGroupToggle() {
         val split = pt(kind = TrainingKind.SPLIT, clients = listOf("a", "b"))
         assertTrue(TrainingCardRules.canCancelClient(split, "a"))

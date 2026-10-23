@@ -85,6 +85,21 @@ object TrainingCardRules {
     fun groupTotal(training: TrainingState): Int =
         training.participants.count { it.status == ParticipationStatus.EXPECTED || it.came || noShow(training, it) }
 
+    /** «Добавить на раз» (5.4, 5.10): в тренировку группы, пока она не отменена; в проведённую — забытого ребёнка. */
+    fun canAddGuest(training: TrainingState): Boolean =
+        training.kind == TrainingKind.GROUP && training.status != TrainingStatus.CANCELLED
+
+    /**
+     * С каким статусом приходит ребёнок «на раз»: когда отмечать уже можно — сразу «пришёл» (его добавляют, потому
+     * что он стоит у бортика; в проведённую — потому что был), раньше — ждём, как остальных.
+     */
+    fun guestStatus(training: TrainingState, now: LocalDateTime): ParticipationStatus =
+        if (canToggle(training, now)) ParticipationStatus.ATTENDED else ParticipationStatus.EXPECTED
+
+    /** «Убрать» в строке ребёнка «на раз» — добавили по ошибке; у отменённой группы ничего не меняется. */
+    fun canRemoveGuest(training: TrainingState, guest: Boolean): Boolean =
+        guest && training.kind == TrainingKind.GROUP && training.status != TrainingStatus.CANCELLED
+
     /** У отменённого клиента в строке — «Вернуть» его одного; отменённую целиком возвращает общая «Вернуть». */
     fun canReturnClient(training: TrainingState, clientId: String): Boolean {
         val p = training.participant(clientId)

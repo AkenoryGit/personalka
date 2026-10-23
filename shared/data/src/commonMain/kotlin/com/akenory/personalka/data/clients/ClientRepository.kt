@@ -467,10 +467,7 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     private suspend fun coachId(): String = coaches.currentCoach()?.id ?: error("Клиенты появляются после первого запуска")
 
-    private fun newClient(coachId: String, now: Long, draft: ClientDraft): ClientEntity {
-        val blank = ClientEntity(id = Ids.newId(now), sync = SyncFields.new(coachId, now), lastName = "", firstName = "")
-        return draft.applyTo(blank, ClubTime.today(now))
-    }
+    private fun newClient(coachId: String, now: Long, draft: ClientDraft): ClientEntity = newClientEntity(coachId, now, draft)
 
     private companion object {
         const val DEFAULT_UPCOMING = 4
@@ -493,6 +490,12 @@ fun ClientEntity.draft(): ClientDraft = ClientDraft(
 
 /** Взрослый ли сегодня: с датой рождения — по возрасту, иначе как отмечено (3.5). */
 fun ClientEntity.adultOn(today: LocalDate): Boolean = ClientRules.isAdult(birthDate, isAdult, today)
+
+/** Новый клиент из черновика — из формы клиента и из «Добавить на раз» (5.4). */
+internal fun newClientEntity(coachId: String, now: Long, draft: ClientDraft): ClientEntity {
+    val blank = ClientEntity(id = Ids.newId(now), sync = SyncFields.new(coachId, now), lastName = "", firstName = "")
+    return draft.applyTo(blank, ClubTime.today(now))
+}
 
 private fun ClientDraft.applyTo(client: ClientEntity, today: LocalDate): ClientEntity = client.copy(
     lastName = lastName.trim(),

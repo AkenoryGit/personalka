@@ -1,10 +1,15 @@
 package com.akenory.personalka.data.training
 
 import androidx.room3.withWriteTransaction
+import com.akenory.personalka.data.clients.adultOn
+import com.akenory.personalka.data.clients.newClientEntity
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
+import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
+import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
+import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.toSeriesTraining
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
@@ -15,10 +20,14 @@ import com.akenory.personalka.data.series.restore
 import com.akenory.personalka.data.series.toSeries
 import com.akenory.personalka.data.series.write
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientName
+import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.group.GroupRules
+import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -39,12 +48,25 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 
-/** Клиент в карточке тренировки: «Носова Е.» и его итог (4.1). */
-data class CardClient(val id: String, val name: String, val state: ParticipantState, val outcome: ClientOutcome)
+/** Клиент в карточке тренировки: «Носова Е.» и его итог (4.1); [guest] — ребёнок «на раз» в группе (5.4, 5.10). */
+data class CardClient(
+    val id: String,
+    val name: String,
+    val state: ParticipantState,
+    val outcome: ClientOutcome,
+    val guest: Boolean = false,
+)
+
+/**
+ * Кого можно добавить «на раз» (5.4): действующий клиент, которого нет в тренировке. [name] — «Белов Артём»,
+ * как в выборе «В состав» (5.10); [adult] — взрослых в списке без поиска не показывают.
+ */
+data class GuestChoice(val id: String, val name: ClientName, val birthDate: LocalDate?, val adult: Boolean)
 
 /**
  * Всё, что показывает карточка тренировки (ТЗ 5.4). [state] — для правил статусов и кнопок.
@@ -110,8 +132,14 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             clients.observeAllClients(),
             reference.observeTrainingTypes(),
             reference.observeLocations(),
-            combine(coaches.observeSettings(), schedule.observeBlocks(), trainings.observeTrainingsBetween(dayStart, dayEnd)) { s, b, d -> Triple(s, b, d) },
-        ) { people, all, types, places, (settingsRow, blocks, sameDay) ->
+            combine(
+                coaches.observeSettings(),
+                schedule.observeBlocks(),
+                trainings.observeTrainingsBetween(dayStart, dayEnd),
+                t.groupId?.let { clients.observeMembersOf(it) } ?: flowOf(emptyList()),
+                { s, b, d, m -> CardExtras(s, b, d, m) },
+            ),
+        ) { people, all, types, places, (settingsRow, blocks, sameDay, members) ->
             val typeById = types.associateBy { it.id }
             val type = typeById[t.typeId]
             val kind = type?.kind ?: TrainingKind.OTHER
@@ -120,9 +148,16 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             val ordered = people.ordered()
             val state = t.toState(kind, ordered)
             val names = all.associateBy { it.id }
+            val guests = if (t.groupId == null) emptySet() else GroupRules.guests(ordered.map { it.clientId }, members.map { it.member() }, t.start.date).toSet()
             val cardClients = ordered.mapNotNull { p ->
                 val c = names[p.clientId] ?: return@mapNotNull null
-                CardClient(p.clientId, CalendarFormat.client(ClientName(c.lastName, c.firstName, c.middleName)), p.toState(), ClientOutcome.of(t.status, p.status))
+                CardClient(
+                    id = p.clientId,
+                    name = CalendarFormat.client(ClientName(c.lastName, c.firstName, c.middleName)),
+                    state = p.toState(),
+                    outcome = ClientOutcome.of(t.status, p.status),
+                    guest = p.clientId in guests,
+                )
             }
             val group = t.groupId?.let { clients.group(it) }
             val waiting = if (t.status == TrainingStatus.CANCELLED) ordered.size else state.participants.count { !it.isCancelled }
@@ -164,6 +199,79 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 settings = settingsRow.statusSettings(),
             )
         }
+    }
+
+    /**
+     * Кого можно добавить «на раз» в тренировку [id] (5.4): действующие клиенты, которых в ней нет (отменённые
+     * в ней — тоже есть: их возвращает «Вернуть» в строке). Список без поиска и поиск — в карточке.
+     */
+    fun guestChoices(id: String): Flow<List<GuestChoice>> = combine(
+        trainings.observeParticipationsOf(id),
+        clients.observeAllClients(),
+    ) { people, all ->
+        val inside = people.map { it.clientId }.toSet()
+        val today = ClubTime.today(clock())
+        all.filter { it.status == ClientStatus.ACTIVE && it.id !in inside }
+            .map { GuestChoice(it.id, ClientName(it.lastName, it.firstName, it.middleName), it.birthDate, it.adultOn(today)) }
+    }
+
+    /**
+     * «Добавить на раз» (5.4, 5.10): ребёнок только в этой тренировке группы, состав не меняется. Отмечать уже
+     * можно — сразу «пришёл» ([TrainingCardRules.guestStatus]). `null` — нельзя: группа отменена или он уже в ней.
+     */
+    suspend fun addGuest(id: String, clientId: String): CardResult? = addGuest(id) { _, _ -> clientId }
+
+    /** То же с новым клиентом — «Новый клиент: Белов Артём»: клиент заводится по фамилии и имени (5.8). */
+    suspend fun addNewGuest(id: String, lastName: String, firstName: String): CardResult? {
+        val last = lastName.trim()
+        val first = firstName.trim()
+        if (last.isEmpty() || first.isEmpty()) return null
+        return addGuest(id) { coachId, now ->
+            val client = newClientEntity(coachId, now, ClientDraft(last, first, sex = ClientRules.guessSex(null, last)?.sex))
+            clients.upsertClient(client)
+            client.id
+        }
+    }
+
+    /**
+     * «Убрать» ребёнка «на раз» — добавили по ошибке (5.4). Детей из состава так не убрать: их отменяют или правят
+     * состав группы (5.10).
+     */
+    suspend fun removeGuest(id: String, clientId: String): CardResult? {
+        val now = clock()
+        var result: CardResult? = null
+        db.withWriteTransaction {
+            val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            val groupId = t.groupId ?: return@withWriteTransaction
+            val people = trainings.participationsOf(id).ordered()
+            val row = people.firstOrNull { it.clientId == clientId } ?: return@withWriteTransaction
+            val state = t.toState(reference.trainingType(t.typeId)?.kind ?: TrainingKind.OTHER, people)
+            val guest = clientId in GroupRules.guests(people.map { it.clientId }, clients.membersOf(groupId).map { it.member() }, t.start.date)
+            if (!TrainingCardRules.canRemoveGuest(state, guest)) return@withWriteTransaction
+            val recorder = Recorder(db, now)
+            recorder.saveParticipations(id, listOf(row.copy(sync = row.sync.deleted(now))))
+            result = CardResult(TrainingCardFormat.guestRemoved(clientName(clientId)), recorder.undo())
+        }
+        return result
+    }
+
+    /** Добавить «на раз» того, кого вернёт [who] (`null` — никого); [who] зовётся, только если добавить можно. */
+    private suspend fun addGuest(id: String, who: suspend (coachId: String, now: Long) -> String?): CardResult? {
+        val now = clock()
+        var result: CardResult? = null
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            val people = trainings.participationsOf(id).ordered()
+            val state = t.toState(reference.trainingType(t.typeId)?.kind ?: TrainingKind.OTHER, people)
+            if (t.groupId == null || !TrainingCardRules.canAddGuest(state)) return@withWriteTransaction
+            val clientId = who(coach.id, now) ?: return@withWriteTransaction
+            if (people.any { it.clientId == clientId }) return@withWriteTransaction
+            val recorder = Recorder(db, now)
+            recorder.addParticipant(t, clientId, TrainingCardRules.guestStatus(state, ClubTime.now(now)))
+            result = CardResult(TrainingCardFormat.guestAdded(clientName(clientId)), recorder.undo())
+        }
+        return result
     }
 
     /** «Проведено», у группы — «Все пришли» (4.1). `null` — уже нельзя: тренировку изменили. */
@@ -332,6 +440,14 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
     private suspend fun seriesClientIds(seriesId: String): List<String> =
         schedule.seriesClients(seriesId).sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }
 }
+
+/** Что ещё нужно карточке, кроме тренировки: настройки, запреты, тренировки того же дня, состав группы. */
+private data class CardExtras(
+    val settings: CoachSettingsEntity?,
+    val blocks: List<ScheduleBlockEntity>,
+    val sameDay: List<TrainingEntity>,
+    val members: List<GroupMemberEntity>,
+)
 
 private fun List<ParticipationEntity>.ordered(): List<ParticipationEntity> = sortedWith(compareBy({ it.sync.createdAt }, { it.id }))
 

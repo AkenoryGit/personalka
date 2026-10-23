@@ -12,6 +12,7 @@ import com.akenory.personalka.data.groups.addParticipant
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.model.ConductedBy
 import com.akenory.personalka.domain.model.Owner
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.restriction.Placement
 import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionRules
@@ -66,6 +67,15 @@ internal class Recorder(private val db: PersonalkaDatabase, private val now: Lon
         // Порядок клиентов — по моменту записи: «Петров / Сидоров» в блоке не меняется местами.
         clientIds.filter { id -> old.none { it.clientId == id } }.forEachIndexed { i, clientId ->
             db.addParticipant(training, clientId, now + i)
+        }
+    }
+
+    /** Добавить клиента в тренировку со статусом [status] — ребёнок «на раз» (5.4): новая запись или ожившая прежняя. */
+    suspend fun addParticipant(training: TrainingEntity, clientId: String, status: ParticipationStatus) {
+        rememberParticipants(training.id)
+        db.addParticipant(training, clientId, now)
+        if (status != ParticipationStatus.EXPECTED) {
+            trainingDao.participationRow(training.id, clientId)?.let { trainingDao.upsertParticipation(it.copy(status = status)) }
         }
     }
 

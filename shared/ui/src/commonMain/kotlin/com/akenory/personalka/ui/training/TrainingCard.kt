@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
@@ -34,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,15 +53,20 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.training.CardClient
 import com.akenory.personalka.data.training.CardResult
+import com.akenory.personalka.data.training.GuestChoice
 import com.akenory.personalka.data.training.TrainingCard
 import com.akenory.personalka.data.training.TrainingCardRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.CalendarBadge
+import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
@@ -74,6 +81,8 @@ import com.akenory.personalka.domain.training.TrainingCardRules
 import com.akenory.personalka.domain.training.TrainingPhase
 import com.akenory.personalka.domain.training.came
 import com.akenory.personalka.ui.clients.MenuAction
+import com.akenory.personalka.ui.clients.PersonRow
+import com.akenory.personalka.ui.clients.SearchField
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
@@ -89,6 +98,7 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -104,6 +114,13 @@ fun cardClientTag(id: String) = "card-client-$id"
 fun cardClientActionTag(id: String) = "card-client-action-$id"
 fun cancelWhoTag(id: String) = "cancel-who-$id"
 const val CANCEL_WHOLE_TAG = "cancel-whole"
+const val ADD_GUEST_TAG = "add-guest"
+const val GUEST_PANEL_TAG = "guest-panel"
+const val GUEST_SEARCH_TAG = "guest-search"
+const val NEW_GUEST_TAG = "guest-new"
+const val NEW_GUEST_LAST_TAG = "guest-new-last"
+const val NEW_GUEST_FIRST_TAG = "guest-new-first"
+fun guestPickTag(id: String) = "guest-pick-$id"
 
 /**
  * Что открыто в карточке — строкой, чтобы пережить пересоздание окна: тренировка или сразу её панель отмены
@@ -163,6 +180,12 @@ fun TrainingCardHost(
     var pickDate by rememberSaveable(key) { mutableStateOf<String?>(null) }
     var pickingDate by rememberSaveable(key) { mutableStateOf(false) }
     var askDelete by rememberSaveable(key) { mutableStateOf(false) }
+    // «Добавить на раз»: открыт выбор, набранный поиск, «Новый клиент» с фамилией и именем.
+    var addingGuest by rememberSaveable(key) { mutableStateOf(false) }
+    var guestQuery by rememberSaveable(key) { mutableStateOf("") }
+    var newGuest by rememberSaveable(key) { mutableStateOf(false) }
+    var guestLast by rememberSaveable(key) { mutableStateOf("") }
+    var guestFirst by rememberSaveable(key) { mutableStateOf("") }
 
     var card by remember(id) { mutableStateOf<TrainingCard?>(null) }
     LaunchedEffect(id) {
@@ -173,6 +196,17 @@ fun TrainingCardHost(
         }
     }
     val shown = card?.takeIf { it.id == id }
+    val guestChoices by remember(id, addingGuest) {
+        if (id != null && addingGuest) cards.guestChoices(id) else flowOf(emptyList())
+    }.collectAsState(emptyList())
+
+    fun closeGuest() {
+        addingGuest = false
+        guestQuery = ""
+        newGuest = false
+        guestLast = ""
+        guestFirst = ""
+    }
 
     fun done(result: CardResult?) {
         if (result != null) messages.showUndo(result.message) { scope.launch { cards.undo(result.undo) } }
@@ -190,7 +224,35 @@ fun TrainingCardHost(
     val pane: @Composable ColumnScope.() -> Unit = {
         if (shown != null) {
             val who = cancelWho
-            if (who == null) {
+            if (who == null && addingGuest) {
+                GuestBody(
+                    choices = guestChoices,
+                    today = now.date,
+                    query = guestQuery,
+                    onQuery = { guestQuery = it },
+                    creating = newGuest,
+                    lastName = guestLast,
+                    firstName = guestFirst,
+                    onCreate = { last, first ->
+                        newGuest = true
+                        guestLast = last
+                        guestFirst = first
+                    },
+                    onLastName = { guestLast = it },
+                    onFirstName = { guestFirst = it },
+                    onPick = { clientId ->
+                        closeGuest()
+                        scope.launch { done(cards.addGuest(shown.id, clientId)) }
+                    },
+                    onAddNew = {
+                        val last = guestLast
+                        val first = guestFirst
+                        closeGuest()
+                        scope.launch { done(cards.addNewGuest(shown.id, last, first)) }
+                    },
+                    onBack = ::closeGuest,
+                )
+            } else if (who == null) {
                 CardBody(
                     card = shown,
                     now = now,
@@ -219,6 +281,8 @@ fun TrainingCardHost(
                     onToggle = { clientId -> scope.launch { cards.toggleAttendance(shown.id, clientId) } },
                     onCancelClient = { clientId -> cancelWho = clientId },
                     onReturnClient = { clientId -> scope.launch { done(cards.restoreClient(shown.id, clientId)) } },
+                    onAddGuest = { addingGuest = true },
+                    onRemoveGuest = { clientId -> scope.launch { done(cards.removeGuest(shown.id, clientId)) } },
                     onClient = onClient,
                     onGroup = onGroup,
                 )
@@ -376,6 +440,8 @@ private fun ColumnScope.CardBody(
     onToggle: (String) -> Unit,
     onCancelClient: (String) -> Unit,
     onReturnClient: (String) -> Unit,
+    onAddGuest: () -> Unit,
+    onRemoveGuest: (String) -> Unit,
     onClient: (String) -> Unit,
     onGroup: (String) -> Unit,
 ) {
@@ -430,12 +496,12 @@ private fun ColumnScope.CardBody(
         cancelled?.notifiedAt?.let { InfoRow(TrainingCardFormat.NOTIFIED, TrainingCardFormat.notified(it, state.start)) }
 
         if (isGroup) {
-            GroupMembers(card, now, onToggle, onCancelClient, onReturnClient, onClient)
+            GroupMembers(card, now, onToggle, onCancelClient, onReturnClient, onAddGuest, onRemoveGuest, onClient)
         } else if (TrainingCardRules.perClient(state)) {
             SectionLabel(TrainingCardFormat.CLIENTS)
             card.clients.forEachIndexed { i, c ->
                 if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
-                ClientLine(card, c, onCancelClient, onReturnClient, onClient)
+                ClientLine(card, c, onCancelClient, onReturnClient, onRemoveGuest, onClient)
             }
         }
 
@@ -561,6 +627,7 @@ private fun ClientLine(
     c: CardClient,
     onCancelClient: (String) -> Unit,
     onReturnClient: (String) -> Unit,
+    onRemoveGuest: (String) -> Unit,
     onClient: (String) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
@@ -583,15 +650,25 @@ private fun ClientLine(
             style = MaterialTheme.typography.labelMedium,
             color = fg,
         )
-        ClientActionIcon(card, c, onCancelClient, onReturnClient)
+        ClientActionIcon(card, c, onCancelClient, onReturnClient, onRemoveGuest)
     }
 }
 
-/** Значок в строке клиента: отменить его одного или вернуть отменённого. */
+/** Значок в строке клиента: убрать ребёнка «на раз», отменить клиента одного или вернуть отменённого. */
 @Composable
-private fun ClientActionIcon(card: TrainingCard, c: CardClient, onCancelClient: (String) -> Unit, onReturnClient: (String) -> Unit) {
+private fun ClientActionIcon(
+    card: TrainingCard,
+    c: CardClient,
+    onCancelClient: (String) -> Unit,
+    onReturnClient: (String) -> Unit,
+    onRemoveGuest: (String) -> Unit,
+) {
     val colors = PersonalkaTheme.colors
     when {
+        !c.state.isCancelled && TrainingCardRules.canRemoveGuest(card.state, c.guest) ->
+            IconButton(onClick = { onRemoveGuest(c.id) }, modifier = Modifier.testTag(cardClientActionTag(c.id))) {
+                Icon(PIcons.Close, contentDescription = TrainingCardFormat.removeGuest(c.name), tint = colors.textMuted)
+            }
         TrainingCardRules.canCancelClient(card.state, c.id) ->
             IconButton(onClick = { onCancelClient(c.id) }, modifier = Modifier.testTag(cardClientActionTag(c.id))) {
                 Icon(PIcons.EventBusy, contentDescription = TrainingCardFormat.cancelClient(c.name), tint = colors.textMuted)
@@ -606,7 +683,8 @@ private fun ClientActionIcon(card: TrainingCard, c: CardClient, onCancelClient: 
 
 /**
  * Состав группы (5.4, макет «Группа идёт»): «Пришли» сверху, «Ещё не отмечены» ниже; нажатие на ребёнка отмечает
- * «пришёл» и обратно. До начала минус 15 минут отмечать нельзя — нажатие ведёт в карточку ребёнка.
+ * «пришёл» и обратно. До начала минус 15 минут отмечать нельзя — нажатие ведёт в карточку ребёнка. Справа
+ * от «Состав» — «Добавить на раз»; ребёнок «на раз» помечен в строке и убирается «×».
  */
 @Composable
 private fun GroupMembers(
@@ -615,12 +693,29 @@ private fun GroupMembers(
     onToggle: (String) -> Unit,
     onCancelClient: (String) -> Unit,
     onReturnClient: (String) -> Unit,
+    onAddGuest: () -> Unit,
+    onRemoveGuest: (String) -> Unit,
     onClient: (String) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val state = card.state
     val toggle = TrainingCardRules.canToggle(state, now)
-    SectionLabel(TrainingCardFormat.members(card.clients.size))
+    val guests = card.clients.count { it.guest }
+    Row(Modifier.fillMaxWidth().padding(top = Dimens.space3), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            TrainingCardFormat.members(card.clients.size - guests, guests),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.textMuted,
+        )
+        if (TrainingCardRules.canAddGuest(state)) {
+            TextButton(onClick = onAddGuest, modifier = Modifier.heightIn(min = Dimens.touch).testTag(ADD_GUEST_TAG)) {
+                Icon(PIcons.PersonAdd, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(Dimens.space2))
+                Text(TrainingCardFormat.ADD_GUEST, style = MaterialTheme.typography.labelLarge, color = colors.text)
+            }
+        }
+    }
     if (toggle && state.status == TrainingStatus.PLANNED) {
         Text(TrainingCardFormat.MARK_HINT, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
     }
@@ -654,7 +749,10 @@ private fun GroupMembers(
                 }
                 Spacer(Modifier.width(Dimens.space3))
                 Text(c.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                ClientActionIcon(card, c, onCancelClient, onReturnClient)
+                if (c.guest) {
+                    Text(TrainingCardFormat.GUEST, modifier = Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+                }
+                ClientActionIcon(card, c, onCancelClient, onReturnClient, onRemoveGuest)
             }
         }
     }
@@ -686,6 +784,97 @@ private fun CardButtonsRow(actions: List<CardAction>, onAction: (CardAction) -> 
         }
     }
 }
+
+// --- Ребёнок «на раз» (5.4, 5.10) ---
+
+/**
+ * Выбор ребёнка «на раз» вместо карточки: без поиска — сначала дети, восемь человек; поиском — все действующие
+ * клиенты, кого нет в тренировке. Нажатие на строку сразу добавляет (одно нажатие, 10.7); нет в списке —
+ * «Новый клиент» с фамилией и именем и «Добавить».
+ */
+@Composable
+private fun ColumnScope.GuestBody(
+    choices: List<GuestChoice>,
+    today: LocalDate,
+    query: String,
+    onQuery: (String) -> Unit,
+    creating: Boolean,
+    lastName: String,
+    firstName: String,
+    onCreate: (String, String) -> Unit,
+    onLastName: (String) -> Unit,
+    onFirstName: (String) -> Unit,
+    onPick: (String) -> Unit,
+    onAddNew: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    val shown = if (query.isBlank()) {
+        choices.sortedWith(compareBy<GuestChoice> { it.adult }.thenBy { ClientRules.sortKey(it.name) }).take(GUEST_SHORT_LIST)
+    } else {
+        choices.filter { ClientRules.matches(query, it.name) }.sortedBy { ClientRules.sortKey(it.name) }
+    }
+    Column(
+        Modifier
+            .weight(1f, fill = false)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = Dimens.space4)
+            .testTag(GUEST_PANEL_TAG),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                TrainingCardFormat.GUEST_TITLE,
+                modifier = Modifier.weight(1f).semantics { heading() },
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.text,
+            )
+            IconButton(onClick = onBack) { Icon(PIcons.Close, contentDescription = "Закрыть", tint = colors.text) }
+        }
+        Text(TrainingCardFormat.GUEST_HINT, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+        Spacer(Modifier.height(Dimens.space3))
+        SearchField(query, onQuery, TrainingCardFormat.GUEST_SEARCH, Modifier.testTag(GUEST_SEARCH_TAG))
+        Spacer(Modifier.height(Dimens.space2))
+        Column(Modifier.clip(MaterialTheme.shapes.medium)) {
+            shown.forEach { c ->
+                PersonRow(
+                    title = c.name.lastName + " " + c.name.firstName,
+                    subtitle = c.birthDate?.let { ClientFormat.age(it, today) },
+                    onClick = { onPick(c.id) },
+                    modifier = Modifier.testTag(guestPickTag(c.id)),
+                )
+            }
+            PersonRow(
+                title = TrainingCardFormat.newClient(query),
+                subtitle = null,
+                onClick = {
+                    val words = query.trim().split(' ').filter { it.isNotEmpty() }.map { w -> w.replaceFirstChar { it.uppercaseChar() } }
+                    onCreate(words.firstOrNull().orEmpty(), words.drop(1).joinToString(" "))
+                },
+                selected = creating,
+                leading = PIcons.PersonAdd,
+                modifier = Modifier.testTag(NEW_GUEST_TAG),
+            )
+        }
+        if (creating) {
+            Spacer(Modifier.height(Dimens.space3))
+            val words = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next)
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                Field(TrainingCardFormat.LAST_NAME, lastName, onLastName, Modifier.weight(1f), keyboardOptions = words, tag = NEW_GUEST_LAST_TAG)
+                Field(TrainingCardFormat.FIRST_NAME, firstName, onFirstName, Modifier.weight(1f), keyboardOptions = words, tag = NEW_GUEST_FIRST_TAG)
+            }
+        }
+        Spacer(Modifier.height(Dimens.space4))
+    }
+    if (creating) {
+        val ready = lastName.isNotBlank() && firstName.isNotBlank()
+        Column(Modifier.fillMaxWidth().padding(Dimens.space4)) {
+            PrimaryButton(TrainingCardFormat.ADD, onAddNew, Modifier.fillMaxWidth(), enabled = ready)
+        }
+    }
+}
+
+/** Сколько клиентов в выборе «на раз» без поиска — как в «В состав» (5.10). */
+private const val GUEST_SHORT_LIST = 8
 
 // --- Панель отмены (5.6) ---
 

@@ -89,8 +89,9 @@ object TrainingCardFormat {
     const val REASON = "Причина"
     const val NOTIFIED = "Предупредили"
 
-    /** «Состав · 12». */
-    fun members(count: Int): String = "Состав" + DOT + RuText.digits(count.toLong())
+    /** «Состав · 12», с детьми «на раз» — «Состав · 12 · 1 на раз» (как в карточке группы, 5.10). */
+    fun members(count: Int, guests: Int = 0): String =
+        "Состав" + DOT + RuText.digits(count.toLong()) + if (guests > 0) DOT + GroupFormat.guests(guests) else ""
 
     /** «Пришли · 5». */
     fun cameSection(count: Int): String = "Пришли" + DOT + RuText.digits(count.toLong())
@@ -159,6 +160,32 @@ object TrainingCardFormat {
 
     /** «Отменено: Носова Е.» — фамилия после двоеточия не склоняется (10.6). */
     fun cancelledFor(names: List<String>): String = "Отменено: " + names.joinToString(", ")
+
+    /** «Добавили на раз: Белов А.» — без рода: фамилии не склоняются. */
+    fun guestAdded(name: String): String = "Добавили на раз: $name"
+
+    /** «Убрали: Белов А.». */
+    fun guestRemoved(name: String): String = "Убрали: $name"
+
+    // --- Ребёнок «на раз» (5.4, 5.10) ---
+
+    const val ADD_GUEST = "Добавить на раз"
+    const val GUEST_TITLE = "Ребёнок на раз"
+    const val GUEST_HINT = "Только на эту тренировку — в состав группы он не попадёт."
+    const val GUEST_SEARCH = "Фамилия или имя"
+
+    /** Метка в строке ребёнка «на раз». */
+    const val GUEST = "на раз"
+
+    /** «Убрать: Белов А.» — подпись значка в строке. */
+    fun removeGuest(name: String): String = "Убрать: $name"
+
+    /** «Новый клиент…», с набранным — «Новый клиент: Белов…». */
+    fun newClient(query: String): String = if (query.isBlank()) "Новый клиент…" else "Новый клиент: ${query.trim()}…"
+
+    const val LAST_NAME = "Фамилия"
+    const val FIRST_NAME = "Имя"
+    const val ADD = "Добавить"
 
     /** «Дата пропущена: вт 27.10». */
     fun skipped(date: LocalDate): String = "Дата пропущена: ${DateFormat.short(date)}"

@@ -195,6 +195,67 @@ class TrainingCardsTest {
         assertEquals(ParticipationStatus.CANCELLED, statusOf(id, kids[2]))
     }
 
+    /** Группа «Вт ББ» с Беловым и Гришиным и её тренировки в [starts]; возвращает id группы, детей и тренировок. */
+    private suspend fun groupWith(vararg starts: LocalDateTime): Triple<String, List<String>, List<String>> {
+        val group = groups.create(GroupDraft("Вт ББ", typeId("Группа"), placeId("ББ")))
+        val kids = listOf(client("Белов", "Артём"), client("Гришин", "Матвей"))
+        kids.forEach { groups.addMember(group, it, LocalDate(2026, 9, 1)) }
+        starts.forEach { assertIs<SaveResult.Saved>(calendar.forms.create(TrainingDraft(it, typeId("Группа"), emptyList(), group, placeId("ББ"), 60))) }
+        val ids = db.trainingDao().trainingsOfGroup(group).sortedBy { it.start }.map { it.id }
+        return Triple(group, kids, ids)
+    }
+
+    @Test
+    fun guestOnlyInThisTraining(): Unit = runBlocking {
+        // Проверка шага 1.14а: гость виден в составе только этой тренировки.
+        val (group, kids, ids) = groupWith(at(tuesday, 18, 0), at(tuesday.plus(7, DateTimeUnit.DAY), 18, 0))
+        val (first, second) = ids
+        val vera = client("Зуева", "Вера")
+        assertEquals(listOf(vera), cards.guestChoices(first).first().map { it.id })
+
+        val added = assertNotNull(cards.addGuest(first, vera))
+        assertEquals(s("Добавили на раз: Зуева_В."), added.message)
+        // До начала минус 15 минут — ждём, как остальных.
+        assertEquals(ParticipationStatus.EXPECTED, statusOf(first, vera))
+        val c = card(first)
+        assertEquals(listOf(false, false, true), c.clients.map { it.guest })
+        assertEquals(3, c.clients.size)
+        assertEquals(kids, card(second).clients.map { it.id })
+        assertTrue(db.clientDao().membersOf(group).none { it.clientId == vera })
+        assertTrue(cards.guestChoices(first).first().isEmpty())
+        // Второй раз — ничего: он уже в тренировке.
+        assertNull(cards.addGuest(first, vera))
+
+        // Детей из состава «Убрать» не убирает — только гостя.
+        assertNull(cards.removeGuest(first, kids[0]))
+        val removed = assertNotNull(cards.removeGuest(first, vera))
+        assertEquals(s("Убрали: Зуева_В."), removed.message)
+        assertEquals(kids, card(first).clients.map { it.id })
+        cards.undo(removed.undo)
+        assertTrue(card(first).client(vera)!!.guest)
+        cards.undo(added.undo)
+        assertEquals(kids, card(first).clients.map { it.id })
+    }
+
+    @Test
+    fun guestDuringTrainingCameAndNewClient(): Unit = runBlocking {
+        // Идёт с 15:30: гость сразу «пришёл»; «Новый клиент» заводится по фамилии и имени.
+        val (_, _, ids) = groupWith(at(tuesday, 15, 30))
+        val id = ids.single()
+        assertNull(cards.addNewGuest(id, "Зуева", " "))
+        val result = assertNotNull(cards.addNewGuest(id, " Зуева ", "Вера"))
+        assertEquals(s("Добавили на раз: Зуева_В."), result.message)
+        val guest = card(id).clients.last()
+        assertTrue(guest.guest)
+        assertEquals(ParticipationStatus.ATTENDED, guest.state.status)
+        assertEquals("Вера", clients.rows(now).first().single { it.client.id == guest.id }.client.firstName)
+
+        // Отменённая группа — не добавить и не убрать.
+        assertNotNull(cards.cancel(id, emptyList(), CancelReasons.BY_COACH, now))
+        assertNull(cards.addGuest(id, client("Ершов", "Тимофей")))
+        assertNull(cards.removeGuest(id, guest.id))
+    }
+
     @Test
     fun returnCancelledAndDelete(): Unit = runBlocking {
         val orlov = client("Орлов", "Максим")

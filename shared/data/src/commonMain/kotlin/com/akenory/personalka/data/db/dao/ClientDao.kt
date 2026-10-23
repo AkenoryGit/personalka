@@ -80,6 +80,10 @@ interface ClientDao {
     @Query("SELECT * FROM group_member WHERE groupId = :groupId AND deletedAt IS NULL")
     suspend fun membersOf(groupId: String): List<GroupMemberEntity>
 
+    /** То же потоком: кто в карточке тренировки группы «на раз» (5.4). */
+    @Query("SELECT * FROM group_member WHERE groupId = :groupId AND deletedAt IS NULL")
+    fun observeMembersOf(groupId: String): Flow<List<GroupMemberEntity>>
+
     @Query("SELECT * FROM group_member WHERE id = :id")
     suspend fun groupMember(id: String): GroupMemberEntity?
 

@@ -24,6 +24,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Dp
@@ -230,6 +231,49 @@ class TrainingCardUiTest {
         cardButton(CardAction.ALL_CAME).performClick()
         awaitNode(inCard("Проведено"))
         assertEquals(List(3) { ParticipationStatus.ATTENDED }, kids.map { statusOf(id, it) })
+    }
+
+    @Test
+    fun guestOnceInGroup() = runComposeUiTest {
+        // Шаг 1.14а: «Добавить на раз» — поиск клиента, гость сразу «пришёл» (группа идёт), «×» убирает его.
+        val group = runBlocking { groups.create(GroupDraft("Вт 15:30 ББ", typeId("Группа"), placeId("ББ"))) }
+        val kids = listOf(client("Белов", "Артём"), client("Гришин", "Матвей"))
+        val vera = client("Зуева", "Вера")
+        runBlocking {
+            kids.forEach { groups.addMember(group, it, LocalDate(2026, 9, 1)) }
+            calendar.forms.create(TrainingDraft(at("15:30"), typeId("Группа"), emptyList(), group, placeId("ББ"), 60))
+        }
+        val id = runBlocking { db.trainingDao().trainingsOfGroup(group).single().id }
+        openCalendar()
+        tapBlock("Вт 15:30 ББ (2)")
+
+        awaitNode(hasTestTag(ADD_GUEST_TAG))
+        onNodeWithTag(ADD_GUEST_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(GUEST_PANEL_TAG))
+        onNodeWithTag(GUEST_SEARCH_TAG).performTextInput("Зуе")
+        awaitNode(hasTestTag(guestPickTag(vera)))
+        onNodeWithTag(guestPickTag(kids[0])).assertDoesNotExist()
+        onNodeWithTag(guestPickTag(vera)).performClick()
+        awaitNode(hasText(s("Добавили на раз: Зуева_В.")))
+        awaitNode(inCard(TrainingCardFormat.members(2, 1)))
+        onNode(inCard(TrainingCardFormat.GUEST)).assertIsDisplayed()
+        assertEquals(ParticipationStatus.ATTENDED, statusOf(id, vera))
+
+        // «×» в строке гостя — убран; у детей из состава вместо него значок отмены.
+        onNodeWithTag(cardClientActionTag(vera)).performScrollTo().performClick()
+        awaitNode(hasText(s("Убрали: Зуева_В.")))
+        awaitNode(inCard(TrainingCardFormat.members(2)))
+        assertEquals(true, runBlocking { db.trainingDao().participationRow(id, vera)!!.sync.deletedAt != null })
+
+        // Нет в списке — «Новый клиент» с фамилией и именем из поиска и «Добавить».
+        onNodeWithTag(ADD_GUEST_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(GUEST_SEARCH_TAG))
+        onNodeWithTag(GUEST_SEARCH_TAG).performTextInput("ершов тимофей")
+        onNodeWithTag(NEW_GUEST_TAG).performClick()
+        awaitNode(hasTestTag(NEW_GUEST_LAST_TAG))
+        onNodeWithText(TrainingCardFormat.ADD).performClick()
+        awaitNode(hasText(s("Добавили на раз: Ершов_Т.")))
+        awaitNode(inCard(TrainingCardFormat.members(2, 1)))
     }
 
     @Test
