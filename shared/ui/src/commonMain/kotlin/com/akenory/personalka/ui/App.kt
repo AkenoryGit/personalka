@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,8 @@ import com.akenory.personalka.ui.shell.rememberClubNow
 import com.akenory.personalka.ui.shell.rememberShellState
 import com.akenory.personalka.ui.shell.systemMillis
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.training.TrainingFormKey
+import com.akenory.personalka.ui.training.TrainingFormSheet
 import kotlinx.coroutines.flow.map
 
 /**
@@ -39,7 +42,7 @@ import kotlinx.coroutines.flow.map
  * @param settings тренер, места и типы в базе телефона.
  * @param clients клиенты и родственники в базе телефона (шаг 1.7).
  * @param groups группы и их состав (шаг 1.8).
- * @param calendar тренировки дней для календаря (шаг 1.9).
+ * @param calendar тренировки дней для календаря (шаг 1.9), их создание и изменение — `calendar.forms` (шаг 1.13).
  * @param prefs настройки этого телефона: масштаб календаря.
  * @param backHandler «Назад» системы. Платформа передаёт свой обработчик (на Android — `BackHandler`
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
@@ -64,8 +67,15 @@ fun App(
         // Записи из экранов идут здесь: экран закрывается сразу, запись и «Отменить» доживают до конца.
         val scope = rememberCoroutineScope()
         val hasCoach by remember(settings) { settings.coach.map { it != null } }.collectAsState(initial = null)
-        // Пример дня в календаре — проверить сетку на телефоне, пока тренировку не создать (до шага 1.13).
+        // Пример дня в календаре — дежурство и запрет, пока их не создать формой (до шага 1.13а).
         var sample by rememberSaveable { mutableStateOf(false) }
+        // Открытая форма тренировки (5.5) — поверх всего приложения: «+» есть и на «Главной», и в «Календаре».
+        var form by rememberSaveable { mutableStateOf<String?>(null) }
+
+        // Серии продлеваются до горизонта при открытии приложения и при смене дня (4.4).
+        LaunchedEffect(calendar, hasCoach, now.date) {
+            if (hasCoach == true) calendar.forms.extendSeries()
+        }
 
         Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
             when (hasCoach) {
@@ -73,18 +83,14 @@ fun App(
                 false -> FirstRun(settings, backHandler, onDone = { shell.select(Section.CALENDAR) })
                 true -> {
                     backHandler(shell.canGoBack) { shell.back() }
+                    // «Назад» при открытой форме закрывает форму, а не экран под ней.
+                    backHandler(form != null) { form = null }
                     AppShell(
                         shell = shell,
                         messages = messages,
                         // Счётчик дел на «Главной» появится вместе с «Нужно сделать» (шаг 1.16).
                         todoCount = 0,
-                        onNewTraining = {
-                            if (shell.section == Section.CALENDAR) {
-                                messages.show(NEW_TRAINING_LATER, if (sample) SAMPLE_OFF else SAMPLE_ON) { sample = !sample }
-                            } else {
-                                messages.show(NEW_TRAINING_LATER)
-                            }
-                        },
+                        onNewTraining = { form = TrainingFormKey.new() },
                         immersive = when (shell.section) {
                             Section.MORE -> shell.top(Section.MORE).let { SettingsRoute.isForm(it) || GroupRoute.isForm(it) }
                             Section.CLIENTS -> ClientRoute.isForm(shell.top(Section.CLIENTS))
@@ -104,6 +110,19 @@ fun App(
                             sample = sample,
                             messages = messages,
                             scope = scope,
+                            onSample = { sample = it },
+                            onForm = { form = it },
+                        )
+                    }
+                    form?.let { key ->
+                        TrainingFormSheet(
+                            key = key,
+                            forms = calendar.forms,
+                            clients = clients,
+                            now = now,
+                            messages = messages,
+                            scope = scope,
+                            onClose = { form = null },
                         )
                     }
                 }
@@ -111,10 +130,3 @@ fun App(
         }
     }
 }
-
-/** Что «+» отвечает до шага 1.13, где появится форма новой тренировки. */
-internal const val NEW_TRAINING_LATER = "Новая тренировка — в шаге 1.13"
-
-/** Кнопки сообщения «+» в календаре до шага 1.13: пример дня из макета — сетка, блоки и наложения. */
-internal const val SAMPLE_ON = "Показать пример"
-internal const val SAMPLE_OFF = "Убрать пример"

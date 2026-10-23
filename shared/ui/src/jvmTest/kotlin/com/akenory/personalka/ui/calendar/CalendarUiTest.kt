@@ -55,14 +55,12 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.App
-import com.akenory.personalka.ui.NEW_TRAINING_LATER
-import com.akenory.personalka.ui.SAMPLE_OFF
-import com.akenory.personalka.ui.SAMPLE_ON
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.components.PANEL_TAG
@@ -72,6 +70,8 @@ import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import com.akenory.personalka.ui.theme.LightColors
 import com.akenory.personalka.ui.theme.TypeColor
+import com.akenory.personalka.ui.training.FORM_TIME_TAG
+import com.akenory.personalka.ui.training.TRAINING_FORM_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DayOfWeek
@@ -84,8 +84,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * «Календарь»: вид «День» (шаги 1.9–1.11), «Несколько дней», шапка и фильтр мест (шаг 1.12), ТЗ 5.3. «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
- * формы ещё нет (1.13). Окно тестов на компьютере — 1024 × 768, поэтому экран ниже, чем у Fold, и сетке
+ * «Календарь»: вид «День» (шаги 1.9–1.11), «Несколько дней», шапка и фильтр мест (шаг 1.12), ТЗ 5.3. «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO,
+ * форма тренировки (1.13) — в `TrainingFormUiTest`. Окно тестов на компьютере — 1024 × 768, поэтому экран ниже, чем у Fold, и сетке
  * остаётся 768 − панель 72 − шапка 56 − неделя 64 = 576 dp; что видно при той же высоте, что у Fold, —
  * в `CalendarGridTest`.
  */
@@ -171,6 +171,12 @@ class CalendarUiTest {
         awaitNode(hasTestTag(navTag(Section.CALENDAR)))
         onNodeWithTag(navTag(Section.CALENDAR)).performClick()
         awaitNode(hasTestTag(CALENDAR_GRID_TAG))
+    }
+
+    /** Пример дня — в меню вида. */
+    private fun ComposeUiTest.toggleSample() {
+        onNodeWithTag(CALENDAR_VIEW_TAG).performClick()
+        onNodeWithText(SAMPLE_DAY).performClick()
     }
 
     private fun ComposeUiTest.day(date: LocalDate = today): DayBlocks =
@@ -335,17 +341,20 @@ class CalendarUiTest {
         onNodeWithText(s("Лаптева_А.")).assertIsDisplayed()
         onNodeWithText(s("Егорова_Л.")).performClick()
         onNodeWithTag(PANEL_TAG).assertDoesNotExist()
-        onNodeWithText(TRAINING_CARD_LATER).assertIsDisplayed()
+        awaitNode(hasText(TrainingFormat.EDIT_TITLE))
     }
 
     @Test
-    fun tapOnBlockSaysCardLater() = runComposeUiTest {
+    fun tapOnBlockOpensItsForm() = runComposeUiTest {
+        // До карточки тренировки (шаг 1.14) нажатие на блок открывает форму изменения.
         training("16:00", 50, "Белова Ева")
         openCalendar()
         awaitBlocks(1)
         val block = day().blocks.single()
         tapDay(block.x + 20f, block.y + 20f)
-        onNodeWithText(TRAINING_CARD_LATER).assertIsDisplayed()
+        awaitNode(hasText(TrainingFormat.EDIT_TITLE))
+        awaitNode(hasText("16:00–16:50"))
+        onNodeWithText(s("Белова_Е.")).assertIsSelected()
     }
 
     @Test
@@ -582,19 +591,19 @@ class CalendarUiTest {
     }
 
     @Test
-    fun sampleDayFromPlus() = runComposeUiTest {
+    fun sampleDayFromViewMenu() = runComposeUiTest {
         openCalendar()
-        onNodeWithTag(FAB_TAG).performClick()
-        onNodeWithText(NEW_TRAINING_LATER).assertIsDisplayed()
-        onNodeWithText(SAMPLE_ON).performClick()
+        // С шага 1.13 «+» открывает форму, а пример дня — в меню вида (до шага 1.13а).
+        toggleSample()
         // 19 тренировок примера: пять на 20:00 — это три блока и «+2».
         awaitBlocks(17)
         assertEquals(listOf(2), day().more.map { it.ids.size })
         assertEquals(GridHours(6, 23), grid()[CalendarHours])
 
-        onNodeWithTag(FAB_TAG).performClick()
-        onNodeWithText(SAMPLE_OFF).performClick()
+        toggleSample()
         awaitBlocks(0)
+        onNodeWithTag(FAB_TAG).performClick()
+        awaitNode(hasTestTag(TRAINING_FORM_TAG))
     }
 
     @Test
@@ -706,8 +715,7 @@ class CalendarUiTest {
     @Test
     fun sampleZonesAndBadges() = runComposeUiTest {
         openCalendar()
-        onNodeWithTag(FAB_TAG).performClick()
-        onNodeWithText(SAMPLE_ON).performClick()
+        toggleSample()
         awaitBlocks(17)
         awaitZones(2)
         val byName = day().blocks.associate { it.lines.first() to it.badges }
@@ -728,9 +736,11 @@ class CalendarUiTest {
     @Test
     fun holdOnEmptyPlaceCreatesAtStepBelow() = runComposeUiTest {
         openCalendar()
-        // ТЗ 5.3: время под пальцем, вниз до шага — 17:23 даёт 17:15. Форма появится в шаге 1.13.
+        // ТЗ 5.3: время под пальцем, вниз до шага — 17:23 даёт 17:15; форма новой тренировки на это время.
         holdDay(150f, yOf("17:23") + 0.5f)
-        onNodeWithText(newTrainingLater(at(today, "17:15"))).assertIsDisplayed()
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        awaitNode(hasText("17:15–18:05"))
+        onNodeWithTag(FORM_TIME_TAG).assertIsDisplayed()
     }
 
     @Test
@@ -750,7 +760,8 @@ class CalendarUiTest {
 
         holdDay(block.x + 40f, block.y + 20f)
         onNodeWithText(NEW_AT_THIS_TIME).performClick()
-        onNodeWithText(newTrainingLater(at(today, "16:00"))).assertIsDisplayed()
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        awaitNode(hasText("16:00–16:50"))
         assertEquals(at(today, "16:00"), startOf(id))
     }
 
@@ -842,8 +853,7 @@ class CalendarUiTest {
     @Test
     fun sampleMovesInMemory() = runComposeUiTest {
         openCalendar()
-        onNodeWithTag(FAB_TAG).performClick()
-        onNodeWithText(SAMPLE_ON).performClick()
+        toggleSample()
         awaitBlocks(17)
         fun sokolova() = day().blocks.single { it.lines.first() == s("Соколова_В.") }
 

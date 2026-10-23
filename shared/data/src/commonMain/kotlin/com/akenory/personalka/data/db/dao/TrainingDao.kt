@@ -65,6 +65,29 @@ interface TrainingDao {
     @Query("SELECT * FROM training WHERE seriesId = :seriesId AND deletedAt IS NULL ORDER BY start")
     suspend fun trainingsOfSeries(seriesId: String): List<TrainingEntity>
 
+    /** Тренировки серий с [from]: продление серий не ставит вторую на дату, где уже есть своя (4.4). */
+    @Query("SELECT * FROM training WHERE seriesId IS NOT NULL AND start >= :from AND deletedAt IS NULL ORDER BY start")
+    suspend fun seriesTrainingsFrom(from: LocalDateTime): List<TrainingEntity>
+
+    /**
+     * Последние созданные тренировки, новые первыми: в форме (5.5) последний тип — первым, место — последнее
+     * для типа, недавние клиенты и группы.
+     */
+    @Query("SELECT * FROM training WHERE deletedAt IS NULL ORDER BY createdAt DESC, id DESC LIMIT :limit")
+    fun observeLastCreated(limit: Int): Flow<List<TrainingEntity>>
+
+    /** Участия в последних созданных тренировках: недавние клиенты над полем поиска (5.5). */
+    @Query(
+        """
+        SELECT p.* FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        WHERE p.deletedAt IS NULL AND t.deletedAt IS NULL
+        ORDER BY t.createdAt DESC, t.id DESC, p.createdAt, p.id
+        LIMIT :limit
+        """
+    )
+    fun observeRecentParticipations(limit: Int): Flow<List<ParticipationEntity>>
+
     /** Тренировки группы по времени, отменённые тоже (5.10). */
     @Query("SELECT * FROM training WHERE groupId = :groupId AND deletedAt IS NULL ORDER BY start")
     suspend fun trainingsOfGroup(groupId: String): List<TrainingEntity>
@@ -114,6 +137,10 @@ interface TrainingDao {
 
     @Query("SELECT * FROM participation WHERE trainingId = :trainingId AND clientId = :clientId")
     suspend fun participationRow(trainingId: String, clientId: String): ParticipationEntity?
+
+    /** Участия тренировки, и удалённые: «Отменить» возвращает состав как был (5.20). */
+    @Query("SELECT * FROM participation WHERE trainingId = :trainingId")
+    suspend fun participationRowsOfTraining(trainingId: String): List<ParticipationEntity>
 
     @Query("DELETE FROM participation WHERE id = :id")
     suspend fun eraseParticipation(id: String)

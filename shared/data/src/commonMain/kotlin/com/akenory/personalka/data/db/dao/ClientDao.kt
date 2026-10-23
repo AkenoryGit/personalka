@@ -125,6 +125,10 @@ interface ClientDao {
     @Query("SELECT * FROM client_relation WHERE id = :id")
     suspend fun relation(id: String): ClientRelationEntity?
 
+    /** Все действующие связи: в форме тренировки вторым в сплит первыми предлагаются родственники (4.17, 5.5). */
+    @Query("SELECT * FROM client_relation WHERE deletedAt IS NULL")
+    fun observeRelations(): Flow<List<ClientRelationEntity>>
+
     /**
      * Запись связи пары в любом порядке, и удалённая тоже: уникальный индекс помнит удалённые записи,
      * поэтому связь, убранную и добавленную снова, пишет та же запись.

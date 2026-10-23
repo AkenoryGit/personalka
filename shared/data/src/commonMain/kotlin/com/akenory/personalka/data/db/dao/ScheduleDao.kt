@@ -59,6 +59,17 @@ interface ScheduleDao {
     @Query("SELECT * FROM series_client WHERE deletedAt IS NULL")
     fun observeSeriesClients(): Flow<List<SeriesClientEntity>>
 
+    /** То же разово: продление серий при открытии приложения (4.4). */
+    @Query("SELECT * FROM series WHERE deletedAt IS NULL AND (validTo IS NULL OR validTo >= :date)")
+    suspend fun seriesFrom(date: LocalDate): List<SeriesEntity>
+
+    @Query("SELECT * FROM series_client WHERE deletedAt IS NULL")
+    suspend fun allSeriesClients(): List<SeriesClientEntity>
+
+    /** Клиенты серии, и удалённые: пара «серия — клиент» уникальна и с ними; «Отменить» возвращает состав. */
+    @Query("SELECT * FROM series_client WHERE seriesId = :seriesId")
+    suspend fun seriesClientRowsOfSeries(seriesId: String): List<SeriesClientEntity>
+
     /** Записи «серия — клиент» клиента, и удалённые: пара уникальна и с ними (объединение дублей). */
     @Query("SELECT * FROM series_client WHERE clientId = :clientId")
     suspend fun seriesClientRowsOf(clientId: String): List<SeriesClientEntity>

@@ -6,6 +6,7 @@ import com.akenory.personalka.data.db.Samples
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.CalendarBadge.CHARGED
 import com.akenory.personalka.domain.calendar.CalendarBadge.DONE
@@ -373,11 +374,16 @@ class CalendarRepositoryTest {
         val id = training("ПТ", "ББ", at(nextTuesday, 13, 30), clientIds = listOf(client), statuses = listOf(ParticipationStatus.EXPECTED))
         db.trainingDao().upsertTraining(db.trainingDao().training(id)!!.copy(seriesId = series.id))
 
-        // «Только эту» (4.4): отдельная, её дата — в пропусках серии, чтобы продление не поставило вторую.
-        val moved = assertIs<MoveResult.Moved>(calendar.move(id, at(LocalDate(2026, 10, 28), 14)))
+        // Сначала вопрос (4.4): ничего не записано.
+        val ask = assertIs<MoveResult.AskScope>(calendar.move(id, at(LocalDate(2026, 10, 28), 14)))
+        assertEquals(s("Морозов_Д. · каждый вт и чт, 13:30. Новый день — ср_28.10. Новое время — 14:00–14:50."), ask.question)
+        assertEquals(nextTuesday, ask.date)
+        assertEquals(at(nextTuesday, 13, 30), db.trainingDao().training(id)!!.start)
+
+        // «Только эту»: отдельная, её дата — в пропусках серии, чтобы продление не поставило вторую.
+        val moved = assertIs<MoveResult.Moved>(calendar.move(id, at(LocalDate(2026, 10, 28), 14), scope = EditScope.ONLY_THIS))
         assertTrue(db.trainingDao().training(id)!!.seriesDetached)
         assertEquals(listOf(nextTuesday, LocalDate(2026, 11, 3)), db.scheduleDao().series(series.id)!!.skipDates)
-        assertEquals(nextTuesday, moved.undo.seriesSkip)
 
         // «Отменить» — снова тренировка серии на своей дате.
         calendar.undoMove(moved.undo)

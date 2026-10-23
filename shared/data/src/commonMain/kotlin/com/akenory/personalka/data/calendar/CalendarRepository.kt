@@ -7,12 +7,14 @@ import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
-import com.akenory.personalka.data.groups.toSeriesTraining
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
 import com.akenory.personalka.data.restrictions.recalcRestrictionFlags
 import com.akenory.personalka.data.restrictions.toRestriction
-import com.akenory.personalka.data.series.toSeries
+import com.akenory.personalka.data.series.Undo
+import com.akenory.personalka.data.training.EditScope
+import com.akenory.personalka.data.training.SaveResult
+import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.BadgeFacts
 import com.akenory.personalka.domain.calendar.CalendarBadge
@@ -28,12 +30,8 @@ import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
-import com.akenory.personalka.domain.restriction.Placement
-import com.akenory.personalka.domain.restriction.RestrictionCheck
 import com.akenory.personalka.domain.restriction.RestrictionHit
 import com.akenory.personalka.domain.restriction.RestrictionRules
-import com.akenory.personalka.domain.series.SeriesRules
-import com.akenory.personalka.domain.series.TrainingEdit
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.TrainingTime
 import kotlinx.coroutines.flow.Flow
@@ -73,7 +71,13 @@ data class CalendarTraining(
 /** Что вышло из переноса тренировки (5.3). */
 sealed interface MoveResult {
     /** Перенесено; [undo] — для «Отменить». */
-    data class Moved(val undo: MoveUndo) : MoveResult
+    data class Moved(val undo: Undo) : MoveResult
+
+    /**
+     * Тренировка серии (4.4): ничего не записано, нужен ответ «Только эту — [date]» или «Эту и следующие»;
+     * [question] — «Никитин А. · каждый вт и чт, 12:00. Новое время — 12:30–13:20.»
+     */
+    data class AskScope(val question: String, val date: LocalDate) : MoveResult
 
     /**
      * Новое время под запретом того же места (4.5): ничего не записано, нужно окно «Поставить всё равно?»
@@ -85,19 +89,9 @@ sealed interface MoveResult {
     data class Refused(val problem: MoveProblem?) : MoveResult
 }
 
-/** Как было до переноса: время, флаг «поверх запрета», отдельность от серии и дата, которая ушла в пропуски серии. */
-data class MoveUndo(
-    val trainingId: String,
-    val start: LocalDateTime,
-    val overRestriction: Boolean,
-    val seriesDetached: Boolean,
-    val seriesId: String?,
-    val seriesSkip: LocalDate?,
-)
-
 /**
- * Скопированная тренировка (5.3): тип, место, длительность и клиенты в порядке записи или группа. Её предложит
- * «Вставить скопированную» в форме новой тренировки (5.5, шаг 1.13).
+ * Скопированная тренировка (5.3): тип, место, длительность и клиенты в порядке записи или группа. Её предлагает
+ * «Вставить скопированную» в форме новой тренировки (5.5).
  */
 data class TrainingCopy(
     val typeId: String,
@@ -185,6 +179,7 @@ data class WorkHours(val start: LocalTime = LocalTime(7, 0), val end: LocalTime 
 /**
  * Календарь (ТЗ 5.3): тренировки дней с именами клиентов, типом, местом и значками; дежурства и запреты — зоны
  * под тренировками; часы сетки и шаг перетаскивания; перенос, «Копировать» и «Пропустить этот день».
+ * Создание и изменение тренировок (5.5) — [forms]: календарь и форма пишут через одно и то же.
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
@@ -214,6 +209,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Последняя скопированная тренировка; живёт, пока приложение открыто. */
     val copied: StateFlow<TrainingCopy?> = copiedState.asStateFlow()
+
+    /** Форма тренировки (5.5): создание, изменение, продление серий. */
+    val forms: TrainingRepository = TrainingRepository(db, clock, copied)
 
     /**
      * Тренировки, которые начинаются в дни с [from] по [to] не включая, по времени; отменённые тоже.
@@ -314,79 +312,31 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /**
      * Перенос перетаскиванием на [start] (5.3): длительность и место прежние; статус, план и отметки остаются —
-     * перенос не отмена (4.2). Новое время под запретом того же места — сначала [MoveResult.Confirm] без записи,
-     * «Поставить» — тот же вызов с [confirmed]. Флаг «поверх запрета» пишется вместе с временем (4.5).
+     * перенос не отмена (4.2). Проведённую нельзя унести в будущее, отменённую — никуда.
      *
-     * Тренировка серии переносится «Только эту» (4.4): становится отдельной, её дата уходит в пропуски серии.
-     * Вопрос «Только эту / Эту и следующие» появится с записью серий в шаге 1.13 — до него серий в базе нет.
+     * Ответы, которых ещё нет, возвращаются без записи, как в форме (5.5): у тренировки серии —
+     * [MoveResult.AskScope], «Только эту» или «Эту и следующие» — тот же вызов со [scope] (4.4); под запретом
+     * того же места — [MoveResult.Confirm], «Поставить» — тот же вызов с [confirmed]. Флаг «поверх запрета»
+     * пишется вместе с временем (4.5).
      */
-    suspend fun move(id: String, start: LocalDateTime, confirmed: Boolean = false): MoveResult {
+    suspend fun move(id: String, start: LocalDateTime, confirmed: Boolean = false, scope: EditScope? = null): MoveResult {
         val now = clock()
-        var result: MoveResult = MoveResult.Refused(null)
-        db.withWriteTransaction {
-            val t = trainings.training(id)
-            if (t == null || t.sync.deletedAt != null || TrainingTime.problem(start, t.durationMin) != null) return@withWriteTransaction
-            val participations = trainings.participationsOf(id)
-            val marked = t.status == TrainingStatus.DONE || participations.any { it.status == ParticipationStatus.ATTENDED }
-            val problem = CalendarDrag.problem(t.status, marked, start, ClubTime.now(now))
-            if (problem != null) {
-                result = MoveResult.Refused(problem)
-                return@withWriteTransaction
-            }
-
-            val isDuty = reference.trainingType(t.typeId)?.kind == TrainingKind.DUTY
-            val restrictions = schedule.blocks().map { it.toRestriction() }
-            val after = Placement(start, t.durationMin, t.locationId, isDuty)
-            val check = RestrictionRules.check(t.placement(isDuty), after, restrictions)
-            if (check is RestrictionCheck.Confirm && !confirmed) {
-                val places = reference.locations().associateBy { it.id }
-                result = MoveResult.Confirm(
-                    check.hits.map { hit ->
-                        val r = hit.restriction
-                        ZoneFormat.conflict(places[r.locationId]?.name.orEmpty(), r.startMinute, r.endMinute, r.reason)
-                    },
-                )
-                return@withWriteTransaction
-            }
-
-            val series = t.seriesId?.let { schedule.series(it) }?.takeIf { it.sync.deletedAt == null }
-            var skip: LocalDate? = null
-            if (series != null) {
-                val before = series.toSeries(schedule.seriesClients(series.id).map { it.clientId })
-                val edit = TrainingEdit(start, t.durationMin, t.typeId, t.locationId, participations.map { it.clientId }, t.groupId)
-                val changed = SeriesRules.changeOnlyThis(before, t.toSeriesTraining(participations), edit).series.firstOrNull()
-                if (changed != null) {
-                    schedule.upsertSeries(series.copy(skipDates = changed.skipDates.sorted(), sync = series.sync.touched(now)))
-                    skip = (changed.skipDates - before.skipDates).firstOrNull()
-                }
-            }
-            trainings.upsertTraining(
-                t.copy(
-                    start = start,
-                    overRestriction = RestrictionRules.flag(after, restrictions),
-                    seriesDetached = t.seriesDetached || series != null,
-                    sync = t.sync.touched(now),
-                ),
-            )
-            result = MoveResult.Moved(MoveUndo(id, t.start, t.overRestriction, t.seriesDetached, t.seriesId, skip))
-        }
-        return result
-    }
-
-    /** «Отменить» после переноса: прежние время, флаг и отдельность от серии; дата снова у серии. */
-    suspend fun undoMove(undo: MoveUndo) {
-        val now = clock()
-        db.withWriteTransaction {
-            val t = trainings.training(undo.trainingId)
-            if (t == null || t.sync.deletedAt != null) return@withWriteTransaction
-            trainings.upsertTraining(
-                t.copy(start = undo.start, overRestriction = undo.overRestriction, seriesDetached = undo.seriesDetached, sync = t.sync.touched(now)),
-            )
-            val skip = undo.seriesSkip ?: return@withWriteTransaction
-            val series = undo.seriesId?.let { schedule.series(it) } ?: return@withWriteTransaction
-            schedule.upsertSeries(series.copy(skipDates = series.skipDates - skip, sync = series.sync.touched(now)))
+        val t = trainings.training(id)
+        if (t == null || t.sync.deletedAt != null || TrainingTime.problem(start, t.durationMin) != null) return MoveResult.Refused(null)
+        val participations = trainings.participationsOf(id)
+        val marked = t.status == TrainingStatus.DONE || participations.any { it.status == ParticipationStatus.ATTENDED }
+        CalendarDrag.problem(t.status, marked, start, ClubTime.now(now))?.let { return MoveResult.Refused(it) }
+        val stored = forms.stored(id) ?: return MoveResult.Refused(null)
+        return when (val result = forms.update(id, stored.draft.copy(start = start), scope, confirmed, checkFields = false)) {
+            is SaveResult.Saved -> MoveResult.Moved(result.undo)
+            is SaveResult.AskScope -> MoveResult.AskScope(result.question, result.date)
+            is SaveResult.Confirm -> MoveResult.Confirm(result.conflicts)
+            is SaveResult.Invalid -> MoveResult.Refused(null)
         }
     }
+
+    /** «Отменить» после переноса: всё как было — время, флаг, серия и её пропуски. */
+    suspend fun undoMove(undo: Undo) = forms.undo(undo)
 
     /**
      * «Копировать» в меню тренировки (5.3): запоминает тип, место, длительность и клиентов — у группы саму группу.

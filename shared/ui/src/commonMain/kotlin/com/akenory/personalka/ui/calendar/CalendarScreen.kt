@@ -46,6 +46,7 @@ import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.CalendarZone
 import com.akenory.personalka.data.calendar.MoveResult
 import com.akenory.personalka.data.calendar.WorkHours
+import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.domain.calendar.CalendarDrag
 import com.akenory.personalka.domain.calendar.CalendarGrid
@@ -56,16 +57,18 @@ import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.clients.MenuAction
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.Panel
-import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
+import com.akenory.personalka.ui.training.ConflictPanel
+import com.akenory.personalka.ui.training.ScopePanel
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
@@ -77,12 +80,12 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
-/** Что «Календарь» отвечает на нажатие на тренировку до шага 1.14, где появится её карточка. */
-internal const val TRAINING_CARD_LATER = "Карточка тренировки — в шаге 1.14"
+/** Нажатие на тренировку примера: её нет в базе — ни формы, ни карточки. */
+internal const val SAMPLE_READ_ONLY = "Это пример дня — его не изменить"
 
 internal const val TODAY_LABEL = "Сегодня"
 
-/** Кнопка окна запрета (ТЗ 5.3). «Изменить» появится с формой запрета в шаге 1.13. */
+/** Кнопка окна запрета (ТЗ 5.3). «Изменить» появится с формой запрета в шаге 1.13а. */
 internal const val SKIP_DAY = "Пропустить этот день"
 
 /** Меню по длительному нажатию на тренировку (ТЗ 5.3, макет «Удержание на тренировке»). */
@@ -93,14 +96,11 @@ internal const val COPY_TRAINING = "Копировать"
 /** Что «Отменить» в меню отвечает до шага 1.14, где появится отмена из карточки (5.6). */
 internal const val CANCEL_LATER = "Отмена тренировки — в шаге 1.14"
 
-/** После «Копировать»: вставить её предложит форма новой тренировки (1.13). */
+/** После «Копировать»: вставить её предлагает форма новой тренировки (5.5). */
 internal const val COPIED = "Тренировка скопирована"
 
 /** Проведённую или с отметками «пришёл» не перенести туда, где её ещё нельзя было бы отметить. */
 internal const val MARKED_STAYS = "Проведённую тренировку нельзя перенести в будущее"
-
-/** Новая тренировка на время под пальцем или на время тренировки — до формы 1.13. */
-internal fun newTrainingLater(start: LocalDateTime): String = "Новая тренировка на ${CalendarFormat.at(start)} — в шаге 1.13"
 
 /** День в строке недели. */
 fun weekDayTag(date: LocalDate) = "week-$date"
@@ -116,13 +116,15 @@ private const val ID_SEPARATOR = "\n"
  * на сложенном — «День», на разложенном — «Несколько дней» по настройке тренера. Фильтр мест скрывает
  * тренировки, дежурства и запреты других мест; показ отменённых включается в меню вида.
  *
- * Выбранный день, положение сетки, фильтр мест, открытый список «+N», открытая зона, меню тренировки и окно
- * «Поставить всё равно?» хранятся выше всего, что зависит от ширины экрана: сложение и разложение Fold их не
- * сбрасывают. «День» и «Несколько дней» — одна и та же сетка с одним листанием: первая колонка — выбранный день.
+ * Выбранный день, положение сетки, фильтр мест, открытый список «+N», открытая зона, меню тренировки, вопрос
+ * для серии и окно «Поставить всё равно?» хранятся выше всего, что зависит от ширины экрана: сложение и разложение
+ * Fold их не сбрасывают. «День» и «Несколько дней» — одна и та же сетка с одним листанием: первая колонка — выбранный день.
  *
- * @param sample показать «пример дня» на сегодня — до шага 1.13, где тренировки можно будет создавать.
+ * @param sample показать «пример дня» на сегодня — с дежурством и запретом, пока их не создать формой (до 1.13а).
  * @param scope записи из окон: «Пропустить этот день» и его «Отменить» доживают до конца, даже если экран закрыли.
  * @param onOpen нажатие на тренировку.
+ * @param onCreate новая тренировка на это время: удержание на пустом месте и «Новая тренировка на это время».
+ * @param onSample пример дня в меню вида.
  */
 @Composable
 fun CalendarScreen(
@@ -133,6 +135,8 @@ fun CalendarScreen(
     messages: MessageState,
     scope: CoroutineScope,
     onOpen: (CalendarTraining) -> Unit,
+    onCreate: (LocalDateTime) -> Unit,
+    onSample: (Boolean) -> Unit,
 ) {
     val today = now.date
     val wide = LocalWide.current
@@ -145,6 +149,7 @@ fun CalendarScreen(
     var zoneKey by rememberSaveable { mutableStateOf<String?>(null) }
     var menuId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var askKey by rememberSaveable { mutableStateOf<String?>(null) }
     // Пропущенные зоны и перенесённые тренировки примера — только в памяти, как и сам пример.
     var sampleSkipped by rememberSaveable { mutableStateOf("") }
     var sampleMoves by rememberSaveable { mutableStateOf("") }
@@ -198,13 +203,15 @@ fun CalendarScreen(
         (if (shown.isEmpty()) stored else stored + shown).filter { inPlace(place, it.placeId, it.placeShort) && (showCancelled || !it.cancelled) }
     }
 
-    // Перенос (ТЗ 5.3, 4.5): под запретом того же места — окно «Поставить всё равно?», потом сообщение с «Отменить».
-    fun moveStored(id: String, start: LocalDateTime, confirmed: Boolean) {
+    // Перенос (ТЗ 5.3, 4.4, 4.5): у тренировки серии — «Только эту / Эту и следующие», под запретом того же места —
+    // окно «Поставить всё равно?», потом сообщение с «Отменить».
+    fun moveStored(id: String, start: LocalDateTime, confirmed: Boolean, answer: EditScope? = null) {
         scope.launch {
-            when (val result = calendar.move(id, start, confirmed)) {
+            when (val result = calendar.move(id, start, confirmed, answer)) {
                 is MoveResult.Moved -> messages.showUndo(CalendarFormat.moved(start)) { scope.launch { calendar.undoMove(result.undo) } }
+                is MoveResult.AskScope -> askKey = encodeAsk(id, start, result.date, result.question)
                 is MoveResult.Confirm -> {
-                    pendingKey = encodePending(id, start, result.conflicts)
+                    pendingKey = encodePending(id, start, answer, result.conflicts)
                 }
                 is MoveResult.Refused -> {
                     if (result.problem == MoveProblem.MARKED_IN_FUTURE) messages.show(MARKED_STAYS)
@@ -220,7 +227,7 @@ fun CalendarScreen(
             null -> {
                 val conflicts = if (confirmed) emptyList() else CalendarSample.conflicts(training, start, today, restrictionSkipped)
                 if (conflicts.isNotEmpty()) {
-                    pendingKey = encodePending(training.id, start, conflicts)
+                    pendingKey = encodePending(training.id, start, null, conflicts)
                 } else {
                     val before = moves
                     sampleMoves = encodeMoves(moves + (training.id to start))
@@ -251,6 +258,7 @@ fun CalendarScreen(
                 view = view,
                 views = CalendarViews.options(wide),
                 showCancelled = showCancelled,
+                sample = sample,
                 places = places,
                 place = place,
                 wide = wide,
@@ -263,6 +271,7 @@ fun CalendarScreen(
                     showCancelled = show
                     prefs.putBoolean(DevicePrefs.CALENDAR_SHOW_CANCELLED, show)
                 },
+                onSample = onSample,
                 onPlace = { placeId = it?.id },
             )
             if (view == CalendarView.Day) {
@@ -290,7 +299,7 @@ fun CalendarScreen(
                         onDismiss = { menuId = null },
                         onNew = {
                             menuId = null
-                            messages.show(newTrainingLater(training.start))
+                            onCreate(training.start)
                         },
                         onCancel = {
                             menuId = null
@@ -309,7 +318,7 @@ fun CalendarScreen(
                 onOpen = onOpen,
                 onMore = { hidden -> moreIds = hidden.joinToString(ID_SEPARATOR) { it.id } },
                 onZone = { zone -> zoneKey = zoneKeyOf(zone) },
-                onCreate = { start -> messages.show(newTrainingLater(start)) },
+                onCreate = onCreate,
                 onMenu = { training -> menuId = training.id },
                 onMove = { training, start -> move(training, start, confirmed = false) },
                 onZoomEnd = { prefs.putFloat(DevicePrefs.CALENDAR_HOUR, grid.hourDp) },
@@ -350,6 +359,25 @@ fun CalendarScreen(
             )
         }
 
+        val ask = askKey?.let(::decodeAsk)
+        if (ask != null) {
+            ScopePanel(
+                title = TrainingFormat.SCOPE_MOVE_TITLE,
+                question = ask.question,
+                date = ask.date,
+                back = ZoneFormat.CONFLICT_CANCEL,
+                onOnlyThis = {
+                    askKey = null
+                    moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.ONLY_THIS)
+                },
+                onFollowing = {
+                    askKey = null
+                    moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.FOLLOWING)
+                },
+                onDismiss = { askKey = null },
+            )
+        }
+
         val pending = pendingKey?.let(::decodePending)
         if (pending != null) {
             ConflictPanel(
@@ -358,22 +386,37 @@ fun CalendarScreen(
                 onPlace = {
                     pendingKey = null
                     val training = sampleDay.firstOrNull { it.id == pending.id }
-                    if (training != null) moveSample(training, pending.start, confirmed = true) else moveStored(pending.id, pending.start, confirmed = true)
+                    if (training != null) {
+                        moveSample(training, pending.start, confirmed = true)
+                    } else {
+                        moveStored(pending.id, pending.start, confirmed = true, answer = pending.answer)
+                    }
                 },
             )
         }
     }
 }
 
-/** Перенос, который ждёт ответа «Поставить всё равно?»: тренировка, новое начало и запреты под ним. */
-private class PendingMove(val id: String, val start: LocalDateTime, val conflicts: List<String>)
+/** Перенос, который ждёт ответа «Поставить всё равно?»: тренировка, новое начало, ответ для серии и запреты под ним. */
+private class PendingMove(val id: String, val start: LocalDateTime, val answer: EditScope?, val conflicts: List<String>)
 
-private fun encodePending(id: String, start: LocalDateTime, conflicts: List<String>): String =
-    (listOf(id, start.toString()) + conflicts).joinToString(ID_SEPARATOR)
+private fun encodePending(id: String, start: LocalDateTime, answer: EditScope?, conflicts: List<String>): String =
+    (listOf(id, start.toString(), answer?.name.orEmpty()) + conflicts).joinToString(ID_SEPARATOR)
 
 private fun decodePending(text: String): PendingMove {
     val lines = text.split(ID_SEPARATOR)
-    return PendingMove(lines[0], LocalDateTime.parse(lines[1]), lines.drop(2))
+    return PendingMove(lines[0], LocalDateTime.parse(lines[1]), lines[2].takeIf { it.isNotEmpty() }?.let(EditScope::valueOf), lines.drop(3))
+}
+
+/** Перенос тренировки серии, который ждёт ответа «Только эту / Эту и следующие». */
+private class AskMove(val id: String, val start: LocalDateTime, val date: LocalDate, val question: String)
+
+private fun encodeAsk(id: String, start: LocalDateTime, date: LocalDate, question: String): String =
+    listOf(id, start.toString(), date.toString(), question).joinToString(ID_SEPARATOR)
+
+private fun decodeAsk(text: String): AskMove {
+    val lines = text.split(ID_SEPARATOR)
+    return AskMove(lines[0], LocalDateTime.parse(lines[1]), LocalDate.parse(lines[2]), lines.drop(3).joinToString(ID_SEPARATOR))
 }
 
 /** Перенесённые тренировки примера: «id=2026-10-20T12:15» построчно. */
@@ -474,19 +517,6 @@ private fun TrainingMenu(
         MenuAction(NEW_AT_THIS_TIME, PIcons.Add, onNew)
         if (!training.cancelled) MenuAction(CANCEL_TRAINING, PIcons.EventBusy, onCancel)
         MenuAction(COPY_TRAINING, PIcons.ContentCopy, onCopy)
-    }
-}
-
-/**
- * Окно, когда тренировку ставят под запрет (4.5): «Детский бассейн 17:00–18:00: групповая тренировка» — строка
- * на каждый запрет, «Поставить» и «Отмена». «Отмена» оставляет тренировку на прежнем месте.
- */
-@Composable
-private fun ConflictPanel(conflicts: List<String>, onDismiss: () -> Unit, onPlace: () -> Unit) {
-    val colors = PersonalkaTheme.colors
-    Panel(title = ZoneFormat.CONFLICT_QUESTION, onDismiss = onDismiss) {
-        conflicts.forEach { Text(text = it, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text) }
-        PanelActions(primary = ZoneFormat.CONFLICT_PLACE, onPrimary = onPlace, secondary = ZoneFormat.CONFLICT_CANCEL, onSecondary = onDismiss)
     }
 }
 

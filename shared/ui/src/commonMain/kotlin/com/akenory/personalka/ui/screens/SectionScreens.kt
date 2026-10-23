@@ -35,8 +35,9 @@ import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.ui.calendar.CalendarSample
 import com.akenory.personalka.ui.calendar.CalendarScreen
-import com.akenory.personalka.ui.calendar.TRAINING_CARD_LATER
+import com.akenory.personalka.ui.calendar.SAMPLE_READ_ONLY
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
@@ -51,6 +52,7 @@ import com.akenory.personalka.ui.shell.ShellState
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
+import com.akenory.personalka.ui.training.TrainingFormKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.LocalDateTime
 
@@ -60,7 +62,9 @@ import kotlinx.datetime.LocalDateTime
  * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8, «Календарь» — с шага 1.9.
  *
  * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
- * @param sample показать в календаре пример дня — до шага 1.13.
+ * @param sample показать в календаре пример дня — до шага 1.13а.
+ * @param onForm открыть форму тренировки ([TrainingFormKey]): из календаря — новая на это время или изменение;
+ *   до карточки тренировки (шаг 1.14) нажатие на тренировку открывает её форму.
  */
 @Composable
 fun SectionScreen(
@@ -76,6 +80,8 @@ fun SectionScreen(
     sample: Boolean,
     messages: MessageState,
     scope: CoroutineScope,
+    onSample: (Boolean) -> Unit,
+    onForm: (String) -> Unit,
 ) {
     val today = now.date
     when (section) {
@@ -85,7 +91,19 @@ fun SectionScreen(
             heading = "Здесь будет ближайшая тренировка",
             text = "И список «Нужно сделать». Появится в шаге 1.16.",
         )
-        Section.CALENDAR -> CalendarScreen(calendar, prefs, now, sample, messages, scope, onOpen = { messages.show(TRAINING_CARD_LATER) })
+        Section.CALENDAR -> CalendarScreen(
+            calendar = calendar,
+            prefs = prefs,
+            now = now,
+            sample = sample,
+            messages = messages,
+            scope = scope,
+            onOpen = { training ->
+                if (CalendarSample.isSample(training)) messages.show(SAMPLE_READ_ONLY) else onForm(TrainingFormKey.edit(training.id))
+            },
+            onCreate = { start -> onForm(TrainingFormKey.new(start)) },
+            onSample = onSample,
+        )
         Section.CLIENTS -> ClientsScreen(shell, clients, messages, scope, now)
         Section.SALARY -> Placeholder(
             title = "Зарплата",

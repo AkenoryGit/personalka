@@ -68,6 +68,12 @@ const val CALENDAR_PLACE_TAG = "calendar-place"
 /** Пункт меню вида: показ отменённых (ТЗ 5.3) — на этом телефоне, по умолчанию включён. */
 internal const val SHOW_CANCELLED = "Показывать отменённые"
 
+/**
+ * Пункт меню вида до шага 1.13а: пример дня из макета с дежурством и запретом — их ещё не создать формой.
+ * С шага 1.13 «+» открывает форму тренировки, поэтому пример переехал сюда.
+ */
+internal const val SAMPLE_DAY = "Пример дня"
+
 /** День в строке над колонками «Нескольких дней». */
 fun dayHeaderTag(date: LocalDate) = "day-header-$date"
 
@@ -79,7 +85,7 @@ private const val PLACE_CHIPS_MAX = 4
  * На сложенном фильтр — кнопка «Все места ▾» после вида, на разложенном — чипы «Все / ББ / ДБ / Зал» перед
  * «Сегодня». Мест одно — фильтра нет (10.7). Мини-календарь по нажатию на месяц — шаг 1.12а.
  *
- * @param views виды этого состояния Fold; в меню вида под ними — «Показывать отменённые».
+ * @param views виды этого состояния Fold; в меню вида под ними — «Показывать отменённые» и «Пример дня».
  * @param place выбранное место; `null` — все.
  */
 @Composable
@@ -88,12 +94,14 @@ internal fun CalendarHeader(
     view: CalendarView,
     views: List<CalendarView>,
     showCancelled: Boolean,
+    sample: Boolean,
     places: List<CalendarPlace>,
     place: CalendarPlace?,
     wide: Boolean,
     onToday: () -> Unit,
     onView: (CalendarView) -> Unit,
     onShowCancelled: (Boolean) -> Unit,
+    onSample: (Boolean) -> Unit,
     onPlace: (CalendarPlace?) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
@@ -132,6 +140,10 @@ internal fun CalendarHeader(
             MenuToggle(SHOW_CANCELLED, showCancelled) {
                 close()
                 onShowCancelled(!showCancelled)
+            }
+            MenuToggle(SAMPLE_DAY, sample) {
+                close()
+                onSample(!sample)
             }
         }
         if (filter && !chips) {

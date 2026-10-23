@@ -30,8 +30,8 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.ui.App
-import com.akenory.personalka.ui.NEW_TRAINING_LATER
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.components.MessageState
@@ -40,6 +40,7 @@ import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.settings.PLACES_ROW_TAG
 import com.akenory.personalka.ui.settings.PROFILE_ROW_TAG
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.training.TRAINING_FORM_TAG
 import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -205,8 +206,11 @@ class ShellUiTest {
         setContent { Box(Modifier.size(folded, height)) { App(versionName = "0.1.0", settings = settings, clients = TestData.clientsOf(settings), groups = TestData.groupsOf(settings), calendar = TestData.calendarOf(settings), clock = clock) } }
         awaitShell()
 
+        // «+» на «Главной» — форма новой тренировки; «Закрыть» возвращает на «Главную».
         onNodeWithTag(FAB_TAG).performClick()
-        onNodeWithText(NEW_TRAINING_LATER).assertIsDisplayed()
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        onNodeWithContentDescription("Закрыть").performClick()
+        onNodeWithTag(TRAINING_FORM_TAG).assertDoesNotExist()
 
         onNodeWithTag(navTag(Section.CALENDAR)).performClick()
         onNodeWithTag(FAB_TAG).assertIsDisplayed()

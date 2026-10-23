@@ -144,7 +144,8 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 
 /**
  * Поле ввода с подписью над ним (TextField): высота 56, фон surface, рамка 1 dp outline, в фокусе — 2 dp primary.
- * Ошибка — рамка и строка под полем цветом error.
+ * Ошибка — рамка и строка под полем цветом error. [placeholder] — серым внутри пустого поля: «Необязательно».
+ * Многострочное ([singleLine] = `false`) растёт вниз по тексту — план тренировки.
  */
 @Composable
 fun Field(
@@ -156,6 +157,8 @@ fun Field(
     hint: String? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     tag: String? = null,
+    placeholder: String? = null,
+    singleLine: Boolean = true,
 ) {
     val colors = PersonalkaTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -183,7 +186,7 @@ fun Field(
                     if (error != null) this.error(error)
                 }
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier),
-            singleLine = true,
+            singleLine = singleLine,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.text),
             cursorBrush = SolidColor(colors.primary),
             keyboardOptions = keyboardOptions,
@@ -195,9 +198,14 @@ fun Field(
                         .heightIn(min = Dimens.field)
                         .background(colors.surface, MaterialTheme.shapes.medium)
                         .border(if (focused || error != null) 2.dp else 1.dp, border, MaterialTheme.shapes.medium)
-                        .padding(horizontal = Dimens.space4),
+                        .padding(horizontal = Dimens.space4, vertical = if (singleLine) 0.dp else Dimens.space4),
                     contentAlignment = Alignment.CenterStart,
-                ) { inner() }
+                ) {
+                    if (placeholder != null && value.isEmpty()) {
+                        Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
+                    }
+                    inner()
+                }
             },
         )
         val below = error ?: hint
@@ -214,7 +222,7 @@ fun Field(
 
 /**
  * Чип (Chip): высота 36, зона нажатия 48. Выбранный — primary с галочкой, невыбранный — surface-alt;
- * у типа до выбора — точка его цвета.
+ * у типа до выбора — точка его цвета. Узкие чипы в ряд (дни недели) — без галочки и во всю свою ширину ([fill]).
  */
 @Composable
 fun ChoiceChip(
@@ -225,6 +233,7 @@ fun ChoiceChip(
     dot: Color? = null,
     icon: ImageVector? = null,
     toggle: Boolean = false,
+    fill: Boolean = false,
 ) {
     val colors = PersonalkaTheme.colors
     val shape = MaterialTheme.shapes.small
@@ -236,16 +245,18 @@ fun ChoiceChip(
     Box(modifier.heightIn(min = Dimens.touch), contentAlignment = Alignment.Center) {
         Row(
             modifier = Modifier
+                .then(if (fill) Modifier.fillMaxWidth() else Modifier)
                 .height(Dimens.chip)
                 .clip(shape)
                 .background(if (selected) colors.primary else colors.surfaceAlt, shape)
                 .then(select)
-                .padding(horizontal = Dimens.space3),
+                .padding(horizontal = if (fill) 0.dp else Dimens.space3),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = if (fill) Arrangement.Center else Arrangement.spacedBy(6.dp),
         ) {
             val content = if (selected) colors.onPrimary else colors.text
             when {
+                fill -> Unit
                 selected -> Icon(PIcons.Check, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
                 icon != null -> Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
                 dot != null -> Box(Modifier.size(8.dp).background(dot, CircleShape))
