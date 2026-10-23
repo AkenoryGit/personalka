@@ -397,7 +397,7 @@ class TrainingFormUiTest {
     @Test
     fun restrictionOnAllPlacesAtOnce() = runComposeUiTest {
         openCalendar()
-        holdDay(150f, yOf("12:00") + 0.5f)
+        holdDay(150f, yOf("18:00") + 0.5f)
         awaitNode(hasText(TrainingFormat.NEW_TITLE))
         mode(TrainingFormat.MODE_RESTRICTION)
         awaitNode(hasText(TrainingFormat.NEW_RESTRICTION_TITLE))
@@ -411,7 +411,7 @@ class TrainingFormUiTest {
         awaitNode(hasText(s("Запреты созданы в 3_местах")))
         val blocks = runBlocking { db.scheduleDao().blocks() }
         assertEquals(3, blocks.map { it.locationId }.toSet().size)
-        assertTrue(blocks.all { it.reason == "Свои дела" && it.startTime == LocalTime(12, 0) })
+        assertTrue(blocks.all { it.reason == "Свои дела" && it.startTime == LocalTime(18, 0) })
         onNodeWithText("Отменить").performClick()
         waitUntil(timeoutMillis = 5_000) { runBlocking { db.scheduleDao().blocks().isEmpty() } }
     }
