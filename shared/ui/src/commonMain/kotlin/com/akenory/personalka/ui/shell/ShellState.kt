@@ -49,6 +49,12 @@ class ShellState(section: Section = Section.HOME, stacks: Map<Section, List<Stri
         }
     }
 
+    /** Открыть раздел с самого начала: «Клиенты без записи» на «Главной» ведут к списку, а не к открытой карточке. */
+    fun selectRoot(target: Section) {
+        section = target
+        stacks = stacks - target
+    }
+
     /** Открыть экран поверх текущего в открытом разделе. */
     fun open(route: String) {
         stacks = stacks + (section to stack() + route)

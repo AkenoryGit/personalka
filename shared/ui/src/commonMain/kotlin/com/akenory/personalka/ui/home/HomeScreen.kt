@@ -51,8 +51,11 @@ import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.training.MissingDiary
+import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.training.TrainingCard
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.home.HomeRules
@@ -118,14 +121,16 @@ internal fun CalendarTraining.slot() = HomeSlot(id, start, durationMin, group, c
 
 /**
  * Пункты «Нужно сделать» в порядке ТЗ 5.2. С шага 1.16 — группы без отметки и копия (в режиме «Только телефон»),
- * с шага 2.1 — «Без дневника» ([noDiary] — `DiaryRepository.missing`); лист ожидания, «без записи» и деньги добавят
- * свои шаги (2.4, этап 3). [backup] `null` — раздела копии нет (тесты). Их число — счётчик дел на значке «Главной».
+ * с шага 2.1 — «Без дневника» ([noDiary] — `DiaryRepository.missing`), с шага 2.4 — клиенты без записи ([followup]);
+ * лист ожидания и деньги добавят свои шаги (2.4а, этап 3). [backup] `null` — раздела копии нет (тесты). Их число —
+ * счётчик дел на значке «Главной».
  */
 fun homeTodos(
     trainings: List<CalendarTraining>,
     backup: BackupState?,
     now: LocalDateTime,
     noDiary: List<MissingDiary> = emptyList(),
+    followup: Followup = Followup.EMPTY,
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -151,6 +156,10 @@ fun homeTodos(
             ),
         )
     }
+    if (followup.rows.isNotEmpty()) {
+        val names = followup.rows.map { ClientName(it.client.lastName, it.client.firstName) }
+        add(HomeTodo(TodoKind.NOT_BOOKED, FollowupFormat.todo(names.size), FollowupFormat.todoNote(names), count = names.size))
+    }
     if (backup != null) {
         HomeRules.backup(backup.folder != null, backup.last, now)?.let { todo ->
             add(HomeTodo(TodoKind.BACKUP, HomeFormat.backup(todo), HomeFormat.backupNote(todo, backup.last), count = null))
@@ -171,6 +180,7 @@ fun homeTodos(
  * @param onDay «Ещё сегодня», «Сегодня всё» и «Завтра» — этот день в «Календаре».
  * @param onBackup пункт про копию — «Настройки → Данные».
  * @param onDiary «Дневник» у «Ближайшей» и в карточке, пункт «Без дневника» — экран дневника (5.7).
+ * @param onNoBooking пункт «Клиенты без записи» — «Клиенты» с фильтром «Без записи».
  */
 @Composable
 fun HomeScreen(
@@ -184,6 +194,7 @@ fun HomeScreen(
     onCard: (String?) -> Unit,
     onDay: (LocalDate) -> Unit,
     onBackup: () -> Unit,
+    onNoBooking: () -> Unit = {},
     onEdit: (String) -> Unit,
     onClient: (String) -> Unit,
     onGroup: (String) -> Unit,
@@ -209,6 +220,7 @@ fun HomeScreen(
     val onTodo: (HomeTodo) -> Unit = { todo ->
         val id = todo.trainingId
         when {
+            todo.kind == TodoKind.NOT_BOOKED -> onNoBooking()
             id == null -> onBackup()
             todo.kind == TodoKind.NO_DIARY -> onDiary(id)
             else -> open(id)
@@ -479,6 +491,7 @@ private fun TodoBlock(todos: List<HomeTodo>, onClick: (HomeTodo) -> Unit) {
 
 private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.UNMARKED_GROUPS -> PIcons.Groups
+    TodoKind.NOT_BOOKED -> PIcons.EventBusy
     TodoKind.BACKUP -> PIcons.FolderOpen
     TodoKind.NO_DIARY -> PIcons.EditNote
     else -> PIcons.Info

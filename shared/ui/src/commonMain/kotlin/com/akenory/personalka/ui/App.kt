@@ -15,11 +15,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.ui.clients.ClientRoute
+import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.home.homeTodos
@@ -95,7 +97,13 @@ fun App(
         val noDiary by remember(calendar, hasCoach) {
             if (hasCoach == true) calendar.diaries.missing else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
-        val todos = remember(home, backupState, now, noDiary) { homeTodos(home, backupState, now, noDiary) }
+        // «Без записи» (4.15): раздел «Клиентов», метка в карточке и пункт «Нужно сделать».
+        val followup by remember(clients, hasCoach, now) {
+            if (hasCoach == true) clients.followup.observe(now) else flowOf(Followup.EMPTY)
+        }.collectAsState(initial = Followup.EMPTY)
+        val todos = remember(home, backupState, now, noDiary, followup) { homeTodos(home, backupState, now, noDiary, followup) }
+        // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
+        val clientList = rememberClientListState()
 
         // Серии продлеваются до горизонта при открытии приложения и при смене дня (4.4).
         LaunchedEffect(calendar, hasCoach, now.date) {
@@ -162,6 +170,8 @@ fun App(
                                 }
                             },
                             onDiary = { diary = it },
+                            followup = followup,
+                            clientList = clientList,
                         )
                     }
                     form?.let { key ->

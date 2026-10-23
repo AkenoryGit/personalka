@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.screens
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,15 +32,19 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.ui.calendar.CalendarScreen
+import com.akenory.personalka.ui.clients.ClientFilter
+import com.akenory.personalka.ui.clients.ClientListState
+import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.clients.ClientsScreen
+import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
-import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.home.HomeScreen
@@ -77,6 +81,8 @@ import kotlinx.datetime.LocalDateTime
  * @param calendarDay день, который «Главная» попросила открыть в «Календаре»; [onCalendarDay] — открыть его
  *   (раздел «Календарь» переключается) или `null` — день открыт.
  * @param onDiary открыть дневник тренировки (шаг 2.1) — экран поверх приложения.
+ * @param followup «Без записи» (шаг 2.4) для «Клиентов»; [clientList] — поиск и фильтр их списка: пункт «Главной»
+ *   открывает «Без записи».
  */
 @Composable
 fun SectionScreen(
@@ -102,6 +108,8 @@ fun SectionScreen(
     calendarDay: LocalDate? = null,
     onCalendarDay: (LocalDate?) -> Unit = {},
     onDiary: (String) -> Unit = {},
+    followup: Followup = Followup.EMPTY,
+    clientList: ClientListState = rememberClientListState(),
 ) {
     val openClient: (String) -> Unit = { id ->
         shell.select(Section.CLIENTS)
@@ -126,6 +134,10 @@ fun SectionScreen(
                 shell.select(Section.MORE)
                 shell.reset(SettingsRoute.HOME)
                 shell.open(SettingsRoute.DATA)
+            },
+            onNoBooking = {
+                clientList.filter = ClientFilter.NO_BOOKING
+                shell.selectRoot(Section.CLIENTS)
             },
             onEdit = { id -> onForm(TrainingFormKey.edit(id)) },
             onClient = { id ->
@@ -164,7 +176,7 @@ fun SectionScreen(
             onWent = { onCalendarDay(null) },
             onDiary = onDiary,
         )
-        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm)
+        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList)
         Section.SALARY -> Placeholder(
             title = "Зарплата",
             icon = PIcons.Payments,

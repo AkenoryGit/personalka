@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.data.clients.ClientTrainingRow
+import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.RelativeRow
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.db.entity.ClientEntity
@@ -62,6 +64,7 @@ import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.ResultFormat
+import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.model.ClientStatus
@@ -138,6 +141,7 @@ fun ClientCard(
     now: LocalDateTime,
     onForm: (String) -> Unit,
     onBack: (() -> Unit)?,
+    followup: Followup = Followup.EMPTY,
 ) {
     val today = now.date
     val row = rows.firstOrNull { it.client.id == clientId }
@@ -211,7 +215,7 @@ fun ClientCard(
                 }, danger = true)
             }
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                CardHeader(row, today)
+                CardHeader(row, today, noBooking = clientId in followup.noBooking)
                 if (stats != null && !stats.isEmpty) StatsRow(stats)
                 if (active) {
                     // Клиента в архиве не записывают: сначала «Вернуть из архива».
@@ -388,7 +392,7 @@ private fun CardTopBar(onBack: (() -> Unit)?, menu: (@Composable (close: () -> U
 
 /** Имя, метки и строка «11 лет · Вт, Чт 13:30 · ПТ ББ». */
 @Composable
-private fun CardHeader(row: ClientRow, today: LocalDate) {
+private fun CardHeader(row: ClientRow, today: LocalDate, noBooking: Boolean) {
     val colors = PersonalkaTheme.colors
     val client = row.client
     Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space4)) {
@@ -403,6 +407,7 @@ private fun CardHeader(row: ClientRow, today: LocalDate) {
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
             OutlineLabel(ClientFormat.adult(client.adultOn(today)))
             if (client.status == ClientStatus.ARCHIVED) OutlineLabel("В архиве")
+            if (noBooking) OutlineLabel(FollowupFormat.NO_BOOKING, PIcons.EventBusy)
             if (line.isNotEmpty()) {
                 Text(line.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
             }
@@ -410,18 +415,22 @@ private fun CardHeader(row: ClientRow, today: LocalDate) {
     }
 }
 
-/** Метка с рамкой: «Ребёнок», «В архиве». */
+/** Метка с рамкой: «Ребёнок», «В архиве», «Нет записи» — со значком. */
 @Composable
-private fun OutlineLabel(text: String) {
+private fun OutlineLabel(text: String, icon: ImageVector? = null) {
     val colors = PersonalkaTheme.colors
-    Text(
-        text,
-        modifier = Modifier
+    Row(
+        Modifier
             .border(1.dp, colors.outline, MaterialTheme.shapes.small)
             .padding(horizontal = Dimens.space2, vertical = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = colors.text,
-    )
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = colors.text, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(text, style = MaterialTheme.typography.labelMedium, color = colors.text)
+    }
 }
 
 /** Счётчики: проведено · отменено · со списанием · в месяц. */

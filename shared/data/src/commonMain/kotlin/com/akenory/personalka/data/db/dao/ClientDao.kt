@@ -99,6 +99,10 @@ interface ClientDao {
     @Query("SELECT * FROM wait_entry WHERE status = :status AND deletedAt IS NULL ORDER BY createdAt")
     suspend fun waitEntries(status: WaitStatus): List<WaitEntryEntity>
 
+    /** Записи листа ожидания со статусом [status]: кто ждёт, тот не в «Не записаны дальше» (4.16). */
+    @Query("SELECT * FROM wait_entry WHERE status = :status AND deletedAt IS NULL ORDER BY createdAt")
+    fun observeWaitEntries(status: WaitStatus): Flow<List<WaitEntryEntity>>
+
     @Query("SELECT * FROM wait_entry WHERE clientId = :clientId AND deletedAt IS NULL")
     suspend fun waitEntriesOf(clientId: String): List<WaitEntryEntity>
 

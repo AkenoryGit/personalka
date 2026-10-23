@@ -132,17 +132,30 @@ object TrainingFormKey {
     private const val EDIT = "edit:"
     private const val RESTRICTION = "restriction:"
     private const val SERIES = "series:"
+    private const val START = '@'
     private const val CLIENT = '#'
+    private const val TYPE = '$'
+    private const val PLACE = '%'
     private const val WEEKLY = '!'
+    private val MARKS = charArrayOf(START, CLIENT, TYPE, PLACE, WEEKLY)
 
     /**
      * Новая запись. [clientId] — «+ Тренировка» и «+ Серия» в карточке клиента (5.9): клиент уже выбран;
-     * [weekly] — «+ Серия»: сразу «Каждую неделю».
+     * [weekly] — «+ Серия»: сразу «Каждую неделю». [typeId] и [locationId] — «Записать» из «Без записи» (5.8):
+     * тот же тип и место, что у последнего посещения.
      */
-    fun new(start: LocalDateTime? = null, clientId: String? = null, weekly: Boolean = false): String = buildString {
+    fun new(
+        start: LocalDateTime? = null,
+        clientId: String? = null,
+        weekly: Boolean = false,
+        typeId: String? = null,
+        locationId: String? = null,
+    ): String = buildString {
         append(NEW)
-        if (start != null) append('@').append(start)
+        if (start != null) append(START).append(start)
         if (clientId != null) append(CLIENT).append(clientId)
+        if (typeId != null) append(TYPE).append(typeId)
+        if (locationId != null) append(PLACE).append(locationId)
         if (weekly) append(WEEKLY)
     }
 
@@ -161,13 +174,23 @@ object TrainingFormKey {
 
     fun seriesId(key: String): String? = key.takeIf { it.startsWith(SERIES) }?.removePrefix(SERIES)
 
-    fun start(key: String): LocalDateTime? =
-        key.takeIf { it.startsWith("$NEW@") }?.substringAfter('@')?.substringBefore(CLIENT)?.substringBefore(WEEKLY)?.let(LocalDateTime::parse)
+    fun start(key: String): LocalDateTime? = part(key, START)?.let(LocalDateTime::parse)
 
-    fun clientId(key: String): String? =
-        key.takeIf { it.startsWith(NEW) && CLIENT in it }?.substringAfter(CLIENT)?.removeSuffix(WEEKLY.toString())
+    fun clientId(key: String): String? = part(key, CLIENT)
+
+    fun typeId(key: String): String? = part(key, TYPE)
+
+    fun locationId(key: String): String? = part(key, PLACE)
 
     fun weekly(key: String): Boolean = key.startsWith(NEW) && key.endsWith(WEEKLY)
+
+    /** Значение после [mark] в ключе новой записи — до следующей метки. */
+    private fun part(key: String, mark: Char): String? {
+        if (!key.startsWith(NEW)) return null
+        val from = key.indexOf(mark).takeIf { it >= 0 } ?: return null
+        val to = key.indexOfAny(MARKS, from + 1).takeIf { it >= 0 } ?: key.length
+        return key.substring(from + 1, to)
+    }
 }
 
 /** Что создаёт форма — переключатель «Тренировка / Дежурство / Запрет» вверху новой записи (5.5, шаг 1.13а). */
@@ -370,14 +393,16 @@ private fun TrainingFields(
                 }
             }
         } else if (draft == null) {
-            val type = loaded.types.firstOrNull()
+            val asked = TrainingFormKey.typeId(key)
+            val type = loaded.types.firstOrNull { it.id == asked } ?: loaded.types.firstOrNull()
             val minutes = type?.defaultDurationMin ?: TypePresets.DEFAULT_DURATION
             val start = TrainingFormKey.start(key) ?: forms.suggestStart(minutes)
+            val place = TrainingFormKey.locationId(key)?.takeIf { id -> loaded.places.any { it.id == id } }
             draft = TrainingDraft(
                 start = start,
                 typeId = type?.id,
                 clientIds = listOfNotNull(TrainingFormKey.clientId(key)),
-                locationId = type?.let { loaded.lastPlaceByType[it.id] } ?: loaded.places.firstOrNull()?.id,
+                locationId = place ?: type?.let { loaded.lastPlaceByType[it.id] } ?: loaded.places.firstOrNull()?.id,
                 durationMin = minutes,
                 repeat = if (TrainingFormKey.weekly(key)) Repeat(setOf(start.date.dayOfWeek)) else null,
             )

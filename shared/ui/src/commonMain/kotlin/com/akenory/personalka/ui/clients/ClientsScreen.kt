@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.ClientRow
+import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.clients.draft
 import com.akenory.personalka.data.training.TrainingRepository
@@ -90,7 +91,8 @@ sealed interface ClientScreen {
     data class Merge(override val clientId: String) : ClientScreen
 }
 
-enum class ClientFilter { ACTIVE, ARCHIVE }
+/** Чипы списка (5.8): «Активные», «Без записи» (4.15, 4.16), «Архив». */
+enum class ClientFilter { ACTIVE, NO_BOOKING, ARCHIVE }
 
 enum class ClientSort(val label: String) { NAME("по фамилии"), NEXT("по ближайшей тренировке") }
 
@@ -112,7 +114,8 @@ class ClientListState(
 
     /** Строки, которые видны: фильтр, редкий фильтр, поиск и порядок. */
     fun visible(rows: List<ClientRow>, today: LocalDate): List<ClientRow> {
-        val status = if (filter == ClientFilter.ACTIVE) ClientStatus.ACTIVE else ClientStatus.ARCHIVED
+        // «Без записи» — свой список ([FollowupList]); здесь — активные, если спросят.
+        val status = if (filter == ClientFilter.ARCHIVE) ClientStatus.ARCHIVED else ClientStatus.ACTIVE
         val shown = rows.filter { row ->
             val client = row.client
             client.status == status &&
@@ -147,6 +150,10 @@ class ClientListState(
     }
 }
 
+/** Состояние списка, которое переживает сложение и смену темы. */
+@Composable
+fun rememberClientListState(): ClientListState = rememberSaveable(saver = ClientListState.Saver) { ClientListState() }
+
 val ClientRow.name: ClientName get() = ClientName(client.lastName, client.firstName, client.middleName)
 
 /** Строка под именем: «9 лет · Сб 09:00 · Группа ББ». */
@@ -164,7 +171,11 @@ private val ListWidth = 360.dp
  * карточки родственника возвращает карточку на той же вкладке и прокрутке.
  *
  * @param forms серии клиента и их запись — «Расписание» карточки (шаг 1.13б).
- * @param onForm открыть форму тренировки поверх приложения: «+ Тренировка», «+ Серия», «Изменить с даты…».
+ * @param onForm открыть форму тренировки поверх приложения: «+ Тренировка», «+ Серия», «Изменить с даты…»,
+ *   «Записать» из «Без записи».
+ * @param followup «Без записи» (4.15): раздел списка и метка «Нет записи» в карточке; считает приложение — пункт
+ *   «Нужно сделать» на «Главной» нужен из любого раздела.
+ * @param list поиск и фильтры списка: «Главная» открывает «Без записи» ([ClientListState.filter]).
  */
 @Composable
 fun ClientsScreen(
@@ -175,10 +186,12 @@ fun ClientsScreen(
     scope: CoroutineScope,
     now: LocalDateTime,
     onForm: (String) -> Unit,
+    followup: Followup = Followup.EMPTY,
+    list: ClientListState = rememberClientListState(),
 ) {
     val wide = LocalWide.current
-    val list = rememberSaveable(saver = ClientListState.Saver) { ClientListState() }
     val scroll = rememberLazyListState()
+    val followupScroll = rememberLazyListState()
     val screens = rememberSaveableStateHolder()
     val rows by remember(clients, now) { clients.rows(now) }.collectAsState(initial = null)
     val stack = shell.stack(Section.CLIENTS)
@@ -198,6 +211,10 @@ fun ClientsScreen(
                 selectedId = top?.clientId,
                 onOpen = nav::openFromList,
                 onNew = nav::newFromList,
+                noBookingCount = followup.rows.size,
+                noBooking = { modifier ->
+                    FollowupList(followup, list.query, followupScroll, clients, messages, scope, now, nav::openFromList, onForm, modifier)
+                },
                 modifier = if (wide) Modifier.width(ListWidth).fillMaxHeight() else Modifier.weight(1f).fillMaxHeight(),
             )
             if (wide) VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)
@@ -208,6 +225,7 @@ fun ClientsScreen(
                     ClientDetail(
                         screen = top,
                         rows = loaded,
+                        followup = followup,
                         clients = clients,
                         forms = forms,
                         nav = nav,
@@ -265,6 +283,7 @@ class ClientNav(private val shell: ShellState, private val wide: Boolean) {
 private fun ClientDetail(
     screen: ClientScreen,
     rows: List<ClientRow>,
+    followup: Followup,
     clients: ClientRepository,
     forms: TrainingRepository,
     nav: ClientNav,
@@ -275,7 +294,7 @@ private fun ClientDetail(
     onBack: (() -> Unit)?,
 ) {
     when (screen) {
-        is ClientScreen.Card -> ClientCard(screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack)
+        is ClientScreen.Card -> ClientCard(screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack, followup)
         is ClientScreen.New -> ClientEditor(
             clientId = null,
             initial = prefillDraft(screen.prefill),

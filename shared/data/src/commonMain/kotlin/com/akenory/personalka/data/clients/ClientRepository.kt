@@ -86,6 +86,9 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     /** Результаты клиентов (шаг 2.3, ТЗ 5.11). */
     val results: ResultRepository = ResultRepository(db, clock)
 
+    /** «Без записи» (4.15): список, метка «Нет записи», «Написал» и «Пауза до…». */
+    val followup = ClientFollowup(db, clock)
+
     /** Все клиенты, и в архиве, со строкой списка. [now] — «сейчас» клуба: от него ближайшая тренировка. */
     fun rows(now: LocalDateTime): Flow<List<ClientRow>> = combine(
         clients.observeAllClients(),

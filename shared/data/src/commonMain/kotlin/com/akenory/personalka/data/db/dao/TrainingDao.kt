@@ -8,12 +8,22 @@ import com.akenory.personalka.data.db.entity.ResultEntity
 import com.akenory.personalka.data.db.entity.SptCaseEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDateTime
 
 /** Ближайшая тренировка клиента — для строки списка (5.8). */
 data class NextTraining(val clientId: String, val start: LocalDateTime)
+
+/** Тренировка клиента с видом её типа — для «Без записи» (4.15): посещения и запись дальше. */
+data class ClientVisit(
+    val clientId: String,
+    val start: LocalDateTime,
+    val typeId: String,
+    val locationId: String,
+    val kind: TrainingKind,
+)
 
 /** Тренировки и дежурства, участие клиентов, результаты, стартовые тренировки (ТЗ 3.5). */
 @Dao
@@ -211,6 +221,22 @@ interface TrainingDao {
         """
     )
     fun observeNextTrainings(from: LocalDateTime, planned: TrainingStatus, expected: ParticipationStatus): Flow<List<NextTraining>>
+
+    /**
+     * Тренировки клиентов с [from], где у клиента статус [participation], а у тренировки — [training]: проведённые
+     * с «пришёл» — посещения, запланированные с «ждём» — запись дальше (4.15). Вид типа — для отбора индивидуальных.
+     */
+    @Query(
+        """
+        SELECT p.clientId AS clientId, t.start AS start, t.typeId AS typeId, t.locationId AS locationId, ty.kind AS kind
+        FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        JOIN training_type AS ty ON ty.id = t.typeId
+        WHERE t.start >= :from AND t.status = :training AND p.status = :participation
+          AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        """
+    )
+    fun observeClientVisits(from: LocalDateTime, training: TrainingStatus, participation: ParticipationStatus): Flow<List<ClientVisit>>
 
     @Upsert
     suspend fun upsertResult(item: ResultEntity)

@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.domain.format.ClientFormat
+import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.EmptyState
@@ -73,11 +74,12 @@ fun clientRowTag(name: String) = "client-row-$name"
 fun filterChipTag(filter: ClientFilter) = "client-filter-${filter.name}"
 
 /**
- * Список клиентов (5.8, макет ClList): поиск по фамилии и имени, «Активные · 42» и «Архив» чипами, редкие
- * фильтры и сортировка — под значком в шапке, выбранный редкий фильтр — чипом с крестиком в начале ряда.
- * Строка: имя, возраст и постоянное расписание, справа — ближайшая тренировка.
+ * Список клиентов (5.8, макет ClList): поиск по фамилии и имени, «Активные · 42», «Без записи · 6» и «Архив»
+ * чипами, редкие фильтры и сортировка — под значком в шапке, выбранный редкий фильтр — чипом с крестиком в начале
+ * ряда. Строка: имя, возраст и постоянное расписание, справа — ближайшая тренировка.
  *
- * «Без записи» появится вместе со списком «Без записи» и листом ожидания (шаг 2.4): выключенное не показывается.
+ * «Без записи» виден всегда (с шага 2.4), его содержимое — [noBooking] (макет ClNoBooking); [noBookingCount] —
+ * число на чипе.
  */
 @Composable
 fun ClientList(
@@ -88,6 +90,8 @@ fun ClientList(
     selectedId: String?,
     onOpen: (String) -> Unit,
     onNew: (prefill: String) -> Unit,
+    noBookingCount: Int,
+    noBooking: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = PersonalkaTheme.colors
@@ -110,7 +114,7 @@ fun ClientList(
         val active = rows.count { it.client.status == ClientStatus.ACTIVE }
         val archived = rows.size - active
         // В архиве никого — фильтр «Архив» не нужен; если его выбрали, а архив опустел, — снова «Активные».
-        LaunchedEffect(archived) { if (archived == 0) state.filter = ClientFilter.ACTIVE }
+        LaunchedEffect(archived) { if (archived == 0 && state.filter == ClientFilter.ARCHIVE) state.filter = ClientFilter.ACTIVE }
         val visible = state.visible(rows, today)
 
         SearchField(
@@ -119,29 +123,35 @@ fun ClientList(
             placeholder = "Фамилия или имя",
             modifier = Modifier.padding(horizontal = Dimens.space4).testTag(CLIENT_SEARCH_TAG),
         )
-        if (archived > 0 || state.age != AgeFilter.ALL) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.space4, vertical = Dimens.space1),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
-            ) {
-                if (state.age != AgeFilter.ALL) RemovableChip(state.age.label, onRemove = { state.age = AgeFilter.ALL })
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.space4, vertical = Dimens.space1),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+        ) {
+            if (state.age != AgeFilter.ALL) RemovableChip(state.age.label, onRemove = { state.age = AgeFilter.ALL })
+            ChoiceChip(
+                text = "Активные · $active",
+                selected = state.filter == ClientFilter.ACTIVE,
+                onClick = { state.filter = ClientFilter.ACTIVE },
+                modifier = Modifier.testTag(filterChipTag(ClientFilter.ACTIVE)),
+            )
+            ChoiceChip(
+                text = FollowupFormat.chip(noBookingCount),
+                selected = state.filter == ClientFilter.NO_BOOKING,
+                onClick = { state.filter = ClientFilter.NO_BOOKING },
+                modifier = Modifier.testTag(filterChipTag(ClientFilter.NO_BOOKING)),
+            )
+            if (archived > 0) {
                 ChoiceChip(
-                    text = "Активные · $active",
-                    selected = state.filter == ClientFilter.ACTIVE,
-                    onClick = { state.filter = ClientFilter.ACTIVE },
-                    modifier = Modifier.testTag(filterChipTag(ClientFilter.ACTIVE)),
+                    text = "Архив",
+                    selected = state.filter == ClientFilter.ARCHIVE,
+                    onClick = { state.filter = ClientFilter.ARCHIVE },
+                    modifier = Modifier.testTag(filterChipTag(ClientFilter.ARCHIVE)),
                 )
-                if (archived > 0) {
-                    ChoiceChip(
-                        text = "Архив",
-                        selected = state.filter == ClientFilter.ARCHIVE,
-                        onClick = { state.filter = ClientFilter.ARCHIVE },
-                        modifier = Modifier.testTag(filterChipTag(ClientFilter.ARCHIVE)),
-                    )
-                }
             }
-        } else {
-            Spacer(Modifier.height(Dimens.space2))
+        }
+        if (state.filter == ClientFilter.NO_BOOKING) {
+            noBooking(Modifier.weight(1f).fillMaxWidth())
+            return@Column
         }
         Text(
             text = "${ClientFormat.clients(visible.size)} · ${state.sort.label}",
