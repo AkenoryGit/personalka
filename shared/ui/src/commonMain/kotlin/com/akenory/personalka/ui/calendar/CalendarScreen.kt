@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +62,7 @@ import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.CalendarView
 import com.akenory.personalka.domain.calendar.CalendarViews
 import com.akenory.personalka.domain.calendar.DaySpan
+import com.akenory.personalka.domain.calendar.MonthRules
 import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.CalendarFormat
@@ -118,17 +121,22 @@ fun weekDayTag(date: LocalDate) = "week-$date"
 private const val ID_SEPARATOR = "\n"
 
 /**
- * «Календарь» (ТЗ 5.3): шапка с месяцем, «Сегодня», видом и фильтром мест; вид «День» со строкой недели пн–вс
- * или «Несколько дней» (3, 5, 7) со строкой дней над колонками; сетка с дежурствами и запретами под тренировками,
- * жесты — перенос, меню, быстрое создание. Месяц, список и мини-календарь — шаг 1.12а.
+ * «Календарь» (ТЗ 5.3): шапка с месяцем и мини-календарём, «Сегодня», видом и фильтром мест; вид «День» со строкой
+ * недели пн–вс или «Несколько дней» (3, 5, 7) со строкой дней над колонками — сетка с дежурствами и запретами под
+ * тренировками, жесты — перенос, меню, быстрое создание; «Месяц» — сетка дней со списком выбранного дня; «Список»
+ * — тренировки по дням подряд.
  *
  * Вид запоминается на этом телефоне отдельно для сложенного и разложенного Fold ([DevicePrefs]); по умолчанию
  * на сложенном — «День», на разложенном — «Несколько дней» по настройке тренера. Фильтр мест скрывает
  * тренировки, дежурства и запреты других мест; показ отменённых включается в меню вида.
  *
- * Выбранный день, положение сетки, фильтр мест, открытый список «+N», открытая зона, меню тренировки, вопрос
- * для серии и окно «Поставить всё равно?» хранятся выше всего, что зависит от ширины экрана: сложение и разложение
- * Fold их не сбрасывают. «День» и «Несколько дней» — одна и та же сетка с одним листанием: первая колонка — выбранный день.
+ * Выбранный день — один на все виды (шаг 1.12а): на сетке это первая колонка листания, в «Месяце» — выбранная
+ * клетка, в «Списке» — первый видимый день. Пока открыт «Месяц» или «Список», листание сетки и страница месяца
+ * стоят на выбранном дне, поэтому другой вид открывается сразу на нём, без кадра со старым днём.
+ *
+ * Выбранный день, положение сетки, страница месяца, прокрутка списка, фильтр мест, открытый список «+N», открытая
+ * зона, меню тренировки, вопрос для серии и окно «Поставить всё равно?» хранятся выше всего, что зависит от ширины
+ * экрана: сложение и разложение Fold их не сбрасывают.
  *
  * @param sample показать «пример дня» на сегодня — с дежурством и запретом, пока их не создать формой (до 1.13а).
  * @param scope записи из окон: «Пропустить этот день» и его «Отменить» доживают до конца, даже если экран закрыли.
@@ -152,6 +160,12 @@ fun CalendarScreen(
     val wide = LocalWide.current
     val ui = rememberCoroutineScope()
     val pager = rememberPagerState(initialPage = pageOf(today)) { PAGE_COUNT }
+    val months = rememberPagerState(initialPage = MonthRules.page(today)) { MonthRules.PAGE_COUNT }
+    val agenda = rememberSaveable(saver = AgendaState.Saver) { AgendaState(pageOf(today)) }
+    val agendaList = rememberLazyListState()
+    // Выбранный день «Месяца» и «Списка» — номер дня от 1970 г., как страница листания; на сетке он идёт за листанием.
+    var pickedPage by rememberSaveable { mutableIntStateOf(pageOf(today)) }
+    val picked = dateOfPage(pickedPage)
     val grid = rememberSaveable(saver = DayGridState.Saver) {
         DayGridState(CalendarGrid.openTop(now.time), prefs.float(DevicePrefs.CALENDAR_HOUR) ?: CalendarGrid.HOUR_DEFAULT_DP)
     }
@@ -164,7 +178,6 @@ fun CalendarScreen(
     var sampleSkipped by rememberSaveable { mutableStateOf("") }
     var sampleMoves by rememberSaveable { mutableStateOf("") }
 
-    val day = dateOfPage(pager.currentPage)
     val work by remember(calendar) { calendar.workHours }.collectAsState(initial = WorkHours())
     val step by remember(calendar) { calendar.dragStep }.collectAsState(initial = CalendarDrag.STEP_DEFAULT)
     // Пунктирный блок новой тренировки — такой длины, какую подставит форма: у типа, который в ней первый.
@@ -182,24 +195,93 @@ fun CalendarScreen(
         prefs.putString(viewKey(wide), next.code)
         viewChanges++
     }
+    // Выбранный день: на сетке — первая колонка листания, в «Месяце» и «Списке» — свой.
+    val day = if (view.grid) dateOfPage(pager.currentPage) else picked
+
+    // На сетке выбранный день идёт за листанием — с него откроются «Месяц» и «Список».
+    LaunchedEffect(view.grid) {
+        if (!view.grid) return@LaunchedEffect
+        if (pager.currentPage != pickedPage) pager.requestScrollToPage(pickedPage)
+        snapshotFlow { pager.currentPage }.collect { pickedPage = it }
+    }
+    // В «Месяце» и «Списке» сетка ждёт на выбранном дне, страница месяца — на его месяце: другой вид откроется на нём же.
+    LaunchedEffect(view, pickedPage) {
+        if (!view.grid && pager.currentPage != pickedPage) pager.requestScrollToPage(pickedPage)
+        val month = MonthRules.page(dateOfPage(pickedPage))
+        if (view != CalendarView.Month && months.currentPage != month) months.requestScrollToPage(month)
+    }
+    // «Месяц» перелистнули — выбран тот же день в новом месяце, а в месяце сегодняшнего дня — сегодня.
+    LaunchedEffect(view) {
+        if (view != CalendarView.Month) return@LaunchedEffect
+        snapshotFlow { months.settledPage }.collect { page ->
+            val current = dateOfPage(pickedPage)
+            if (MonthRules.page(current) != page) pickedPage = pageOf(MonthRules.sameDay(current, page, today))
+        }
+    }
+    // «Список» открывается с выбранного дня.
+    val isAgenda = view == CalendarView.Agenda
+    LaunchedEffect(isAgenda) {
+        if (!isAgenda) return@LaunchedEffect
+        agenda.jump(dateOfPage(pickedPage))
+        agendaList.requestScrollToItem(0)
+    }
+
+    /**
+     * Открыть [date] в текущем виде: «Сегодня» и мини-календарь. На сетке листание едет к нему, в «Месяце» — страница
+     * месяца, «Список» начинается с него.
+     */
+    fun go(date: LocalDate, animate: Boolean) {
+        val page = pageOf(date)
+        when {
+            view.grid -> ui.launch { if (animate) pager.animateScrollToPage(page) else pager.scrollToPage(page) }
+            view == CalendarView.Month -> {
+                pickedPage = page
+                ui.launch { if (animate) months.animateScrollToPage(MonthRules.page(date)) else months.scrollToPage(MonthRules.page(date)) }
+            }
+            else -> {
+                pickedPage = page
+                agenda.jump(date)
+                agendaList.requestScrollToItem(0)
+            }
+        }
+    }
+
+    /** Нажатие на заголовок дня в «Месяце» и «Списке»: этот день в виде «День». */
+    fun openDay(date: LocalDate) {
+        pickedPage = pageOf(date)
+        pager.requestScrollToPage(pickedPage)
+        select(CalendarView.Day)
+    }
     var showCancelled by remember { mutableStateOf(prefs.boolean(DevicePrefs.CALENDAR_SHOW_CANCELLED) ?: true) }
     val places by remember(calendar) { calendar.places }.collectAsState(initial = emptyList())
     var placeId by rememberSaveable { mutableStateOf<String?>(null) }
     // Место убрали в архив — фильтр снова «Все места».
     val place = places.firstOrNull { it.id == placeId }
 
-    // Тренировки трёх недель вокруг выбранной: соседние дни при листании уже на месте. Пока грузится новое окно,
-    // видно старое — дни не мигают пустыми.
-    val weekStart = DateFormat.weekStart(day)
+    // Что загружено — по виду. Сетка: три недели вокруг выбранного дня — соседние дни при листании уже на месте.
+    // «Месяц»: страница и по месяцу с каждой стороны — при свайпе соседний месяц уже с числами и точками.
+    // «Список»: его дни. Пока грузится новое окно, видно старое — дни не мигают пустыми.
+    val range = when {
+        view.grid -> DateFormat.weekStart(day).let { DayRange(it.minus(7, DateTimeUnit.DAY), it.plus(14, DateTimeUnit.DAY)) }
+        view == CalendarView.Month -> months.settledPage.let { page ->
+            DayRange(
+                MonthRules.span(MonthRules.firstOf((page - 1).coerceAtLeast(0))).from,
+                MonthRules.span(MonthRules.firstOf((page + 1).coerceAtMost(MonthRules.PAGE_COUNT - 1))).to,
+            )
+        }
+        else -> DayRange(dateOfPage(agenda.from), dateOfPage(agenda.to))
+    }
     var loaded by remember { mutableStateOf(emptyMap<LocalDate, List<CalendarTraining>>()) }
     var loadedZones by remember { mutableStateOf(emptyMap<LocalDate, List<CalendarZone>>()) }
-    LaunchedEffect(calendar, weekStart) {
-        calendar.trainings(weekStart.minus(7, DateTimeUnit.DAY), weekStart.plus(14, DateTimeUnit.DAY)).collect { list ->
+    var loadedRange by remember { mutableStateOf<DayRange?>(null) }
+    LaunchedEffect(calendar, range) {
+        calendar.trainings(range.from, range.to).collect { list ->
             loaded = list.groupBy { it.start.date }
+            loadedRange = range
         }
     }
-    LaunchedEffect(calendar, weekStart) {
-        calendar.zones(weekStart.minus(7, DateTimeUnit.DAY), weekStart.plus(14, DateTimeUnit.DAY)).collect { list ->
+    LaunchedEffect(calendar, range) {
+        calendar.zones(range.from, range.to).collect { list ->
             loadedZones = list.groupBy { it.date }
         }
     }
@@ -268,7 +350,9 @@ fun CalendarScreen(
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             CalendarHeader(
+                month = if (view == CalendarView.Month) MonthRules.firstOf(months.currentPage) else day,
                 day = day,
+                today = today,
                 view = view,
                 views = CalendarViews.options(wide),
                 showCancelled = showCancelled,
@@ -277,8 +361,8 @@ fun CalendarScreen(
                 place = place,
                 wide = wide,
                 onToday = {
-                    grid.showNow(now.time)
-                    ui.launch { pager.animateScrollToPage(pageOf(today)) }
+                    if (view.grid) grid.showNow(now.time)
+                    go(today, animate = true)
                 },
                 onView = ::select,
                 onShowCancelled = { show ->
@@ -287,12 +371,46 @@ fun CalendarScreen(
                 },
                 onSample = onSample,
                 onPlace = { placeId = it?.id },
+                onPick = { date -> go(date, animate = false) },
             )
             // Свайп по строке дней — неделя вперёд или назад, тот же день недели.
             val onWeek: (Int) -> Unit = { days ->
                 ui.launch { pager.animateScrollToPage((pager.currentPage + days).coerceIn(0, PAGE_COUNT - 1)) }
             }
-            if (view == CalendarView.Day) {
+            val onZone: (CalendarZone) -> Unit = { zone -> zoneKey = zoneKeyOf(zone) }
+            if (view == CalendarView.Month) {
+                MonthView(
+                    months = months,
+                    selected = picked,
+                    today = today,
+                    wide = wide,
+                    itemsOf = itemsOf,
+                    zonesOf = zonesOf,
+                    onSelect = { date ->
+                        pickedPage = pageOf(date)
+                        // День соседнего месяца — листаем на его месяц.
+                        val page = MonthRules.page(date)
+                        if (page != months.currentPage) ui.launch { months.animateScrollToPage(page) }
+                    },
+                    onDay = ::openDay,
+                    onOpen = onOpen,
+                    onZone = onZone,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else if (view == CalendarView.Agenda) {
+                AgendaView(
+                    state = agenda,
+                    list = agendaList,
+                    ready = loadedRange == range,
+                    itemsOf = itemsOf,
+                    zonesOf = zonesOf,
+                    onTop = { date -> pickedPage = pageOf(date) },
+                    onDay = ::openDay,
+                    onOpen = onOpen,
+                    onZone = onZone,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else if (view == CalendarView.Day) {
                 WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } }, onWeek = onWeek)
             } else {
                 // Нажатие на день над колонкой — этот день в виде «День».
@@ -308,7 +426,7 @@ fun CalendarScreen(
                     onWeek = onWeek,
                 )
             }
-            DayGrid(
+            if (view.grid) DayGrid(
                 pager = pager,
                 grid = grid,
                 hours = hours,
@@ -343,7 +461,7 @@ fun CalendarScreen(
                 },
                 onOpen = onOpen,
                 onMore = { hidden -> moreIds = hidden.joinToString(ID_SEPARATOR) { it.id } },
-                onZone = { zone -> zoneKey = zoneKeyOf(zone) },
+                onZone = onZone,
                 onCreate = onCreate,
                 onMenu = { training -> menuId = training.id },
                 onMove = { training, start -> move(training, start, confirmed = false) },
@@ -422,6 +540,9 @@ fun CalendarScreen(
         }
     }
 }
+
+/** Загруженные дни: с [from] по [to] не включая. */
+private data class DayRange(val from: LocalDate, val to: LocalDate)
 
 /** Перенос, который ждёт ответа «Поставить всё равно?»: тренировка, новое начало, ответ для серии и запреты под ним. */
 private class PendingMove(val id: String, val start: LocalDateTime, val answer: EditScope?, val conflicts: List<String>)

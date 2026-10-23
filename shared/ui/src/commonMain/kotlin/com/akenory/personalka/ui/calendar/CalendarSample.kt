@@ -27,6 +27,9 @@ internal object CalendarSample {
     private const val PREFIX = "sample-"
     private const val SMALL_POOL = "Детский бассейн"
 
+    /** Полные названия типов примера — для строк «Месяца» и «Списка». */
+    private val TYPE_NAMES = mapOf("Груд" to "Грудничковое", "Мини" to "Мини-группа", "Гидро" to "Гидрореабилитация")
+
     /** Id запрета примера: «Пропустить этот день» убирает его из [day] и [zones]. */
     const val RESTRICTION_ID = "${PREFIX}restriction"
 
@@ -69,6 +72,7 @@ internal object CalendarSample {
                 badges = CalendarBadges.of(placed),
                 marked = facts.done,
                 shade = shade,
+                typeName = TYPE_NAMES[type] ?: type,
             )
         }
         fun one(last: String, first: String) = CalendarFormat.client(ClientName(last, first))

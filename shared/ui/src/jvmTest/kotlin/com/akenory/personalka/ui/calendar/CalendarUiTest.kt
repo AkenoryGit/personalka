@@ -15,6 +15,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -30,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.runComposeUiTest
@@ -51,6 +53,8 @@ import com.akenory.personalka.domain.calendar.BlockRows
 import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.GridHours
+import com.akenory.personalka.domain.calendar.MonthDay
+import com.akenory.personalka.domain.calendar.MonthDot
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.CalendarFormat
@@ -85,7 +89,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * «Календарь»: вид «День» (шаги 1.9–1.11), «Несколько дней», шапка и фильтр мест (шаг 1.12), ТЗ 5.3. «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO,
+ * «Календарь»: вид «День» (шаги 1.9–1.11), «Несколько дней», шапка и фильтр мест (шаг 1.12), «Месяц», «Список» и мини-календарь (шаг 1.12а), ТЗ 5.3. «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO,
  * форма тренировки (1.13) — в `TrainingFormUiTest`. Окно тестов на компьютере — 1024 × 768, поэтому экран ниже, чем у Fold, и сетке
  * остаётся 768 − панель 72 − шапка 56 − неделя 64 = 576 dp; что видно при той же высоте, что у Fold, —
  * в `CalendarGridTest`.
@@ -921,5 +925,203 @@ class CalendarUiTest {
         onNodeWithText(MessageState.UNDO_LABEL).performClick()
         waitUntil(timeoutMillis = 5_000) { abs(sokolova().y - yOf("15:00", fromHour = 6)) < 0.5f }
         assertEquals(emptyList(), sokolova().badges)
+    }
+
+    // «Месяц», «Список» и мини-календарь (шаг 1.12а).
+
+    private fun ComposeUiTest.summary(date: LocalDate): MonthDay = onNodeWithTag(monthDayTag(date)).fetchSemanticsNode().config[MonthSummary]
+
+    /** Ждать, пока в клетке месяца будет [count] тренировок. */
+    private fun ComposeUiTest.awaitCount(date: LocalDate, count: Int) {
+        waitUntil(timeoutMillis = 5_000) { exists(monthDayTag(date)) && summary(date).count == count }
+    }
+
+    private fun ComposeUiTest.top(tag: String): Float = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top / density.density
+
+    private fun ComposeUiTest.left(tag: String): Float = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.left / density.density
+
+    @Test
+    fun monthShowsCountDotsAndDayList() = runComposeUiTest {
+        val morozov = training("08:00", 50, "Морозов Даниил", status = TrainingStatus.DONE)
+        val split = training("09:00", 50, "Ковалёв Илья", "Ковалёва Мира", type = "Сплит")
+        val zaitseva = training("10:00", 50, "Зайцева Мария", status = TrainingStatus.CANCELLED, charged = true)
+        val belova = training("10:00", 30, "Белова Ева", type = "Груд", place = "ДБ")
+        val duty = training("11:00", 240, type = "Деж")
+        val thursday = LocalDate(2026, 10, 22)
+        val orlov = training("16:00", 50, "Орлов Максим", place = "ДБ", date = thursday)
+        openCalendar()
+        chooseView("Месяц")
+        assertEquals("month", prefs.string(DevicePrefs.CALENDAR_VIEW_FOLDED))
+        onNodeWithText(s("Октябрь_2026")).assertIsDisplayed()
+
+        // Макет «Месяц»: число — без отменённой и без дежурства; точки — цвет места оттенком типа, поровну — в порядке дня.
+        awaitCount(today, 3)
+        assertEquals(listOf(MonthDot("blue", 1), MonthDot("blue", 2), MonthDot("pink", 2)), summary(today).dots)
+        assertEquals(MonthDay(1, listOf(MonthDot("pink", 1))), summary(thursday))
+        assertEquals(MonthDay.EMPTY, summary(LocalDate(2026, 10, 21)))
+        onNodeWithTag(monthDayTag(today)).assertIsSelected()
+        // Дни соседних месяцев в первой и последней строке: октябрь 2026 — с пн 28.09 по вс 01.11.
+        onNodeWithTag(monthDayTag(LocalDate(2026, 9, 28))).assertIsDisplayed()
+        onNodeWithTag(monthDayTag(LocalDate(2026, 11, 1))).assertIsDisplayed()
+
+        // Под сеткой — список выбранного дня: заголовок с числом, строки по времени, длинная на одно время — выше.
+        onNodeWithTag(dayTitleTag(today)).assert(hasText(DateFormat.header(today))).assert(hasText(s("3_тренировки")))
+        onNodeWithTag(calendarRowTag(split)).assert(hasText("Ковалёв / Ковалёва")).assert(hasText("Сплит · ББ"))
+        onNodeWithTag(calendarRowTag(zaitseva)).assert(hasText("ПТ · ББ · со списанием"))
+        onNodeWithTag(calendarRowTag(belova)).assert(hasText(s("Грудничковое · ДБ · 30_мин")))
+        onNodeWithTag(calendarRowTag(duty)).assert(hasText("Дежурство")).assert(hasText(s("ББ · до_15:00")))
+        val order = listOf(morozov, split, zaitseva, belova, duty).map { top(calendarRowTag(it)) }
+        assertEquals(order.sorted(), order, "Строки по времени: $order")
+
+        // Нажатие на другой день — его список.
+        onNodeWithTag(monthDayTag(thursday)).performClick()
+        waitForIdle()
+        onNodeWithTag(monthDayTag(thursday)).assertIsSelected()
+        onNodeWithTag(dayTitleTag(thursday)).assert(hasText(s("1_тренировка")))
+        onNodeWithTag(calendarRowTag(orlov)).assert(hasText(s("Орлов_М.")))
+        onNodeWithTag(calendarRowTag(morozov)).assertDoesNotExist()
+
+        // Нажатие на заголовок дня — этот день в виде «День».
+        onNodeWithTag(dayTitleTag(thursday)).performClick()
+        waitForIdle()
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals("День")
+        assertSelected(thursday, "День из заголовка в месяце")
+        awaitBlocks(1, thursday)
+    }
+
+    @Test
+    fun dayChosenInMonthOpensInDayAndDays() = runComposeUiTest {
+        val day28 = LocalDate(2026, 10, 28)
+        openCalendar()
+        chooseView("Месяц")
+        onNodeWithTag(monthDayTag(day28)).performClick()
+        waitForIdle()
+        onNodeWithTag(dayTitleTag(day28)).assertIsDisplayed()
+
+        // Проверка шага: день, выбранный в месяце, — первая колонка «3 дней» и выбранный день «Дня».
+        chooseView("3_дня")
+        near(left(CALENDAR_GRID_TAG) + 48f, left(dayHeaderTag(day28)), "Первая колонка — 28.10")
+        onNodeWithTag(calendarDayTag(day28)).assertIsDisplayed()
+        chooseView("День")
+        assertSelected(day28, "День после месяца")
+
+        // Обратно в месяц — выбран тот же день; свайп — следующий месяц, выбран тот же день в нём.
+        chooseView("Месяц")
+        onNodeWithTag(monthDayTag(day28)).assertIsSelected()
+        onNodeWithTag(MONTH_PAGER_TAG).performTouchInput { swipeLeft() }
+        waitForIdle()
+        val november28 = LocalDate(2026, 11, 28)
+        onNodeWithText(DateFormat.monthYear(november28)).assertIsDisplayed()
+        onNodeWithTag(monthDayTag(november28)).assertIsSelected()
+        chooseView("День")
+        assertSelected(november28, "День после свайпа месяца")
+
+        // Нажатие на день соседнего месяца открывает его месяц; «Сегодня» — снова октябрь и сегодня.
+        chooseView("Месяц")
+        val december1 = LocalDate(2026, 12, 1)
+        onNodeWithTag(monthDayTag(december1)).performClick()
+        waitForIdle()
+        onNodeWithText(DateFormat.monthYear(december1)).assertIsDisplayed()
+        onNodeWithTag(monthDayTag(december1)).assertIsSelected()
+        onNodeWithContentDescription(TODAY_LABEL).performClick()
+        waitForIdle()
+        onNodeWithText(DateFormat.monthYear(today)).assertIsDisplayed()
+        onNodeWithTag(monthDayTag(today)).assertIsSelected()
+    }
+
+    @Test
+    fun monthOnFoldedAndUnfolded() = runComposeUiTest {
+        var width by mutableStateOf(folded)
+        val day28 = LocalDate(2026, 10, 28)
+        openCalendar { width }
+        chooseView("Месяц")
+        onNodeWithTag(monthDayTag(day28)).performClick()
+        waitForIdle()
+
+        // Разложили: свой вид — «3 дня», первая колонка — день, выбранный в месяце.
+        width = unfolded
+        waitForIdle()
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals(s("3_дня"))
+        near(left(CALENDAR_GRID_TAG) + 48f, left(dayHeaderTag(day28)), "Первая колонка после разложения")
+
+        // «Месяц» на разложенном: сетка слева на всю высоту, список дня — справа.
+        chooseView("Месяц")
+        onNodeWithTag(monthDayTag(day28)).assertIsSelected()
+        onNodeWithTag(dayTitleTag(day28)).assertIsDisplayed()
+        assertTrue(left(MONTH_DAY_LIST_TAG) > left(MONTH_PAGER_TAG) + 200f, "Список дня справа от месяца")
+
+        // Сложили — снова свой «Месяц» с тем же днём.
+        width = folded
+        waitForIdle()
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals("Месяц")
+        onNodeWithTag(monthDayTag(day28)).assertIsSelected()
+        assertTrue(top(MONTH_DAY_LIST_TAG) > top(MONTH_PAGER_TAG) + 300f, "Список дня под месяцем")
+    }
+
+    @Test
+    fun agendaListsDaysFromSelected() = runComposeUiTest {
+        val belova = training("16:00", 50, "Белова Ева")
+        val monday = LocalDate(2026, 10, 19)
+        training("16:00", 50, "Гусев Борис", date = monday)
+        val friday = LocalDate(2026, 10, 23)
+        training("09:00", 50, "Орлов Максим", place = "ДБ", date = friday)
+        openCalendar()
+        chooseView("Список")
+        assertEquals("list", prefs.string(DevicePrefs.CALENDAR_VIEW_FOLDED))
+
+        // С выбранного дня: сегодня, потом пятница; пустые дни не показываются, вчерашние — выше и ещё не загружены.
+        awaitNode(hasTestTag(dayTitleTag(friday)))
+        onNodeWithTag(dayTitleTag(today)).assert(hasText(s("1_тренировка")))
+        onNodeWithTag(calendarRowTag(belova)).assert(hasText("ПТ · ББ"))
+        onNodeWithTag(dayTitleTag(LocalDate(2026, 10, 21))).assertDoesNotExist()
+        onNodeWithTag(dayTitleTag(monday)).assertDoesNotExist()
+        assertTrue(top(dayTitleTag(today)) < top(dayTitleTag(friday)))
+
+        // Потянули вниз у самого начала — подгрузились четыре недели раньше: понедельник выше.
+        onNodeWithTag(AGENDA_TAG).performTouchInput { swipeDown() }
+        waitUntil(timeoutMillis = 5_000) { runCatching { onNodeWithTag(AGENDA_TAG).performScrollToKey(agendaTitleKey(monday)) }.isSuccess }
+        onNodeWithTag(dayTitleTag(monday)).assertIsDisplayed()
+
+        // Мини-календарь: пятница — список с неё; «День» открывается на ней.
+        onNodeWithTag(CALENDAR_MONTH_TAG).performClick()
+        onNodeWithTag(miniDayTag(friday)).performClick()
+        waitUntil(timeoutMillis = 5_000) { exists(dayTitleTag(friday)) && !exists(dayTitleTag(today)) }
+        chooseView("День")
+        assertSelected(friday, "День после списка")
+
+        // Снова «Список» — с пятницы; «Сегодня» — с сегодня; нажатие на строку — форма тренировки.
+        chooseView("Список")
+        waitUntil(timeoutMillis = 5_000) { exists(dayTitleTag(friday)) && !exists(dayTitleTag(today)) }
+        onNodeWithContentDescription(TODAY_LABEL).performClick()
+        awaitNode(hasTestTag(dayTitleTag(today)))
+        onNodeWithTag(calendarRowTag(belova)).performClick()
+        awaitNode(hasText(TrainingFormat.EDIT_TITLE))
+    }
+
+    @Test
+    fun miniCalendarOpensDayInCurrentView() = runComposeUiTest {
+        openCalendar()
+        // На месяце — «▾»: мини-календарь на месяце выбранного дня, выбран сегодняшний.
+        onNodeWithTag(CALENDAR_MONTH_TAG).performClick()
+        onNodeWithTag(miniDayTag(today)).assertIsSelected()
+        onNodeWithContentDescription(CalendarFormat.NEXT_MONTH).performClick()
+        waitForIdle()
+        val november10 = LocalDate(2026, 11, 10)
+        onNodeWithText(DateFormat.monthYear(november10)).assertIsDisplayed()
+        onNodeWithTag(miniDayTag(november10)).performClick()
+        waitForIdle()
+        onNodeWithTag(miniDayTag(november10)).assertDoesNotExist()
+        assertSelected(november10, "День из мини-календаря")
+        onNodeWithText(DateFormat.monthYear(november10)).assertIsDisplayed()
+
+        // В «Месяце» — тот же мини-календарь: выбран день, страница — его месяц.
+        chooseView("Месяц")
+        onNodeWithTag(CALENDAR_MONTH_TAG).performClick()
+        onNodeWithContentDescription(CalendarFormat.PREVIOUS_MONTH).performClick()
+        waitForIdle()
+        onNodeWithTag(miniDayTag(LocalDate(2026, 10, 5))).performClick()
+        waitForIdle()
+        onNodeWithTag(monthDayTag(LocalDate(2026, 10, 5))).assertIsSelected()
+        onNodeWithText(DateFormat.monthYear(today)).assertIsDisplayed()
     }
 }

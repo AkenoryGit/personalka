@@ -136,6 +136,9 @@ class CalendarRepositoryTest {
         assertEquals("pink", list[2].color)
         assertEquals(50, pt.durationMin)
         assertFalse(pt.cancelled)
+        // Полное название типа — для строк «Месяца» и «Списка» (шаг 1.12а): «Гидрореабилитация · ДБ».
+        assertEquals(listOf("ПТ", "Сплит", "Гидрореабилитация"), list.map { it.typeName })
+        assertEquals("Гидро", list[2].typeShort)
     }
 
     @Test

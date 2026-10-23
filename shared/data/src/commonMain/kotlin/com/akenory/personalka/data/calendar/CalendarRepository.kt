@@ -51,6 +51,8 @@ import kotlinx.datetime.plus
  * Тренировка в календаре (5.3) — всё, что нужно блоку. [start] — время клуба.
  *
  * @param title «Иванов И.», «Петров / Сидоров», «Сб 9:00 ББ (12)».
+ * @param typeShort короткое название типа — на блоке: «ПТ», «Груд».
+ * @param typeName полное название типа — в строках «Месяца» и «Списка»: «Грудничковое · ДБ · 30 мин».
  * @param color ключ цвета места (`Location.color`): у каждой темы свои тона.
  * @param shade оттенок типа (`TrainingType.shade`): 1 — светлый … 4 — тёмный; фон блока — цвет места этим оттенком.
  * @param badges значки по важности (`CalendarBadges`); сколько из них видно, решает высота блока.
@@ -69,6 +71,7 @@ data class CalendarTraining(
     val badges: List<CalendarBadge> = emptyList(),
     val marked: Boolean = false,
     val shade: Int = ReferenceRules.SHADE_LIGHT,
+    val typeName: String = typeShort,
 )
 
 /** Что вышло из переноса тренировки (5.3). */
@@ -392,6 +395,7 @@ private fun TrainingEntity.toCalendar(
     durationMin = durationMin,
     title = title,
     typeShort = type?.shortName.orEmpty(),
+    typeName = type?.name.orEmpty(),
     placeId = locationId,
     placeShort = place?.shortName.orEmpty(),
     color = place?.color.orEmpty(),

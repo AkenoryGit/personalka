@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,9 +65,10 @@ import com.akenory.personalka.ui.theme.tabular
 import kotlinx.datetime.LocalDate
 import kotlin.math.roundToInt
 
-/** Кнопка вида и кнопка мест в шапке календаря. */
+/** Кнопка вида, кнопка мест и месяц с мини-календарём в шапке календаря. */
 const val CALENDAR_VIEW_TAG = "calendar-view"
 const val CALENDAR_PLACE_TAG = "calendar-place"
+const val CALENDAR_MONTH_TAG = "calendar-month"
 
 /** Пункт меню вида: показ отменённых (ТЗ 5.3) — на этом телефоне, по умолчанию включён. */
 internal const val SHOW_CANCELLED = "Показывать отменённые"
@@ -104,16 +106,21 @@ internal fun Modifier.weekSwipe(onDays: (Int) -> Unit): Modifier = pointerInput(
 private const val PLACE_CHIPS_MAX = 4
 
 /**
- * Шапка календаря (ТЗ 5.3, макеты «3 дня»): месяц и год, «Сегодня», переключатель вида и фильтр мест.
- * На сложенном фильтр — кнопка «Все места ▾» после вида, на разложенном — чипы «Все / ББ / ДБ / Зал» перед
- * «Сегодня». Мест одно — фильтра нет (10.7). Мини-календарь по нажатию на месяц — шаг 1.12а.
+ * Шапка календаря (ТЗ 5.3, макеты «3 дня» и «Месяц»): месяц и год с «▾» — мини-календарь, «Сегодня», переключатель
+ * вида и фильтр мест. На сложенном фильтр — кнопка «Все места ▾» после вида, на разложенном — чипы «Все / ББ / ДБ /
+ * Зал» перед «Сегодня». Мест одно — фильтра нет (10.7).
  *
+ * @param month какой месяц и год написать: на сетке — месяц выбранного дня, в «Месяце» — листаемый месяц.
+ * @param day выбранный день: мини-календарь открывается на его месяце и отмечает его.
  * @param views виды этого состояния Fold; в меню вида под ними — «Показывать отменённые» и «Пример дня».
  * @param place выбранное место; `null` — все.
+ * @param onPick день из мини-календаря.
  */
 @Composable
 internal fun CalendarHeader(
+    month: LocalDate,
     day: LocalDate,
+    today: LocalDate,
     view: CalendarView,
     views: List<CalendarView>,
     showCancelled: Boolean,
@@ -126,23 +133,47 @@ internal fun CalendarHeader(
     onShowCancelled: (Boolean) -> Unit,
     onSample: (Boolean) -> Unit,
     onPlace: (CalendarPlace?) -> Unit,
+    onPick: (LocalDate) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val filter = places.size > 1
     val chips = filter && wide && places.size <= PLACE_CHIPS_MAX
+    // Мини-календарь открыт — переживает сложение Fold, как меню тренировки.
+    var mini by rememberSaveable { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().height(Dimens.topBar).padding(start = Dimens.space4, end = Dimens.space2),
+        modifier = Modifier.fillMaxWidth().height(Dimens.topBar).padding(start = Dimens.space2, end = Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.space1),
     ) {
-        Text(
-            text = DateFormat.monthYear(day),
-            modifier = Modifier.weight(1f).semantics { heading() },
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // Месяц и год с «▾» (макет «Месяц»): нажатие — мини-календарь под ним.
+        Box(Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier
+                    .heightIn(min = Dimens.touch)
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable(role = Role.DropdownList) { mini = true }
+                    .semantics(mergeDescendants = true) { heading() }
+                    .testTag(CALENDAR_MONTH_TAG)
+                    .padding(start = Dimens.space2, end = Dimens.space1),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = DateFormat.monthYear(month),
+                    modifier = Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Icon(PIcons.ArrowDropDown, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
+            }
+            DropdownMenu(expanded = mini, onDismissRequest = { mini = false }, containerColor = colors.surface) {
+                MiniCalendar(selected = day, today = today) { date ->
+                    mini = false
+                    onPick(date)
+                }
+            }
+        }
         if (chips) {
             Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                 ChoiceChip(CalendarFormat.ALL, place == null, onClick = { onPlace(null) })

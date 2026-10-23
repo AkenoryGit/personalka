@@ -1,7 +1,9 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarView
 import com.akenory.personalka.domain.client.ClientName
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -58,5 +60,27 @@ class CalendarFormatTest {
         assertEquals(s("3_дня"), CalendarFormat.view(CalendarView.Days(3)))
         assertEquals(s("5_дней"), CalendarFormat.view(CalendarView.Days(5)))
         assertEquals(s("7_дней"), CalendarFormat.view(CalendarView.Days(7)))
+        assertEquals("Месяц", CalendarFormat.view(CalendarView.Month))
+        assertEquals("Список", CalendarFormat.view(CalendarView.Agenda))
+    }
+
+    @Test
+    fun monthAndListLines() {
+        // Макет «Месяц»: заголовок дня и число справа, строки тренировок и дежурства.
+        assertEquals(s("10_тренировок"), CalendarFormat.trainings(10))
+        assertEquals(s("1_тренировка"), CalendarFormat.trainings(1))
+        assertEquals(s("3_тренировки"), CalendarFormat.trainings(3))
+        assertEquals("Сплит · ББ", CalendarFormat.listLine("Сплит", "ББ", 50, charged = false))
+        assertEquals(s("Грудничковое · ДБ · 30_мин"), CalendarFormat.listLine("Грудничковое", "ДБ", 30, charged = false))
+        assertEquals("ПТ · ББ · со списанием", CalendarFormat.listLine("ПТ", "ББ", 50, charged = true))
+        assertEquals(s("Группа · ББ · 60_мин · со списанием"), CalendarFormat.listLine("Группа", "ББ", 60, charged = true))
+        assertEquals(s("ББ · до_15:00"), CalendarFormat.dutyLine("ББ", 15 * 60))
+        assertEquals(s("ДБ · до_24:00"), CalendarFormat.dutyLine("ДБ", 24 * 60))
+        // TalkBack на клетке месяца: день и число тренировок; пустой день — только день.
+        assertEquals(s("вт_20.10, 10_тренировок"), CalendarFormat.monthDay(LocalDate(2026, 10, 20), 10))
+        assertEquals(s("вс_25.10"), CalendarFormat.monthDay(LocalDate(2026, 10, 25), 0))
+        // Значки строки словами — для TalkBack.
+        assertEquals("Отмена со списанием", CalendarFormat.badge(CalendarBadge.CHARGED))
+        assertEquals("Поверх дежурства", CalendarFormat.badge(CalendarBadge.OVER_DUTY))
     }
 }

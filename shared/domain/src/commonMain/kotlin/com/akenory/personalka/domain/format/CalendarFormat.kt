@@ -1,11 +1,14 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarView
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.RuText.NBSP
+import com.akenory.personalka.domain.reference.TypePresets
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
-/** Строки блока тренировки в календаре (ТЗ 5.3): имя, время, тип и место. */
+/** Строки календаря (ТЗ 5.3): блок тренировки — имя, время, тип и место; строки «Месяца» и «Списка»; шапка. */
 object CalendarFormat {
     private const val DOT = " · "
 
@@ -57,11 +60,54 @@ object CalendarFormat {
     /** Сообщение после переноса (5.20): «Перенесено на вт 22.10, 17:15». */
     fun moved(start: LocalDateTime): String = "Перенесено на ${at(start)}"
 
-    /** Вид в переключателе шапки: «День», «3 дня», «5 дней». */
+    /** Вид в переключателе шапки: «День», «3 дня», «5 дней», «Месяц», «Список». */
     fun view(view: CalendarView): String = when (view) {
         CalendarView.Day -> "День"
         is CalendarView.Days -> RuText.count(view.count, "день", "дня", "дней")
+        CalendarView.Month -> "Месяц"
+        CalendarView.Agenda -> "Список"
     }
+
+    /** Число тренировок дня справа от его заголовка в «Месяце» и «Списке»: «10 тренировок». */
+    fun trainings(count: Int): String = RuText.count(count, "тренировка", "тренировки", "тренировок")
+
+    /** Под заголовком дня без тренировок в «Месяце». */
+    const val NO_TRAININGS = "Тренировок нет"
+
+    /**
+     * Вторая строка тренировки в «Месяце» и «Списке» (макет «Месяц»): полное название типа и место — «Сплит · ББ»;
+     * длительность — если она не обычные 50 минут: «Грудничковое · ДБ · 30 мин»; у отменённой со списанием —
+     * «ПТ · ББ · со списанием»: время строки показывает только начало, а списание — деньги клиента.
+     */
+    fun listLine(typeName: String, place: String, durationMin: Int, charged: Boolean): String = buildString {
+        append(typeName)
+        append(DOT)
+        append(place)
+        if (durationMin != TypePresets.DEFAULT_DURATION) append(DOT).append(DurationFormat.minutes(durationMin))
+        if (charged) append(DOT).append(CHARGED)
+    }
+
+    private const val CHARGED = "со списанием"
+
+    /** Строка дежурства в «Месяце» и «Списке»: «ББ · до 15:00»; через полночь — «до 24:00». */
+    fun dutyLine(place: String, endMinute: Int): String = place + DOT + "до" + NBSP + DateFormat.minuteOfDay(endMinute)
+
+    /** Значок тренировки словами — для TalkBack в строках «Месяца» и «Списка». */
+    fun badge(badge: CalendarBadge): String = when (badge) {
+        CalendarBadge.CHARGED -> "Отмена со списанием"
+        CalendarBadge.OVER_RESTRICTION -> "Поверх запрета"
+        CalendarBadge.NO_DIARY -> "Дневник не заполнен"
+        CalendarBadge.OVER_DUTY -> "Поверх дежурства"
+        CalendarBadge.DONE -> "Проведено"
+    }
+
+    /** Кнопки листания мини-календаря. */
+    const val PREVIOUS_MONTH = "Предыдущий месяц"
+    const val NEXT_MONTH = "Следующий месяц"
+
+    /** Клетка дня в «Месяце» для TalkBack: «вт 20.10, 10 тренировок»; без тренировок — только день. */
+    fun monthDay(date: LocalDate, count: Int): String =
+        DateFormat.short(date) + if (count > 0) ", " + trainings(count) else ""
 
     /** Фильтр мест без выбора: на кнопке сложенного экрана — «Все места», на чипе разложенного — «Все». */
     const val ALL_PLACES = "Все места"
