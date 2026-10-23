@@ -223,7 +223,8 @@ class ClientsUiTest {
 
         // «+ Родственник» → Наталья → «Мать» → «Сохранить»: 4 нажатия (4.17).
         onNodeWithTag(ADD_RELATIVE_TAG).performScrollTo().performClick()
-        onNodeWithText("Родственник для Артёма").assertIsDisplayed()
+        // Форма связи читает родственников из базы — дождаться её.
+        awaitNode(hasText("Родственник для Артёма"))
         onNodeWithTag(relativePickTag("Ковалёва Наталья")).performClick()
         // Наталья старше и женщина: «Мать» есть, «Дочь» и «Отец» — нет.
         onNodeWithText("Дочь").assertDoesNotExist()
@@ -251,6 +252,7 @@ class ClientsUiTest {
         show()
         openCard("Ковалёв Артём")
         onNodeWithTag(ADD_RELATIVE_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(NEW_RELATIVE_TAG))
         onNodeWithTag(NEW_RELATIVE_TAG).performClick()
         onNodeWithTag(NEW_RELATIVE_LAST_TAG).performTextClearance()
         onNodeWithTag(NEW_RELATIVE_LAST_TAG).performTextInput("Ковалёва")

@@ -633,8 +633,9 @@ class CalendarUiTest {
         dragDay(block.x + 40f, block.y + 20f, 0f, yOf("17:17") - yOf("16:00"), release = false)
         onNodeWithText(s("Вт_20.10 · 17:15–18:05")).assertIsDisplayed()
         onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { up() }
-        waitUntil(timeoutMillis = 5_000) { startOf(id) == at(today, "17:15") }
-        onNodeWithText(s("Перенесено на вт_20.10, 17:15")).assertIsDisplayed()
+        // Сообщение — после записи в базу, из её потока: дождаться его.
+        awaitNode(hasText(s("Перенесено на вт_20.10, 17:15")))
+        assertEquals(at(today, "17:15"), startOf(id))
 
         // «Отменить» — на прежнем месте.
         onNodeWithText(MessageState.UNDO_LABEL).performClick()
@@ -661,8 +662,8 @@ class CalendarUiTest {
             moveTo(middle)
             up()
         }
-        waitUntil(timeoutMillis = 5_000) { startOf(id) == at(LocalDate(2026, 10, 21), "17:15") }
-        onNodeWithText(s("Перенесено на ср_21.10, 17:15")).assertIsDisplayed()
+        awaitNode(hasText(s("Перенесено на ср_21.10, 17:15")))
+        assertEquals(at(LocalDate(2026, 10, 21), "17:15"), startOf(id))
     }
 
     @Test
