@@ -98,11 +98,11 @@ class ReminderSettingsUiTest {
         assertEquals(0, onAllNodes(hasTestTag(INSTANT_DIARY_TAG)).fetchSemanticsNodes().size)
 
         onNodeWithTag(DIGEST_TAG).performClick()
-        waitUntil(5_000) { !saved().digest }
-        waitUntil(5_000) { onAllNodes(hasTestTag(DIGEST_TIME_TAG)).fetchSemanticsNodes().isEmpty() }
+        waitUntil(timeoutMillis = 5_000) { !saved().digest }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(DIGEST_TIME_TAG)).fetchSemanticsNodes().isEmpty() }
 
         onNodeWithTag(followupDaysTag(21)).performScrollTo().performClick()
-        waitUntil(5_000) { saved().followupDays == 21 }
+        waitUntil(timeoutMillis = 5_000) { saved().followupDays == 21 }
     }
 
     @Test
@@ -110,14 +110,14 @@ class ReminderSettingsUiTest {
         openReminders(access)
         onNodeWithTag(MORE_TAG).performScrollTo().performClick()
         onNodeWithTag(INSTANT_DIARY_TAG).performScrollTo().assertIsOff().performClick()
-        waitUntil(5_000) { saved().instantDiary }
+        waitUntil(timeoutMillis = 5_000) { saved().instantDiary }
         onNodeWithTag(INSTANT_GROUP_TAG).performScrollTo().performClick()
-        waitUntil(5_000) { saved().instantGroup }
+        waitUntil(timeoutMillis = 5_000) { saved().instantGroup }
         onNodeWithTag(DAY_PLAN_TAG).performScrollTo().assertIsOff().performClick()
         onNodeWithTag(DAY_PLAN_TAG).assertIsOn()
         assertTrue(reminders.dayPlan)
         // Каждое изменение переставляет будильник.
-        waitUntil(5_000) { access.changes >= 3 }
+        waitUntil(timeoutMillis = 5_000) { access.changes >= 3 }
     }
 
     @Test
@@ -128,14 +128,14 @@ class ReminderSettingsUiTest {
         onNode(hasText("Включить")).performClick()
         assertTrue(access.on)
         // Строка уходит сама: экран сверяется с телефоном после нажатия и при возврате в приложение.
-        waitUntil(5_000) { onAllNodes(hasTestTag(BLOCKED_TAG)).fetchSemanticsNodes().isEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(BLOCKED_TAG)).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test
     fun diaryOffHidesInstantDiary() = runComposeUiTest {
         openReminders()
         onNodeWithTag(DIARY_SWITCH_TAG).performClick()
-        waitUntil(5_000) { !saved().diary }
+        waitUntil(timeoutMillis = 5_000) { !saved().diary }
         onNodeWithTag(MORE_TAG).performScrollTo().performClick()
         onNodeWithTag(INSTANT_GROUP_TAG).performScrollTo().assertIsDisplayed()
         assertFalse(onAllNodes(hasTestTag(INSTANT_DIARY_TAG)).fetchSemanticsNodes().isNotEmpty())

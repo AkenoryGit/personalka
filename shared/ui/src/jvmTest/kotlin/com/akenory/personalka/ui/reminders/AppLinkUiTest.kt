@@ -55,7 +55,7 @@ class AppLinkUiTest {
             }
         }
         awaitNode(hasText(s("Орлов_М.")) and hasAnyAncestor(hasTestTag(DIARY_TAG)))
-        waitUntil(5_000) { link == null }
+        waitUntil(timeoutMillis = 5_000) { link == null }
         assertNull(link)
     }
 

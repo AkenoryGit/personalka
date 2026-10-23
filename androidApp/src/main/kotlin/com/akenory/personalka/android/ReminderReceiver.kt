@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
  */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action !in ACTIONS) return
         val app = context.applicationContext as PersonalkaApplication
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
@@ -26,5 +27,15 @@ class ReminderReceiver : BroadcastReceiver() {
                 pending.finish()
             }
         }
+    }
+
+    private companion object {
+        val ACTIONS = setOf(
+            AndroidReminders.ACTION_CHECK,
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+        )
     }
 }
