@@ -49,6 +49,7 @@ import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.series.TrainingEdit
 import com.akenory.personalka.domain.training.FormField
 import com.akenory.personalka.domain.training.FormType
+import com.akenory.personalka.domain.training.PlanCarryRules
 import com.akenory.personalka.domain.training.Repeat
 import com.akenory.personalka.domain.training.TrainingDraft
 import com.akenory.personalka.domain.training.TrainingFormRules
@@ -273,7 +274,7 @@ class TrainingRepository internal constructor(
                     start = draft.start,
                     durationMin = draft.durationMin,
                     groupId = draft.groupId,
-                    plan = draft.plan.cleanPlan(),
+                    plan = draft.plan.cleanPlan() ?: if (draft.start > clubNow && !duty) takePending(recorder, draft.groupId, draft.clientIds) else null,
                     owner = group?.owner ?: Owner.SELF,
                     ownerColleagueId = group?.ownerColleagueId,
                     conductedBy = group?.defaultConductedBy ?: ConductedBy.SELF,
@@ -297,14 +298,16 @@ class TrainingRepository internal constructor(
                     horizonWeeks = horizonWeeks(),
                     members = members(draft.groupId),
                 )
-                // План — у первой тренировки серии.
-                val changes = draft.plan.cleanPlan()?.let { plan ->
-                    created.copy(created = created.created.mapIndexed { i, t -> if (i == 0) t.copy(plan = plan) else t })
-                } ?: created
-                val batch = RestrictionRules.checkAll(changes.created.map { it.placement(duty) }, restrictions)
+                // План — у первой тренировки серии; без плана — отложенный (4.3) у первой будущей.
+                val first = draft.plan.cleanPlan()?.let { 0 } ?: created.created.indexOfFirst { it.start > clubNow }.takeIf { it >= 0 && !duty }
+                val batch = RestrictionRules.checkAll(created.created.map { it.placement(duty) }, restrictions)
                 if (batch != null && !confirmed) {
                     result = SaveResult.Confirm(batchLines(batch))
                     return@withWriteTransaction
+                }
+                val plan = draft.plan.cleanPlan() ?: first?.let { takePending(recorder, draft.groupId, draft.clientIds) }
+                val changes = if (first == null || plan == null) created else {
+                    created.copy(created = created.created.mapIndexed { i, t -> if (i == first) t.copy(plan = plan) else t })
                 }
                 recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty = { duty })
                 result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.undo())
@@ -633,6 +636,21 @@ class TrainingRepository internal constructor(
 
     private suspend fun seriesClientIds(seriesId: String): List<String> =
         schedule.seriesClients(seriesId).sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }
+
+    /**
+     * Отложенный план (4.3) для новой тренировки с пустым планом: у группы — её, у остальных — клиентов, без
+     * повторов. Забранный план у них стирается — подставляется он один раз. `null` — ждать нечего.
+     */
+    private suspend fun takePending(recorder: Recorder, groupId: String?, clientIds: List<String>): String? {
+        if (groupId != null) {
+            val text = clients.group(groupId)?.pendingPlan?.takeIf { it.isNotBlank() } ?: return null
+            recorder.setGroupPendingPlan(groupId, null)
+            return text
+        }
+        val text = PlanCarryRules.pending(clientIds.map { clients.client(it)?.pendingPlan }) ?: return null
+        clientIds.forEach { recorder.setPendingPlan(it, null) }
+        return text
+    }
 
     private suspend fun setPlan(recorder: Recorder, id: String, plan: String?, now: Long) {
         val t = trainings.training(id) ?: return

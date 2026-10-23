@@ -6,14 +6,11 @@ import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CalendarFormat
-import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.training.DiaryFields
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.DiarySlot
-import com.akenory.personalka.domain.training.PlanRules
-import com.akenory.personalka.domain.training.PlanSlot
 import com.akenory.personalka.domain.training.TrainingTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -163,25 +160,9 @@ class DiaryRepository internal constructor(private val db: PersonalkaDatabase, p
         writes.withLock { db.withWriteTransaction { block() } }
     }
 
-    /** Следующая тренировка (4.3): кандидаты — тренировки группы, серии сплита или клиентов этой тренировки. */
-    private suspend fun nextOf(t: TrainingEntity, kind: TrainingKind): TrainingEntity? {
-        val people = trainings.participationsOf(t.id).filter { !it.cancelled }.map { it.clientId }.toSet()
-        val groupId = t.groupId
-        val seriesId = t.seriesId
-        val pool = when {
-            groupId != null -> trainings.trainingsOfGroup(groupId)
-            kind == TrainingKind.SPLIT && seriesId != null -> trainings.trainingsOfSeries(seriesId)
-            else -> people.flatMap { trainings.trainingsOfClient(it) }.distinctBy { it.id }
-        }.filter { it.status == TrainingStatus.PLANNED && it.start > t.start && it.sync.deletedAt == null }
-        if (pool.isEmpty()) return null
-        val kinds = reference.trainingTypes().associate { it.id to it.kind }
-        val slots = pool.map { c ->
-            PlanSlot(c.id, c.start, c.status, kinds[c.typeId] ?: TrainingKind.OTHER, c.seriesId, c.groupId, trainings.participationsOf(c.id).filter { !it.cancelled }.map { it.clientId }.toSet())
-        }
-        val of = PlanSlot(t.id, t.start, t.status, kind, t.seriesId, t.groupId, people)
-        val found = PlanRules.next(of, slots) ?: return null
-        return pool.first { it.id == found.id }
-    }
+    /** Следующая тренировка (4.3) для тех, кто в этой тренировке не отменён. */
+    private suspend fun nextOf(t: TrainingEntity, kind: TrainingKind): TrainingEntity? =
+        db.nextTraining(t, kind, trainings.participationsOf(t.id).filter { !it.cancelled }.map { it.clientId }.toSet())
 
     /** Имя тренировки, как в календаре и карточке. */
     private suspend fun title(t: TrainingEntity, typeName: String): String {
@@ -194,9 +175,6 @@ class DiaryRepository internal constructor(private val db: PersonalkaDatabase, p
         )
     }
 }
-
-private val ParticipationEntity.cancelled: Boolean
-    get() = status == ParticipationStatus.CANCELLED || status == ParticipationStatus.CANCELLED_CHARGED
 
 private fun List<ParticipationEntity>.ordered(): List<ParticipationEntity> = sortedWith(compareBy({ it.sync.createdAt }, { it.id }))
 

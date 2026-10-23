@@ -35,7 +35,17 @@ class Undo internal constructor(
     internal val seriesClients: Map<String, List<SeriesClientEntity>>,
     internal val clients: Map<String, ClientEntity>,
     internal val groups: Map<String, GroupEntity>,
-)
+) {
+    /** Два действия подряд как одно (5.20): «Отменить» возвращает всё к виду до первого. */
+    internal operator fun plus(later: Undo): Undo = Undo(
+        later.trainings + trainings,
+        later.participations + participations,
+        later.series + series,
+        later.seriesClients + seriesClients,
+        later.clients + clients,
+        later.groups + groups,
+    )
+}
 
 /**
  * Записывает изменения и запоминает, какими записи были до первой правки, — для [Undo]. Вызывается внутри
@@ -142,6 +152,22 @@ internal class Recorder(private val db: PersonalkaDatabase, private val now: Lon
         val group = clientDao.group(groupId) ?: return
         if (groupId !in groups) groups[groupId] = group
         clientDao.upsertGroup(group.copy(pendingPlan = joinPlans(group.pendingPlan, text), sync = group.sync.touched(now)))
+    }
+
+    /** Заменить «отложенный» план клиента (4.3): подставили в новую тренировку или убрали при «Вернуть». */
+    suspend fun setPendingPlan(clientId: String, text: String?) {
+        val client = clientDao.client(clientId) ?: return
+        if (client.pendingPlan == text) return
+        if (clientId !in clients) clients[clientId] = client
+        clientDao.upsertClient(client.copy(pendingPlan = text, sync = client.sync.touched(now)))
+    }
+
+    /** То же для группы. */
+    suspend fun setGroupPendingPlan(groupId: String, text: String?) {
+        val group = clientDao.group(groupId) ?: return
+        if (group.pendingPlan == text) return
+        if (groupId !in groups) groups[groupId] = group
+        clientDao.upsertGroup(group.copy(pendingPlan = text, sync = group.sync.touched(now)))
     }
 
     fun undo(): Undo = Undo(trainings.toMap(), participations.toMap(), series.toMap(), seriesClients.toMap(), clients.toMap(), groups.toMap())

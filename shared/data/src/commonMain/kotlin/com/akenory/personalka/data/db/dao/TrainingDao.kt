@@ -110,6 +110,10 @@ interface TrainingDao {
     @Query("SELECT * FROM training WHERE groupId = :groupId AND deletedAt IS NULL ORDER BY start")
     suspend fun trainingsOfGroup(groupId: String): List<TrainingEntity>
 
+    /** Куда перенесён план тренировки [fromId] (4.3) — для отката при «Вернуть». */
+    @Query("SELECT * FROM training WHERE planCarriedFromId = :fromId AND deletedAt IS NULL ORDER BY start")
+    suspend fun trainingsCarriedFrom(fromId: String): List<TrainingEntity>
+
     @Query("SELECT * FROM training WHERE groupId = :groupId AND deletedAt IS NULL ORDER BY start")
     fun observeTrainingsOfGroup(groupId: String): Flow<List<TrainingEntity>>
 

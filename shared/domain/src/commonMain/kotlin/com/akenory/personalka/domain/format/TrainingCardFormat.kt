@@ -163,6 +163,41 @@ object TrainingCardFormat {
     fun cancelled(start: LocalDateTime, charged: Boolean): String =
         (if (charged) ClientOutcome.CANCELLED_CHARGED.label else ClientOutcome.CANCELLED.label) + ": " + CalendarFormat.at(start)
 
+    /** Отмена с переносом плана (4.3, макет «После отмены»): «Отменено. План перенесён на вт 27.10». */
+    fun cancelledCarried(charged: Boolean, to: LocalDate): String =
+        (if (charged) ClientOutcome.CANCELLED_CHARGED.label else ClientOutcome.CANCELLED.label) + ". " + planCarried(to)
+
+    /** Следующей нет (4.3): «Отменено. План — в первую новую тренировку». */
+    fun cancelledPending(charged: Boolean): String =
+        (if (charged) ClientOutcome.CANCELLED_CHARGED.label else ClientOutcome.CANCELLED.label) + ". " + PLAN_PENDING
+
+    /** «Тренировка возвращена. План убран из вт 27.10» — перенесённый текст ушёл из следующей (4.3). */
+    fun returnedUncarried(from: LocalDate): String = "$RETURNED. План убран из ${DateFormat.short(from)}"
+
+    // --- Перенос плана (4.3) ---
+
+    /** «План перенесён на вт 27.10» — в сообщении и в карточке отменённой (макет «Отмена со списанием»). */
+    fun planCarried(to: LocalDate): String = "План перенесён на ${DateFormat.short(to)}"
+
+    const val PLAN_PENDING = "План — в первую новую тренировку"
+
+    /** Вопрос «У следующей уже есть план» (макет «У следующей уже есть план»). */
+    const val CARRY_TITLE = "У следующей тренировки уже есть план"
+    const val CARRY_MOVING = "Переносится"
+    const val CARRY_EXISTING = "Уже записан"
+    const val CARRY_ADD = "Добавить с новой строки"
+    const val CARRY_REPLACE = "Заменить"
+    const val CARRY_KEEP = "Оставить как есть"
+
+    /** Подпись под заголовком вопроса: «Орлов М. · вт 27.10, 17:00». */
+    fun carryWhom(title: String, start: LocalDateTime): String = title + DOT + CalendarFormat.at(start)
+
+    /** Вопрос при «Вернуть», если перенесённый план правили (4.3). */
+    const val UNCARRY_TITLE = "План следующей тренировки уже правили"
+    const val UNCARRY_CARRIED = "Перенесено"
+    const val UNCARRY_NOW = "Сейчас"
+    const val UNCARRY_REMOVE = "Убрать перенесённое"
+
     /** «Отменено: Носова Е.» — фамилия после двоеточия не склоняется (10.6). */
     fun cancelledFor(names: List<String>): String = "Отменено: " + names.joinToString(", ")
 

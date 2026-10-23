@@ -34,6 +34,10 @@ import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.training.CancelRules
+import com.akenory.personalka.domain.training.CarryChoice
+import com.akenory.personalka.domain.training.CarryStep
+import com.akenory.personalka.domain.training.PlanCarryRules
+import com.akenory.personalka.domain.training.ReturnStep
 import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.ParticipantState
@@ -81,6 +85,7 @@ data class GuestChoice(val id: String, val name: ClientName, val birthDate: Loca
  * @param skippable «Пропустить дату серии»: будущая тренировка серии без отметок и списаний (4.4).
  * @param noDiary проведена, а дневник не заполнен — строка с оранжевой точкой.
  * @param keepsDiary дневник включён (3.2) и у типа есть его поля (3.3) — кнопка «Дневник» (5.4).
+ * @param carriedTo у отменённой — куда перенесён её план (4.3): «План перенесён на вт 27.10».
  */
 data class TrainingCard(
     val id: String,
@@ -98,6 +103,7 @@ data class TrainingCard(
     val noDiary: Boolean,
     val settings: StatusSettings,
     val keepsDiary: Boolean = false,
+    val carriedTo: LocalDate? = null,
 ) {
     /** Итог для метки статуса: у одного клиента — его итог («Отмена со списанием»), иначе — тренировки. */
     val outcome: ClientOutcome
@@ -110,8 +116,39 @@ data class TrainingCard(
     fun client(id: String): CardClient? = clients.firstOrNull { it.id == id }
 }
 
-/** Что вышло из действия карточки: [message] — для сообщения с «Отменить» (5.20). `null` у действия — ничего не сделано. */
-data class CardResult(val message: String, val undo: Undo)
+/**
+ * Что вышло из действия карточки: [message] — для сообщения с «Отменить» (5.20). `null` у действия — ничего не сделано.
+ * [carry] или [uncarry] — сначала вопрос о плане (4.3), сообщение — после ответа ([TrainingCardRepository.carry],
+ * [TrainingCardRepository.uncarry]).
+ */
+data class CardResult(val message: String, val undo: Undo, val carry: CarryAsk? = null, val uncarry: UncarryAsk? = null)
+
+/**
+ * Вопрос «У следующей тренировки уже есть план» (4.3): [whom] — «Орлов М. · вт 27.10, 17:00», [moving] — план
+ * отменённой, [existing] — план следующей [toId]; [charged] — отмена со списанием, для текста сообщения.
+ */
+data class CarryAsk(
+    val fromId: String,
+    val toId: String,
+    val toDate: LocalDate,
+    val whom: String,
+    val moving: String,
+    val existing: String,
+    val charged: Boolean,
+)
+
+/**
+ * Вопрос при «Вернуть»: перенесённый план у следующей [toId] правили (4.3). [carried] — что переносили, [current] —
+ * план сейчас, [left] — что останется после «Убрать перенесённое».
+ */
+data class UncarryAsk(
+    val toId: String,
+    val toDate: LocalDate,
+    val whom: String,
+    val carried: String,
+    val current: String,
+    val left: String?,
+)
 
 /**
  * Карточка тренировки (ТЗ 5.4) и отмена (5.6): «Проведено», отметка детей, «Отменить» со списанием или без,
@@ -208,6 +245,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 settings = settingsRow.statusSettings(),
                 keepsDiary = (settingsRow?.diaryEnabled ?: true) && type != null &&
                     DiaryRules.fields(kind, type.diaryPlan, type.diaryFact, type.diaryBehavior).any,
+                carriedTo = if (t.status == TrainingStatus.CANCELLED) trainings.trainingsCarriedFrom(t.id).firstOrNull()?.start?.date else null,
             )
         }
     }
@@ -298,7 +336,8 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
 
     /**
      * Отмена (5.6): [clientIds] пусто — «Всю тренировку», иначе этих клиентов; [notifiedAt] — «Когда предупредили»,
-     * [charged] — переключатель «Со списанием», если тренер его трогал. Перенос плана (4.3) — шаг 2.2.
+     * [charged] — переключатель «Со списанием», если тренер его трогал. Отменена вся тренировка — её план
+     * переходит на следующую (4.3): молча, с вопросом ([CardResult.carry]) или в отложенный план.
      */
     suspend fun cancel(
         id: String,
@@ -306,7 +345,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
         reason: String?,
         notifiedAt: LocalDateTime,
         charged: Boolean? = null,
-    ): CardResult? = change(id) { state, _, settings ->
+    ): CardResult? = change(id, follow = ::carryOnCancel) { state, _, settings ->
         if (state.status == TrainingStatus.CANCELLED) return@change null
         val open = CancelRules.open(state)
         if (clientIds.any { it !in open }) return@change null
@@ -319,13 +358,60 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
         next to message
     }
 
+    /**
+     * Ответ на вопрос «У следующей уже есть план» после [cancelled]: «Добавить», «Заменить» или «Оставить как есть».
+     * «Отменить» в сообщении вернёт и отмену, и перенос.
+     */
+    suspend fun carry(cancelled: CardResult, choice: CarryChoice): CardResult {
+        val ask = cancelled.carry ?: return cancelled
+        val now = clock()
+        var result = CardResult(cancelled.message, cancelled.undo)
+        if (choice == CarryChoice.KEEP) return result
+        db.withWriteTransaction {
+            val target = trainings.training(ask.toId)?.takeIf { it.sync.deletedAt == null && it.status == TrainingStatus.PLANNED } ?: return@withWriteTransaction
+            val recorder = Recorder(db, now)
+            recorder.saveTraining(
+                target.copy(
+                    plan = PlanCarryRules.carried(choice, ask.moving, target.plan),
+                    planCarriedFromId = ask.fromId,
+                    planCarriedText = ask.moving,
+                    sync = target.sync.touched(now),
+                ),
+            )
+            result = CardResult(TrainingCardFormat.cancelledCarried(ask.charged, target.start.date), cancelled.undo + recorder.undo())
+        }
+        return result
+    }
+
+    /** Ответ на вопрос при «Вернуть»: [remove] — «Убрать перенесённое», иначе «Оставить как есть». */
+    suspend fun uncarry(returned: CardResult, remove: Boolean): CardResult {
+        val ask = returned.uncarry ?: return returned
+        val now = clock()
+        var result = CardResult(TrainingCardFormat.RETURNED, returned.undo)
+        db.withWriteTransaction {
+            val target = trainings.training(ask.toId)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            val recorder = Recorder(db, now)
+            recorder.saveTraining(
+                target.copy(
+                    plan = if (remove) ask.left else target.plan,
+                    planCarriedFromId = null,
+                    planCarriedText = null,
+                    sync = target.sync.touched(now),
+                ),
+            )
+            val message = if (remove) TrainingCardFormat.returnedUncarried(target.start.date) else TrainingCardFormat.RETURNED
+            result = CardResult(message, returned.undo + recorder.undo())
+        }
+        return result
+    }
+
     /** «Вернуть» у отменённой (4.1): до конца — «Запланировано», после — «Проведено»; группа ждёт отметки. */
-    suspend fun restore(id: String): CardResult? = change(id) { state, now, _ ->
+    suspend fun restore(id: String): CardResult? = change(id, follow = ::uncarryOnReturn) { state, now, _ ->
         if (!StatusRules.canReturn(state)) null else StatusRules.returnTraining(state, now) to TrainingCardFormat.RETURNED
     }
 
     /** «Вернуть» одного отменённого клиента сплита или группы. */
-    suspend fun restoreClient(id: String, clientId: String): CardResult? = change(id) { state, now, _ ->
+    suspend fun restoreClient(id: String, clientId: String): CardResult? = change(id, follow = ::uncarryOnReturn) { state, now, _ ->
         if (state.participants.none { it.clientId == clientId } || !TrainingCardRules.canReturnClient(state, clientId)) null
         else StatusRules.returnClient(state, clientId, now) to TrainingCardFormat.returnClient(clientName(clientId))
     }
@@ -408,10 +494,12 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
 
     /**
      * Действие над одной тренировкой: [action] получает её состояние, «сейчас» и настройки и отвечает новым
-     * состоянием и текстом сообщения; `null` — действие недоступно, ничего не пишется.
+     * состоянием и текстом сообщения; `null` — действие недоступно, ничего не пишется. [follow] — что ещё сделать
+     * в той же записи (перенос плана); `null` от него — обычное сообщение.
      */
     private suspend fun change(
         id: String,
+        follow: (suspend (TrainingEntity, TrainingState, Recorder, String) -> CardResult?)? = null,
         action: suspend (TrainingState, LocalDateTime, StatusSettings) -> Pair<TrainingState, String>?,
     ): CardResult? {
         val now = clock()
@@ -425,7 +513,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 ?: return@withWriteTransaction
             val recorder = Recorder(db, now)
             save(t, people, next, now, recorder)
-            result = CardResult(message, recorder.undo())
+            result = follow?.invoke(t, next, recorder, message) ?: CardResult(message, recorder.undo())
         }
         return result
     }
@@ -443,6 +531,89 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             p.copy(status = s.status, cancelReason = s.cancelReason, notifiedAt = s.notifiedAt, chargeOverridden = s.chargeOverridden, sync = p.sync.touched(now))
         }
         if (changed.isNotEmpty()) recorder.saveParticipations(t.id, changed)
+    }
+
+    /**
+     * Перенос плана, когда тренировка [t] стала отменённой (4.3): у следующей план пуст — молча; есть план — вопрос
+     * без записи; следующей нет — в отложенный план группы или каждого клиента. План отменённой остаётся у неё.
+     */
+    private suspend fun carryOnCancel(t: TrainingEntity, next: TrainingState, recorder: Recorder, message: String): CardResult? {
+        if (t.status == TrainingStatus.CANCELLED || next.status != TrainingStatus.CANCELLED) return null
+        val plan = t.plan?.takeIf { it.isNotBlank() } ?: return null
+        val kind = reference.trainingType(t.typeId)?.kind ?: TrainingKind.OTHER
+        // Отменены все — следующую ищем для всех, кто был записан.
+        val people = trainings.participationsOf(t.id).ordered().map { it.clientId }
+        val target = db.nextTraining(t, kind, people.toSet())
+        val charged = next.participants.any { it.status == ParticipationStatus.CANCELLED_CHARGED }
+        val now = clock()
+        return when (PlanCarryRules.onCancel(plan, target != null, target?.plan)) {
+            CarryStep.NONE -> null
+            CarryStep.MOVE -> {
+                target!!
+                recorder.saveTraining(target.copy(plan = plan, planCarriedFromId = t.id, planCarriedText = plan, sync = target.sync.touched(now)))
+                CardResult(TrainingCardFormat.cancelledCarried(charged, target.start.date), recorder.undo())
+            }
+            CarryStep.ASK -> {
+                target!!
+                val ask = CarryAsk(t.id, target.id, target.start.date, TrainingCardFormat.carryWhom(titleOf(target), target.start), plan, target.plan.orEmpty(), charged)
+                CardResult(message, recorder.undo(), carry = ask)
+            }
+            CarryStep.PENDING -> {
+                val groupId = t.groupId
+                if (groupId != null) recorder.addGroupPendingPlan(groupId, plan) else people.forEach { recorder.addPendingPlan(it, plan) }
+                CardResult(TrainingCardFormat.cancelledPending(charged), recorder.undo())
+            }
+        }
+    }
+
+    /**
+     * Откат переноса, когда отменённую [t] вернули (4.3): перенесённый текст не меняли — уходит из следующей молча,
+     * правили — вопрос ([CardResult.uncarry]). План ждал в отложенном — убирается оттуда, если он там ещё есть.
+     */
+    private suspend fun uncarryOnReturn(t: TrainingEntity, next: TrainingState, recorder: Recorder, message: String): CardResult? {
+        if (t.status != TrainingStatus.CANCELLED || next.status == TrainingStatus.CANCELLED) return null
+        val now = clock()
+        val target = trainings.trainingsCarriedFrom(t.id).firstOrNull()
+        if (target == null) {
+            val plan = t.plan?.takeIf { it.isNotBlank() } ?: return null
+            val groupId = t.groupId
+            if (groupId != null) {
+                val left = PlanCarryRules.onReturn(plan, clients.group(groupId)?.pendingPlan) as? ReturnStep.Remove ?: return null
+                recorder.setGroupPendingPlan(groupId, left.left)
+            } else {
+                trainings.participationsOf(t.id).forEach { p ->
+                    val left = PlanCarryRules.onReturn(plan, clients.client(p.clientId)?.pendingPlan) as? ReturnStep.Remove ?: return@forEach
+                    recorder.setPendingPlan(p.clientId, left.left)
+                }
+            }
+            return null
+        }
+        val carried = target.planCarriedText.orEmpty()
+        return when (val step = PlanCarryRules.onReturn(carried, target.plan)) {
+            ReturnStep.Nothing -> {
+                recorder.saveTraining(target.copy(planCarriedFromId = null, planCarriedText = null, sync = target.sync.touched(now)))
+                null
+            }
+            is ReturnStep.Remove -> {
+                recorder.saveTraining(target.copy(plan = step.left, planCarriedFromId = null, planCarriedText = null, sync = target.sync.touched(now)))
+                CardResult(TrainingCardFormat.returnedUncarried(target.start.date), recorder.undo())
+            }
+            is ReturnStep.Ask -> {
+                val ask = UncarryAsk(target.id, target.start.date, TrainingCardFormat.carryWhom(titleOf(target), target.start), carried, target.plan.orEmpty(), step.left)
+                CardResult(message, recorder.undo(), uncarry = ask)
+            }
+        }
+    }
+
+    /** Имя тренировки, как в календаре: «Орлов М.», «Сб 9:00 ББ (12)». */
+    private suspend fun titleOf(t: TrainingEntity): String {
+        val open = trainings.participationsOf(t.id).ordered().filter { !it.cancelled }
+        return CalendarFormat.title(
+            clients = open.mapNotNull { p -> clients.client(p.clientId)?.let { ClientName(it.lastName, it.firstName, it.middleName) } },
+            groupName = t.groupId?.let { clients.group(it) }?.name,
+            groupSize = open.size,
+            typeName = reference.trainingType(t.typeId)?.name.orEmpty(),
+        )
     }
 
     private suspend fun clientName(id: String): String =

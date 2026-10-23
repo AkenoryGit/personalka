@@ -76,6 +76,7 @@ import com.akenory.personalka.domain.training.CancelReasons
 import com.akenory.personalka.domain.training.CancelRules
 import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.CardMenu
+import com.akenory.personalka.domain.training.CarryChoice
 import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.TrainingCardRules
 import com.akenory.personalka.domain.training.TrainingPhase
@@ -107,6 +108,7 @@ const val TRAINING_CARD_TAG = "training-card"
 const val CANCEL_PANEL_TAG = "cancel-panel"
 const val CARD_MENU_TAG = "card-menu"
 const val CARD_SCRIM_TAG = "card-scrim"
+const val CARRY_PANEL_TAG = "carry-panel"
 const val CHARGE_SWITCH_TAG = "charge-switch"
 const val OWN_REASON_TAG = "own-reason"
 
@@ -189,6 +191,8 @@ fun TrainingCardHost(
     var guestLast by rememberSaveable(key) { mutableStateOf("") }
     var guestFirst by rememberSaveable(key) { mutableStateOf("") }
 
+    // Вопрос о переносе плана после отмены или «Вернуть» (4.3): ждёт ответа и после закрытия карточки.
+    var asked by remember { mutableStateOf<CardResult?>(null) }
     var card by remember(id) { mutableStateOf<TrainingCard?>(null) }
     LaunchedEffect(id) {
         if (id == null) return@LaunchedEffect
@@ -211,7 +215,12 @@ fun TrainingCardHost(
     }
 
     fun done(result: CardResult?) {
-        if (result != null) messages.showUndo(result.message) { scope.launch { cards.undo(result.undo) } }
+        when {
+            result == null -> Unit
+            // Вопрос о плане (4.3): сообщение с «Отменить» — после ответа.
+            result.carry != null || result.uncarry != null -> asked = result
+            else -> messages.showUndo(result.message) { scope.launch { cards.undo(result.undo) } }
+        }
     }
 
     val draft = CancelDraft(
@@ -385,6 +394,39 @@ fun TrainingCardHost(
                 )
             }
         }
+        asked?.carry?.let { ask ->
+            val answer = { choice: CarryChoice ->
+                val result = asked
+                asked = null
+                if (result != null) scope.launch { done(cards.carry(result, choice)) }
+            }
+            Panel(title = TrainingCardFormat.CARRY_TITLE, onDismiss = { answer(CarryChoice.KEEP) }, modifier = Modifier.testTag(CARRY_PANEL_TAG)) {
+                PlanQuestion(ask.whom, TrainingCardFormat.CARRY_MOVING to ask.moving, TrainingCardFormat.CARRY_EXISTING to ask.existing)
+                Column(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    PrimaryButton(TrainingCardFormat.CARRY_ADD, { answer(CarryChoice.ADD) }, Modifier.fillMaxWidth())
+                    OutlineButton(TrainingCardFormat.CARRY_REPLACE, { answer(CarryChoice.REPLACE) }, Modifier.fillMaxWidth())
+                    TextButton(onClick = { answer(CarryChoice.KEEP) }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button)) {
+                        Text(TrainingCardFormat.CARRY_KEEP, style = MaterialTheme.typography.labelLarge, color = PersonalkaTheme.colors.text)
+                    }
+                }
+            }
+        }
+        asked?.uncarry?.let { ask ->
+            val answer = { remove: Boolean ->
+                val result = asked
+                asked = null
+                if (result != null) scope.launch { done(cards.uncarry(result, remove)) }
+            }
+            Panel(title = TrainingCardFormat.UNCARRY_TITLE, onDismiss = { answer(false) }, modifier = Modifier.testTag(CARRY_PANEL_TAG)) {
+                PlanQuestion(ask.whom, TrainingCardFormat.UNCARRY_CARRIED to ask.carried, TrainingCardFormat.UNCARRY_NOW to ask.current)
+                PanelActions(
+                    primary = TrainingCardFormat.CARRY_KEEP,
+                    onPrimary = { answer(false) },
+                    secondary = TrainingCardFormat.UNCARRY_REMOVE,
+                    onSecondary = { answer(true) },
+                )
+            }
+        }
         if (pickingDate) {
             DatePickerPanel(
                 initial = (draft.notifiedAt ?: now).date,
@@ -512,6 +554,8 @@ private fun ColumnScope.CardBody(
             SectionLabel(TrainingCardFormat.PLAN)
             Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text)
         }
+        // Отменённая: куда ушёл план (4.3, макет «Отмена со списанием»).
+        card.carriedTo?.let { InfoRow(TrainingCardFormat.PLAN, TrainingCardFormat.planCarried(it)) }
         card.fact?.let {
             SectionLabel(TrainingCardFormat.FACT)
             Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text)
@@ -601,6 +645,25 @@ private fun StatusChip(label: String, bg: Color, fg: Color, icon: ImageVector, o
     ) {
         Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
         Text(label, style = MaterialTheme.typography.labelMedium, color = fg)
+    }
+}
+
+/** Тело вопроса о плане (макет «У следующей уже есть план»): «Орлов М. · вт 27.10, 17:00» и два текста в плашках. */
+@Composable
+private fun PlanQuestion(whom: String, first: Pair<String, String>, second: Pair<String, String>) {
+    val colors = PersonalkaTheme.colors
+    Text(whom, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.textMuted)
+    listOf(first, second).forEach { (label, text) ->
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+                .padding(Dimens.space3),
+            verticalArrangement = Arrangement.spacedBy(Dimens.space1),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
+            Text(text, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text)
+        }
     }
 }
 
