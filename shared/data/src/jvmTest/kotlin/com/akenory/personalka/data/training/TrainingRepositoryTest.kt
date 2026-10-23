@@ -211,6 +211,26 @@ class TrainingRepositoryTest {
     }
 
     @Test
+    fun dutySeriesIgnoresRestrictions(): Unit = runBlocking {
+        db.scheduleDao().upsertBlock(Samples.block(placeId("ДБ")).copy(skipDates = emptyList()))
+        val form = forms.form().first()
+        assertEquals("Дежурство", form.duty?.name)
+
+        // Дежурство ДБ 16:00–19:00 каждый вт — поверх запрета 17:00–18:00, но без окна и без флага (4.5).
+        val draft = TrainingDraft(at(tuesday, 16), form.duty!!.id, locationId = placeId("ДБ"), durationMin = 180, repeat = Repeat(setOf(DayOfWeek.TUESDAY)))
+        val result = saved(forms.create(draft))
+        assertEquals(s("Создано: каждый вт, 16:00"), result.message)
+        assertEquals(9, all().size)
+        assertTrue(all().none { it.overRestriction })
+        assertTrue(forms.stored(all().first().id)!!.isDuty)
+
+        // Без клиентов не ругается, а без места — да.
+        assertIs<SaveResult.Invalid>(forms.create(draft.copy(locationId = null, repeat = null)))
+        forms.undo(result.undo)
+        assertEquals(emptyList(), all())
+    }
+
+    @Test
     fun groupTakesMembersOnDate(): Unit = runBlocking {
         val group = groups.create(GroupDraft("Сб 9:00 ББ", typeId("Группа"), placeId("ББ")))
         val belova = client("Белова", "Ева")

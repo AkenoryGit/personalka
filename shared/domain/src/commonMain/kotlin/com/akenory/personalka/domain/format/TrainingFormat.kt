@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.RuText.NBSP
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -31,6 +32,38 @@ object TrainingFormat {
 
     /** Поле даты: «вт 20.10.2026». */
     fun date(date: LocalDate): String = "${DateFormat.weekdayShort(date.dayOfWeek)}$NBSP${DateFormat.full(date)}"
+
+    // --- Дежурство и запрет (шаг 1.13а, макет «Запрет») ---
+
+    /** Переключатель вверху формы новой записи. */
+    const val MODE_TRAINING = "Тренировка"
+    const val MODE_DUTY = "Дежурство"
+    const val MODE_RESTRICTION = "Запрет"
+
+    const val NEW_DUTY_TITLE = "Новое дежурство"
+    const val EDIT_DUTY_TITLE = "Изменить дежурство"
+    const val NEW_RESTRICTION_TITLE = "Новый запрет"
+    const val EDIT_RESTRICTION_TITLE = "Изменить запрет"
+
+    /** Подсказка в поле причины: она нужна только для строки в окне — «ДБ 17:00–18:00 — групповая тренировка». */
+    const val REASON_PLACEHOLDER = "Например, групповая тренировка"
+
+    const val DELETE_RESTRICTION = "Удалить запрет"
+
+    /** Сообщения после записи запрета (5.20). */
+    const val RESTRICTION_CREATED = "Запрет создан"
+    const val RESTRICTION_SAVED = "Запрет сохранён"
+    const val RESTRICTION_DELETED = "Запрет удалён"
+
+    /** Поле начала: «с 17:00». */
+    fun from(time: LocalTime): String = "с ${DateFormat.time(time)}"
+
+    /** Поле конца: «до 18:00»; полночь — «до 24:00», конец дня. */
+    fun to(time: LocalTime): String =
+        "до " + DateFormat.minuteOfDay((time.hour * 60 + time.minute).let { if (it == 0) ClubTime.MINUTES_PER_DAY else it })
+
+    /** Начало периода запрета: «с 01.09.2026». */
+    fun periodFrom(date: LocalDate): String = "с ${DateFormat.full(date)}"
 
     /** «Ещё 3» под чипами типов. */
     fun moreTypes(count: Int): String = "Ещё $count"

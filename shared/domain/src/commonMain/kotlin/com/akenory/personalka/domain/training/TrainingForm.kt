@@ -36,7 +36,7 @@ data class TrainingDraft(
 
 /**
  * Тип в форме: чип, оттенок (точка на чипе — цвет выбранного места этим оттенком), сколько клиентов
- * и длительность по умолчанию. Дежурств среди них нет — у них своя форма.
+ * и длительность по умолчанию. Дежурств среди чипов нет — у них своя форма (шаг 1.13а).
  */
 data class FormType(
     val id: String,
@@ -171,11 +171,57 @@ object TrainingFormRules {
         if (marked && CalendarDrag.problem(status, marked = true, draft.start, now) == MoveProblem.MARKED_IN_FUTURE) {
             put(FormField.TIME, "Проведённую тренировку нельзя перенести в будущее")
         }
-        val repeat = draft.repeat
-        if (repeat != null) {
-            if (repeat.weekdays.isEmpty()) put(FormField.WEEKDAYS, "Выберите дни недели")
-            if (repeat.until != null && repeat.until < draft.start.date) put(FormField.UNTIL, "Не раньше даты тренировки")
+        repeatProblems(draft)
+    }
+
+    // --- Дежурство (5.5: место, время, повтор) ---
+
+    /** Минуты от [start] до [end] в один день; конец 00:00 — полночь (24:00). Конец не позже начала — 0 и меньше. */
+    fun minutesUntil(start: LocalTime, end: LocalTime): Int {
+        val to = (end.hour * 60 + end.minute).let { if (it == 0) ClubTime.MINUTES_PER_DAY else it }
+        return to - (start.hour * 60 + start.minute)
+    }
+
+    /** Конец по часам — «до 15:00»; полночь — 00:00. */
+    fun endTime(draft: TrainingDraft): LocalTime = TrainingTime.end(draft.start, draft.durationMin).time
+
+    /**
+     * Новое дежурство с [start] (удержание на сетке или «+»): тип дежурства и его длительность (4 часа),
+     * но не дальше полуночи.
+     */
+    fun newDuty(start: LocalDateTime, type: FormType?, locationId: String?): TrainingDraft = TrainingDraft(
+        start = start,
+        typeId = type?.id,
+        locationId = locationId,
+        durationMin = minOf(type?.defaultDurationMin ?: TypePresets.DEFAULT_DURATION, ClubTime.MINUTES_PER_DAY - ClubTime.minuteOfDay(start)),
+    )
+
+    /** Начало дежурства сменили, конец «до» остаётся на месте. */
+    fun withDutyStart(draft: TrainingDraft, start: LocalDateTime): TrainingDraft =
+        draft.copy(start = start, durationMin = minutesUntil(start.time, endTime(draft)))
+
+    /** Конец дежурства «до» сменили. */
+    fun withDutyEnd(draft: TrainingDraft, end: LocalTime): TrainingDraft =
+        draft.copy(durationMin = minutesUntil(draft.start.time, end))
+
+    /**
+     * Ошибки формы дежурства: место, конец позже начала, не дольше 10 часов (длительность 5–600 минут, как у тренировки),
+     * повтор — как у тренировки. Клиентов у дежурства нет. Пусто — можно сохранять.
+     */
+    fun dutyProblems(draft: TrainingDraft): Map<FormField, String> = buildMap {
+        if (draft.locationId == null) put(FormField.PLACE, "Выберите место")
+        when {
+            draft.durationMin <= 0 -> put(FormField.TIME, "Конец должен быть позже начала")
+            draft.durationMin < TrainingTime.MIN_DURATION -> put(FormField.TIME, "Не меньше ${TrainingTime.MIN_DURATION} минут")
+            draft.durationMin > TrainingTime.MAX_DURATION -> put(FormField.TIME, "Не дольше ${TrainingTime.MAX_DURATION / 60} часов")
         }
+        repeatProblems(draft)
+    }
+
+    private fun MutableMap<FormField, String>.repeatProblems(draft: TrainingDraft) {
+        val repeat = draft.repeat ?: return
+        if (repeat.weekdays.isEmpty()) put(FormField.WEEKDAYS, "Выберите дни недели")
+        if (repeat.until != null && repeat.until < draft.start.date) put(FormField.UNTIL, "Не раньше даты тренировки")
     }
 
     private fun clientsProblem(draft: TrainingDraft, type: FormType): String? {

@@ -73,7 +73,8 @@ data class FormPlace(val id: String, val shortName: String, val name: String, va
 /**
  * Всё, что показывает форма тренировки (5.5): типы без дежурств (последний использованный первым), места,
  * клиенты по алфавиту, группы, недавние клиенты и группы, последнее место каждого типа и родственники —
- * их первыми предлагают вторым в сплит (4.17).
+ * их первыми предлагают вторым в сплит (4.17). [duty] — тип дежурства для формы дежурства (шаг 1.13а);
+ * `null` — дежурств у тренера нет, и переключатель их не показывает.
  */
 data class TrainingFormData(
     val types: List<FormType> = emptyList(),
@@ -84,6 +85,7 @@ data class TrainingFormData(
     val recentGroupIds: List<String> = emptyList(),
     val lastPlaceByType: Map<String, String> = emptyMap(),
     val relatives: Map<String, List<String>> = emptyMap(),
+    val duty: FormType? = null,
 )
 
 /**
@@ -91,6 +93,7 @@ data class TrainingFormData(
  *
  * @param marked проведена или с отметками «пришёл» — в будущее её не перенести.
  * @param seriesRepeat повтор серии; в форме он виден, а меняется вопросом «Эту и следующие» (4.4).
+ * @param isDuty дежурство: открывается форма дежурства.
  */
 data class StoredTraining(
     val id: String,
@@ -98,6 +101,7 @@ data class StoredTraining(
     val status: TrainingStatus,
     val marked: Boolean,
     val seriesRepeat: Repeat?,
+    val isDuty: Boolean = false,
 )
 
 /** Ответ на вопрос «Только эту / Эту и следующие» (4.4). */
@@ -150,6 +154,7 @@ class TrainingRepository internal constructor(
         ) { types, places, people, groups, relations ->
             Lists(
                 types = types.filter { !it.archived && it.kind != TrainingKind.DUTY }.map { it.toForm() },
+                duty = types.firstOrNull { !it.archived && it.kind == TrainingKind.DUTY }?.toForm(),
                 places = places.filter { !it.archived }.map { FormPlace(it.id, it.shortName, it.name, it.color) },
                 clients = people.map { FormClient(it.id, ClientName(it.lastName, it.firstName, it.middleName)) }.sortedBy { ClientRules.sortKey(it.name) },
                 groups = groups.map { FormGroup(it.id, it.name, it.typeId, it.locationId) }.sortedBy { it.name },
@@ -170,6 +175,7 @@ class TrainingRepository internal constructor(
                 recentGroupIds = last.mapNotNull { it.groupId }.distinct().filter { it in groupIds },
                 lastPlaceByType = last.reversed().associate { it.typeId to it.locationId },
                 relatives = l.relatives,
+                duty = l.duty,
             )
         }
     }
@@ -217,6 +223,7 @@ class TrainingRepository internal constructor(
             status = t.status,
             marked = t.marked(people),
             seriesRepeat = series?.let { Repeat(it.weekdays, it.validTo) },
+            isDuty = reference.trainingType(t.typeId)?.kind == TrainingKind.DUTY,
         )
     }
 
@@ -231,7 +238,7 @@ class TrainingRepository internal constructor(
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val type = draft.typeId?.let { reference.trainingType(it) }
-            val problems = TrainingFormRules.problems(draft, type?.toForm(), clubNow)
+            val problems = problems(draft, type?.toForm(), clubNow)
             if (problems.isNotEmpty() || type == null) {
                 result = SaveResult.Invalid(problems)
                 return@withWriteTransaction
@@ -240,8 +247,10 @@ class TrainingRepository internal constructor(
             val recorder = Recorder(db, now)
             val repeat = draft.repeat
             val locationId = draft.locationId!!
+            // Дежурство с запретами не сверяется (4.5) и создаётся так же — разово или серией.
+            val duty = type.kind == TrainingKind.DUTY
             if (repeat == null) {
-                val check = RestrictionRules.check(null, Placement(draft.start, draft.durationMin, locationId), restrictions)
+                val check = RestrictionRules.check(null, Placement(draft.start, draft.durationMin, locationId, duty), restrictions)
                 if (check is RestrictionCheck.Confirm && !confirmed) {
                     result = SaveResult.Confirm(conflictLines(check.hits))
                     return@withWriteTransaction
@@ -283,12 +292,12 @@ class TrainingRepository internal constructor(
                 val changes = draft.plan.cleanPlan()?.let { plan ->
                     created.copy(created = created.created.mapIndexed { i, t -> if (i == 0) t.copy(plan = plan) else t })
                 } ?: created
-                val batch = RestrictionRules.checkAll(changes.created.map { it.placement() }, restrictions)
+                val batch = RestrictionRules.checkAll(changes.created.map { it.placement(duty) }, restrictions)
                 if (batch != null && !confirmed) {
                     result = SaveResult.Confirm(batchLines(batch))
                     return@withWriteTransaction
                 }
-                recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty = { false })
+                recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty = { duty })
                 result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.undo())
             }
         }
@@ -319,7 +328,7 @@ class TrainingRepository internal constructor(
             val people = trainings.participationsOf(id)
             val type = draft.typeId?.let { reference.trainingType(it) }
             val problems = when {
-                checkFields -> TrainingFormRules.problems(draft, type?.toForm(), clubNow, t.status, t.marked(people))
+                checkFields -> problems(draft, type?.toForm(), clubNow, t.status, t.marked(people))
                 TrainingTime.problem(draft.start, draft.durationMin) != null -> mapOf(FormField.TIME to "")
                 else -> emptyMap()
             }
@@ -425,7 +434,7 @@ class TrainingRepository internal constructor(
                     )
                     val own = created.created.firstOrNull { it.date == draft.start.date && it.start == draft.start }
                     val changes = created.copy(created = created.created - listOfNotNull(own).toSet())
-                    val placed = changes.created.map { it.placement() } + listOfNotNull(after.takeIf { RestrictionRules.moved(before, it) })
+                    val placed = changes.created.map { it.placement(isDuty(it.typeId)) } + listOfNotNull(after.takeIf { RestrictionRules.moved(before, it) })
                     val batch = RestrictionRules.checkAll(placed, restrictions)
                     if (batch != null && !confirmed) {
                         result = SaveResult.Confirm(batchLines(batch))
@@ -476,6 +485,16 @@ class TrainingRepository internal constructor(
         }
         return count
     }
+
+    /** Ошибки формы: у дежурства — свои (место, время, повтор), у тренировки — все поля (5.5). */
+    private fun problems(
+        draft: TrainingDraft,
+        type: FormType?,
+        now: LocalDateTime,
+        status: TrainingStatus = TrainingStatus.PLANNED,
+        marked: Boolean = false,
+    ): Map<FormField, String> =
+        if (type?.kind == TrainingKind.DUTY) TrainingFormRules.dutyProblems(draft) else TrainingFormRules.problems(draft, type, now, status, marked)
 
     private suspend fun horizonWeeks(): Int =
         coaches.currentCoach()?.let { coaches.settings(it.id) }?.seriesHorizonWeeks ?: SeriesRules.DEFAULT_HORIZON_WEEKS
@@ -536,6 +555,7 @@ class TrainingRepository internal constructor(
         val clients: List<FormClient>,
         val groups: List<FormGroup>,
         val relatives: Map<String, List<String>>,
+        val duty: FormType?,
     )
 
     private companion object {

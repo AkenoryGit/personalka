@@ -26,6 +26,15 @@ class TrainingFormatTest {
     }
 
     @Test
+    fun restrictionFieldsLikeMockup() {
+        // Макет «Запрет»: «с 17:00», «до 18:00», «с 01.09.2026»; конец 00:00 — «до 24:00».
+        assertEquals("с 17:00", TrainingFormat.from(LocalTime(17, 0)))
+        assertEquals("до 18:00", TrainingFormat.to(LocalTime(18, 0)))
+        assertEquals("до 24:00", TrainingFormat.to(LocalTime(0, 0)))
+        assertEquals("с 01.09.2026", TrainingFormat.periodFrom(LocalDate(2026, 9, 1)))
+    }
+
+    @Test
     fun scopeQuestionLikeMockup() {
         // Макет: «Никитин А. · каждый вт и чт, 12:00. Новое время — 12:30–13:20.», «Только эту — вт 20.10».
         val series = TrainingFormat.series(s("Никитин_А."), tueThu, LocalTime(12, 0))

@@ -157,4 +157,31 @@ class TrainingFormTest {
         assertEquals("Проведённую тренировку нельзя перенести в будущее", future[FormField.TIME])
         assertTrue(TrainingFormRules.problems(done.copy(start = at("16:00")), pt, now).isEmpty())
     }
+
+    @Test
+    fun dutyKeepsEndWhenStartMoves() {
+        val duty = FormType("duty", "Дежурство", TrainingKind.DUTY, 1, 240, 0)
+        // Дежурство на 4 часа — ББ 11:00–15:00; позже 20:00 — до полуночи.
+        val draft = TrainingFormRules.newDuty(at("11:00"), duty, "bb")
+        assertEquals(240, draft.durationMin)
+        assertEquals(LocalTime(15, 0), TrainingFormRules.endTime(draft))
+        assertEquals(180, TrainingFormRules.newDuty(at("21:00"), duty, "bb").durationMin)
+        assertEquals(LocalTime(0, 0), TrainingFormRules.endTime(TrainingFormRules.newDuty(at("21:00"), duty, "bb")))
+
+        // Начало сдвинули на 12:00 — конец остался 15:00; конец «до 00:00» — до полуночи.
+        val later = TrainingFormRules.withDutyStart(draft, at("12:00"))
+        assertEquals(180, later.durationMin)
+        assertEquals(LocalTime(15, 0), TrainingFormRules.endTime(later))
+        assertEquals(720, TrainingFormRules.withDutyEnd(later, LocalTime(0, 0)).durationMin)
+    }
+
+    @Test
+    fun dutyProblems() {
+        val draft = TrainingDraft(start = at("11:00"), typeId = "duty", locationId = "bb", durationMin = 240)
+        assertEquals(emptyMap(), TrainingFormRules.dutyProblems(draft))
+        assertEquals(setOf(FormField.PLACE), TrainingFormRules.dutyProblems(draft.copy(locationId = null)).keys)
+        assertEquals("Конец должен быть позже начала", TrainingFormRules.dutyProblems(TrainingFormRules.withDutyEnd(draft, LocalTime(10, 0)))[FormField.TIME])
+        assertEquals("Не дольше 10 часов", TrainingFormRules.dutyProblems(draft.copy(durationMin = 660))[FormField.TIME])
+        assertEquals(setOf(FormField.WEEKDAYS), TrainingFormRules.dutyProblems(draft.copy(repeat = Repeat(emptySet()))).keys)
+    }
 }

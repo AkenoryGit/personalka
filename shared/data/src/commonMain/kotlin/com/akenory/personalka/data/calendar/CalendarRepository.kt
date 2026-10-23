@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.restrictions.RestrictionRepository
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
 import com.akenory.personalka.data.restrictions.recalcRestrictionFlags
@@ -28,6 +29,7 @@ import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.ReferenceRules
@@ -117,6 +119,7 @@ data class TrainingCopy(
  * @param text строка окна: «ДБ 17:00–18:00 — групповая тренировка».
  * @param label подпись на самой зоне: «ДБ · групповая тренировка», «Дежурство · ББ».
  * @param repeat как повторяется запрет — «Каждый вт и чт»; у дежурства пусто.
+ * @param editable окно зоны показывает «Изменить»: дежурство и свой запрет; запрет клуба меняет администратор (этап 2).
  */
 data class CalendarZone(
     val id: String,
@@ -131,12 +134,13 @@ data class CalendarZone(
     val text: String,
     val label: String,
     val repeat: String?,
+    val editable: Boolean = true,
 ) {
     val span: ZoneSpan get() = ZoneSpan(id, kind, start, end)
 
     companion object {
         /** Запрет в его день. */
-        fun restriction(hit: RestrictionHit, placeShort: String): CalendarZone {
+        fun restriction(hit: RestrictionHit, placeShort: String, editable: Boolean = true): CalendarZone {
             val r = hit.restriction
             return CalendarZone(
                 id = r.id,
@@ -151,6 +155,7 @@ data class CalendarZone(
                 text = ZoneFormat.restriction(placeShort, r.startMinute, r.endMinute, r.reason),
                 label = ZoneFormat.restrictionLabel(placeShort, r.reason),
                 repeat = ZoneFormat.repeat(r.weekdays, r.validTo),
+                editable = editable,
             )
         }
 
@@ -216,8 +221,11 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     /** Последняя скопированная тренировка; живёт, пока приложение открыто. */
     val copied: StateFlow<TrainingCopy?> = copiedState.asStateFlow()
 
-    /** Форма тренировки (5.5): создание, изменение, продление серий. */
+    /** Форма тренировки и дежурства (5.5): создание, изменение, продление серий. */
     val forms: TrainingRepository = TrainingRepository(db, clock, copied)
+
+    /** Форма запрета (5.5): свои запреты, «Удалить запрет» и «Отменить». */
+    val restrictions: RestrictionRepository = RestrictionRepository(db, clock)
 
     /**
      * Тренировки, которые начинаются в дни с [from] по [to] не включая, по времени; отменённые тоже.
@@ -299,10 +307,11 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                 CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), place?.color.orEmpty())
             }
             val restrictions = blocks.map { it.toRestriction() }
+            val own = blocks.filter { it.scope == Scope.COACH }.map { it.id }.toSet()
             val hatched = generateSequence(from) { it.plus(1, DateTimeUnit.DAY) }
                 .takeWhile { it < to }
                 .flatMap { date -> RestrictionRules.on(restrictions, date) }
-                .map { hit -> CalendarZone.restriction(hit, placeById[hit.locationId]?.shortName.orEmpty()) }
+                .map { hit -> CalendarZone.restriction(hit, placeById[hit.locationId]?.shortName.orEmpty(), editable = hit.restriction.id in own) }
                 .toList()
             duties + hatched
         }
