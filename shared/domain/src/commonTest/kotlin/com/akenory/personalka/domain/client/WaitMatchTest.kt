@@ -1,5 +1,7 @@
 package com.akenory.personalka.domain.client
 
+import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.WaitFormat
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -79,5 +81,18 @@ class WaitMatchTest {
             E("освободилось ср", FreedSlot(LocalDate(2026, 10, 21), LocalTime(8, 0), "bb", false), 7),
         )
         assertEquals(listOf("освободилось ср", "освободилось чт", "ждёт давно", "ждёт недавно"), WaitMatch.order(list, { it.match }, { it.since }).map { it.name })
+    }
+
+    @Test
+    fun strings() {
+        val nbsp = RuText.NBSP
+        val series = FreedSlot(LocalDate(2026, 10, 26), LocalTime(8, 0), "bb", series = true)
+        assertEquals("Освободилось пн 08:00", WaitFormat.freed(series))
+        assertEquals("Освободилось вт${nbsp}20.10 17:00", WaitFormat.freed(series.copy(date = LocalDate(2026, 10, 20), start = LocalTime(17, 0), series = false)))
+        assertEquals("Освободилось пн 08:00 · ждут 2", WaitFormat.todo(series, 2))
+        assertEquals(
+            "Это время ждут: Петров К. (разово), Морозов Д. (постоянно)",
+            WaitFormat.waitingFor(listOf("Петров К." to true, "Морозов Д." to false)),
+        )
     }
 }

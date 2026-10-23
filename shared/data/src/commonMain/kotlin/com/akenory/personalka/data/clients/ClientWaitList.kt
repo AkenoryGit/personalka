@@ -10,18 +10,24 @@ import com.akenory.personalka.data.db.entity.WaitEntryEntity
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.FollowupRules
+import com.akenory.personalka.domain.client.FreedSlot
 import com.akenory.personalka.domain.client.WaitDraft
+import com.akenory.personalka.domain.client.WaitMatch
 import com.akenory.personalka.domain.client.WaitRules
 import com.akenory.personalka.domain.client.WaitWant
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.WaitStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.plus
 
 /**
- * Строка «Ждут время» (5.8): запись, клиент, что ждёт, короткие тип и место (`null` — любое) и день, с которого
- * ждёт.
+ * Строка «Ждут время» (5.8): запись, клиент, что ждёт, короткие тип и место (`null` — любое), день, с которого
+ * ждёт, и освободившееся время [match], которое ещё держится (4.16).
  */
 data class WaitRow(
     val entry: WaitEntryEntity,
@@ -30,6 +36,7 @@ data class WaitRow(
     val typeShort: String,
     val placeShort: String?,
     val since: LocalDate,
+    val match: FreedSlot? = null,
 )
 
 /** Чипы формы «+ В ожидание»: действующие индивидуальные типы и места — группы в лист не входят (4.16). */
@@ -47,20 +54,59 @@ class ClientWaitList internal constructor(private val db: PersonalkaDatabase, pr
     private val reference = db.referenceDao()
     private val coaches = db.coachDao()
 
-    /** Кто ждёт — по порядку записи: дольше ждёт — выше. Клиенты в архиве не показываются. */
-    fun observe(): Flow<List<WaitRow>> = combine(
-        clients.observeWaitEntries(WaitStatus.WAITING),
-        clients.observeAllClients(),
-        reference.observeTrainingTypes(),
-        reference.observeLocations(),
-    ) { entries, all, types, places ->
-        val byId = all.associateBy { it.id }
-        val typeShort = types.associate { it.id to it.shortName }
-        val placeShort = places.associate { it.id to it.shortName }
-        entries.mapNotNull { e ->
-            val client = byId[e.clientId]?.takeIf { it.status == ClientStatus.ACTIVE } ?: return@mapNotNull null
-            WaitRow(e, client, e.want(), typeShort[e.typeId].orEmpty(), e.locationId?.let { placeShort[it] }, ClubTime.today(e.sync.createdAt))
-        }.sortedWith(compareBy<WaitRow>({ it.entry.sync.createdAt }, { it.entry.id }))
+    /**
+     * Кто ждёт (4.16): сначала записи, для которых освободилось время (ближайшее — выше), дальше — кто ждёт дольше.
+     * Совпадение исчезает само, когда время прошло или его заняли другой тренировкой. Клиенты в архиве не показываются.
+     */
+    fun observe(now: LocalDateTime): Flow<List<WaitRow>> {
+        val week = LocalDateTime(now.date.plus(8, DateTimeUnit.DAY), LocalTime(0, 0))
+        val rows = combine(
+            clients.observeWaitEntries(WaitStatus.WAITING),
+            clients.observeAllClients(),
+            reference.observeTrainingTypes(),
+            reference.observeLocations(),
+        ) { entries, all, types, places -> Lists(entries, all, types, places) }
+        return combine(rows, trainings.observeTrainingsBetween(LocalDateTime(now.date, LocalTime(0, 0)), week)) { l, _ ->
+            val byId = l.clients.associateBy { it.id }
+            val typeOf = l.types.associateBy { it.id }
+            val placeShort = l.places.associate { it.id to it.shortName }
+            val list = l.entries.mapNotNull { e ->
+                val client = byId[e.clientId]?.takeIf { it.status == ClientStatus.ACTIVE } ?: return@mapNotNull null
+                val match = e.match()?.let { WaitMatch.current(it, now) }?.takeIf { slot ->
+                    // Заняли другой тренировкой — совпадения больше нет.
+                    db.waitingFor(listOf(slot), now).any { it.first.id == e.id }
+                }
+                WaitRow(e, client, e.want(), typeOf[e.typeId]?.shortName.orEmpty(), e.locationId?.let { placeShort[it] }, ClubTime.today(e.sync.createdAt), match)
+            }
+            WaitMatch.order(list, { it.match }, { it.entry.sync.createdAt })
+        }
+    }
+
+    private data class Lists(
+        val entries: List<WaitEntryEntity>,
+        val clients: List<ClientEntity>,
+        val types: List<TrainingTypeEntity>,
+        val places: List<LocationEntity>,
+    )
+
+    /** «Не подходит» у строки с «Освободилось» (4.16): совпадение снято, запись ждёт дальше. Возвращает её до правки. */
+    suspend fun notSuitable(id: String): WaitEntryEntity? {
+        val entry = entry(id) ?: return null
+        val now = clock()
+        clients.upsertWaitEntry(entry.copy(matchDate = null, matchSlot = null, matchOneOff = false, sync = entry.sync.touched(now)))
+        return entry
+    }
+
+    /**
+     * Строка «Это время ждут» для подтверждения «Завершить» серии (4.16): кто ждёт её время после [lastDay] —
+     * постоянно и ближайшую дату разово. Никто — `null`.
+     */
+    suspend fun waitingForSeriesEnd(seriesId: String, lastDay: LocalDate): String? {
+        val series = db.scheduleDao().series(seriesId)?.takeIf { it.sync.deletedAt == null } ?: return null
+        val now = ClubTime.now(clock())
+        return db.waitingLine(series.freedSlots(maxOf(lastDay, now.date.plus(-1, DateTimeUnit.DAY))), now) {
+            it.seriesId == seriesId && it.start.date > lastDay
+        }
     }
 
     fun choices(): Flow<WaitChoices> = combine(reference.observeTrainingTypes(), reference.observeLocations()) { types, places ->
@@ -115,10 +161,15 @@ class ClientWaitList internal constructor(private val db: PersonalkaDatabase, pr
 
     /**
      * Записали разово через «Записать» (4.16): запись «только разово» — «Записан» с датой; запись «постоянно» разовая
-     * тренировка не закрывает — `null`. Возвращает запись до правки — для «Вернуть».
+     * тренировка не закрывает (снимается только совпадение) — `null`. Возвращает запись до правки — для «Вернуть».
      */
     suspend fun bookedOnce(id: String): WaitEntryEntity? {
-        if (entry(id)?.wantsSeries != false) return null
+        val entry = entry(id) ?: return null
+        if (entry.wantsSeries) {
+            // Записать нажали — совпадение снято, а постоянное время клиент ждёт дальше.
+            if (entry.matchDate != null) notSuitable(id)
+            return null
+        }
         return setStatus(id, WaitStatus.BOOKED)
     }
 
@@ -126,7 +177,8 @@ class ClientWaitList internal constructor(private val db: PersonalkaDatabase, pr
     suspend fun contacted(id: String): WaitEntryEntity? {
         val entry = entry(id) ?: return null
         val now = clock()
-        clients.upsertWaitEntry(entry.copy(contactedAt = now, sync = entry.sync.touched(now)))
+        // «Написал» снимает и совпадение (4.16): клиенту уже предложили.
+        clients.upsertWaitEntry(entry.copy(contactedAt = now, matchDate = null, matchSlot = null, matchOneOff = false, sync = entry.sync.touched(now)))
         return entry
     }
 

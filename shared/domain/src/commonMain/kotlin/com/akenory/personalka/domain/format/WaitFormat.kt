@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.client.FreedSlot
 import com.akenory.personalka.domain.client.WaitProblem
 import com.akenory.personalka.domain.client.WaitWant
 import com.akenory.personalka.domain.format.RuText.DASH
@@ -128,6 +129,35 @@ object WaitFormat {
 
     /** Подпись над формой тренировки из «Записать» (макет ClBook). */
     const val FORM_BANNER = "Из листа ожидания. После сохранения клиент уйдёт из листа сам."
+
+    // --- Освободившееся время (шаг 2.4б) ---
+
+    /** «Это время ждут: Петров К. (разово), Морозов Д. (постоянно)» — в подтверждениях отмены, удаления, конца серии. */
+    fun waitingFor(people: List<Pair<String, Boolean>>): String =
+        "Это время ждут: " + people.joinToString(", ") { (name, oneOff) -> "$name (${if (oneOff) "разово" else "постоянно"})" }
+
+    /** Пометка в строке «Ждут время»: «Освободилось пн 08:00»; постоянное — по дню недели, разовое — с датой. */
+    fun freed(slot: FreedSlot): String =
+        "Освободилось " + if (slot.series) {
+            DateFormat.weekdayShort(slot.date.dayOfWeek) + " " + DateFormat.time(slot.start)
+        } else {
+            DateFormat.short(slot.date) + " " + DateFormat.time(slot.start)
+        }
+
+    const val NOT_SUITABLE = "Не подходит"
+
+    /** После «Не подходит»: «Петров К. — время не подходит». */
+    fun notSuitable(name: String): String = "$name — время не подходит"
+
+    /** Пункт «Нужно сделать» (5.2): «Освободилось вт 08:00 · ждут 2». */
+    fun todo(first: FreedSlot, count: Int): String = freed(first) + DOT + "ждут " + RuText.digits(count.toLong())
+
+    /** Подпись пункта: кто ждёт — «Петров К., Смирнова И. и ещё 1». */
+    fun todoNote(names: List<String>): String {
+        val shown = names.take(HomeFormat.MAX_NAMES).joinToString(", ")
+        val rest = names.size - HomeFormat.MAX_NAMES
+        return if (rest > 0) "$shown и ещё ${RuText.digits(rest.toLong())}" else shown
+    }
 
     private fun two(n: Int): String = n.toString().padStart(2, '0')
 }

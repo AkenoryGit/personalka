@@ -24,20 +24,25 @@ import com.akenory.personalka.domain.client.WaitWant
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.WaitFormat
+import com.akenory.personalka.domain.home.TodoKind
+import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.model.WaitStatus
+import com.akenory.personalka.domain.training.TrainingDraft
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.components.PANEL_TAG
+import com.akenory.personalka.ui.home.todoTag
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import com.akenory.personalka.ui.training.FORM_WEEKLY_TAG
 import com.akenory.personalka.ui.training.formClientTag
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DayOfWeek
-import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlinx.datetime.LocalDateTime
 
 /** Лист ожидания (шаг 2.4а, ТЗ 4.16, 5.8, макеты ClNoBooking, ClWaitAdd, ClBook). «Сейчас» — вт 20.10.2026 15:40. */
 @OptIn(ExperimentalTestApi::class)
@@ -120,5 +125,36 @@ class WaitUiTest {
         assertEquals(WaitStatus.CLOSED, entryOf(smirnova).status)
         awaitNode(hasText(WaitFormat.EMPTY))
         assertEquals("Смирнова", runBlocking { db.clientDao().client(smirnova)!!.lastName })
+    }
+
+    @Test
+    fun freedTimeOnHomeAndBookOnceRemovesFromList() = runComposeUiTest {
+        // Смирнова ждёт разово вечером; ПТ Орлова сегодня в 17:00 отменили — время освободилось.
+        val smirnova = client("Смирнова", "Ирина")
+        val orlov = client("Орлов", "Максим")
+        val db = TestData.dbOf(settings)
+        runBlocking {
+            clients.waitlist.save(WaitDraft(smirnova, WaitWant(series = false, oneOff = true, ranges = listOf(WaitRules.EVENING), typeId = ptId())))
+            val dbPlace = settings.places.first().single { it.shortName == "ДБ" }.id
+            calendar.forms.create(TrainingDraft(LocalDateTime(2026, 10, 20, 17, 0), ptId(), listOf(orlov), null, dbPlace, 50))
+            val training = db.trainingDao().trainingsAfter(TestData.now).single()
+            assertEquals("Это время ждут: Смирнова И. (разово)", calendar.cards.waitingLine(training.id))
+            calendar.cards.cancel(training.id, emptyList(), "Не сможет", TestData.now)
+        }
+        setContent { Box(Modifier.size(412.dp, 960.dp)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), calendar, clock = TestData.clock) } }
+
+        // «Главная»: «Освободилось вт 20.10 17:00 · ждут 1» — ведёт в «Без записи».
+        awaitNode(hasTestTag(todoTag(TodoKind.FREED_TIME)))
+        onNodeWithTag(todoTag(TodoKind.FREED_TIME)).performClick()
+        awaitNode(hasTestTag(waitFreedTag("Смирнова Ирина")))
+
+        // «Записать» — на освободившееся время, без повтора; после «Сохранить» запись «только разово» закрыта.
+        onNodeWithTag(waitBookTag("Смирнова Ирина")).performClick()
+        awaitNode(hasTestTag(formClientTag(smirnova)))
+        onNodeWithText(TrainingFormat.SAVE).performClick()
+        waitUntil(timeoutMillis = 5_000) { entryOf(smirnova).status == WaitStatus.BOOKED }
+        val booked = runBlocking { db.trainingDao().trainingsAfter(TestData.now).filter { it.status == TrainingStatus.PLANNED } }
+        assertEquals(LocalDateTime(2026, 10, 20, 17, 0), booked.single().start)
+        awaitNode(hasText(WaitFormat.BOOKED))
     }
 }

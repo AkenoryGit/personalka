@@ -61,7 +61,7 @@ class ClientWaitListTest {
         val first = repo.waitlist.save(WaitDraft(id, petrov.copy(typeId = ptId, locationId = bbId, note = "  можно сплит с братом ")))
         val second = repo.waitlist.save(WaitDraft(id, petrov.copy(typeId = ptId, oneOff = true, until = LocalDate(2026, 10, 31))))
         assertEquals(first, second)
-        val row = repo.waitlist.observe().first().single()
+        val row = repo.waitlist.observe(now).first().single()
         assertTrue(row.want.oneOff)
         assertEquals(LocalDate(2026, 10, 31), row.want.until)
         // Вторая запись сменила место на «любое» и стёрла заметку — форма шлёт всё целиком.
@@ -87,11 +87,11 @@ class ClientWaitListTest {
         assertNull(repo.waitlist.entry(entry)!!.contactedAt)
 
         val before = repo.waitlist.close(entry)!!
-        assertTrue(repo.waitlist.observe().first().isEmpty())
+        assertTrue(repo.waitlist.observe(now).first().isEmpty())
         assertEquals(WaitStatus.CLOSED, repo.waitlist.entry(entry)!!.status)
         assertFalse(repo.waitlist.hasTrainings(id))
         repo.waitlist.restore(before)
-        assertEquals(1, repo.waitlist.observe().first().size)
+        assertEquals(1, repo.waitlist.observe(now).first().size)
     }
 
     @Test
@@ -129,5 +129,64 @@ class ClientWaitListTest {
         millis = ClubTime.toMillis(LocalDateTime(2027, 1, 19, 9, 0))
         repo.waitlist.tidy()
         assertNull(repo.waitlist.entry(entry))
+    }
+
+    // --- Освободившееся время (шаг 2.4б) ---
+
+    private fun dbId(short: String) = runBlocking { db.referenceDao().locations().single { it.shortName == short }.id }
+
+    @Test
+    fun oneOffCancelShowsWhoWaitsOnceAndRecordsMatch(): Unit = runBlocking {
+        val smirnova = repo.create(ClientDraft("Смирнова", "Ирина"))
+        val petrovId = repo.create(ClientDraft("Петров", "Кирилл"))
+        val orlov = repo.create(ClientDraft("Орлов", "Максим"))
+        repo.waitlist.save(WaitDraft(smirnova, WaitWant(series = false, oneOff = true, ranges = listOf(WaitRules.EVENING), typeId = ptId, until = LocalDate(2026, 10, 31))))
+        repo.waitlist.save(WaitDraft(petrovId, petrov.copy(typeId = ptId, locationId = bbId)))
+        // ПТ Орлова сегодня, вт 20.10 в 17:00 в ДБ — пример проверки 0.8.
+        calendar.forms.create(TrainingDraft(LocalDateTime(2026, 10, 20, 17, 0), ptId, listOf(orlov), null, dbId("ДБ"), 50))
+        val training = db.trainingDao().trainingsAfter(now).single()
+
+        // В панели отмены — кто ждёт: Смирнова (разово), не Петров.
+        assertEquals("Это время ждут: Смирнова И. (разово)", calendar.cards.waitingLine(training.id))
+        calendar.cards.cancel(training.id, emptyList(), "Не сможет", now)
+
+        val rows = repo.waitlist.observe(now).first()
+        assertEquals("Смирнова", rows.first().client.lastName)
+        val match = rows.first().match!!
+        assertEquals(LocalDateTime(2026, 10, 20, 17, 0), match.at)
+        assertFalse(match.series)
+        assertNull(rows.single { it.client.id == petrovId }.match)
+
+        // Время заняли другой тренировкой — совпадение исчезло само.
+        calendar.forms.create(TrainingDraft(LocalDateTime(2026, 10, 20, 17, 0), ptId, listOf(petrovId), null, bbId, 50))
+        assertNull(repo.waitlist.observe(now).first().single { it.client.id == smirnova }.match)
+    }
+
+    @Test
+    fun seriesEndOnTuesday8ShowsWhoWaitsSeries(): Unit = runBlocking {
+        val morozov = repo.create(ClientDraft("Морозов", "Дмитрий"))
+        val smirnova = repo.create(ClientDraft("Смирнова", "Ирина"))
+        val kovalev = repo.create(ClientDraft("Ковалёв", "Артём"))
+        val entry = repo.waitlist.save(WaitDraft(morozov, WaitWant(series = true, days = setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY), ranges = listOf(WaitRules.MORNING), typeId = ptId)))!!
+        repo.waitlist.save(WaitDraft(smirnova, WaitWant(series = false, oneOff = true, ranges = listOf(WaitRules.EVENING), typeId = ptId)))
+        // Серия Ковалёва: вт 08:00 в ББ с 13.10.
+        calendar.forms.create(TrainingDraft(LocalDateTime(2026, 10, 13, 8, 0), ptId, listOf(kovalev), null, bbId, 50, Repeat(setOf(DayOfWeek.TUESDAY))))
+        val seriesId = db.scheduleDao().seriesOfClient(kovalev).single().id
+
+        // В подтверждении «Завершить» — кто ждёт это время: Морозов постоянно; Смирнова ждёт вечер — нет.
+        assertEquals("Это время ждут: Морозов Д. (постоянно)", repo.waitlist.waitingForSeriesEnd(seriesId, now.date))
+        calendar.forms.endSeries(seriesId, now.date)
+
+        val stored = repo.waitlist.entry(entry)!!
+        assertEquals(LocalDate(2026, 10, 27), stored.matchDate)
+        assertFalse(stored.matchOneOff)
+        val row = repo.waitlist.observe(now).first().first()
+        assertEquals("Морозов", row.client.lastName)
+        assertTrue(row.match!!.series)
+
+        // «Не подходит» — совпадения нет, запись ждёт дальше.
+        repo.waitlist.notSuitable(entry)
+        assertNull(repo.waitlist.observe(now).first().single { it.entry.id == entry }.match)
+        assertEquals(WaitStatus.WAITING, repo.waitlist.entry(entry)!!.status)
     }
 }

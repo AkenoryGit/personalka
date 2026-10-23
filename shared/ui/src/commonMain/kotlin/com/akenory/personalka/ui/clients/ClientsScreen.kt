@@ -193,6 +193,7 @@ private val ListWidth = 360.dp
  * @param followup «Без записи» (4.15): раздел списка и метка «Нет записи» в карточке; считает приложение — пункт
  *   «Нужно сделать» на «Главной» нужен из любого раздела.
  * @param list поиск и фильтры списка: «Главная» открывает «Без записи» ([ClientListState.filter]).
+ * @param waiting лист ожидания (4.16) с освободившимся временем — его тоже считает приложение (пункт «Главной»).
  */
 @Composable
 fun ClientsScreen(
@@ -206,9 +207,9 @@ fun ClientsScreen(
     followup: Followup = Followup.EMPTY,
     list: ClientListState = rememberClientListState(),
     voice: VoiceInput? = null,
+    waiting: List<WaitRow> = emptyList(),
 ) {
     val wide = LocalWide.current
-    val waiting by remember(clients) { clients.waitlist.observe() }.collectAsState(initial = emptyList())
     val scroll = rememberLazyListState()
     val followupScroll = rememberLazyListState()
     val screens = rememberSaveableStateHolder()

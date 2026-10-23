@@ -206,7 +206,10 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
                 }
                 db.syncGroupTrainings(groupId, before, now)
             }
-            undo = ArchiveUndo(id, changed, endSeriesOf(id, now))
+            val series = endSeriesOf(id, now)
+            undo = ArchiveUndo(id, changed, series)
+            // Серии ушедшего клиента освободили время — кто его ждёт (4.16).
+            series?.let { db.recordFreed(it, now) }
         }
         return undo
     }

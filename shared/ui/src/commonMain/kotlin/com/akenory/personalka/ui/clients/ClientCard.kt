@@ -79,6 +79,7 @@ import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
@@ -96,6 +97,7 @@ import com.akenory.personalka.ui.training.DatePickerPanel
 import com.akenory.personalka.ui.training.ErrorText
 import com.akenory.personalka.ui.training.PickBox
 import com.akenory.personalka.ui.training.TrainingFormKey
+import com.akenory.personalka.ui.training.WAIT_LINE_TAG
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -296,6 +298,8 @@ fun ClientCard(
         if (endingSeries != null) {
             val day = LocalDate.parse(lastDay)
             val problem = ClientScheduleRules.lastDayProblem(day, today)
+            // Кто ждёт это время из листа ожидания (4.16) — до того, как серию завершат.
+            val waitLine by produceState<String?>(null, endingSeries.id, day) { value = clients.waitlist.waitingForSeriesEnd(endingSeries.id, day) }
             Panel(ClientFormat.END_TITLE, onDismiss = { ending = null }) {
                 Text(
                     ClientFormat.seriesDays(endingSeries.weekdays, endingSeries.startTime, endingSeries.durationMin),
@@ -312,6 +316,7 @@ fun ClientCard(
                 )
                 problem?.let { ErrorText(it) }
                 Text(ClientFormat.END_NOTE, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+                waitLine?.let { Note(it, Modifier.testTag(WAIT_LINE_TAG)) }
                 PanelActions(
                     primary = ClientFormat.END_SERIES,
                     onPrimary = {

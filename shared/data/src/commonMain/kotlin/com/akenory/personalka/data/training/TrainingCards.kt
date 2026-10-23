@@ -2,7 +2,10 @@ package com.akenory.personalka.data.training
 
 import androidx.room3.withWriteTransaction
 import com.akenory.personalka.data.clients.adultOn
+import com.akenory.personalka.data.clients.freedSlot
 import com.akenory.personalka.data.clients.newClientEntity
+import com.akenory.personalka.data.clients.recordFreed
+import com.akenory.personalka.data.clients.waitingLine
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
@@ -36,11 +39,11 @@ import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.training.CancelRules
 import com.akenory.personalka.domain.training.CarryChoice
 import com.akenory.personalka.domain.training.CarryStep
-import com.akenory.personalka.domain.training.PlanCarryRules
-import com.akenory.personalka.domain.training.ReturnStep
 import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.ParticipantState
+import com.akenory.personalka.domain.training.PlanCarryRules
+import com.akenory.personalka.domain.training.ReturnStep
 import com.akenory.personalka.domain.training.StatusRules
 import com.akenory.personalka.domain.training.StatusSettings
 import com.akenory.personalka.domain.training.TrainingCardRules
@@ -435,6 +438,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 recorder.saveSeries(stored.copy(skipDates = stored.skipDates + t.start.date), coach.id)
             }
             result = CardResult(TrainingCardFormat.DELETED, recorder.undo())
+            result?.let { db.recordFreed(it.undo, now) }
         }
         return result
     }
@@ -457,8 +461,20 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             val recorder = Recorder(db, now)
             recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
             result = CardResult(TrainingCardFormat.skipped(t.start.date), recorder.undo())
+            result?.let { db.recordFreed(it.undo, now) }
         }
         return result
+    }
+
+    /**
+     * Строка «Это время ждут: Петров К. (разово)» для панели отмены и подтверждения удаления (4.16, 5.6): кто ждёт
+     * время тренировки [id], если её отменят или удалят. Никто не ждёт, прошла или дежурство — `null`.
+     */
+    suspend fun waitingLine(id: String): String? {
+        val now = ClubTime.now(clock())
+        val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null && it.status == TrainingStatus.PLANNED && it.start > now } ?: return null
+        if (reference.trainingType(t.typeId)?.kind == TrainingKind.DUTY) return null
+        return db.waitingLine(listOf(t.freedSlot()), now) { it.id == id }
     }
 
     /** «Отменить» в сообщении: всё как было до действия. */
@@ -514,6 +530,8 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             val recorder = Recorder(db, now)
             save(t, people, next, now, recorder)
             result = follow?.invoke(t, next, recorder, message) ?: CardResult(message, recorder.undo())
+            // Отменили — время освободилось: кто его ждёт из листа ожидания (4.16).
+            result?.let { db.recordFreed(it.undo, now) }
         }
         return result
     }

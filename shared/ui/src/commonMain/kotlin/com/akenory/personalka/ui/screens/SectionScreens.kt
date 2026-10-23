@@ -33,6 +33,7 @@ import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.Followup
+import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
@@ -112,6 +113,7 @@ fun SectionScreen(
     followup: Followup = Followup.EMPTY,
     clientList: ClientListState = rememberClientListState(),
     voice: VoiceInput? = null,
+    waiting: List<WaitRow> = emptyList(),
 ) {
     val openClient: (String) -> Unit = { id ->
         shell.select(Section.CLIENTS)
@@ -178,7 +180,7 @@ fun SectionScreen(
             onWent = { onCalendarDay(null) },
             onDiary = onDiary,
         )
-        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice)
+        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting)
         Section.SALARY -> Placeholder(
             title = "Зарплата",
             icon = PIcons.Payments,

@@ -66,6 +66,7 @@ import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.icons.PIcons
@@ -162,11 +163,13 @@ internal fun FollowupList(
                     today = today,
                     onOpen = { onOpen(row.client.id) },
                     onBook = {
+                        // Освободилось время — на него: постоянное — «Каждую неделю», разовое — без повтора (5.8).
+                        val match = row.match
                         onForm(
                             TrainingFormKey.new(
-                                start = WaitRules.bookingStart(row.want, now),
+                                start = match?.at ?: WaitRules.bookingStart(row.want, now),
                                 clientId = row.client.id,
-                                weekly = row.want.series,
+                                weekly = match?.series ?: row.want.series,
                                 typeId = row.entry.typeId,
                                 locationId = row.entry.locationId,
                                 waitId = row.entry.id,
@@ -180,6 +183,12 @@ internal fun FollowupList(
                         }
                     },
                     onEdit = { nav.formFromList(ClientRoute.waitEdit(row.entry.id)) },
+                    onNotSuitable = {
+                        scope.launch {
+                            val before = clients.waitlist.notSuitable(row.entry.id) ?: return@launch
+                            messages.showUndo(WaitFormat.notSuitable(name)) { scope.launch { clients.waitlist.restore(before) } }
+                        }
+                    },
                     onClose = {
                         scope.launch {
                             val before = clients.waitlist.close(row.entry.id) ?: return@launch
@@ -428,6 +437,7 @@ const val WAIT_ADD_TAG = "wait-add"
 fun waitRowTag(name: String) = "wait-row-$name"
 fun waitBookTag(name: String) = "wait-book-$name"
 fun waitMenuTag(name: String) = "wait-menu-$name"
+fun waitFreedTag(name: String) = "wait-freed-$name"
 
 /**
  * Строка «Ждут время» (5.8, макет ClNoBooking): имя и «ждёт 37 дней», «писали 02.10», что ждёт, заметка одной
@@ -442,12 +452,14 @@ private fun WaitItem(
     onBook: () -> Unit,
     onContacted: () -> Unit,
     onEdit: () -> Unit,
+    onNotSuitable: () -> Unit,
     onClose: () -> Unit,
     onCopied: () -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val client = row.client
     val title = "${client.lastName} ${client.firstName}"
+    val match = row.match
     var menu by remember { mutableStateOf(false) }
     Column(
         Modifier
@@ -471,8 +483,26 @@ private fun WaitItem(
             )
             Text(WaitFormat.waiting(WaitRules.daysWaiting(row.since, today)), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
         }
-        row.entry.contactedAt?.let { at ->
-            Text(FollowupFormat.contacted(ClubTime.today(at)), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        val contacted = row.entry.contactedAt?.let { FollowupFormat.contacted(ClubTime.today(it)) }
+        if (match != null || contacted != null) {
+            Spacer(Modifier.size(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                if (match != null) {
+                    // Освободилось время (макет ClNoBooking): пометка графитом — главное в строке.
+                    Row(
+                        Modifier
+                            .background(colors.primary, MaterialTheme.shapes.small)
+                            .padding(horizontal = Dimens.space2, vertical = 4.dp)
+                            .testTag(waitFreedTag(title)),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(PIcons.EventAvailable, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(WaitFormat.freed(match), style = MaterialTheme.typography.labelMedium, color = colors.onPrimary)
+                    }
+                }
+                if (contacted != null) Text(contacted, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+            }
         }
         Spacer(Modifier.size(4.dp))
         Text(
@@ -493,7 +523,12 @@ private fun WaitItem(
         }
         Spacer(Modifier.size(Dimens.space3))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            SecondaryButton(WaitFormat.BOOK, onBook, modifier = Modifier.testTag(waitBookTag(title)))
+            // С освободившимся временем «Записать» — главная кнопка строки (макет ClNoBooking).
+            if (match != null) {
+                PrimaryButton(WaitFormat.BOOK, onBook, modifier = Modifier.testTag(waitBookTag(title)))
+            } else {
+                SecondaryButton(WaitFormat.BOOK, onBook, modifier = Modifier.testTag(waitBookTag(title)))
+            }
             Spacer(Modifier.weight(1f))
             client.contactPhone?.let { CallButton(it, onCopied) }
             Box {
@@ -501,6 +536,12 @@ private fun WaitItem(
                     Icon(PIcons.MoreVert, contentDescription = "Ещё", tint = colors.text)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = colors.surface) {
+                    if (match != null) {
+                        MenuAction(WaitFormat.NOT_SUITABLE, PIcons.Close, {
+                            menu = false
+                            onNotSuitable()
+                        })
+                    }
                     MenuAction(WaitFormat.CONTACTED, PIcons.Check, {
                         menu = false
                         onContacted()
@@ -509,7 +550,7 @@ private fun WaitItem(
                         menu = false
                         onEdit()
                     })
-                    MenuAction(WaitFormat.CLOSE, PIcons.Close, {
+                    MenuAction(WaitFormat.CLOSE, PIcons.Archive, {
                         menu = false
                         onClose()
                     })
