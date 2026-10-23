@@ -694,8 +694,6 @@ class TrainingRepository internal constructor(
 
 private fun TrainingTypeEntity.toForm(): FormType = FormType(id, name, kind, shade, defaultDurationMin, maxClients)
 
-private fun List<ParticipationEntity>.ordered(): List<ParticipationEntity> = sortedWith(compareBy({ it.sync.createdAt }, { it.id }))
-
 private fun TrainingEntity.marked(people: List<ParticipationEntity>): Boolean =
     status == TrainingStatus.DONE || people.any { it.status == ParticipationStatus.ATTENDED }
 

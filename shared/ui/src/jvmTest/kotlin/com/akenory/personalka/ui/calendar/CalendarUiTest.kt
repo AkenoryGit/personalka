@@ -354,6 +354,8 @@ class CalendarUiTest {
         val block = day().blocks.single()
         tapDay(block.x + 20f, block.y + 20f)
         awaitNode(hasTestTag(TRAINING_CARD_TAG))
+        // Панель появляется раньше данных карточки — ждём саму строку.
+        awaitNode(hasText(s("вт_20.10 · 16:00–16:50 · 50_мин")))
         onNodeWithText(s("вт_20.10 · 16:00–16:50 · 50_мин")).assertIsDisplayed()
         onNodeWithText(s("через 20_мин")).assertIsDisplayed()
     }

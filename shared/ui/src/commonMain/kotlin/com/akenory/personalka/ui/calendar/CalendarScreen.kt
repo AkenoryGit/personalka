@@ -145,6 +145,8 @@ private const val ID_SEPARATOR = "\n"
  * @param onClient имя клиента в карточке — его карточка; [onGroup] — карточка группы.
  * @param onCreate новая тренировка на это время: удержание на пустом месте и «Новая тренировка на это время».
  * @param onEditZone «Изменить» в окне зоны: форма дежурства или своего запрета (шаг 1.13а).
+ * @param openDay день, который нужно открыть в текущем виде — с «Главной» (шаг 1.16); открыв, календарь
+ *   зовёт [onDayOpened].
  */
 @Composable
 fun CalendarScreen(
@@ -160,6 +162,8 @@ fun CalendarScreen(
     onGroup: (String) -> Unit,
     onCreate: (LocalDateTime) -> Unit,
     onEditZone: (CalendarZone) -> Unit,
+    openDay: LocalDate? = null,
+    onDayOpened: () -> Unit = {},
 ) {
     val onOpen: (CalendarTraining) -> Unit = { training -> onCard(TrainingCardKey.card(training.id)) }
     val today = now.date
@@ -247,6 +251,13 @@ fun CalendarScreen(
                 agendaList.requestScrollToItem(0)
             }
         }
+    }
+
+    // «Ещё сегодня» и завтрашняя на «Главной» — этот день в том виде, который открыт.
+    LaunchedEffect(openDay) {
+        if (openDay == null) return@LaunchedEffect
+        go(openDay, animate = false)
+        onDayOpened()
     }
 
     /** Нажатие на заголовок дня в «Месяце» и «Списке»: этот день в виде «День». */

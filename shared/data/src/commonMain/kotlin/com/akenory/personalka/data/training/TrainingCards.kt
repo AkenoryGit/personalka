@@ -451,11 +451,11 @@ private data class CardExtras(
     val members: List<GroupMemberEntity>,
 )
 
-private fun List<ParticipationEntity>.ordered(): List<ParticipationEntity> = sortedWith(compareBy({ it.sync.createdAt }, { it.id }))
+internal fun List<ParticipationEntity>.ordered(): List<ParticipationEntity> = sortedWith(compareBy({ it.sync.createdAt }, { it.id }))
 
-private fun ParticipationEntity.toState(): ParticipantState = ParticipantState(clientId, status, cancelReason, notifiedAt, chargeOverridden)
+internal fun ParticipationEntity.toState(): ParticipantState = ParticipantState(clientId, status, cancelReason, notifiedAt, chargeOverridden)
 
-private fun TrainingEntity.toState(kind: TrainingKind, people: List<ParticipationEntity>): TrainingState = TrainingState(
+internal fun TrainingEntity.toState(kind: TrainingKind, people: List<ParticipationEntity>): TrainingState = TrainingState(
     kind = kind,
     start = start,
     durationMin = durationMin,
@@ -465,5 +465,5 @@ private fun TrainingEntity.toState(kind: TrainingKind, people: List<Participatio
     doneAt = doneAt?.let { ClubTime.now(it) },
 )
 
-private fun CoachSettingsEntity?.statusSettings(): StatusSettings =
+internal fun CoachSettingsEntity?.statusSettings(): StatusSettings =
     if (this == null) StatusSettings() else StatusSettings(cancelNoticeMinutes, autoDonePersonal)

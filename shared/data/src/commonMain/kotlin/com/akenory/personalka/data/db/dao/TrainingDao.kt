@@ -39,6 +39,20 @@ interface TrainingDao {
     @Query("SELECT * FROM training WHERE status = :planned AND start < :before AND deletedAt IS NULL ORDER BY start")
     suspend fun plannedBefore(before: LocalDateTime, planned: TrainingStatus): List<TrainingEntity>
 
+    /** То же для «Главной»: прошедшие без отметки — пункт «Нужно сделать» (5.2). */
+    @Query("SELECT * FROM training WHERE status = :planned AND start < :before AND deletedAt IS NULL ORDER BY start")
+    fun observePlannedBefore(before: LocalDateTime, planned: TrainingStatus): Flow<List<TrainingEntity>>
+
+    /** Участие клиентов в них: отмечен ли в группе хоть один (4.1). */
+    @Query(
+        """
+        SELECT p.* FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        WHERE t.status = :planned AND t.start < :before AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        """
+    )
+    fun observeParticipationsOfPlannedBefore(before: LocalDateTime, planned: TrainingStatus): Flow<List<ParticipationEntity>>
+
     /** Тренировки, которые начинаются в промежутке [from, to), по времени начала. Отменённые тоже. */
     @Query(
         """

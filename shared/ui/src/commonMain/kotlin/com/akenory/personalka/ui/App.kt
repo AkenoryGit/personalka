@@ -22,6 +22,7 @@ import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.groups.GroupRoute
+import com.akenory.personalka.ui.home.rememberHomeView
 import com.akenory.personalka.ui.screens.SectionScreen
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
@@ -35,6 +36,7 @@ import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.TrainingFormSheet
 import kotlinx.coroutines.flow.map
+import kotlinx.datetime.LocalDate
 
 /**
  * Приложение целиком: тема 0.2; пока тренера нет — первый запуск (шаг 1.6), потом оболочка с пятью
@@ -74,6 +76,11 @@ fun App(
         var form by rememberSaveable { mutableStateOf<String?>(null) }
         // Открытая карточка тренировки в календаре (5.4): «Назад» закрывает сначала её.
         var card by rememberSaveable { mutableStateOf<String?>(null) }
+        // Своя карточка у «Главной» (5.2): открытая там не появляется в календаре.
+        var homeCard by rememberSaveable { mutableStateOf<String?>(null) }
+        // День, который «Главная» просит открыть в календаре: «Ещё сегодня», завтрашняя.
+        var calendarDay by rememberSaveable { mutableStateOf<String?>(null) }
+        val home = rememberHomeView(calendar, backup?.repository, now)
 
         // Серии продлеваются до горизонта при открытии приложения и при смене дня (4.4).
         LaunchedEffect(calendar, hasCoach, now.date) {
@@ -95,15 +102,15 @@ fun App(
                 true -> {
                     backHandler(shell.canGoBack) { shell.back() }
                     backHandler(card != null && shell.section == Section.CALENDAR) { card = null }
+                    backHandler(homeCard != null && shell.section == Section.HOME) { homeCard = null }
                     // «Назад» при открытой форме закрывает форму, а не экран под ней.
                     backHandler(form != null) { form = null }
                     AppShell(
                         shell = shell,
                         messages = messages,
-                        // Счётчик дел на «Главной» появится вместе с «Нужно сделать» (шаг 1.16).
-                        todoCount = 0,
+                        todoCount = home.todo.size,
                         onNewTraining = { form = TrainingFormKey.new() },
-                        hideFab = card != null && shell.section == Section.CALENDAR,
+                        hideFab = card != null && shell.section == Section.CALENDAR || homeCard != null && shell.section == Section.HOME,
                         immersive = when (shell.section) {
                             Section.MORE -> shell.top(Section.MORE).let { SettingsRoute.isForm(it) || GroupRoute.isForm(it) }
                             Section.CLIENTS -> ClientRoute.isForm(shell.top(Section.CLIENTS))
@@ -126,6 +133,11 @@ fun App(
                             card = card,
                             onCard = { card = it },
                             backup = backup,
+                            home = home,
+                            homeCard = homeCard,
+                            onHomeCard = { homeCard = it },
+                            calendarDay = calendarDay?.let(LocalDate::parse),
+                            onCalendarDay = { calendarDay = it?.toString() },
                         )
                     }
                     form?.let { key ->

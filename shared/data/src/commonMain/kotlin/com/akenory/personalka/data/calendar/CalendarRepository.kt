@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.home.HomeRepository
 import com.akenory.personalka.data.restrictions.RestrictionRepository
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
@@ -227,6 +228,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Карточка тренировки (5.4) и отмена (5.6): «Проведено», отметка детей, «Вернуть», «Удалить». */
     val cards: TrainingCardRepository = TrainingCardRepository(db, clock)
+
+    /** «Главная» (5.2): ближайшая тренировка и «Нужно сделать». */
+    val home: HomeRepository = HomeRepository(db)
 
     /** Форма запрета (5.5): свои запреты, «Удалить запрет» и «Отменить». */
     val restrictions: RestrictionRepository = RestrictionRepository(db, clock)
