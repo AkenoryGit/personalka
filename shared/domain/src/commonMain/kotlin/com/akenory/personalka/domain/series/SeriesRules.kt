@@ -330,6 +330,9 @@ object SeriesRules {
      * Состав группы изменился (5.10): в будущих неотмеченных тренировках группы — пришедшие в состав на эту
      * дату добавляются ожидаемыми, ушедшие убираются. Гости «на раз», отметки и прошлое не трогаются.
      * [before] и [after] — состав группы до и после правки.
+     *
+     * В группу, которая уже идёт или где детей начали отмечать, новый ребёнок тоже добавляется ожидаемым
+     * (шаг 1.15): его записали, пока он стоит у бортика. Убирать из такой тренировки никого не нужно.
      */
     fun updateGroupMembers(
         trainings: List<SeriesTraining>,
@@ -338,12 +341,13 @@ object SeriesRules {
         now: LocalDateTime,
     ): SeriesChanges {
         val updated = trainings.mapNotNull { t ->
-            val unmarked = t.groupId != null && t.status == TrainingStatus.PLANNED && t.changeableAt(now) &&
-                t.participants.none { it.status == ParticipationStatus.ATTENDED }
-            if (!unmarked) return@mapNotNull null
+            if (t.groupId == null || t.status != TrainingStatus.PLANNED) return@mapNotNull null
+            val unmarked = t.changeableAt(now) && t.participants.none { it.status == ParticipationStatus.ATTENDED }
+            val going = now < TrainingTime.end(t.start, t.durationMin)
+            if (!unmarked && !going) return@mapNotNull null
             val was = before.membersOn(t.date).toSet()
             val will = after.membersOn(t.date)
-            val gone = was - will.toSet()
+            val gone = if (unmarked) was - will.toSet() else emptySet()
             val joined = will.filter { it !in was && t.participants.none { p -> p.clientId == it } }
             if (gone.isEmpty() && joined.isEmpty()) {
                 null

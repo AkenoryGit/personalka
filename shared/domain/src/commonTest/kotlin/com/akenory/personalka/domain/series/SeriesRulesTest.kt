@@ -596,4 +596,22 @@ class SeriesRulesTest {
         assertEquals(listOf("a", "guest", "c"), changed.participants.map { it.clientId })
         assertNull(c.updated.firstOrNull { it.id == sat24.id })
     }
+
+    @Test
+    fun newMemberJoinsGroupThatIsGoingNow() {
+        // Сейчас вт 20.10 15:40: группа в 15:00 идёт до 16:00, группа в 13:00 уже закончилась.
+        val before = listOf(GroupMember("a", day(1, 9)), GroupMember("b", day(1, 9)))
+        val after = listOf(GroupMember("a", day(1, 9)), GroupMember("b", day(1, 9), toDate = day(19)), GroupMember("c", day(20)))
+        fun today(h: Int, vararg kids: ParticipantState) =
+            SeriesTraining("t$h", "g1", at(day(20), h, 0), 60, "group", "bb", groupId = "g", participants = kids.toList())
+
+        val going = today(15, ParticipantState("a", ATTENDED), ParticipantState("b"))
+        val ended = today(13, ParticipantState("a"), ParticipantState("b"))
+
+        val changed = SeriesRules.updateGroupMembers(listOf(going, ended), before, after, now).updated.single()
+        assertEquals(going.id, changed.id)
+        // Отмеченную «a» и ожидаемую «b» не трогаем — новый «c» ожидается.
+        assertEquals(listOf("a", "b", "c"), changed.participants.map { it.clientId })
+        assertEquals(ATTENDED, changed.participants.first().status)
+    }
 }

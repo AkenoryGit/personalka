@@ -238,6 +238,19 @@ class TrainingCardsTest {
     }
 
     @Test
+    fun childAddedToGoingGroupIsInCardInAlphabeticalOrder(): Unit = runBlocking {
+        // Группа идёт с 15:30; новый ребёнок в составе с сегодня сразу в ней — по алфавиту, а не в конце.
+        val (group, kids, ids) = groupWith(at(tuesday, 15, 30))
+        val id = ids.single()
+        val zueva = client("Зуева", "Вера")
+        assertNotNull(cards.addGuest(id, zueva))
+        val aksenova = client("Аксёнова", "Ева")
+        groups.addMember(group, aksenova, tuesday)
+        assertEquals(listOf(aksenova, kids[0], kids[1], zueva), card(id).clients.map { it.id })
+        assertEquals(ParticipationStatus.EXPECTED, statusOf(id, aksenova))
+    }
+
+    @Test
     fun guestDuringTrainingCameAndNewClient(): Unit = runBlocking {
         // Идёт с 15:30: гость сразу «пришёл»; «Новый клиент» заводится по фамилии и имени.
         val (_, _, ids) = groupWith(at(tuesday, 15, 30))

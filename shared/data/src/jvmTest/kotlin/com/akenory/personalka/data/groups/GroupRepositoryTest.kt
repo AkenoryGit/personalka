@@ -132,6 +132,25 @@ class GroupRepositoryTest {
     }
 
     @Test
+    fun newMemberAppearsInGroupThatIsGoing(): Unit = runBlocking {
+        val id = newGroup()
+        val anya = kid("Белова", "Аня")
+        val boris = kid("Гусев", "Борис")
+        groups.addMember(id, anya, day(1, 9))
+        // Сейчас 15:40: группа в 15:00 идёт, Аню уже отметили.
+        val going = Samples.training(groupTypeId, bbId, LocalDateTime(day(20), LocalTime(15, 0))).copy(groupId = id)
+        db.trainingDao().upsertTraining(going)
+        db.trainingDao().upsertParticipation(
+            Samples.participation(going.id, anya).copy(status = ParticipationStatus.ATTENDED, behavior = null, cancelReason = null, notifiedAt = null, chargeOverridden = false),
+        )
+
+        groups.addMember(id, boris, day(20))
+        assertEquals(setOf(anya, boris), kidsOn(going.id))
+        assertEquals(ParticipationStatus.EXPECTED, db.trainingDao().participationRow(going.id, boris)!!.status)
+        assertEquals(ParticipationStatus.ATTENDED, db.trainingDao().participationRow(going.id, anya)!!.status)
+    }
+
+    @Test
     fun guestOnceStaysWhenCompositionChanges(): Unit = runBlocking {
         val id = newGroup()
         val anya = kid("Белова", "Аня")

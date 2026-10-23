@@ -149,7 +149,9 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             val state = t.toState(kind, ordered)
             val names = all.associateBy { it.id }
             val guests = if (t.groupId == null) emptySet() else GroupRules.guests(ordered.map { it.clientId }, members.map { it.member() }, t.start.date).toSet()
-            val cardClients = ordered.mapNotNull { p ->
+            // Дети группы — по алфавиту, как в составе (5.10): новый ребёнок встаёт на своё место, а не в конец.
+            val inOrder = if (t.groupId == null) ordered else ordered.sortedBy { p -> names[p.clientId]?.let { ClientRules.sortKey(ClientName(it.lastName, it.firstName, it.middleName)) } }
+            val cardClients = inOrder.mapNotNull { p ->
                 val c = names[p.clientId] ?: return@mapNotNull null
                 CardClient(
                     id = p.clientId,
