@@ -5,7 +5,7 @@
 - **Платформы:** Android 10+ (основной телефон — Samsung Galaxy Z Fold 8, сложенный и разложенный), затем iPhone (iOS 16+). Кабинет — браузер родителя, от 320 px.
 - **Пакет:** `com.akenory.personalka` (Android и iOS) — после первой установки не меняется никогда.
 - **Стек** (ТЗ 2.1, повторяет Planovo — финансовое приложение Дмитрия): Kotlin Multiplatform + Compose Multiplatform, Room KMP, Koin, kotlinx-datetime (часовой пояс клуба `Asia/Yekaterinburg`), Ktor Client; сервер — Ktor 3.1.3, Java 21, PostgreSQL 16 + Flyway, kotlinx.html для кабинета, Caddy, systemd на VPS Planovo; выкладка — GitHub Actions по SSH.
-- **Модули** (ТЗ 2.2): `shared/domain` — все правила и расчёты, только здесь, с тестами по примерам ТЗ 12; `shared/data` — Room, синхронизация, копии; `shared/ui` — экраны и тема; `androidApp`, `iosApp`; `server`; `tools/import`.
+- **Модули** (ТЗ 2.2): `shared/domain` — все правила и расчёты, только здесь, с тестами по примерам ТЗ 12; `shared/data` — Room, синхронизация, копии; `shared/ui` — экраны и тема; `androidApp`, `iosApp`; `server`; `tools/import` (импорт отменён 23.10.2026 — ТЗ 9, утилита не развивается).
 - **Режимы** (ТЗ 1.5): «Только телефон» по умолчанию; «С сервером» — по приглашению. Полная копия данных всегда в телефоне.
 
 ## Где что лежит
