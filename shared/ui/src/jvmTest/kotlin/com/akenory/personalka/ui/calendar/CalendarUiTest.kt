@@ -936,6 +936,15 @@ class CalendarUiTest {
         waitUntil(timeoutMillis = 5_000) { exists(monthDayTag(date)) && summary(date).count == count }
     }
 
+    /**
+     * Клетка месяца выбрана — та, что на экране. Нажатая мышью теста клетка соседнего месяца остаётся в фокусе,
+     * и пролистанная страница держит её в дереве за краем экрана (касание на телефоне фокус не ставит).
+     */
+    private fun ComposeUiTest.assertMonthSelected(date: LocalDate) {
+        val shown = onAllNodes(hasTestTag(monthDayTag(date))).fetchSemanticsNodes().filter { it.boundsInRoot.left >= 0f && it.boundsInRoot.height > 0f }
+        assertEquals(listOf(true), shown.map { it.config.getOrNull(SemanticsProperties.Selected) }, "Выбран $date")
+    }
+
     private fun ComposeUiTest.top(tag: String): Float = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top / density.density
 
     private fun ComposeUiTest.left(tag: String): Float = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.left / density.density
@@ -1022,7 +1031,7 @@ class CalendarUiTest {
         onNodeWithTag(monthDayTag(december1)).performClick()
         waitForIdle()
         onNodeWithText(DateFormat.monthYear(december1)).assertIsDisplayed()
-        onNodeWithTag(monthDayTag(december1)).assertIsSelected()
+        assertMonthSelected(december1)
         onNodeWithContentDescription(TODAY_LABEL).performClick()
         waitForIdle()
         onNodeWithText(DateFormat.monthYear(today)).assertIsDisplayed()
