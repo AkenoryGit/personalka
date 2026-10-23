@@ -90,7 +90,8 @@ import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
-import com.akenory.personalka.ui.theme.TypeColor
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.theme.shade
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -309,6 +310,8 @@ fun TrainingFormSheet(
                     SectionLabel("Тип")
                     val index = form.types.indexOfFirst { it.id == current.typeId }
                     val showAll = moreTypes || index >= TrainingFormRules.TYPE_CHIPS
+                    // Точка типа — цвет выбранного места его оттенком: так блок будет выглядеть в календаре.
+                    val placeColor = PlaceColor.of(form.places.firstOrNull { it.id == current.locationId }?.color)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                         form.types.take(if (showAll) form.types.size else TrainingFormRules.TYPE_CHIPS).forEach { t ->
                             ChoiceChip(
@@ -323,7 +326,7 @@ fun TrainingFormSheet(
                                     if (!keepDuration) ownDuration = false
                                 },
                                 modifier = Modifier.testTag(formTypeTag(t.id)),
-                                dot = TypeColor.of(t.color).tone(colors.isDark).stripe,
+                                dot = placeColor.shade(colors.isDark, t.shade),
                             )
                         }
                         if (!showAll && form.types.size > TrainingFormRules.TYPE_CHIPS) {

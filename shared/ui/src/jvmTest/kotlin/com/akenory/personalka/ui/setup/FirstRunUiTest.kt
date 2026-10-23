@@ -78,7 +78,9 @@ class FirstRunUiTest {
         onNodeWithTag(TYPE_SHORT_TAG).performTextInput("Аква")
         onNodeWithTag(kindTag(TrainingKind.GROUP)).performClick()
         onNodeWithText("Длительность, оплата и дневник заполнены как у группы — ниже их можно поправить.").assertIsDisplayed()
-        onNodeWithTag(colorTag("sky")).performScrollTo().performClick()
+        // Цвета у типа нет — оттенок; образцы блока — в каждом отмеченном месте (шаг 1.13в).
+        onNodeWithTag(shadeTag(3)).performScrollTo().performClick()
+        onNodeWithText("19:00 · Аква · ДБ").performScrollTo().assertIsDisplayed()
         onNodeWithText("Сохранить").performClick()
 
         onNodeWithTag(setupTypeTag("Аквааэробика")).performScrollTo().assertIsOn()
@@ -98,7 +100,7 @@ class FirstRunUiTest {
             val aqua = types.single { it.name == "Аквааэробика" }
             assertEquals(TrainingKind.GROUP, aqua.kind)
             assertEquals(PayUnit.PER_CLIENT, aqua.payUnit)
-            assertEquals("sky", aqua.color)
+            assertEquals(3, aqua.shade)
             assertEquals(9, types.size)
         }
     }
@@ -136,11 +138,11 @@ class FirstRunUiTest {
         onNodeWithText("Введите название").assertIsDisplayed()
         onNodeWithText("Введите короткое имя").assertIsDisplayed()
 
-        // Повтор названия и цвета: название запрещено, о цвете — только предупреждение.
+        // Повтор названия запрещён; о том же оттенке — только подсказка.
         onNodeWithTag(TYPE_NAME_TAG).performTextInput("Группа")
         onNodeWithText("Такой тип уже есть").assertIsDisplayed()
-        onNodeWithTag(colorTag("green")).performScrollTo().performClick()
-        onNodeWithText("Этот цвет уже у типа «Группа»").performScrollTo().assertIsDisplayed()
+        onNodeWithTag(shadeTag(4)).performScrollTo().performClick()
+        onNodeWithText("Такой же оттенок у типа «Группа»").performScrollTo().assertIsDisplayed()
 
         // Разложили Fold: набранное не пропало.
         width = unfolded

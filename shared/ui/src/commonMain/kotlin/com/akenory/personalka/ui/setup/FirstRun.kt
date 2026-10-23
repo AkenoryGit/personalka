@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -61,6 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.format.TypeFormat
+import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.domain.reference.PlaceDraft
 import com.akenory.personalka.domain.reference.ReferenceRules
@@ -73,10 +73,13 @@ import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SectionLabel
+import com.akenory.personalka.ui.components.ShadeDot
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
-import com.akenory.personalka.ui.theme.TypeColor
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.theme.Shade
+import com.akenory.personalka.ui.theme.dutyFill
 import kotlinx.coroutines.launch
 
 const val LAST_NAME_TAG = "last-name"
@@ -133,7 +136,7 @@ class FirstRunState(
 
     /** Новое место — отмеченным в конце списка. */
     fun addPlace(place: PlaceDraft) {
-        places = places + Picked(PlaceDraft(place.name.trim(), place.shortName.trim()))
+        places = places + Picked(PlaceDraft(place.name.trim(), place.shortName.trim(), place.color))
         page = FirstRunPage.SETUP
     }
 
@@ -153,7 +156,7 @@ class FirstRunState(
                     s.name.lastName,
                     s.name.firstName,
                     s.name.middleName.orEmpty(),
-                    s.places.joinToString(ITEM) { (if (it.on) "1" else "0") + it.item.name + FIELD + it.item.shortName },
+                    s.places.joinToString(ITEM) { (if (it.on) "1" else "0") + it.item.name + FIELD + it.item.shortName + FIELD + it.item.color },
                     s.types.joinToString(ITEM) { (if (it.on) "1" else "0") + encodeType(it.item) },
                 )
             },
@@ -164,8 +167,8 @@ class FirstRunState(
                     page = FirstRunPage.valueOf(v[0]),
                     name = CoachName(v[1], v[2], v[3]),
                     places = v[4].split(ITEM).filter { it.isNotEmpty() }.map {
-                        val (name, short) = it.drop(1).split(FIELD)
-                        Picked(PlaceDraft(name, short), on = it.startsWith("1"))
+                        val (name, short, color) = it.drop(1).split(FIELD)
+                        Picked(PlaceDraft(name, short, color), on = it.startsWith("1"))
                     },
                     types = v[5].split(ITEM).filter { it.isNotEmpty() }.map {
                         Picked(decodeType(it.drop(1)), on = it.startsWith("1"))
@@ -232,16 +235,17 @@ fun FirstRun(
                 )
                 FirstRunPage.NEW_PLACE -> PlaceEditor(
                     title = "Новое место",
-                    initial = PlaceDraft("", ""),
+                    initial = ReferenceRules.newPlace(state.places.map { it.item.color }),
                     others = state.places.map { it.item },
+                    samples = TypeFormat.shadeSamples(state.types.filter { it.on }.map { it.item }),
                     onSave = state::addPlace,
                     onClose = state::back,
                 )
                 FirstRunPage.NEW_TYPE -> TypeEditor(
                     title = "Новый тип",
-                    initial = ReferenceRules.newType(state.types.map { it.item.color }),
+                    initial = ReferenceRules.newType(state.types.map { it.item }.filter { it.kind != TrainingKind.DUTY }.map { it.shade }),
                     others = state.types.map { it.item },
-                    placeShort = state.places.firstOrNull { it.on }?.item?.shortName,
+                    places = state.places.filter { it.on }.map { it.item },
                     onSave = state::addType,
                     onClose = state::back,
                 )
@@ -397,15 +401,24 @@ private fun SetupPage(state: FirstRunState, saving: Boolean, failed: Boolean, on
             SectionLabel("Места")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                 state.places.forEachIndexed { index, place ->
-                    ChoiceChip(place.item.shortName, selected = place.on, toggle = true, onClick = { state.togglePlace(index) })
+                    val tone = PlaceColor.of(place.item.color).tone(colors.isDark)
+                    ChoiceChip(
+                        text = place.item.shortName,
+                        selected = place.on,
+                        toggle = true,
+                        onClick = { state.togglePlace(index) },
+                        dot = Shade(tone.block(2), tone.stripe),
+                    )
                 }
                 ChoiceChip("Место", selected = false, icon = PIcons.Add, onClick = { state.page = FirstRunPage.NEW_PLACE })
             }
             SectionLabel("Типы тренировок")
+            // Точки типов — оттенками в цвете первого отмеченного места: так блоки будут выглядеть в календаре.
+            val firstPlace = PlaceColor.of(state.places.firstOrNull { it.on }?.item?.color)
             ListCard {
                 state.types.forEachIndexed { index, type ->
                     if (index > 0) RowDivider(start = 52.dp)
-                    SetupTypeRow(type, onToggle = { state.toggleType(index) })
+                    SetupTypeRow(type, firstPlace, onToggle = { state.toggleType(index) })
                 }
                 RowDivider(start = 52.dp)
                 Row(
@@ -438,7 +451,7 @@ private fun SetupPage(state: FirstRunState, saving: Boolean, failed: Boolean, on
 }
 
 @Composable
-private fun SetupTypeRow(type: Picked<TypeDraft>, onToggle: () -> Unit) {
+private fun SetupTypeRow(type: Picked<TypeDraft>, place: PlaceColor, onToggle: () -> Unit) {
     val colors = PersonalkaTheme.colors
     Row(
         Modifier
@@ -451,7 +464,9 @@ private fun SetupTypeRow(type: Picked<TypeDraft>, onToggle: () -> Unit) {
     ) {
         CheckBox(type.on)
         Spacer(Modifier.width(Dimens.space4))
-        Box(Modifier.size(10.dp).background(TypeColor.of(type.item.color).tone(colors.isDark).stripe, CircleShape))
+        val tone = place.tone(colors.isDark)
+        val dot = if (type.item.kind == TrainingKind.DUTY) Shade(dutyFill(place, colors), tone.stripe) else Shade(tone.block(type.item.shade), tone.stripe)
+        ShadeDot(dot)
         Spacer(Modifier.width(Dimens.space3))
         Text(type.item.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.text)
         Spacer(Modifier.width(Dimens.space2))

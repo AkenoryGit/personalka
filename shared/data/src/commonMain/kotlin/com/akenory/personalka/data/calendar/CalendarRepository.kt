@@ -30,6 +30,7 @@ import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.restriction.RestrictionHit
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.training.DiaryRules
@@ -50,7 +51,8 @@ import kotlinx.datetime.plus
  * Тренировка в календаре (5.3) — всё, что нужно блоку. [start] — время клуба.
  *
  * @param title «Иванов И.», «Петров / Сидоров», «Сб 9:00 ББ (12)».
- * @param color ключ цвета типа (`TrainingType.color`): у каждой темы свои тона.
+ * @param color ключ цвета места (`Location.color`): у каждой темы свои тона.
+ * @param shade оттенок типа (`TrainingType.shade`): 1 — светлый … 4 — тёмный; фон блока — цвет места этим оттенком.
  * @param badges значки по важности (`CalendarBadges`); сколько из них видно, решает высота блока.
  * @param marked проведена или в ней отмечены пришедшие: в будущее её не перенести (`CalendarDrag.problem`).
  */
@@ -66,6 +68,7 @@ data class CalendarTraining(
     val cancelled: Boolean,
     val badges: List<CalendarBadge> = emptyList(),
     val marked: Boolean = false,
+    val shade: Int = ReferenceRules.SHADE_LIGHT,
 )
 
 /** Что вышло из переноса тренировки (5.3). */
@@ -106,7 +109,7 @@ data class TrainingCopy(
  *
  * @param id id запрета или тренировки-дежурства.
  * @param placeId место: фильтр мест в шапке скрывает зоны других мест (шаг 1.12).
- * @param color ключ цвета типа дежурства; у запрета пусто — штриховка нейтральная.
+ * @param color ключ цвета места дежурства; у запрета пусто — штриховка нейтральная.
  * @param title заголовок окна по нажатию: «Запрет» или название типа дежурства.
  * @param text строка окна: «ДБ 17:00–18:00 — групповая тренировка».
  * @param label подпись на самой зоне: «ДБ · групповая тренировка», «Дежурство · ББ».
@@ -289,7 +292,8 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
             val duties = list.mapNotNull { t ->
                 val type = typeById[t.typeId]?.takeIf { it.kind == TrainingKind.DUTY } ?: return@mapNotNull null
                 if (t.status == TrainingStatus.CANCELLED) return@mapNotNull null
-                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, placeById[t.locationId]?.shortName.orEmpty(), type.color)
+                val place = placeById[t.locationId]
+                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), place?.color.orEmpty())
             }
             val restrictions = blocks.map { it.toRestriction() }
             val hatched = generateSequence(from) { it.plus(1, DateTimeUnit.DAY) }
@@ -390,7 +394,8 @@ private fun TrainingEntity.toCalendar(
     typeShort = type?.shortName.orEmpty(),
     placeId = locationId,
     placeShort = place?.shortName.orEmpty(),
-    color = type?.color.orEmpty(),
+    color = place?.color.orEmpty(),
+    shade = type?.shade ?: ReferenceRules.SHADE_LIGHT,
     cancelled = status == TrainingStatus.CANCELLED,
     badges = badges,
     marked = marked,

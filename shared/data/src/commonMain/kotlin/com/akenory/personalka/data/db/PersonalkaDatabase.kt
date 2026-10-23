@@ -74,7 +74,7 @@ import kotlin.coroutines.CoroutineContext
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -87,7 +87,8 @@ abstract class PersonalkaDatabase : RoomDatabase() {
     abstract fun trainingDao(): TrainingDao
 
     companion object {
-        const val VERSION = 1
+        /** 1 — шаг 1.1; 2 — шаг 1.13в: цвет у места, оттенок у типа ([Migration1To2]). */
+        const val VERSION = 2
         const val FILE_NAME = "personalka.db"
     }
 }
@@ -99,10 +100,11 @@ expect object PersonalkaDatabaseConstructor : RoomDatabaseConstructor<Personalka
 }
 
 /**
- * Общие настройки базы на всех платформах: SQLite, собранный вместе с приложением (одна и та же версия
- * на любом телефоне и на компьютере), запросы — в [queryContext].
+ * Общие настройки базы на всех платформах: переходы со старых версий ([PersonalkaMigrations]), SQLite, собранный
+ * вместе с приложением (одна и та же версия на любом телефоне и на компьютере), запросы — в [queryContext].
  */
 fun RoomDatabase.Builder<PersonalkaDatabase>.buildPersonalka(queryContext: CoroutineContext): PersonalkaDatabase =
-    setDriver(BundledSQLiteDriver())
+    addMigrations(*PersonalkaMigrations)
         .setQueryCoroutineContext(queryContext)
+        .setDriver(BundledSQLiteDriver())
         .build()

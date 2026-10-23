@@ -45,10 +45,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.theme.Shade
 
 // Элементы форм дизайн-системы 0.2 (Button, Chip, TextField, Toggles): первыми их собрали первый запуск
 // и конструктор типа (шаг 1.6), дальше ими пользуются все формы.
@@ -230,7 +232,7 @@ fun ChoiceChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    dot: Color? = null,
+    dot: Shade? = null,
     icon: ImageVector? = null,
     toggle: Boolean = false,
     fill: Boolean = false,
@@ -259,11 +261,20 @@ fun ChoiceChip(
                 fill -> Unit
                 selected -> Icon(PIcons.Check, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
                 icon != null -> Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
-                dot != null -> Box(Modifier.size(8.dp).background(dot, CircleShape))
+                dot != null -> ShadeDot(dot)
             }
             Text(text, style = MaterialTheme.typography.labelMedium, color = content)
         }
     }
+}
+
+/**
+ * Точка оттенка: фон блока с кольцом 1,5 dp цвета полосы — светлый оттенок виден и на светлом фоне, потому что
+ * кольцо не ниже 3 : 1 (ТЗ 10.4).
+ */
+@Composable
+fun ShadeDot(shade: Shade, modifier: Modifier = Modifier, size: Dp = 12.dp) {
+    Box(modifier.size(size).clip(CircleShape).background(shade.fill).border(1.5.dp, shade.ring, CircleShape))
 }
 
 /** Флажок (Toggles): 20 dp, скругление 4; отмечен — primary с галочкой, пустой — рамка 2 dp outline. */

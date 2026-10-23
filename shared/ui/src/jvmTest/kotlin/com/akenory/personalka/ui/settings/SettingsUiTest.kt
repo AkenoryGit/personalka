@@ -29,6 +29,7 @@ import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.setup.TYPE_NAME_TAG
 import com.akenory.personalka.ui.setup.TYPE_SHORT_TAG
+import com.akenory.personalka.ui.setup.colorTag
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import kotlinx.coroutines.flow.first
@@ -141,8 +142,15 @@ class SettingsUiTest {
         onNodeWithText("Уже есть у места «Детский бассейн»").assertIsDisplayed()
         onNodeWithTag(com.akenory.personalka.ui.setup.PLACE_SHORT_TAG).performTextInput("2")
         onNodeWithText("Не больше 4 знаков").assertDoesNotExist()
+        // Цвет места (шаг 1.13в): розовый уже у ДБ — только предупреждение; образцы — с типами этого оттенка.
+        onNodeWithTag(colorTag("pink")).performScrollTo().performClick()
+        onNodeWithText("Этот цвет уже у места «Детский бассейн»").performScrollTo().assertIsDisplayed()
+        onNodeWithTag(colorTag("teal")).performScrollTo().performClick()
+        onNodeWithText("Этот цвет уже у места «Детский бассейн»").assertDoesNotExist()
+        onNodeWithText("Группа").performScrollTo().assertIsDisplayed()
         onNodeWithText("Сохранить").performClick()
         awaitNode(hasTestTag(placeRowTag("ДБ2")))
+        runBlocking { assertEquals("teal", settings.places.first().single { it.shortName == "ДБ2" }.color) }
     }
 
     @Test

@@ -21,15 +21,21 @@ data class CoachName(val lastName: String, val firstName: String, val middleName
     val full: String get() = listOfNotNull(lastName, firstName, middleName).joinToString(" ")
 }
 
-/** Место (3.3): «Большой бассейн», «ББ». */
-data class PlaceDraft(val name: String, val shortName: String)
+/**
+ * Место (3.3): «Большой бассейн», «ББ» и цвет — ключ палитры 16 цветов. Тренировки места красятся его цветом,
+ * а оттенок выбирает тип (шаг 1.13в): по цвету тренер сразу видит, в каком бассейне работает.
+ */
+data class PlaceDraft(val name: String, val shortName: String, val color: String = ReferenceRules.FALLBACK_COLOR)
 
-/** Тип тренировки (3.3) — всё, что задаётся в конструкторе (5.16). Цвет — ключ палитры 16 цветов. */
+/**
+ * Тип тренировки (3.3) — всё, что задаётся в конструкторе (5.16). Своего цвета у типа нет: блок красится цветом
+ * места, а тип выбирает оттенок — от 1 (светлый) до 4 (тёмный).
+ */
 data class TypeDraft(
     val name: String,
     val shortName: String,
     val kind: TrainingKind,
-    val color: String,
+    val shade: Int,
     val durationMin: Int,
     /** 1 — персональная и стартовая, 2 — сплит, `null` — сколько угодно, 0 — дежурство. */
     val maxClients: Int?,
@@ -42,10 +48,10 @@ data class TypeDraft(
 ) {
     /**
      * Другой вид — длительность, клиенты, оплата, «как ПТ», ступени и дневник заполняются как у этого вида
-     * («Длительность, оплата и дневник заполнены как у группы»); название и цвет остаются.
+     * («Длительность, оплата и дневник заполнены как у группы»); название и оттенок остаются.
      */
     fun withKind(kind: TrainingKind): TypeDraft =
-        TypePresets.of(kind).copy(name = name, shortName = shortName, color = color)
+        TypePresets.of(kind).copy(name = name, shortName = shortName, shade = shade)
 }
 
 /** Поля формы, под которыми показывается ошибка. */
@@ -84,7 +90,7 @@ object TypePresets {
         name = "",
         shortName = "",
         kind = kind,
-        color = "",
+        shade = ReferenceRules.SHADE_LIGHT,
         durationMin = DEFAULT_DURATION,
         maxClients = maxClients,
         payUnit = payUnit,
@@ -122,35 +128,74 @@ object ReferenceRules {
         "sky", "blue", "indigo", "violet", "magenta", "pink", "brown", "slate",
     )
 
+    /** Цвет места, если ключ потерялся: нейтральный сланцевый. */
+    const val FALLBACK_COLOR = "slate"
+
+    /**
+     * Оттенки типа (шаг 1.13в): 1 — светлый … 4 — тёмный. Больше четырёх оттенков одного цвета на ходу не различить,
+     * поэтому типы с одним оттенком отличаются надписью в блоке.
+     */
+    const val SHADE_LIGHT = 1
+    const val SHADE_DARK = 4
+    val SHADES = SHADE_LIGHT..SHADE_DARK
+
     val defaultPlaces: List<PlaceDraft> = listOf(
-        PlaceDraft("Большой бассейн", "ББ"),
-        PlaceDraft("Детский бассейн", "ДБ"),
-        PlaceDraft("Тренажёрный зал", "Зал"),
+        PlaceDraft("Большой бассейн", "ББ", "blue"),
+        PlaceDraft("Детский бассейн", "ДБ", "pink"),
+        PlaceDraft("Тренажёрный зал", "Зал", "brown"),
     )
 
     /**
-     * Девять типов первого запуска (3.3), цвета — из дизайн-системы 0.2. Грудничковое, гидрореабилитация
-     * и кинезио — персональные со своим именем: идут в счёт ПТ и получают надбавку по ступеням;
-     * грудничковое длится 30 минут.
+     * Девять типов первого запуска (3.3). Оттенки — чтобы в одном бассейне чаще всего стоящие рядом типы
+     * различались: ПТ светлая, сплит и грудничковое средние, мини-группа, СПТ и гидро — яркие, группа — тёмная.
+     * Грудничковое, гидрореабилитация и кинезио — персональные со своим именем: идут в счёт ПТ и получают надбавку
+     * по ступеням; грудничковое длится 30 минут.
      */
     val defaultTypes: List<TypeDraft> = listOf(
-        preset(TrainingKind.PERSONAL, "ПТ", "ПТ", "blue"),
-        preset(TrainingKind.SPLIT, "Сплит", "Сплит", "indigo"),
-        preset(TrainingKind.GROUP, "Мини-группа", "Мини", "lime"),
-        preset(TrainingKind.GROUP, "Группа", "Группа", "green").copy(durationMin = 60),
-        preset(TrainingKind.SPT, "СПТ", "СПТ", "pink"),
-        preset(TrainingKind.DUTY, "Дежурство", "Деж", "slate"),
-        preset(TrainingKind.PERSONAL, "Грудничковое", "Груд", "teal").copy(durationMin = 30),
-        preset(TrainingKind.PERSONAL, "Гидрореабилитация", "Гидро", "magenta"),
-        preset(TrainingKind.PERSONAL, "Кинезио", "Кинезио", "brown"),
+        preset(TrainingKind.PERSONAL, "ПТ", "ПТ", shade = 1),
+        preset(TrainingKind.SPLIT, "Сплит", "Сплит", shade = 2),
+        preset(TrainingKind.GROUP, "Мини-группа", "Мини", shade = 3),
+        preset(TrainingKind.GROUP, "Группа", "Группа", shade = 4).copy(durationMin = 60),
+        preset(TrainingKind.SPT, "СПТ", "СПТ", shade = 3),
+        preset(TrainingKind.DUTY, "Дежурство", "Деж", shade = 1),
+        preset(TrainingKind.PERSONAL, "Грудничковое", "Груд", shade = 2).copy(durationMin = 30),
+        preset(TrainingKind.PERSONAL, "Гидрореабилитация", "Гидро", shade = 3),
+        preset(TrainingKind.PERSONAL, "Кинезио", "Кинезио", shade = 2),
     )
 
-    private fun preset(kind: TrainingKind, name: String, shortName: String, color: String) =
-        TypePresets.of(kind).copy(name = name, shortName = shortName, color = color)
+    private fun preset(kind: TrainingKind, name: String, shortName: String, shade: Int) =
+        TypePresets.of(kind).copy(name = name, shortName = shortName, shade = shade)
 
-    /** Новый тип в конструкторе: персональная, первый цвет палитры, которого ещё нет у типов. */
-    fun newType(usedColors: Collection<String>): TypeDraft =
-        TypePresets.of(TrainingKind.PERSONAL).copy(color = COLORS.firstOrNull { it !in usedColors } ?: COLORS.last())
+    /** Новый тип в конструкторе: персональная, первый оттенок, которого ещё нет у типов; заняты все — светлый. */
+    fun newType(usedShades: Collection<Int>): TypeDraft =
+        TypePresets.of(TrainingKind.PERSONAL).copy(shade = SHADES.firstOrNull { it !in usedShades } ?: SHADE_LIGHT)
+
+    /** Новое место: первый цвет палитры, которого ещё нет у мест; заняты все — сланцевый. */
+    fun newPlace(usedColors: Collection<String>): PlaceDraft =
+        PlaceDraft("", "", COLORS.firstOrNull { it !in usedColors } ?: FALLBACK_COLOR)
+
+    /**
+     * Оттенок типа, у которого его ещё нет (переход базы на версию 2, шаг 1.13в; импорт таблиц): у типов первого
+     * запуска — как в [defaultTypes], у своих — по виду: персональная и дежурство светлые, сплит и «другая» —
+     * средние, СПТ — яркая, группа — тёмная.
+     */
+    fun defaultShade(name: String, kind: TrainingKind): Int =
+        defaultTypes.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }?.shade ?: when (kind) {
+            TrainingKind.PERSONAL, TrainingKind.DUTY -> 1
+            TrainingKind.SPLIT, TrainingKind.OTHER -> 2
+            TrainingKind.SPT -> 3
+            TrainingKind.GROUP -> 4
+        }
+
+    /**
+     * Цвета мест, у которых их ещё нет, по порядку тренера: ББ, ДБ и Зал — как в [defaultPlaces] (синий, розовый,
+     * коричневый), остальные — по очереди первым свободным цветом палитры.
+     */
+    fun defaultPlaceColors(shortNames: List<String>): List<String> {
+        val known = shortNames.map { short -> defaultPlaces.firstOrNull { it.shortName.equals(short.trim(), ignoreCase = true) }?.color }
+        val used = known.filterNotNull().toMutableList()
+        return known.map { it ?: newPlace(used).color.also { color -> used += color } }
+    }
 
     /**
      * Ошибки формы места словами тренера. [others] — другие действующие места: короткое имя не должно
@@ -189,8 +234,11 @@ object ReferenceRules {
         }
     }
 
-    /** Тип с таким же цветом среди [others] — конструктор предупреждает, но не запрещает (дизайн-система, TypeColors). */
-    fun sameColor(color: String, others: List<TypeDraft>): TypeDraft? = others.firstOrNull { it.color == color }
+    /**
+     * Место с таким же цветом среди [others] — форма места предупреждает, но не запрещает: два бассейна одного
+     * цвета в календаре не различить.
+     */
+    fun sameColor(color: String, others: List<PlaceDraft>): PlaceDraft? = others.firstOrNull { it.color == color }
 
     /**
      * В какой тип превращается сплит, когда пришёл один клиент (3.3): персональная «ПТ», иначе первая

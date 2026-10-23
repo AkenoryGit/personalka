@@ -81,8 +81,8 @@ object Samples {
         advanceDefault = if (kind == PaySchemeKind.HALF_OFFICIAL) 1_354_650L else null,
     )
 
-    fun location(short: String, name: String, sort: Int) =
-        LocationEntity(id = id(), sync = sync(), scope = Scope.CLUB, name = name, shortName = short, sort = sort)
+    fun location(short: String, name: String, sort: Int, color: String = if (short == "ДБ") "pink" else "blue") =
+        LocationEntity(id = id(), sync = sync(), scope = Scope.CLUB, name = name, shortName = short, sort = sort, color = color)
 
     fun personalType() = TrainingTypeEntity(
         id = id(),
@@ -90,7 +90,7 @@ object Samples {
         name = "Персональная",
         shortName = "ПТ",
         kind = TrainingKind.PERSONAL,
-        color = "blue",
+        shade = 1,
         maxClients = 1,
         payUnit = PayUnit.PER_SESSION,
         countsTowardPt = true,
@@ -103,7 +103,7 @@ object Samples {
         name = "Группа",
         shortName = "Группа",
         kind = TrainingKind.GROUP,
-        color = "green",
+        shade = 4,
         maxClients = null,
         payUnit = PayUnit.PER_CLIENT,
         countsTowardPt = false,

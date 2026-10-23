@@ -62,6 +62,7 @@ class SettingsRepositoryTest {
         val places = repo.places.first()
         assertEquals(listOf("ББ", "ДБ", "Зал"), places.map { it.shortName })
         assertEquals(listOf(0, 1, 2), places.map { it.sort })
+        assertEquals(listOf("blue", "pink", "brown"), places.map { it.color }, "Цвета мест — из заготовок (шаг 1.13в)")
         assertTrue(places.all { it.scope == Scope.COACH && it.sync.coachId == coach.id })
 
         val types = repo.types.first()
@@ -100,9 +101,10 @@ class SettingsRepositoryTest {
         assertEquals(1, places.single { it.shortName == "Зал" }.sync.version, "Место без перемены порядка не переписывается")
         assertEquals(2, places.single { it.shortName == "ББ" }.sync.version)
 
-        repo.updatePlace(street, PlaceDraft("Открытая вода", "ОВ"), archived = true)
+        repo.updatePlace(street, PlaceDraft("Открытая вода", "ОВ", "teal"), archived = true)
         val edited = repo.places.first().single { it.id == street }
         assertEquals("ОВ", edited.shortName)
+        assertEquals("teal", edited.color)
         assertTrue(edited.archived, "Архивное место остаётся в списке — оно нужно истории")
         assertEquals(now, edited.sync.updatedAt)
     }
@@ -111,7 +113,7 @@ class SettingsRepositoryTest {
     fun typeConstructorAddsAndEdits(): Unit = runBlocking {
         firstRun()
         now += 1000
-        val aqua = ReferenceRules.newType(ReferenceRules.defaultTypes.map { it.color })
+        val aqua = ReferenceRules.newType(ReferenceRules.defaultTypes.map { it.shade })
             .copy(name = "Аквааэробика", shortName = "Аква")
             .withKind(TrainingKind.GROUP)
             .copy(durationMin = 45, maxClients = 12)

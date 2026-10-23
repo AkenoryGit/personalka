@@ -1,6 +1,7 @@
 package com.akenory.personalka.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -50,8 +50,8 @@ import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.settings.draft
 import com.akenory.personalka.domain.format.TypeFormat
+import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.CoachName
-import com.akenory.personalka.domain.reference.PlaceDraft
 import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.Field
@@ -60,6 +60,7 @@ import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.NavRow
 import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SecondaryButton
+import com.akenory.personalka.ui.components.ShadeDot
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.setup.PlaceEditor
 import com.akenory.personalka.ui.setup.TypeEditor
@@ -67,7 +68,10 @@ import com.akenory.personalka.ui.shell.ShellState
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
-import com.akenory.personalka.ui.theme.TypeColor
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.theme.Shade
+import com.akenory.personalka.ui.theme.dutyFill
+import com.akenory.personalka.ui.theme.shade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -130,8 +134,9 @@ fun SettingsScreen(
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
         route == SettingsRoute.NEW_PLACE -> PlaceEditor(
             title = "Новое место",
-            initial = PlaceDraft("", ""),
+            initial = ReferenceRules.newPlace(activePlaces.map { it.color }),
             others = activePlaces.map { it.draft() },
+            samples = TypeFormat.shadeSamples(activeTypes.map { it.draft() }),
             onSave = { draft ->
                 scope.launch { settings.addPlace(draft) }
                 close()
@@ -141,9 +146,9 @@ fun SettingsScreen(
         )
         route == SettingsRoute.NEW_TYPE -> TypeEditor(
             title = "Новый тип",
-            initial = ReferenceRules.newType(activeTypes.map { it.color }),
+            initial = ReferenceRules.newType(activeTypes.filter { it.kind != TrainingKind.DUTY }.map { it.shade }),
             others = activeTypes.map { it.draft() },
-            placeShort = activePlaces.firstOrNull()?.shortName,
+            places = activePlaces.map { it.draft() },
             onSave = { draft ->
                 scope.launch { settings.addType(draft) }
                 close()
@@ -157,6 +162,7 @@ fun SettingsScreen(
                 title = place.name,
                 initial = place.draft(),
                 others = activePlaces.filter { it.id != place.id }.map { it.draft() },
+                samples = TypeFormat.shadeSamples(activeTypes.map { it.draft() }),
                 archived = place.archived,
                 onSave = { draft ->
                     scope.launch { settings.updatePlace(place.id, draft, place.archived) }
@@ -180,7 +186,7 @@ fun SettingsScreen(
                 title = type.name,
                 initial = type.draft(),
                 others = activeTypes.filter { it.id != type.id }.map { it.draft() },
-                placeShort = activePlaces.firstOrNull()?.shortName,
+                places = activePlaces.map { it.draft() },
                 archived = type.archived,
                 onSave = { draft ->
                     scope.launch { settings.updateType(type.id, draft, type.archived) }
@@ -264,8 +270,9 @@ private fun ProfileScreen(settings: SettingsRepository, scope: CoroutineScope, m
 }
 
 /**
- * «Места и типы» (макет TypesList): места с коротким именем и ручкой перетаскивания, типы с цветом
- * и строкой «Персональная · 50 мин · как ПТ». Архивные — в конце списков: история их помнит.
+ * «Места и типы» (макет TypesList): места с коротким именем на подложке своего цвета и ручкой перетаскивания,
+ * типы с точкой оттенка (в цвете первого места) и строкой «Персональная · 50 мин · как ПТ». Архивные — в конце
+ * списков: история их помнит.
  */
 @Composable
 private fun PlacesAndTypes(
@@ -279,6 +286,7 @@ private fun PlacesAndTypes(
     val colors = PersonalkaTheme.colors
     val active = places.filter { !it.archived }
     val archivedPlaces = places.filter { it.archived }
+    val firstPlace = PlaceColor.of(active.firstOrNull()?.color)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         TopBar("Места и типы", onBack = onBack)
         Column(Modifier.padding(horizontal = Dimens.space4)) {
@@ -306,8 +314,11 @@ private fun PlacesAndTypes(
                         subtitle = TypeFormat.summary(draft) + if (type.archived) " · в архиве" else "",
                         onClick = { shell.open(SettingsRoute.type(type.id)) },
                         modifier = Modifier.testTag(typeRowTag(type.name)),
-                        leading = {
-                            Box(Modifier.size(10.dp).background(TypeColor.of(type.color).tone(colors.isDark).stripe, CircleShape))
+                        leading = if (type.kind == TrainingKind.DUTY) {
+                            // Дежурство в календаре — заливка цвета места, оттенка у него нет.
+                            { ShadeDot(Shade(dutyFill(firstPlace, colors), firstPlace.tone(colors.isDark).stripe)) }
+                        } else {
+                            { ShadeDot(firstPlace.shade(colors.isDark, type.shade)) }
                         },
                     )
                 }
@@ -402,10 +413,11 @@ private fun ReorderablePlaces(places: List<LocationEntity>, onOpen: (LocationEnt
     }
 }
 
-/** Строка места: короткое имя на подложке, название; у действующего — ручка перетаскивания. */
+/** Строка места: короткое имя на подложке цвета места, название; у действующего — ручка перетаскивания. */
 @Composable
 private fun PlaceRow(place: LocationEntity, modifier: Modifier = Modifier, handle: Modifier? = null) {
     val colors = PersonalkaTheme.colors
+    val tone = PlaceColor.of(place.color).tone(colors.isDark)
     Row(
         modifier
             .fillMaxWidth()
@@ -415,10 +427,14 @@ private fun PlaceRow(place: LocationEntity, modifier: Modifier = Modifier, handl
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.widthIn(min = 36.dp).background(colors.surfaceAlt, MaterialTheme.shapes.small).padding(horizontal = 6.dp, vertical = 4.dp),
+            Modifier
+                .widthIn(min = 36.dp)
+                .background(tone.block(2), MaterialTheme.shapes.small)
+                .border(1.5.dp, tone.stripe, MaterialTheme.shapes.small)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(place.shortName, style = MaterialTheme.typography.labelMedium, color = colors.text)
+            Text(place.shortName, style = MaterialTheme.typography.labelMedium, color = tone.text)
         }
         Spacer(Modifier.width(Dimens.space4))
         Column(Modifier.weight(1f)) {

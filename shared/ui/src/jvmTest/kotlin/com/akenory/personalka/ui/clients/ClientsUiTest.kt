@@ -7,8 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -27,6 +30,7 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.RelationRole
@@ -61,6 +65,8 @@ class ClientsUiTest {
         runBlocking { clients.create(ClientDraft(last, first, sex = sex, birthDate = birth)) }
 
     private fun all() = runBlocking { clients.rows(TestData.now).first() }
+
+    private val emptyField = SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(""))
 
     private fun ComposeUiTest.show(width: () -> androidx.compose.ui.unit.Dp = { folded }) {
         setContent { Box(Modifier.size(width(), height)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), TestData.calendarOf(settings), clock = TestData.clock) } }
@@ -371,6 +377,35 @@ class ClientsUiTest {
         waitForIdle()
         onNodeWithTag(clientRowTag("Ковалёв Артём")).assertIsDisplayed()
         onNodeWithTag(clientRowTag("Орлова Ксения")).assertIsSelected()
+    }
+
+    @Test
+    fun nextNewClientStartsEmpty() = runComposeUiTest {
+        show()
+        awaitNode(hasText("Добавить клиента"))
+        onNodeWithText("Добавить клиента").performClick()
+        onNodeWithTag(CLIENT_LAST_TAG).performTextInput("Ковалёв")
+        onNodeWithTag(CLIENT_FIRST_TAG).performTextInput("Артём")
+        onNodeWithTag(CLIENT_PHONE_TAG).performTextInput("8 919 922-41-08")
+        onNodeWithText("Сохранить").performClick()
+        awaitNode(hasText("Родственников нет"))
+        onNodeWithContentDescription("Назад").performClick()
+
+        // Второй новый клиент — пустая форма, а не данные первого.
+        awaitNode(hasTestTag(CLIENT_ADD_TAG))
+        onNodeWithTag(CLIENT_ADD_TAG).performClick()
+        awaitNode(hasTestTag(CLIENT_LAST_TAG))
+        onNodeWithTag(CLIENT_LAST_TAG).assert(emptyField)
+        onNodeWithTag(CLIENT_FIRST_TAG).assert(emptyField)
+        onNodeWithTag(CLIENT_PHONE_TAG).assert(emptyField)
+        onNodeWithText("Мужской").assertIsNotSelected()
+
+        // Брошенная форма не возвращается при следующем «Новом клиенте».
+        onNodeWithTag(CLIENT_LAST_TAG).performTextInput("Брошенная")
+        onNodeWithContentDescription("Закрыть").performClick()
+        onNodeWithTag(CLIENT_ADD_TAG).performClick()
+        awaitNode(hasTestTag(CLIENT_LAST_TAG))
+        onNodeWithTag(CLIENT_LAST_TAG).assert(emptyField)
     }
 
     @Test

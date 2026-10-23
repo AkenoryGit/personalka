@@ -35,6 +35,7 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,7 @@ import com.akenory.personalka.ui.shell.FAB_TAG
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import com.akenory.personalka.ui.theme.LightColors
-import com.akenory.personalka.ui.theme.TypeColor
+import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.training.FORM_TIME_TAG
 import com.akenory.personalka.ui.training.TRAINING_FORM_TAG
 import kotlinx.coroutines.flow.first
@@ -386,6 +387,37 @@ class CalendarUiTest {
     }
 
     @Test
+    fun swipeOnDaysRowMovesByWeek() = runComposeUiTest {
+        openCalendar()
+        // Свайп по строке недели влево — тот же вторник неделей позже, строка — уже 26.10–01.11.
+        onNodeWithTag(DAYS_ROW_TAG).performTouchInput { swipeLeft() }
+        waitForIdle()
+        assertSelected(LocalDate(2026, 10, 27), "Свайп по строке недели влево")
+        onNodeWithTag(weekDayTag(LocalDate(2026, 11, 1))).assertIsDisplayed()
+        // Вправо — неделей раньше: дважды — 13.10.
+        onNodeWithTag(DAYS_ROW_TAG).performTouchInput { swipeRight() }
+        waitForIdle()
+        onNodeWithTag(DAYS_ROW_TAG).performTouchInput { swipeRight() }
+        waitForIdle()
+        assertSelected(LocalDate(2026, 10, 13), "Два свайпа вправо")
+        // Короткое движение — не свайп, а нажатие на день остаётся нажатием.
+        onNodeWithTag(DAYS_ROW_TAG).performTouchInput { swipeLeft(startX = centerX, endX = centerX - 30f) }
+        waitForIdle()
+        assertSelected(LocalDate(2026, 10, 13), "Короткое движение")
+        onNodeWithTag(weekDayTag(LocalDate(2026, 10, 15))).performClick()
+        waitForIdle()
+        assertSelected(LocalDate(2026, 10, 15), "Нажатие на день")
+
+        // В «3 днях» — строка над колонками листает так же: первая колонка — четверг неделей позже.
+        chooseView("3_дня")
+        onNodeWithTag(dayHeaderTag(LocalDate(2026, 10, 15))).assertIsDisplayed()
+        onNodeWithTag(DAYS_ROW_TAG).performTouchInput { swipeLeft() }
+        waitForIdle()
+        onNodeWithTag(dayHeaderTag(LocalDate(2026, 10, 22))).assertIsDisplayed()
+        onNodeWithTag(dayHeaderTag(LocalDate(2026, 10, 15))).assertDoesNotExist()
+    }
+
+    @Test
     fun scrollStaysInsideGrid() = runComposeUiTest {
         openCalendar()
         val bottom = topMinute()
@@ -635,8 +667,8 @@ class CalendarUiTest {
         // Справа от блока, между линиями сетки, — хоть одна точка штриховки на фоне.
         val margin = (357..363).flatMap { x -> (zone.y.toInt() + 4..zone.y.toInt() + 28).map { y -> pixel(x.toFloat(), y.toFloat()) } }
         assertTrue(margin.any { !close(LightColors.surface, it) }, "Штриховки справа от блока нет")
-        // Низ блока без текста — ровный цвет блока: штриховка под ним.
-        val blockColor = TypeColor.BLUE.light.block
+        // Низ блока без текста — ровный цвет блока: штриховка под ним. ПТ в ДБ — розовый светлого оттенка (шаг 1.13в).
+        val blockColor = PlaceColor.PINK.light.block(1)
         val inside = (150..330 step 10).flatMap { x -> listOf(pixel(x.toFloat(), block.y + block.height - 6f), pixel(x.toFloat(), block.y + block.height - 4f)) }
         assertTrue(inside.all { close(blockColor, it) }, "Штриховка поверх блока: ${inside.firstOrNull { !close(blockColor, it) }}")
     }
@@ -741,6 +773,26 @@ class CalendarUiTest {
         awaitNode(hasText(TrainingFormat.NEW_TITLE))
         awaitNode(hasText("17:15–18:05"))
         onNodeWithTag(FORM_TIME_TAG).assertIsDisplayed()
+    }
+
+    @Test
+    fun holdOnEmptyPlaceDragsDashedBlockThenOpensForm() = runComposeUiTest {
+        openCalendar()
+        // Удержание — пунктирный блок новой тренировки с подсказкой; формы ещё нет.
+        dragDay(150f, yOf("17:23") + 0.5f, 0f, 0f, release = false)
+        onNodeWithContentDescription(NEW_BLOCK).assertIsDisplayed()
+        onNodeWithText(s("Вт_20.10 · 17:15–18:05")).assertIsDisplayed()
+        onNodeWithText(TrainingFormat.NEW_TITLE).assertDoesNotExist()
+
+        // Блок повели вниз до 18:32 — начало 18:30 с привязкой к шагу; отпустили — форма на это время.
+        val point = gridPoint(150f, yOf("18:40") + 0.5f)
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput {
+            moveTo(point)
+            up()
+        }
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        awaitNode(hasText("18:30–19:20"))
+        onNodeWithContentDescription(NEW_BLOCK).assertDoesNotExist()
     }
 
     @Test

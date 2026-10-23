@@ -2,6 +2,7 @@ package com.akenory.personalka.domain.format
 
 import com.akenory.personalka.domain.model.PayUnit
 import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.reference.TypeDraft
 
 /** Строки о типах тренировок для первого запуска, «Мест и типов» и конструктора (5.16, 5.18). */
@@ -80,6 +81,32 @@ object TypeFormat {
             else -> RuText.count(max, "клиент", "клиента", "клиентов")
         }
         return DurationFormat.minutes(type.durationMin) + DOT + clients
+    }
+
+    /** Оттенок типа на кнопке выбора (шаг 1.13в): 1 — «Светлый» … 4 — «Тёмный». */
+    fun shade(shade: Int): String = when (shade) {
+        1 -> "Светлый"
+        2 -> "Средний"
+        3 -> "Яркий"
+        else -> "Тёмный"
+    }
+
+    /**
+     * Подписи четырёх образцов в форме места: короткое имя первого типа с этим оттенком («ПТ», «Сплит», «Мини»,
+     * «Группа»), а если такого нет — название оттенка. Дежурство не в счёт: оно в календаре заливка, а не блок.
+     */
+    fun shadeSamples(types: List<TypeDraft>): List<String> = ReferenceRules.SHADES.map { n ->
+        types.firstOrNull { it.kind != TrainingKind.DUTY && it.shade == n }?.shortName?.trim()?.ifEmpty { null } ?: shade(n)
+    }
+
+    /**
+     * Подсказка под оттенками в конструкторе типа: у кого из других типов такой же — в календаре их различит только
+     * надпись. «Такой же оттенок у типа «Группа»», «Такой же оттенок у типов «Сплит» и «Грудничковое»».
+     */
+    fun sameShade(names: List<String>): String? = when (names.size) {
+        0 -> null
+        1 -> "Такой же оттенок у типа «${names.single()}»"
+        else -> "Такой же оттенок у типов " + names.dropLast(1).joinToString(", ") { "«$it»" } + " и «${names.last()}»"
     }
 
     /** Строка «Мест и типов» в настройках: «3 места · 9 типов». */

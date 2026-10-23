@@ -114,7 +114,7 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.Motion
 import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
-import com.akenory.personalka.ui.theme.TypeColor
+import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.theme.dutyFill
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.datetime.DateTimeUnit
@@ -239,8 +239,9 @@ class DayGridState(top: Float, hourDp: Float) {
  * листает не больше чем на [columns] дней (шаг 1.12). Прокрутка и щипок — общие для всех дней. Всё рисуется
  * на Canvas, а прокрутка только сдвигает готовую картинку: блоки при ней не перерисовываются.
  *
- * Жесты (шаг 1.11): длительное нажатие на пустое место — новая тренировка на время под пальцем; на тренировку —
- * меню, а со сдвигом — перетаскивание с подсказкой, привязкой к шагу и автопрокруткой у верхнего и нижнего края.
+ * Жесты (шаг 1.11): длительное нажатие на пустое место — пунктирный блок новой тренировки под пальцем; его тащат,
+ * как тренировку, а отпускание открывает форму на его день и время (шаг 1.13в). На тренировку — меню, а со сдвигом —
+ * перетаскивание с подсказкой, привязкой к шагу и автопрокруткой у верхнего и нижнего края.
  * День под пальцем — по колонке: в «Нескольких днях» блок переносится в соседнюю колонку обычным движением,
  * а в виде «День» — задержкой у бокового края, которая листает день. Жест разбирает вся сетка, а не колонка дня:
  * при листании колонка меняется, а блок остаётся под пальцем.
@@ -252,7 +253,8 @@ class DayGridState(top: Float, hourDp: Float) {
  * @param menuId тренировка с открытым меню: обводка и место для [menu].
  * @param menu меню тренировки — под её блоком.
  * @param onZone нажатие на полоску или видимую часть зоны.
- * @param onCreate длительное нажатие на пустое место: начало новой тренировки.
+ * @param newDuration длительность пунктирного блока новой тренировки: как подставит форма, минуты.
+ * @param onCreate отпущен пунктирный блок новой тренировки: её день и начало.
  * @param onMenu длительное нажатие на тренировку без сдвига.
  * @param onMove тренировку перетащили на новое начало — день и время.
  * @param onZoomEnd щипок закончен — масштаб пора запомнить.
@@ -266,6 +268,7 @@ internal fun DayGrid(
     now: LocalDateTime,
     step: Int,
     columns: Int,
+    newDuration: Int,
     itemsOf: (LocalDate) -> List<CalendarTraining>,
     zonesOf: (LocalDate) -> List<CalendarZone>,
     menuId: String?,
@@ -309,6 +312,7 @@ internal fun DayGrid(
         val currentItems by rememberUpdatedState(itemsOf)
         val currentZones by rememberUpdatedState(zonesOf)
         val currentStep by rememberUpdatedState(step)
+        val currentNewDuration by rememberUpdatedState(newDuration)
         val currentCreate by rememberUpdatedState(onCreate)
         val currentMenu by rememberUpdatedState(onMenu)
         val currentMove by rememberUpdatedState(onMove)
@@ -339,7 +343,7 @@ internal fun DayGrid(
             }
         }
 
-        /** Длительное нажатие в точке сетки [position], px. `true` — палец держит тренировку. */
+        /** Длительное нажатие в точке сетки [position], px. `true` — палец держит блок: тренировку или пунктирный новой. */
         fun hold(position: Offset): Boolean {
             val view = grid.view(currentHours, currentHeight)
             val page = pageAt(position.x / density - Dimens.timeColumn.value)
@@ -357,12 +361,15 @@ internal fun DayGrid(
                 return true
             }
             // На «+N» — ничего: место занято скрытыми тренировками.
-            if (day.more.none { hit(it.x, it.y, it.width, it.height) }) {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                val minute = CalendarDrag.createMinute(view.top + position.y / density / view.dpPerMinute, currentStep)
-                currentCreate(LocalDateTime(date, LocalTime(minute / 60, minute % 60)))
-            }
-            return false
+            if (day.more.any { hit(it.x, it.y, it.width, it.height) }) return false
+            // Пустое место — пунктирный блок новой тренировки: начало под пальцем вниз до шага, длительность как в форме.
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            val minute = CalendarDrag.createMinute(view.top + position.y / density / view.dpPerMinute, currentStep)
+            val duration = currentNewDuration.coerceIn(1, ClubTime.MINUTES_PER_DAY)
+            val fresh = newTraining(LocalDateTime(date, LocalTime(minute / 60, minute % 60)), duration)
+            val dashed = dayBlocks(listOf(fresh), emptyList(), currentWidth, currentHours, grid.hourDp).blocks.single()
+            drag.create(fresh, date, dashed, position, y - dashed.y)
+            return true
         }
 
         /** Палец стоит или движется, пока блок тащат: [clock] — мс жеста, [dt] — с прошлого раза. `true` — палец у края. */
@@ -390,9 +397,14 @@ internal fun DayGrid(
             val to = target
             val moved = drag.moved
             val moving = drag.moving
+            val creating = drag.creating
             drag.reset()
             if (training == null) return
             when {
+                creating -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                    currentCreate(to?.start ?: training.start)
+                }
                 !moved -> currentMenu(training)
                 moving && to != null && to.start != training.start -> {
                     haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
@@ -534,10 +546,20 @@ private class DragState {
     var edgeSide: Int = 0
     var edgeSince: Long = 0L
 
-    /** Блок тащится: палец сдвинулся, и тренировка не отменена — отменённую сначала возвращают. */
-    val moving: Boolean get() = moved && training?.cancelled == false
+    /** Пунктирный блок новой тренировки: виден и тащится сразу, меню у него нет. */
+    var creating: Boolean by mutableStateOf(false)
+        private set
+
+    /** Блок тащится: палец сдвинулся, и тренировка не отменена — отменённую сначала возвращают. Новый — всегда. */
+    val moving: Boolean get() = creating || (moved && training?.cancelled == false)
+
+    fun create(training: CalendarTraining, date: LocalDate, block: BlockInfo, down: Offset, grab: Float) {
+        hold(training, date, block, down, grab)
+        creating = true
+    }
 
     fun hold(training: CalendarTraining, date: LocalDate, block: BlockInfo, down: Offset, grab: Float) {
+        creating = false
         this.training = training
         this.from = date
         this.block = block
@@ -555,6 +577,7 @@ private class DragState {
 
     fun reset() {
         training = null
+        creating = false
         moved = false
         block = null
         from = null
@@ -567,7 +590,8 @@ private class DragState {
  * отпускание — нажатие на блок, второй палец — щипок. Через 400 мс без сдвига жест забирается целиком: события
  * поглощаются до прокрутки, листания и нажатия, и палец ведёт [onHold] / [onDrag] / [onRelease].
  *
- * [onHold] — `true`, если палец держит тренировку; иначе (новая тренировка) остаток жеста просто поглощается.
+ * [onHold] — `true`, если палец держит блок (тренировку или пунктирный новой); иначе («+N») остаток жеста
+ * просто поглощается.
  * [onTick] получает время жеста и шаг в мс; пока он отвечает `true` (палец у края), опрос идёт каждые 16 мс
  * и без движения пальца — так работают автопрокрутка и задержка листания.
  */
@@ -641,7 +665,8 @@ private suspend fun AwaitPointerEventScope.consumeUntilUp(id: PointerId) {
 /**
  * Перетаскиваемый блок и подсказка над пальцем (ТЗ 5.3, макет «Перенос на другой день»): последний слой сетки,
  * над линией «сейчас». Блок приподнят с тенью и стоит на новом времени с привязкой к шагу, подсказка —
- * «Ср 21.10 · 12:15–13:05». Положение читается при раскладке: движение пальца ничего не пересобирает.
+ * «Ср 21.10 · 12:15–13:05». Новая тренировка — пустой блок пунктиром с той же подсказкой.
+ * Положение читается при раскладке: движение пальца ничего не пересобирает.
  *
  * По горизонтали блок идёт за пальцем в пределах колонки дня, куда встанет: в «Нескольких днях» он переходит
  * в соседнюю колонку вместе с пальцем. [columnStart] — левый край колонки страницы, dp.
@@ -669,21 +694,28 @@ private fun DragLayer(
     val moved = training.copy(start = start)
     val lifted = block.copy(x = 0f, y = 0f, lines = moved.lines(block.rows))
     val shadow = if (colors.isDark) Color.Black else colors.text
+    val creating = drag.creating
     Layout(
         content = {
-            Canvas(
-                Modifier
-                    .size(block.width.dp, block.height.dp)
-                    .graphicsLayer {
-                        scaleX = Motion.DRAG_SCALE
-                        scaleY = Motion.DRAG_SCALE
-                        shadowElevation = DRAG_ELEVATION.toPx()
-                        shape = RoundedCornerShape(BLOCK_RADIUS)
-                        ambientShadowColor = shadow
-                        spotShadowColor = shadow
-                    },
-            ) {
-                drawBlock(lifted, moved, measureLines(measurer, lifted, training.cancelled, styles), icons, colors)
+            if (creating) {
+                Canvas(Modifier.size(block.width.dp, block.height.dp).semantics { contentDescription = NEW_BLOCK }) {
+                    drawNewBlock(lifted, colors)
+                }
+            } else {
+                Canvas(
+                    Modifier
+                        .size(block.width.dp, block.height.dp)
+                        .graphicsLayer {
+                            scaleX = Motion.DRAG_SCALE
+                            scaleY = Motion.DRAG_SCALE
+                            shadowElevation = DRAG_ELEVATION.toPx()
+                            shape = RoundedCornerShape(BLOCK_RADIUS)
+                            ambientShadowColor = shadow
+                            spotShadowColor = shadow
+                        },
+                ) {
+                    drawBlock(lifted, moved, measureLines(measurer, lifted, training.cancelled, styles), icons, colors)
+                }
             }
             Text(
                 text = CalendarFormat.dragHint(start, TrainingTime.end(start, training.durationMin)),
@@ -720,6 +752,26 @@ private fun DragLayer(
         }
     }
 }
+
+/** Пунктирный блок новой тренировки — для тестов и TalkBack. */
+internal const val NEW_BLOCK = "Место новой тренировки"
+
+/** Новая тренировка под пальцем, пока не отпустили: без клиентов, типа и места — их выберут в форме. */
+private fun newTraining(start: LocalDateTime, durationMin: Int) = CalendarTraining(
+    id = NEW_BLOCK_ID,
+    start = start,
+    durationMin = durationMin,
+    title = "",
+    typeShort = "",
+    placeId = "",
+    placeShort = "",
+    color = "",
+    cancelled = false,
+    badges = emptyList(),
+    marked = false,
+)
+
+private const val NEW_BLOCK_ID = "new-training"
 
 /** Блок при перетаскивании приподнят (10.5): тень как у макета, 0 8 24. */
 private val DRAG_ELEVATION = 8.dp
@@ -917,6 +969,7 @@ private fun badgeIcons(): BadgeIcons = BadgeIcons(
 /** Призрак перетаскиваемого блока и обводка блока под пальцем. */
 private val GHOST_STROKE = 1.5.dp
 private val GHOST_DASH = 4.dp
+private val NEW_DASH = 6.dp
 private val SELECTED_STROKE = 2.dp
 
 /** Отступы блока от рамки цвета (1 dp зазора уже вычтен): слева за полосой 9 dp, сверху 4 dp, у одной строки — 3. */
@@ -1073,11 +1126,11 @@ private fun DrawScope.drawBackground(date: LocalDate, hours: GridHours, hourDp: 
  */
 private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, String>, CalendarZone>, colors: PersonalkaColors) {
     fun rect(zone: ZoneInfo, left: Float, right: Float) = Rect(left, zone.y.dp.toPx(), right, (zone.y + zone.height).dp.toPx())
-    fun type(zone: ZoneInfo) = TypeColor.of(byId[zone.kind to zone.id]?.color)
+    fun place(zone: ZoneInfo) = PlaceColor.of(byId[zone.kind to zone.id]?.color)
     zones.forEach { zone ->
         val area = rect(zone, 0f, size.width)
         when (zone.kind) {
-            ZoneKind.DUTY -> drawRect(dutyFill(type(zone), colors), area.topLeft, area.size)
+            ZoneKind.DUTY -> drawRect(dutyFill(place(zone), colors), area.topLeft, area.size)
             ZoneKind.RESTRICTION -> hatch(area, colors.hatch, Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
         }
     }
@@ -1085,7 +1138,7 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
     zones.forEach { zone ->
         val area = rect(zone, zone.lane * strip, (zone.lane + 1) * strip)
         when (zone.kind) {
-            ZoneKind.DUTY -> drawRect(type(zone).tone(colors.isDark).stripe, area.topLeft, area.size)
+            ZoneKind.DUTY -> drawRect(place(zone).tone(colors.isDark).stripe, area.topLeft, area.size)
             ZoneKind.RESTRICTION -> {
                 hatch(area, colors.outline, STRIP_HATCH_STROKE.toPx(), STRIP_HATCH_STEP.toPx())
                 val edge = STRIP_EDGE.toPx()
@@ -1119,7 +1172,7 @@ private fun DrawScope.drawZoneLabel(zone: ZoneInfo, info: CalendarZone, label: T
     if (zone.label.isEmpty() || top + label.size.height > (zone.y + zone.height).dp.toPx()) return
     when (zone.kind) {
         ZoneKind.DUTY -> {
-            val text = TypeColor.of(info.color).tone(colors.isDark).text
+            val text = PlaceColor.of(info.color).tone(colors.isDark).text
             drawText(label, color = text, topLeft = Offset(size.width - LABEL_END.toPx() - label.size.width, top))
         }
         ZoneKind.RESTRICTION -> {
@@ -1153,8 +1206,9 @@ private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: Persona
 }
 
 /**
- * Блок (ТЗ 5.3): фон — светлый тон цвета типа, слева полоса 3 dp, текст тёмным тоном того же цвета (в тёмной теме
- * наоборот); вокруг — зазор 1 dp цвета фона. Отменённая — серая и зачёркнутая, текст без прозрачности.
+ * Блок (ТЗ 5.3): фон — цвет места оттенком типа (ПТ светлая, группа тёмная), слева полоса 3 dp цвета места, текст —
+ * тёмным тоном того же цвета (в тёмной теме — светлым); вокруг — зазор 1 dp цвета фона. Отменённая — серая
+ * и зачёркнутая, текст без прозрачности.
  */
 private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, lines: List<TextLayoutResult>, icons: BadgeIcons, colors: PersonalkaColors) {
     val gap = BLOCK_GAP.toPx()
@@ -1165,8 +1219,8 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, li
         bottom = (block.y + block.height).dp.toPx() - gap,
     )
     if (rect.width <= 0f || rect.height <= 0f) return
-    val tone = TypeColor.of(training.color).tone(colors.isDark)
-    val fill = if (training.cancelled) colors.surfaceAlt else tone.block
+    val tone = PlaceColor.of(training.color).tone(colors.isDark)
+    val fill = if (training.cancelled) colors.surfaceAlt else tone.block(training.shade)
     val stripe = if (training.cancelled) colors.outline else tone.stripe
     val text = if (training.cancelled) colors.textMuted else tone.text
     val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = CornerRadius(BLOCK_RADIUS.toPx()))) }
@@ -1195,6 +1249,29 @@ private fun DrawScope.drawGhost(block: BlockInfo, colors: PersonalkaColors) {
         topLeft = Offset(block.x.dp.toPx() + inset, block.y.dp.toPx() + inset),
         size = Size(width, height),
         cornerRadius = CornerRadius(BLOCK_RADIUS.toPx()),
+        style = Stroke(width = stroke, pathEffect = dash),
+    )
+}
+
+/**
+ * Пунктирный блок новой тренировки: заливка фона карточек и пунктир 2 dp цвета текста — виден на любой зоне и любом
+ * блоке под ним (ТЗ 5.3, 10.4: графика не ниже 3 : 1).
+ */
+private fun DrawScope.drawNewBlock(block: BlockInfo, colors: PersonalkaColors) {
+    val stroke = SELECTED_STROKE.toPx()
+    val inset = BLOCK_GAP.toPx() + stroke / 2
+    val width = block.width.dp.toPx() - inset * 2
+    val height = block.height.dp.toPx() - inset * 2
+    if (width <= 0f || height <= 0f) return
+    val topLeft = Offset(block.x.dp.toPx() + inset, block.y.dp.toPx() + inset)
+    val corner = CornerRadius(BLOCK_RADIUS.toPx())
+    drawRoundRect(color = colors.surface, topLeft = topLeft, size = Size(width, height), cornerRadius = corner)
+    val dash = PathEffect.dashPathEffect(floatArrayOf(NEW_DASH.toPx(), NEW_DASH.toPx()))
+    drawRoundRect(
+        color = colors.text,
+        topLeft = topLeft,
+        size = Size(width, height),
+        cornerRadius = corner,
         style = Stroke(width = stroke, pathEffect = dash),
     )
 }

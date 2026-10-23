@@ -43,7 +43,7 @@ internal object CalendarSample {
             minutes: Int,
             title: String,
             type: String,
-            color: String,
+            shade: Int,
             place: String,
             facts: BadgeFacts = BadgeFacts(),
         ): CalendarTraining {
@@ -63,41 +63,43 @@ internal object CalendarSample {
                 typeShort = type,
                 placeId = "$PREFIX$place",
                 placeShort = place,
-                color = color,
+                // Цвет — у места, как у настоящих: ББ синий, ДБ розовый; оттенок — у типа (шаг 1.13в).
+                color = if (place == "ДБ") "pink" else "blue",
                 cancelled = facts.cancelled,
                 badges = CalendarBadges.of(placed),
                 marked = facts.done,
+                shade = shade,
             )
         }
         fun one(last: String, first: String) = CalendarFormat.client(ClientName(last, first))
         val done = BadgeFacts(done = true)
         return listOf(
             // Раньше часов работы: сетка дня начинается с 06:00.
-            t("06:30", 45, one("Гусев", "Борис"), "ПТ", "blue", "ББ", done),
-            t("08:00", 50, one("Морозов", "Даниил"), "ПТ", "blue", "ББ", done),
+            t("06:30", 45, one("Гусев", "Борис"), "ПТ", 1, "ББ", done),
+            t("08:00", 50, one("Морозов", "Даниил"), "ПТ", 1, "ББ", done),
             // Проведена без дневника: на блоке 53 dp виден один значок — точка важнее галочки.
-            t("09:00", 50, "Ковалёв / Ковалёва", "Сплит", "indigo", "ББ", done.copy(noDiary = true)),
+            t("09:00", 50, "Ковалёв / Ковалёва", "Сплит", 2, "ББ", done.copy(noDiary = true)),
             // Отмена со списанием и грудничковое на одно время: длинная — левее.
-            t("10:00", 50, one("Зайцева", "Мария"), "ПТ", "blue", "ББ", BadgeFacts(cancelled = true, charged = true)),
-            t("10:00", 30, one("Белова", "Ева"), "Груд", "teal", "ББ", done),
+            t("10:00", 50, one("Зайцева", "Мария"), "ПТ", 1, "ББ", BadgeFacts(cancelled = true, charged = true)),
+            t("10:00", 30, one("Белова", "Ева"), "Груд", 2, "ББ", done),
             // Поверх дежурства ББ 11:00–15:00: значок «слои» считается по времени.
-            t("12:00", 50, one("Никитин", "Артём"), "ПТ", "blue", "ББ", done),
-            t("13:30", 50, one("Орлова", "Ксения"), "ПТ", "blue", "ББ", done.copy(noDiary = true)),
-            t("15:00", 50, one("Соколова", "Вера"), "ПТ", "blue", "ДБ"),
-            t("16:00", 50, "Ильин / Лаптев / Носова", "Мини", "lime", "ДБ"),
+            t("12:00", 50, one("Никитин", "Артём"), "ПТ", 1, "ББ", done),
+            t("13:30", 50, one("Орлова", "Ксения"), "ПТ", 1, "ББ", done.copy(noDiary = true)),
+            t("15:00", 50, one("Соколова", "Вера"), "ПТ", 1, "ДБ"),
+            t("16:00", 50, "Ильин / Лаптев / Носова", "Мини", 3, "ДБ"),
             // Поверх запрета ДБ 17:00–18:00: штриховка видна по краям блока и на полоске, треугольник — по времени.
-            t("17:00", 50, one("Орлов", "Максим"), "ПТ", "blue", "ДБ"),
+            t("17:00", 50, one("Орлов", "Максим"), "ПТ", 1, "ДБ"),
             // Три на одно время делят ширину.
-            t("18:00", 60, CalendarFormat.title(emptyList(), "Вт, Чт 18:00 ДБ", 10, "Группа"), "Группа", "green", "ДБ"),
-            t("18:00", 50, one("Ильин", "Глеб"), "ПТ", "blue", "ББ"),
-            t("18:15", 50, one("Новикова", "Полина"), "СПТ", "pink", "ББ"),
+            t("18:00", 60, CalendarFormat.title(emptyList(), "Вт, Чт 18:00 ДБ", 10, "Группа"), "Группа", 4, "ДБ"),
+            t("18:00", 50, one("Ильин", "Глеб"), "ПТ", 1, "ББ"),
+            t("18:15", 50, one("Новикова", "Полина"), "СПТ", 3, "ББ"),
             // Пять на одно время: видны три и «+2».
-            t("20:00", 50, one("Ткаченко", "Роман"), "ПТ", "blue", "ББ"),
-            t("20:00", 50, one("Яковлева", "Софья"), "Гидро", "magenta", "ББ"),
-            t("20:00", 50, one("Захаров", "Никита"), "ПТ", "blue", "ДБ"),
-            t("20:00", 50, one("Лаптева", "Алина"), "Сплит", "indigo", "ДБ"),
-            t("20:00", 50, one("Егорова", "Лиза"), "ПТ", "blue", "ББ"),
-            t("21:30", 30, one("Носова", "Ева"), "ПТ", "blue", "ББ"),
+            t("20:00", 50, one("Ткаченко", "Роман"), "ПТ", 1, "ББ"),
+            t("20:00", 50, one("Яковлева", "Софья"), "Гидро", 3, "ББ"),
+            t("20:00", 50, one("Захаров", "Никита"), "ПТ", 1, "ДБ"),
+            t("20:00", 50, one("Лаптева", "Алина"), "Сплит", 2, "ДБ"),
+            t("20:00", 50, one("Егорова", "Лиза"), "ПТ", 1, "ББ"),
+            t("21:30", 30, one("Носова", "Ева"), "ПТ", 1, "ББ"),
         )
     }
 
@@ -105,7 +107,7 @@ internal object CalendarSample {
     fun zones(date: LocalDate): List<CalendarZone> {
         val group = group(date)
         return listOf(
-            CalendarZone.duty("${PREFIX}duty", LocalDateTime(date, LocalTime(11, 0)), 240, "Дежурство", "${PREFIX}ББ", "ББ", "slate"),
+            CalendarZone.duty("${PREFIX}duty", LocalDateTime(date, LocalTime(11, 0)), 240, "Дежурство", "${PREFIX}ББ", "ББ", "blue"),
             CalendarZone.restriction(RestrictionHit(group, LocalDateTime(date, group.startTime), LocalDateTime(date, group.endTime)), "ДБ"),
         )
     }

@@ -114,82 +114,87 @@ val DarkColors = PersonalkaColors(
 
 val LocalPersonalkaColors = staticCompositionLocalOf { LightColors }
 
-/** Три тона цвета типа: фон блока, полоса 3 dp и точка, текст блока. */
+/**
+ * Тона цвета места (шаг 1.13в): полоса 3 dp и точка, текст блока и четыре фона — по одному на оттенок типа,
+ * от светлого (1) до тёмного (4). Текст читается на любом из четырёх не хуже 5,5 : 1, соседние оттенки
+ * различаются на ΔE ≥ 5,9 (OKLab × 100) — значения посчитаны скриптом шага и проверяются тестом.
+ */
 @Immutable
-data class TypeTone(val block: Color, val stripe: Color, val text: Color)
+data class PlaceTone(val stripe: Color, val text: Color, val shades: List<Color>) {
+    /** Фон блока тренировки, у типа которой оттенок [shade]: 1 — светлый … 4 — тёмный. */
+    fun block(shade: Int): Color = shades[(shade - 1).coerceIn(0, shades.lastIndex)]
+}
 
-/** 16 цветов типов. В базе хранится key (TrainingType.color), а не ARGB: у каждой темы свои тона. */
-enum class TypeColor(val key: String, val title: String, val light: TypeTone, val dark: TypeTone) {
+/**
+ * 16 цветов мест (ТЗ 3.3, 5.3). Блок тренировки красится цветом её места, а оттенок фона выбирает тип:
+ * в синем ББ ПТ — светлая, группа — тёмная. В базе хранится key (`Location.color`), а не ARGB: у каждой темы
+ * свои тона. Полосы и название цветов — из дизайн-системы 0.2.
+ */
+enum class PlaceColor(val key: String, val title: String, val light: PlaceTone, val dark: PlaceTone) {
     RED("red", "Красный",
-        light = TypeTone(block = Color(0xFFFFDBD7), stripe = Color(0xFFE44B4A), text = Color(0xFF7C322F)),
-        dark = TypeTone(block = Color(0xFF592624), stripe = Color(0xFFF66C66), text = Color(0xFFF9CBC6))),
+        light = PlaceTone(stripe = Color(0xFFE44B4A), text = Color(0xFF542523), shades = listOf(Color(0xFFFFEBE9), Color(0xFFFED0CB), Color(0xFFF9B5AF), Color(0xFFEF9D96))),
+        dark = PlaceTone(stripe = Color(0xFFF66C66), text = Color(0xFFFFE4E1), shades = listOf(Color(0xFF3F2220), Color(0xFF582C29), Color(0xFF723632), Color(0xFF8A423D)))),
     ORANGE("orange", "Оранжевый",
-        light = TypeTone(block = Color(0xFFFFDCCB), stripe = Color(0xFFD45E00), text = Color(0xFF753B19)),
-        dark = TypeTone(block = Color(0xFF562A11), stripe = Color(0xFFE97D3F), text = Color(0xFFF3CFBD))),
+        light = PlaceTone(stripe = Color(0xFFD45E00), text = Color(0xFF522912), shades = listOf(Color(0xFFFFECE3), Color(0xFFFCD2BE), Color(0xFFF5BA9C), Color(0xFFEBA27D))),
+        dark = PlaceTone(stripe = Color(0xFFE97D3F), text = Color(0xFFFDE6DA), shades = listOf(Color(0xFF3E2417), Color(0xFF562F1A), Color(0xFF6F3A1D), Color(0xFF874723)))),
     AMBER("amber", "Янтарный",
-        light = TypeTone(block = Color(0xFFFFDFB8), stripe = Color(0xFFB47500), text = Color(0xFF6A4404)),
-        dark = TypeTone(block = Color(0xFF4F3100), stripe = Color(0xFFD58D19), text = Color(0xFFEAD3B8))),
+        light = PlaceTone(stripe = Color(0xFFB47500), text = Color(0xFF49300B), shades = listOf(Color(0xFFFCEEDD), Color(0xFFF1D8BA), Color(0xFFE6C297), Color(0xFFD9AD76))),
+        dark = PlaceTone(stripe = Color(0xFFD58D19), text = Color(0xFFF8E8D6), shades = listOf(Color(0xFF392710), Color(0xFF4F340E), Color(0xFF664105), Color(0xFF7D5002)))),
     MUSTARD("mustard", "Горчичный",
-        light = TypeTone(block = Color(0xFFF0E6B2), stripe = Color(0xFF978200), text = Color(0xFF594D09)),
-        dark = TypeTone(block = Color(0xFF423800), stripe = Color(0xFFB59E23), text = Color(0xFFDED8B9))),
+        light = PlaceTone(stripe = Color(0xFF978200), text = Color(0xFF3E350C), shades = listOf(Color(0xFFF4F1DE), Color(0xFFE4DDBB), Color(0xFFD4CA98), Color(0xFFC4B778))),
+        dark = PlaceTone(stripe = Color(0xFFB59E23), text = Color(0xFFF0ECD5), shades = listOf(Color(0xFF312B0F), Color(0xFF443A0A), Color(0xFF574A03), Color(0xFF6A5A03)))),
     LIME("lime", "Салатовый",
-        light = TypeTone(block = Color(0xFFD9EEBB), stripe = Color(0xFF6A9000), text = Color(0xFF415616)),
-        dark = TypeTone(block = Color(0xFF2E3E0D), stripe = Color(0xFF87AE39), text = Color(0xFFD0DEBD))),
+        light = PlaceTone(stripe = Color(0xFF6A9000), text = Color(0xFF2C3C0F), shades = listOf(Color(0xFFEBF4DF), Color(0xFFD3E4BC), Color(0xFFBCD39A), Color(0xFFA6C27B))),
+        dark = PlaceTone(stripe = Color(0xFF87AE39), text = Color(0xFFE6EFDA), shades = listOf(Color(0xFF262F16), Color(0xFF324018), Color(0xFF3F5219), Color(0xFF4D641E)))),
     GREEN("green", "Зелёный",
-        light = TypeTone(block = Color(0xFFC4F2CC), stripe = Color(0xFF149848), text = Color(0xFF245A32)),
-        dark = TypeTone(block = Color(0xFF154222), stripe = Color(0xFF52B76D), text = Color(0xFFC4E0C8))),
+        light = PlaceTone(stripe = Color(0xFF149848), text = Color(0xFF163F21), shades = listOf(Color(0xFFE3F6E6), Color(0xFFC4E7CA), Color(0xFFA4D8AE), Color(0xFF86C894))),
+        dark = PlaceTone(stripe = Color(0xFF52B76D), text = Color(0xFFDEF1E1), shades = listOf(Color(0xFF1A321F), Color(0xFF1F4428), Color(0xFF225731), Color(0xFF296A3B)))),
     EMERALD("emerald", "Изумрудный",
-        light = TypeTone(block = Color(0xFFC7EFDF), stripe = Color(0xFF2B9475), text = Color(0xFF295748)),
-        dark = TypeTone(block = Color(0xFF174133), stripe = Color(0xFF5BB294), text = Color(0xFFC5DED4))),
+        light = PlaceTone(stripe = Color(0xFF2B9475), text = Color(0xFF173E31), shades = listOf(Color(0xFFE3F5EE), Color(0xFFC4E5D8), Color(0xFFA5D5C3), Color(0xFF88C5AE))),
+        dark = PlaceTone(stripe = Color(0xFF5BB294), text = Color(0xFFDEF0E8), shades = listOf(Color(0xFF1A3128), Color(0xFF1E4336), Color(0xFF215544), Color(0xFF286853)))),
     TEAL("teal", "Бирюзовый",
-        light = TypeTone(block = Color(0xFFBAF0F4), stripe = Color(0xFF00929A), text = Color(0xFF0E585D)),
-        dark = TypeTone(block = Color(0xFF004145), stripe = Color(0xFF2CB2BB), text = Color(0xFFBEDFE1))),
+        light = PlaceTone(stripe = Color(0xFF00929A), text = Color(0xFF103D40), shades = listOf(Color(0xFFE1F5F6), Color(0xFFC1E4E7), Color(0xFF9FD4D8), Color(0xFF80C3C8))),
+        dark = PlaceTone(stripe = Color(0xFF2CB2BB), text = Color(0xFFD9F1F2), shades = listOf(Color(0xFF103133), Color(0xFF0B4347), Color(0xFF00555A), Color(0xFF07686D)))),
     SKY("sky", "Голубой",
-        light = TypeTone(block = Color(0xFFC8EAFE), stripe = Color(0xFF3A8BB4), text = Color(0xFF2C5267)),
-        dark = TypeTone(block = Color(0xFF1B3C4E), stripe = Color(0xFF62A8CE), text = Color(0xFFC6DBE7))),
+        light = PlaceTone(stripe = Color(0xFF3A8BB4), text = Color(0xFF1B394A), shades = listOf(Color(0xFFE4F3FC), Color(0xFFC6E1F1), Color(0xFFA8CFE7), Color(0xFF8CBEDA))),
+        dark = PlaceTone(stripe = Color(0xFF62A8CE), text = Color(0xFFDEEEF7), shades = listOf(Color(0xFF1B2E39), Color(0xFF213E4E), Color(0xFF265065), Color(0xFF2F617C)))),
     BLUE("blue", "Синий",
-        light = TypeTone(block = Color(0xFFD3E7FF), stripe = Color(0xFF2D84E0), text = Color(0xFF264F7C)),
-        dark = TypeTone(block = Color(0xFF18395D), stripe = Color(0xFF57A1F6), text = Color(0xFFC3DAF5))),
+        light = PlaceTone(stripe = Color(0xFF2D84E0), text = Color(0xFF193658), shades = listOf(Color(0xFFE7F1FE), Color(0xFFC5DFFE), Color(0xFFA4CDFC), Color(0xFF88BAF5))),
+        dark = PlaceTone(stripe = Color(0xFF57A1F6), text = Color(0xFFDFEDFE), shades = listOf(Color(0xFF1B2C41), Color(0xFF213C5C), Color(0xFF264C77), Color(0xFF2E5C91)))),
     INDIGO("indigo", "Индиго",
-        light = TypeTone(block = Color(0xFFDEE3FF), stripe = Color(0xFF7377E1), text = Color(0xFF43477B)),
-        dark = TypeTone(block = Color(0xFF30335E), stripe = Color(0xFF8C93F4), text = Color(0xFFD1D5F5))),
+        light = PlaceTone(stripe = Color(0xFF7377E1), text = Color(0xFF2E3159), shades = listOf(Color(0xFFEDEFFE), Color(0xFFD4DAFF), Color(0xFFBDC4FD), Color(0xFFA8AFF5))),
+        dark = PlaceTone(stripe = Color(0xFF8C93F4), text = Color(0xFFE7EAFE), shades = listOf(Color(0xFF262941), Color(0xFF33365C), Color(0xFF414478), Color(0xFF4F5392)))),
     VIOLET("violet", "Фиолетовый",
-        light = TypeTone(block = Color(0xFFE9DEFF), stripe = Color(0xFF9B66E6), text = Color(0xFF563E7C)),
-        dark = TypeTone(block = Color(0xFF3E2E59), stripe = Color(0xFFAF82F6), text = Color(0xFFDCD0F6))),
+        light = PlaceTone(stripe = Color(0xFF9B66E6), text = Color(0xFF3B2C54), shades = listOf(Color(0xFFF2EDFE), Color(0xFFE2D5FC), Color(0xFFD1BEF6), Color(0xFFC0A7ED))),
+        dark = PlaceTone(stripe = Color(0xFFAF82F6), text = Color(0xFFEEE7FD), shades = listOf(Color(0xFF2F263E), Color(0xFF403257), Color(0xFF523F71), Color(0xFF644C8A)))),
     MAGENTA("magenta", "Пурпурный",
-        light = TypeTone(block = Color(0xFFFDD5FF), stripe = Color(0xFFBB59C1), text = Color(0xFF67386A)),
-        dark = TypeTone(block = Color(0xFF4B294D), stripe = Color(0xFFD077D5), text = Color(0xFFE9CDEA))),
+        light = PlaceTone(stripe = Color(0xFFBB59C1), text = Color(0xFF472849), shades = listOf(Color(0xFFFBEAFB), Color(0xFFF0D0F1), Color(0xFFE4B7E6), Color(0xFFD7A0D9))),
+        dark = PlaceTone(stripe = Color(0xFFD077D5), text = Color(0xFFF6E5F6), shades = listOf(Color(0xFF372338), Color(0xFF4C2E4D), Color(0xFF613963), Color(0xFF774579)))),
     PINK("pink", "Розовый",
-        light = TypeTone(block = Color(0xFFFFD9E6), stripe = Color(0xFFCF588D), text = Color(0xFF71374F)),
-        dark = TypeTone(block = Color(0xFF55263A), stripe = Color(0xFFE275A3), text = Color(0xFFF1CCD9))),
+        light = PlaceTone(stripe = Color(0xFFCF588D), text = Color(0xFF512537), shades = listOf(Color(0xFFFEEAF1), Color(0xFFFBCEDE), Color(0xFFF4B4CC), Color(0xFFE99BB9))),
+        dark = PlaceTone(stripe = Color(0xFFE275A3), text = Color(0xFFFDE3EC), shades = listOf(Color(0xFF3D222C), Color(0xFF552B3C), Color(0xFF6D354D), Color(0xFF85415E)))),
     BROWN("brown", "Коричневый",
-        light = TypeTone(block = Color(0xFFF5E0D3), stripe = Color(0xFFA2795E), text = Color(0xFF5D483A)),
-        dark = TypeTone(block = Color(0xFF453428), stripe = Color(0xFFBC957C), text = Color(0xFFE2D5CC))),
+        light = PlaceTone(stripe = Color(0xFFA2795E), text = Color(0xFF423127), shades = listOf(Color(0xFFF7EEE8), Color(0xFFEAD9CE), Color(0xFFDCC4B4), Color(0xFFCCAF9C))),
+        dark = PlaceTone(stripe = Color(0xFFBC957C), text = Color(0xFFF3E9E3), shades = listOf(Color(0xFF342922), Color(0xFF47372C), Color(0xFF5B4537), Color(0xFF6F5443)))),
     SLATE("slate", "Сланцевый",
-        light = TypeTone(block = Color(0xFFDDE6EF), stripe = Color(0xFF738497), text = Color(0xFF454E57)),
-        dark = TypeTone(block = Color(0xFF313941), stripe = Color(0xFF90A0B2), text = Color(0xFFD3D8DE))),
+        light = PlaceTone(stripe = Color(0xFF738497), text = Color(0xFF2F363E), shades = listOf(Color(0xFFEDF1F5), Color(0xFFD6DDE5), Color(0xFFC0CAD5), Color(0xFFABB7C5))),
+        dark = PlaceTone(stripe = Color(0xFF90A0B2), text = Color(0xFFE8ECF0), shades = listOf(Color(0xFF272C31), Color(0xFF353B43), Color(0xFF424B56), Color(0xFF515C69)))),
     ;
 
-    fun tone(dark: Boolean): TypeTone = if (dark) this.dark else light
+    fun tone(dark: Boolean): PlaceTone = if (dark) this.dark else light
 
     companion object {
-        fun of(key: String?): TypeColor = entries.firstOrNull { it.key == key } ?: SLATE
+        fun of(key: String?): PlaceColor = entries.firstOrNull { it.key == key } ?: SLATE
     }
 }
 
-/** Заливка дежурства: полоса типа на 20 % поверх фона сетки (ТЗ 5.3). */
-fun dutyFill(type: TypeColor, colors: PersonalkaColors): Color =
-    lerp(colors.surface, type.tone(colors.isDark).stripe, 0.20f)
+/** Оттенок цвета места, каким будет блок в календаре: фон блока и полоса (шаг 1.13в). */
+@Immutable
+data class Shade(val fill: Color, val ring: Color)
 
-/** Цвета типов по умолчанию для первого запуска (ТЗ 3.3). */
-val DefaultTypeColors = mapOf(
-    "ПТ" to TypeColor.BLUE,
-    "Сплит" to TypeColor.INDIGO,
-    "Мини-группа" to TypeColor.LIME,
-    "Группа" to TypeColor.GREEN,
-    "СПТ" to TypeColor.PINK,
-    "Дежурство" to TypeColor.SLATE,
-    "Грудничковое" to TypeColor.TEAL,
-    "Гидрореабилитация" to TypeColor.MAGENTA,
-    "Кинезио" to TypeColor.BROWN,
-)
+/** Блок типа с оттенком [shade] в месте этого цвета: для точек на чипах и строках типов. */
+fun PlaceColor.shade(dark: Boolean, shade: Int): Shade = tone(dark).let { Shade(it.block(shade), it.stripe) }
+
+/** Заливка дежурства: полоса цвета его места на 20 % поверх фона сетки (ТЗ 5.3). */
+fun dutyFill(place: PlaceColor, colors: PersonalkaColors): Color =
+    lerp(colors.surface, place.tone(colors.isDark).stripe, 0.20f)

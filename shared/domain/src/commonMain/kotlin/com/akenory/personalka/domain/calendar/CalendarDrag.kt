@@ -42,6 +42,9 @@ object CalendarDrag {
     /** Скорость автопрокрутки, когда палец у самого края: за секунду — два часа при 64 dp. */
     const val SCROLL_MAX_DP_PER_SECOND: Float = 480f
 
+    /** Свайп по строке дней короче этого — не листание неделей: палец мог дрогнуть при нажатии на день. */
+    const val WEEK_SWIPE_DP: Float = 48f
+
     /** Шаг перетаскивания по умолчанию (`drag_step_minutes`, 3.2); в настройках — 5, 10, 15 или 30. */
     const val STEP_DEFAULT: Int = 15
 
@@ -90,6 +93,16 @@ object CalendarDrag {
     }
 
     /**
+     * Свайп по строке дней над сеткой (пн–вс в «Дне», «вт 20» в «Нескольких днях»): на сколько дней сдвинуть.
+     * Палец влево на [dx] — неделя вперёд (+7), вправо — назад (−7): тот же день недели, как в Google Календаре.
+     */
+    fun weekSwipe(dx: Float): Int = when {
+        dx <= -WEEK_SWIPE_DP -> DAYS_IN_WEEK
+        dx >= WEEK_SWIPE_DP -> -DAYS_IN_WEEK
+        else -> 0
+    }
+
+    /**
      * Можно ли поставить тренировку на [start]. Отменённая не переносится: сначала её возвращают. Проведённая
      * или с отметками «пришёл» ([marked]) не уходит туда, где её ещё нельзя было бы отметить — позже, чем
      * через 15 минут от [now] (4.1): иначе в будущем стояла бы проведённая тренировка.
@@ -100,6 +113,8 @@ object CalendarDrag {
             ClubTime.plusMinutes(start, -StatusRules.MARK_BEFORE_START_MINUTES) > now -> MoveProblem.MARKED_IN_FUTURE
         else -> null
     }
+
+    private const val DAYS_IN_WEEK = 7
 
     private fun safeStep(step: Int): Int = if (step in 1..60) step else STEP_DEFAULT
 }

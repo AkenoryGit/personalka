@@ -26,8 +26,11 @@ class ReferenceRulesTest {
             listOf("ПТ", "Сплит", "Мини-группа", "Группа", "СПТ", "Дежурство", "Грудничковое", "Гидрореабилитация", "Кинезио"),
             types.map { it.name },
         )
-        assertEquals(types.size, types.map { it.color }.toSet().size, "У каждого типа свой цвет")
-        assertTrue(types.all { it.color in ReferenceRules.COLORS })
+        // Цвет — у места, у каждого свой; у типа — оттенок 1–4 (шаг 1.13в).
+        assertEquals(listOf("blue", "pink", "brown"), ReferenceRules.defaultPlaces.map { it.color })
+        assertTrue(ReferenceRules.defaultPlaces.all { it.color in ReferenceRules.COLORS })
+        assertTrue(types.all { it.shade in ReferenceRules.SHADES })
+        assertEquals(listOf(1, 2, 3, 4), listOf("ПТ", "Сплит", "Мини-группа", "Группа").map { type(it).shade })
         assertTrue(types.all { ReferenceRules.typeProblems(it, types - it).isEmpty() }, "Заготовки проходят свою проверку")
         assertTrue(ReferenceRules.defaultPlaces.all { ReferenceRules.placeProblems(it, ReferenceRules.defaultPlaces - it).isEmpty() })
     }
@@ -65,15 +68,15 @@ class ReferenceRulesTest {
     }
 
     @Test
-    fun kindChangeFillsPresetButKeepsNameAndColor() {
-        val aqua = ReferenceRules.newType(usedColors = types.map { it.color })
+    fun kindChangeFillsPresetButKeepsNameAndShade() {
+        val aqua = ReferenceRules.newType(usedShades = listOf(1, 2))
             .copy(name = "Аквааэробика", shortName = "Аква", durationMin = 45)
         assertEquals(TrainingKind.PERSONAL, aqua.kind)
 
         val group = aqua.withKind(TrainingKind.GROUP)
         assertEquals("Аквааэробика", group.name)
         assertEquals("Аква", group.shortName)
-        assertEquals(aqua.color, group.color)
+        assertEquals(3, group.shade)
         assertEquals(50, group.durationMin, "Длительность — как у группы")
         assertNull(group.maxClients)
         assertEquals(PayUnit.PER_CLIENT, group.payUnit)
@@ -89,13 +92,33 @@ class ReferenceRulesTest {
     }
 
     @Test
-    fun newTypeTakesFirstFreeColor() {
-        assertEquals("red", ReferenceRules.newType(types.map { it.color }).color)
-        val allButSky = ReferenceRules.COLORS - "sky"
-        assertEquals("sky", ReferenceRules.newType(allButSky).color)
-        assertEquals("slate", ReferenceRules.newType(ReferenceRules.COLORS).color, "Все заняты — повтор разрешён")
-        assertEquals(type("Группа"), ReferenceRules.sameColor("green", types))
-        assertNull(ReferenceRules.sameColor("red", types))
+    fun newTypeTakesFirstFreeShadeAndNewPlaceFirstFreeColor() {
+        assertEquals(3, ReferenceRules.newType(listOf(1, 2, 4)).shade)
+        assertEquals(1, ReferenceRules.newType(types.map { it.shade }).shade, "Все заняты — светлый")
+
+        val places = ReferenceRules.defaultPlaces
+        assertEquals("red", ReferenceRules.newPlace(places.map { it.color }).color)
+        assertEquals("sky", ReferenceRules.newPlace(ReferenceRules.COLORS - "sky").color)
+        assertEquals("slate", ReferenceRules.newPlace(ReferenceRules.COLORS).color, "Все заняты — повтор разрешён")
+        assertEquals(places[1], ReferenceRules.sameColor("pink", places))
+        assertNull(ReferenceRules.sameColor("red", places))
+    }
+
+    @Test
+    fun shadesAndPlaceColorsForDataWithoutThem() {
+        // Переход базы на версию 2: свои типы — по имени из первого запуска, иначе по виду.
+        assertEquals(1, ReferenceRules.defaultShade("ПТ", TrainingKind.PERSONAL))
+        assertEquals(3, ReferenceRules.defaultShade(" мини-группа ", TrainingKind.GROUP))
+        assertEquals(2, ReferenceRules.defaultShade("Кинезио", TrainingKind.PERSONAL))
+        assertEquals(4, ReferenceRules.defaultShade("Сб 9:00", TrainingKind.GROUP))
+        assertEquals(2, ReferenceRules.defaultShade("Тройка", TrainingKind.OTHER))
+        assertEquals(3, ReferenceRules.defaultShade("Старт", TrainingKind.SPT))
+
+        // ББ, ДБ, Зал — синий, розовый, коричневый; своё место — первый свободный, второе своё — следующий.
+        assertEquals(
+            listOf("pink", "blue", "red", "brown", "orange"),
+            ReferenceRules.defaultPlaceColors(listOf("ДБ", "ББ", "Ул", "зал", "ОВ")),
+        )
     }
 
     @Test
@@ -172,6 +195,16 @@ class ReferenceRulesTest {
 
         assertEquals(s("90_мин"), DurationFormat.minutes(90), "У типа длительность минутами, а не «1 ч 30 мин»")
         assertEquals(s("3_места · 9_типов"), TypeFormat.placesAndTypes(3, 9))
+        // Оттенки в конструкторе типа (шаг 1.13в).
+        assertEquals(listOf("Светлый", "Средний", "Яркий", "Тёмный"), ReferenceRules.SHADES.map(TypeFormat::shade))
+        assertEquals(listOf("ПТ", "Сплит", "Мини", "Группа"), TypeFormat.shadeSamples(types))
+        assertEquals(listOf("ПТ", "Средний", "Яркий", "Тёмный"), TypeFormat.shadeSamples(types.take(1) + type("Дежурство")))
+        assertNull(TypeFormat.sameShade(emptyList()))
+        assertEquals("Такой же оттенок у типа «Группа»", TypeFormat.sameShade(listOf("Группа")))
+        assertEquals(
+            "Такой же оттенок у типов «Сплит», «Грудничковое» и «Кинезио»",
+            TypeFormat.sameShade(listOf("Сплит", "Грудничковое", "Кинезио")),
+        )
         assertEquals(s("1_место · 1_тип"), TypeFormat.placesAndTypes(1, 1))
         assertEquals(
             "Длительность, оплата и дневник заполнены как у группы — ниже их можно поправить.",

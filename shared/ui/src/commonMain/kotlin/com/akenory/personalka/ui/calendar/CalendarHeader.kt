@@ -2,6 +2,7 @@ package com.akenory.personalka.ui.calendar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.calendar.CalendarPlace
+import com.akenory.personalka.domain.calendar.CalendarDrag
 import com.akenory.personalka.domain.calendar.CalendarView
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
@@ -76,6 +79,26 @@ internal const val SAMPLE_DAY = "Пример дня"
 
 /** День в строке над колонками «Нескольких дней». */
 fun dayHeaderTag(date: LocalDate) = "day-header-$date"
+
+/** Строка дней над сеткой: пн–вс в «Дне», «вт 20» над колонками «Нескольких дней». */
+const val DAYS_ROW_TAG = "calendar-days-row"
+
+/**
+ * Свайп по строке дней листает неделями (ТЗ 5.3): влево — тот же день недели неделей позже, вправо — раньше.
+ * [onDays] получает +7 или −7. Короткое движение — не свайп: нажатие на день в строке работает как раньше.
+ */
+internal fun Modifier.weekSwipe(onDays: (Int) -> Unit): Modifier = pointerInput(Unit) {
+    var dx = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { dx = 0f },
+        onDragEnd = { CalendarDrag.weekSwipe(dx / density).takeIf { it != 0 }?.let(onDays) },
+        onDragCancel = { dx = 0f },
+        onHorizontalDrag = { change, amount ->
+            change.consume()
+            dx += amount
+        },
+    )
+}
 
 /** Мест больше — на разложенном вместо чипов кнопка со списком, как на сложенном: ряд чипов не помещается. */
 private const val PLACE_CHIPS_MAX = 4
@@ -206,11 +229,18 @@ private fun MenuToggle(text: String, checked: Boolean, onClick: () -> Unit) {
  * при раскладке по положению листания, поэтому свайп ничего не пересобирает. Нажатие открывает день.
  */
 @Composable
-internal fun DaysHeader(pager: PagerState, columns: Int, today: LocalDate, wide: Boolean, onOpen: (LocalDate) -> Unit) {
+internal fun DaysHeader(
+    pager: PagerState,
+    columns: Int,
+    today: LocalDate,
+    wide: Boolean,
+    onOpen: (LocalDate) -> Unit,
+    onWeek: (Int) -> Unit,
+) {
     // Подписи — с запасом в ширину экрана с каждой стороны: бросок листает до [columns] дней за раз.
     val first = pager.currentPage
     val pages = (first - columns) until (first + 2 * columns)
-    Row(Modifier.fillMaxWidth().height(Dimens.topBar)) {
+    Row(Modifier.fillMaxWidth().height(Dimens.topBar).weekSwipe(onWeek).testTag(DAYS_ROW_TAG)) {
         Spacer(Modifier.width(Dimens.timeColumn))
         Layout(
             content = { pages.forEach { page -> key(page) { DayLabel(dateOfPage(page), today, wide, onOpen) } } },

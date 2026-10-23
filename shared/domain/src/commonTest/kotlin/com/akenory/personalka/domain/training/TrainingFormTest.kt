@@ -15,13 +15,13 @@ import kotlin.test.assertTrue
 class TrainingFormTest {
     private val now = LocalDateTime(2026, 10, 20, 15, 40)
     private val today = now.date
-    private val pt = FormType("pt", "ПТ", TrainingKind.PERSONAL, "blue", 50, 1)
-    private val split = FormType("split", "Сплит", TrainingKind.SPLIT, "indigo", 50, 2)
-    private val mini = FormType("mini", "Мини-группа", TrainingKind.GROUP, "lime", 50, null)
-    private val group = FormType("group", "Группа", TrainingKind.GROUP, "green", 60, null)
-    private val spt = FormType("spt", "СПТ", TrainingKind.SPT, "pink", 50, 1)
-    private val baby = FormType("baby", "Грудничковое", TrainingKind.PERSONAL, "teal", 30, 1)
-    private val three = FormType("three", "Тройка", TrainingKind.OTHER, "brown", 50, 3)
+    private val pt = FormType("pt", "ПТ", TrainingKind.PERSONAL, 1, 50, 1)
+    private val split = FormType("split", "Сплит", TrainingKind.SPLIT, 2, 50, 2)
+    private val mini = FormType("mini", "Мини-группа", TrainingKind.GROUP, 3, 50, null)
+    private val group = FormType("group", "Группа", TrainingKind.GROUP, 4, 60, null)
+    private val spt = FormType("spt", "СПТ", TrainingKind.SPT, 3, 50, 1)
+    private val baby = FormType("baby", "Грудничковое", TrainingKind.PERSONAL, 2, 30, 1)
+    private val three = FormType("three", "Тройка", TrainingKind.OTHER, 2, 50, 3)
     private val open = LocalTime(7, 0)
     private val close = LocalTime(23, 0)
 

@@ -9,6 +9,7 @@ import com.akenory.personalka.domain.model.CoachCategory
 import com.akenory.personalka.domain.model.PayUnit
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.reference.ReferenceRules
 import kotlinx.datetime.LocalDate
 
 // ТЗ 3.3. Справочники и ставки. Ставки — копейки (920 ₽ = 92 000).
@@ -24,6 +25,11 @@ data class LocationEntity(
     val shortName: String,
     val sort: Int = 0,
     val archived: Boolean = false,
+    /**
+     * Ключ цвета из палитры 16 цветов (`blue`, `pink`…), не ARGB: у каждой темы свои тона. Тренировки места
+     * красятся этим цветом, оттенок выбирает тип (версия 2 базы, шаг 1.13в).
+     */
+    val color: String = ReferenceRules.FALLBACK_COLOR,
 )
 
 /** Тип тренировки: «Персональная», «ПТ». */
@@ -34,8 +40,11 @@ data class TrainingTypeEntity(
     val name: String,
     val shortName: String,
     val kind: TrainingKind,
-    /** Ключ цвета из палитры 16 цветов (`blue`, `green`…), не ARGB: у каждой темы свои тона. */
-    val color: String,
+    /**
+     * Оттенок цвета места, которым красится тренировка этого типа: 1 — светлый … 4 — тёмный. До версии 2 базы
+     * у типа был свой цвет (`color`); с шага 1.13в цвет — у места.
+     */
+    val shade: Int = ReferenceRules.SHADE_LIGHT,
     val defaultDurationMin: Int = 50,
     /** 1 для PERSONAL и SPT, 2 для SPLIT, пусто для GROUP, 0 для DUTY. */
     val maxClients: Int?,

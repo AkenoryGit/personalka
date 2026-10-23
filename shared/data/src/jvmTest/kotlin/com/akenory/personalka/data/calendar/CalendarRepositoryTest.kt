@@ -129,7 +129,11 @@ class CalendarRepositoryTest {
         val pt = list.first()
         assertEquals("ПТ", pt.typeShort)
         assertEquals("ББ", pt.placeShort)
+        // Цвет — у места (ББ синий), оттенок — у типа (ПТ светлая, сплит — вторая, шаг 1.13в).
         assertEquals("blue", pt.color)
+        assertEquals(1, pt.shade)
+        assertEquals(2, list[1].shade)
+        assertEquals("pink", list[2].color)
         assertEquals(50, pt.durationMin)
         assertFalse(pt.cancelled)
     }
@@ -236,7 +240,7 @@ class CalendarRepositoryTest {
         assertEquals("Дежурство", duty.title)
         assertEquals("ББ 11:00–15:00 — дежурство", duty.text)
         assertEquals("Дежурство · ББ", duty.label)
-        assertEquals("slate", duty.color)
+        assertEquals("blue", duty.color, "Дежурство — цвета своего места")
         // Место зоны — для фильтра мест в шапке (шаг 1.12).
         assertEquals(placeId("ББ"), duty.placeId)
 

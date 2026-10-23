@@ -33,6 +33,7 @@ import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.restriction.BatchConflicts
 import com.akenory.personalka.domain.restriction.Placement
 import com.akenory.personalka.domain.restriction.Restriction
@@ -66,8 +67,8 @@ data class FormClient(val id: String, val name: ClientName) {
 /** Группа в форме: её тип и место подставляются, когда группу выбрали. */
 data class FormGroup(val id: String, val name: String, val typeId: String, val locationId: String)
 
-/** Место в форме: «ББ» на чипе. */
-data class FormPlace(val id: String, val shortName: String, val name: String)
+/** Место в форме: «ББ» на чипе и цвет места — точки типов показывают его оттенками (шаг 1.13в). */
+data class FormPlace(val id: String, val shortName: String, val name: String, val color: String = ReferenceRules.FALLBACK_COLOR)
 
 /**
  * Всё, что показывает форма тренировки (5.5): типы без дежурств (последний использованный первым), места,
@@ -149,7 +150,7 @@ class TrainingRepository internal constructor(
         ) { types, places, people, groups, relations ->
             Lists(
                 types = types.filter { !it.archived && it.kind != TrainingKind.DUTY }.map { it.toForm() },
-                places = places.filter { !it.archived }.map { FormPlace(it.id, it.shortName, it.name) },
+                places = places.filter { !it.archived }.map { FormPlace(it.id, it.shortName, it.name, it.color) },
                 clients = people.map { FormClient(it.id, ClientName(it.lastName, it.firstName, it.middleName)) }.sortedBy { ClientRules.sortKey(it.name) },
                 groups = groups.map { FormGroup(it.id, it.name, it.typeId, it.locationId) }.sortedBy { it.name },
                 relatives = relations.flatMap { listOf(it.clientAId to it.clientBId, it.clientBId to it.clientAId) }
@@ -546,7 +547,7 @@ class TrainingRepository internal constructor(
     }
 }
 
-private fun TrainingTypeEntity.toForm(): FormType = FormType(id, name, kind, color, defaultDurationMin, maxClients)
+private fun TrainingTypeEntity.toForm(): FormType = FormType(id, name, kind, shade, defaultDurationMin, maxClients)
 
 private fun List<ParticipationEntity>.ordered(): List<ParticipationEntity> = sortedWith(compareBy({ it.sync.createdAt }, { it.id }))
 

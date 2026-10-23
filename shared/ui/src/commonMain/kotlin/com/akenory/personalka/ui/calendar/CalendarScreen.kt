@@ -1,5 +1,10 @@
 package com.akenory.personalka.ui.calendar
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -39,6 +45,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.calendar.CalendarPlace
 import com.akenory.personalka.data.calendar.CalendarRepository
@@ -60,6 +67,7 @@ import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.reference.TypePresets
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.clients.MenuAction
 import com.akenory.personalka.ui.components.MessageState
@@ -70,9 +78,11 @@ import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.training.ConflictPanel
 import com.akenory.personalka.ui.training.ScopePanel
 import com.akenory.personalka.ui.theme.Dimens
+import com.akenory.personalka.ui.theme.Motion
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -157,6 +167,10 @@ fun CalendarScreen(
     val day = dateOfPage(pager.currentPage)
     val work by remember(calendar) { calendar.workHours }.collectAsState(initial = WorkHours())
     val step by remember(calendar) { calendar.dragStep }.collectAsState(initial = CalendarDrag.STEP_DEFAULT)
+    // Пунктирный блок новой тренировки — такой длины, какую подставит форма: у типа, который в ней первый.
+    val newDuration by remember(calendar) {
+        calendar.forms.form().map { it.types.firstOrNull()?.defaultDurationMin ?: TypePresets.DEFAULT_DURATION }
+    }.collectAsState(initial = TypePresets.DEFAULT_DURATION)
 
     // Вид — свой у сложенного и разложенного экрана, на этом телефоне; выбор пишется сразу.
     val weekViewDays by remember(calendar) { calendar.weekViewDays }.collectAsState(initial = CalendarViews.DAY_COUNTS.first())
@@ -274,14 +288,25 @@ fun CalendarScreen(
                 onSample = onSample,
                 onPlace = { placeId = it?.id },
             )
+            // Свайп по строке дней — неделя вперёд или назад, тот же день недели.
+            val onWeek: (Int) -> Unit = { days ->
+                ui.launch { pager.animateScrollToPage((pager.currentPage + days).coerceIn(0, PAGE_COUNT - 1)) }
+            }
             if (view == CalendarView.Day) {
-                WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } })
+                WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } }, onWeek = onWeek)
             } else {
                 // Нажатие на день над колонкой — этот день в виде «День».
-                DaysHeader(pager, view.columns, today, wide, onOpen = { date ->
-                    select(CalendarView.Day)
-                    ui.launch { pager.scrollToPage(pageOf(date)) }
-                })
+                DaysHeader(
+                    pager = pager,
+                    columns = view.columns,
+                    today = today,
+                    wide = wide,
+                    onOpen = { date ->
+                        select(CalendarView.Day)
+                        ui.launch { pager.scrollToPage(pageOf(date)) }
+                    },
+                    onWeek = onWeek,
+                )
             }
             DayGrid(
                 pager = pager,
@@ -290,6 +315,7 @@ fun CalendarScreen(
                 now = now,
                 step = step,
                 columns = view.columns,
+                newDuration = newDuration,
                 itemsOf = itemsOf,
                 zonesOf = zonesOf,
                 menuId = menuId,
@@ -442,11 +468,29 @@ private fun viewKey(wide: Boolean): String = if (wide) DevicePrefs.CALENDAR_VIEW
 private fun inPlace(place: CalendarPlace?, placeId: String, placeShort: String): Boolean =
     place == null || placeId == place.id || (CalendarSample.isSamplePlace(placeId) && placeShort == place.shortName)
 
-/** Строка недели пн–вс под шапкой (ТЗ 5.3): нажатие открывает день, сегодняшнее число — в оранжевом кружке. */
+/**
+ * Строка недели пн–вс под шапкой (ТЗ 5.3): нажатие открывает день, сегодняшнее число — в оранжевом кружке.
+ * Свайп по строке — неделя вперёд или назад ([onWeek]); новая неделя въезжает с той стороны, куда листают.
+ */
 @Composable
-private fun WeekStrip(day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit) {
+private fun WeekStrip(day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit, onWeek: (Int) -> Unit) {
+    AnimatedContent(
+        targetState = DateFormat.weekStart(day),
+        modifier = Modifier.fillMaxWidth().clipToBounds().weekSwipe(onWeek).testTag(DAYS_ROW_TAG),
+        transitionSpec = {
+            val forward = targetState > initialState
+            val slide = tween<IntOffset>(Motion.MEDIUM)
+            (slideInHorizontally(slide) { if (forward) it else -it } togetherWith slideOutHorizontally(slide) { if (forward) -it else it })
+        },
+        label = "week",
+    ) { monday ->
+        WeekRow(monday, day, today, onSelect)
+    }
+}
+
+@Composable
+private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit) {
     val colors = PersonalkaTheme.colors
-    val monday = DateFormat.weekStart(day)
     Row(Modifier.fillMaxWidth().height(Dimens.row).padding(horizontal = Dimens.space2)) {
         repeat(7) { i ->
             val date = monday.plus(i, DateTimeUnit.DAY)

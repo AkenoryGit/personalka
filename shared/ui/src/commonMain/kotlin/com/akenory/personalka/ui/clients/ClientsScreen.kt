@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -173,8 +175,9 @@ fun ClientsScreen(
     val scroll = rememberLazyListState()
     val screens = rememberSaveableStateHolder()
     val rows by remember(clients, now) { clients.rows(now) }.collectAsState(initial = null)
-    val loaded = rows ?: return
     val stack = shell.stack(Section.CLIENTS)
+    screens.ForgetClosed(stack)
+    val loaded = rows ?: return
     val route = stack.lastOrNull()
     val top = route?.let { ClientRoute.parse(it) }
     val nav = ClientNav(shell, wide)
@@ -213,6 +216,22 @@ fun ClientsScreen(
             Box(Modifier.weight(1f).fillMaxHeight().padding(bottom = 56.dp), contentAlignment = Alignment.Center) {
                 EmptyState(icon = PIcons.Group, title = "Откройте клиента", text = "Его карточка появится здесь.")
             }
+        }
+    }
+}
+
+/**
+ * Экран, ушедший из стопки, забывает введённое: после «Сохранить» следующий «Новый клиент» открывается пустым,
+ * а брошенная «Назад» правка не возвращается при следующем «Изменить». Пока экран в стопке, его состояние
+ * хранится: «Назад» из карточки родственника возвращает прежнюю карточку на той же вкладке.
+ */
+@Composable
+private fun SaveableStateHolder.ForgetClosed(stack: List<String>) {
+    val before = remember { arrayOf(stack) }
+    SideEffect {
+        if (before[0] != stack) {
+            (before[0] - stack.toSet()).forEach { removeState(it) }
+            before[0] = stack
         }
     }
 }

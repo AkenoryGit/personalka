@@ -92,7 +92,7 @@ class SettingsRepository(private val db: PersonalkaDatabase, private val clock: 
         return place.id
     }
 
-    /** Название и короткое имя места, архив. */
+    /** Название, короткое имя и цвет места, архив. */
     suspend fun updatePlace(id: String, draft: PlaceDraft, archived: Boolean) {
         val place = reference.location(id) ?: return
         reference.upsertLocation(
@@ -100,6 +100,7 @@ class SettingsRepository(private val db: PersonalkaDatabase, private val clock: 
                 sync = place.sync.touched(clock()),
                 name = draft.name.trim(),
                 shortName = draft.shortName.trim(),
+                color = draft.color,
                 archived = archived,
             ),
         )
@@ -152,6 +153,7 @@ class SettingsRepository(private val db: PersonalkaDatabase, private val clock: 
         name = draft.name.trim(),
         shortName = draft.shortName.trim(),
         sort = sort,
+        color = draft.color,
     )
 
     private fun newType(id: String, coachId: String, now: Long, draft: TypeDraft, fallback: String?) =
@@ -163,7 +165,7 @@ fun TrainingTypeEntity.draft(): TypeDraft = TypeDraft(
     name = name,
     shortName = shortName,
     kind = kind,
-    color = color,
+    shade = shade,
     durationMin = defaultDurationMin,
     maxClients = maxClients,
     payUnit = payUnit,
@@ -175,7 +177,7 @@ fun TrainingTypeEntity.draft(): TypeDraft = TypeDraft(
 )
 
 /** Место из базы — в форму места. */
-fun LocationEntity.draft(): PlaceDraft = PlaceDraft(name = name, shortName = shortName)
+fun LocationEntity.draft(): PlaceDraft = PlaceDraft(name = name, shortName = shortName, color = color)
 
 private fun TypeDraft.toEntity(id: String, sync: SyncFields, fallback: String?) = TrainingTypeEntity(
     id = id,
@@ -183,7 +185,7 @@ private fun TypeDraft.toEntity(id: String, sync: SyncFields, fallback: String?) 
     name = name.trim(),
     shortName = shortName.trim(),
     kind = kind,
-    color = color,
+    shade = shade,
     defaultDurationMin = durationMin,
     maxClients = maxClients,
     payUnit = payUnit,

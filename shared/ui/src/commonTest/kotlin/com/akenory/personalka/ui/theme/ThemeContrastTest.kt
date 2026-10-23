@@ -58,24 +58,37 @@ class ThemeContrastTest {
     }
 
     @Test
-    fun allSixteenTypeColorsWorkInBothThemes() {
-        assertEquals(16, TypeColor.entries.size)
+    fun allSixteenPlaceColorsWorkInBothThemesAndEveryShade() {
+        assertEquals(16, PlaceColor.entries.size)
         for ((name, c) in themes) {
-            for (type in TypeColor.entries) {
-                val tone = type.tone(c.isDark)
-                assertAtLeast(4.5, tone.text, tone.block, "$name тема, ${type.key}: текст блока")
-                assertAtLeast(3.0, tone.stripe, c.surface, "$name тема, ${type.key}: полоса на сетке")
-                assertAtLeast(4.5, tone.text, dutyFill(type, c), "$name тема, ${type.key}: текст на дежурстве")
+            for (place in PlaceColor.entries) {
+                val tone = place.tone(c.isDark)
+                assertEquals(4, tone.shades.size, "${place.key}: четыре оттенка")
+                tone.shades.forEachIndexed { i, fill ->
+                    assertAtLeast(5.5, tone.text, fill, "$name тема, ${place.key}: текст блока на оттенке ${i + 1}")
+                }
+                assertAtLeast(3.0, tone.stripe, c.surface, "$name тема, ${place.key}: полоса на сетке")
+                assertAtLeast(4.5, tone.text, dutyFill(place, c), "$name тема, ${place.key}: текст на дежурстве")
+                // Оттенки идут от светлого к тёмному: в светлой теме фон темнеет, в тёмной — светлеет к четвёртому,
+                // и соседние заметно разные.
+                tone.shades.zipWithNext().forEachIndexed { i, (a, b) ->
+                    val step = luminance(a) - luminance(b)
+                    assertTrue(if (c.isDark) step < 0 else step > 0, "$name тема, ${place.key}: порядок оттенков ${i + 1} → ${i + 2}")
+                    assertTrue(contrast(a, b) >= 1.15, "$name тема, ${place.key}: оттенки ${i + 1} и ${i + 2} различимы")
+                }
             }
         }
     }
 
     @Test
-    fun typeColorIsStoredByKey() {
-        assertEquals(TypeColor.BLUE, TypeColor.of("blue"))
-        assertEquals(TypeColor.SLATE, TypeColor.of("нет такого"), "неизвестный ключ — сланцевый")
-        assertEquals(TypeColor.SLATE, TypeColor.of(null))
-        assertEquals(16, TypeColor.entries.map { it.key }.toSet().size, "ключи не повторяются")
+    fun placeColorIsStoredByKeyAndShadeIsClamped() {
+        assertEquals(PlaceColor.BLUE, PlaceColor.of("blue"))
+        assertEquals(PlaceColor.SLATE, PlaceColor.of("нет такого"), "неизвестный ключ — сланцевый")
+        assertEquals(PlaceColor.SLATE, PlaceColor.of(null))
+        assertEquals(16, PlaceColor.entries.map { it.key }.toSet().size, "ключи не повторяются")
+        val blue = PlaceColor.BLUE.light
+        assertEquals(blue.shades[0], blue.block(0), "оттенок меньше 1 — первый")
+        assertEquals(blue.shades[3], blue.block(9), "оттенок больше 4 — четвёртый")
     }
 
     private fun assertAtLeast(min: Double, fg: Color, bg: Color, what: String) {

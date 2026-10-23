@@ -74,4 +74,14 @@ class CalendarDragTest {
         // Группа с отметками «пришёл» ещё не закрыта, но так же не уходит в будущее.
         assertEquals(MoveProblem.MARKED_IN_FUTURE, CalendarDrag.problem(TrainingStatus.PLANNED, true, tomorrow, now))
     }
+
+    @Test
+    fun weekSwipeMovesSevenDays() {
+        // Влево — неделя вперёд, вправо — назад; дрогнувший палец при нажатии на день — ничего.
+        assertEquals(7, CalendarDrag.weekSwipe(-120f))
+        assertEquals(-7, CalendarDrag.weekSwipe(120f))
+        assertEquals(7, CalendarDrag.weekSwipe(-48f))
+        assertEquals(0, CalendarDrag.weekSwipe(-47f))
+        assertEquals(0, CalendarDrag.weekSwipe(20f))
+    }
 }

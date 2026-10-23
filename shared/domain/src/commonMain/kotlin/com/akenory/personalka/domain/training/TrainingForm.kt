@@ -34,12 +34,15 @@ data class TrainingDraft(
     val plan: String = "",
 )
 
-/** Тип в форме: чип, сколько клиентов и длительность по умолчанию. Дежурств среди них нет — у них своя форма. */
+/**
+ * Тип в форме: чип, оттенок (точка на чипе — цвет выбранного места этим оттенком), сколько клиентов
+ * и длительность по умолчанию. Дежурств среди них нет — у них своя форма.
+ */
 data class FormType(
     val id: String,
     val name: String,
     val kind: TrainingKind,
-    val color: String,
+    val shade: Int,
     val defaultDurationMin: Int,
     /** Как в типе: 1 — ПТ и СПТ, 2 — сплит, `null` — сколько угодно. */
     val maxClients: Int?,
