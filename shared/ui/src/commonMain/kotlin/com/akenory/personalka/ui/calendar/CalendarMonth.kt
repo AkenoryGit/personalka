@@ -257,13 +257,14 @@ private fun MonthCell(
             .clip(MaterialTheme.shapes.medium)
             .background(if (isSelected) colors.surfaceAlt else Color.Transparent)
             .clickable(role = Role.Tab, onClick = onClick)
+            // Метка — левее: clearAndSetSemantics стирает и то, что стоит правее него в цепочке.
+            .testTag(monthDayTag(date))
             .clearAndSetSemantics {
                 selected = isSelected
                 role = Role.Tab
                 contentDescription = CalendarFormat.monthDay(date, summary.count)
                 monthSummary = summary
             }
-            .testTag(monthDayTag(date))
             .padding(top = 1.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
