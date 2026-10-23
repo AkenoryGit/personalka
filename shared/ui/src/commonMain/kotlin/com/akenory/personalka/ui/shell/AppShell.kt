@@ -72,6 +72,8 @@ fun AppShell(
     todoCount: Int,
     onNewTraining: () -> Unit,
     immersive: Boolean = false,
+    // Открыта карточка тренировки (шаг 1.14): «+» не ложится на её кнопки.
+    hideFab: Boolean = false,
     content: @Composable (Section) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
@@ -126,7 +128,7 @@ fun AppShell(
             modifier = Modifier.align(Alignment.BottomEnd).fillMaxWidth().padding(contentPadding),
             horizontalAlignment = Alignment.End,
         ) {
-            if (shell.section.hasFab) {
+            if (shell.section.hasFab && !hideFab) {
                 NewTrainingButton(onClick = onNewTraining, modifier = Modifier.padding(end = 16.dp, bottom = 16.dp))
             }
             MessageHost(messages)

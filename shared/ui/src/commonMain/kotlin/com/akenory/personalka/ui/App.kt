@@ -96,6 +96,7 @@ fun App(
                         // Счётчик дел на «Главной» появится вместе с «Нужно сделать» (шаг 1.16).
                         todoCount = 0,
                         onNewTraining = { form = TrainingFormKey.new() },
+                        hideFab = card != null && shell.section == Section.CALENDAR,
                         immersive = when (shell.section) {
                             Section.MORE -> shell.top(Section.MORE).let { SettingsRoute.isForm(it) || GroupRoute.isForm(it) }
                             Section.CLIENTS -> ClientRoute.isForm(shell.top(Section.CLIENTS))

@@ -253,48 +253,47 @@ fun TrainingCardHost(
     }
 
     Box(Modifier.fillMaxSize()) {
-        if (wide) {
-            Row(Modifier.fillMaxSize()) {
-                Box(Modifier.weight(1f).fillMaxHeight()) { content() }
-                if (key != null) {
-                    VerticalDivider(color = PersonalkaTheme.colors.divider)
-                    Column(
+        // Календарь — всегда первым и на одном месте дерева: сложение Fold его не пересоздаёт (шаг 1.5).
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                content()
+                if (key != null && !wide) {
+                    BoxWithConstraints(
                         Modifier
-                            .width(CARD_WIDTH)
-                            .fillMaxHeight()
-                            .background(PersonalkaTheme.colors.bg)
-                            .semantics { paneTitle = shown?.title.orEmpty() }
-                            .testTag(TRAINING_CARD_TAG),
-                    ) { pane() }
-                }
-            }
-        } else {
-            content()
-            if (key != null) {
-                BoxWithConstraints(
-                    Modifier
-                        .fillMaxSize()
-                        .background(PersonalkaTheme.colors.scrim)
-                        .pointerInput(onClose) { detectTapGestures { onClose() } }
-                        .testTag(CARD_SCRIM_TAG),
-                    contentAlignment = Alignment.BottomCenter,
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = maxHeight * 0.88f)
-                            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                            .background(PersonalkaTheme.colors.bg)
-                            .pointerInput(Unit) { detectTapGestures { } }
-                            .semantics { paneTitle = shown?.title.orEmpty() }
-                            .testTag(TRAINING_CARD_TAG),
+                            .fillMaxSize()
+                            .background(PersonalkaTheme.colors.scrim)
+                            .pointerInput(onClose) { detectTapGestures { onClose() } }
+                            .testTag(CARD_SCRIM_TAG),
+                        contentAlignment = Alignment.BottomCenter,
                     ) {
-                        Box(Modifier.fillMaxWidth().padding(top = Dimens.space2), contentAlignment = Alignment.Center) {
-                            Box(Modifier.size(width = 32.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(PersonalkaTheme.colors.outline))
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = maxHeight * 0.88f)
+                                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                                .background(PersonalkaTheme.colors.bg)
+                                .pointerInput(Unit) { detectTapGestures { } }
+                                .semantics { paneTitle = shown?.title.orEmpty() }
+                                .testTag(TRAINING_CARD_TAG),
+                        ) {
+                            Box(Modifier.fillMaxWidth().padding(top = Dimens.space2), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(width = 32.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(PersonalkaTheme.colors.outline))
+                            }
+                            pane()
                         }
-                        pane()
                     }
                 }
+            }
+            if (key != null && wide) {
+                VerticalDivider(color = PersonalkaTheme.colors.divider)
+                Column(
+                    Modifier
+                        .width(CARD_WIDTH)
+                        .fillMaxHeight()
+                        .background(PersonalkaTheme.colors.bg)
+                        .semantics { paneTitle = shown?.title.orEmpty() }
+                        .testTag(TRAINING_CARD_TAG),
+                ) { pane() }
             }
         }
 

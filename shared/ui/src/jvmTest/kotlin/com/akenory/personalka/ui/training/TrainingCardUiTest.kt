@@ -2,13 +2,15 @@ package com.akenory.personalka.ui.training
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.and
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -91,9 +93,9 @@ class TrainingCardUiTest {
 
     private fun statusOf(id: String, clientId: String) = runBlocking { db.trainingDao().participationRow(id, clientId)!!.status }
 
-    private fun ComposeUiTest.openCalendar(width: Dp = folded) {
+    private fun ComposeUiTest.openCalendar(width: () -> Dp = { folded }) {
         setContent {
-            Box(Modifier.size(width, height)) {
+            Box(Modifier.size(width(), height)) {
                 App("0.1.0", settings, clients, groups, calendar, MemoryPrefs(), clock = TestData.clock)
             }
         }
@@ -186,8 +188,12 @@ class TrainingCardUiTest {
     fun ongoingMarkedDoneOnUnfoldedSide() = runComposeUiTest {
         val nikitin = client("Никитин", "Артём")
         val id = training("15:30", nikitin)
-        openCalendar(unfolded)
+        var width by mutableStateOf(folded)
+        openCalendar { width }
         tapBlock("Никитин_А.")
+        awaitNode(hasTestTag(CARD_SCRIM_TAG))
+        // Разложили — та же карточка справа (она хранится выше ветки по ширине).
+        width = unfolded
 
         // Разложенный: карточка справа без затемнения, «Идёт · до конца 40 мин», «Проведено» — главная.
         awaitNode(hasTestTag(TRAINING_CARD_TAG))

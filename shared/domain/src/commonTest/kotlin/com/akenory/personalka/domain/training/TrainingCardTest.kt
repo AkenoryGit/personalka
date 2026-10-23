@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.training
 
+import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
@@ -120,5 +121,7 @@ class TrainingCardTest {
         assertEquals("ПТ · ББ", TrainingCardFormat.typeLine("ПТ", "ББ", null))
         assertEquals(s("вт_20.10, 09:20 — за_40_мин"), TrainingCardFormat.notified(at(9, 20), at(10)))
         assertEquals(s("Отменить: Носова_Е."), TrainingCardFormat.cancelFor(listOf(s("Носова_Е."))))
+        assertEquals(s("24_часа"), CalendarSettingsFormat.notice(1440))
+        assertEquals(s("6_часов"), CalendarSettingsFormat.notice(360))
     }
 }

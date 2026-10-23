@@ -66,6 +66,7 @@ internal const val VACATION_FROM_TAG = "vacation-from"
 internal const val VACATION_TO_TAG = "vacation-to"
 internal fun stepTag(minutes: Int) = "step-$minutes"
 internal fun horizonTag(weeks: Int) = "horizon-$weeks"
+internal fun noticeTag(minutes: Int) = "notice-$minutes"
 internal fun zoneRowTag(key: String) = "zone-$key"
 
 /** Какое окно выбора открыто: начало или конец часов работы, первый или последний день отпуска. */
@@ -143,6 +144,12 @@ internal fun CalendarSettingsScreen(
                     scope.launch { settings.saveHorizon(it) }
                 }
                 Hint(CalendarSettingsFormat.HORIZON_NOTE)
+
+                SectionLabel(CalendarSettingsFormat.CANCEL_NOTICE)
+                Chips(CalendarSettingsRules.CANCEL_NOTICES, loaded.cancelNoticeMinutes, CalendarSettingsFormat::notice, ::noticeTag) {
+                    scope.launch { settings.saveCancelNotice(it) }
+                }
+                Hint(CalendarSettingsFormat.CANCEL_NOTICE_NOTE)
 
                 SectionLabel(CalendarSettingsFormat.VACATION)
                 OutlineButton(

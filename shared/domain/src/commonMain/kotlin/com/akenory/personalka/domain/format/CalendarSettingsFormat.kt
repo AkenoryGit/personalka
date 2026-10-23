@@ -16,6 +16,9 @@ object CalendarSettingsFormat {
     const val DRAG_STEP = "Шаг перетаскивания"
     const val HORIZON = "Постоянное расписание вперёд"
     const val HORIZON_NOTE = "На столько недель серии ставят тренировки в календарь. Дальше — продлеваются сами."
+    const val CANCEL_NOTICE = "Отмена без списания — если предупредили за"
+    const val CANCEL_NOTICE_NOTE =
+        "Предупредили позже — отмена со списанием. По инициативе тренера или клуба — всегда без списания."
     const val VACATION = "Отпуск"
     const val VACATION_BUTTON = "Отпуск с … по …"
     const val VACATION_TITLE = "Отпуск"
@@ -35,6 +38,9 @@ object CalendarSettingsFormat {
 
     /** «8 недель» на чипе горизонта. */
     fun weeks(n: Int): String = RuText.count(n, "неделю", "недели", "недель")
+
+    /** «1 час», «24 часа» на чипе отмены. */
+    fun notice(minutes: Int): String = RuText.count(minutes / 60, "час", "часа", "часов")
 
     /** «15 мин» на чипе шага. */
     fun step(minutes: Int): String = DurationFormat.minutes(minutes)

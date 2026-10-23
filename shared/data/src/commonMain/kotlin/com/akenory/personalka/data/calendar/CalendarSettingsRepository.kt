@@ -29,12 +29,13 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 
-/** Настройки календаря тренера (3.2): часы сетки, шаг перетаскивания, горизонт серий. */
+/** Настройки календаря тренера (3.2): часы сетки, шаг перетаскивания, горизонт серий, порог отмены без списания. */
 data class CalendarPrefs(
     val workStart: LocalTime = LocalTime(7, 0),
     val workEnd: LocalTime = LocalTime(23, 0),
     val dragStep: Int = CalendarDrag.STEP_DEFAULT,
     val horizonWeeks: Int = SeriesRules.DEFAULT_HORIZON_WEEKS,
+    val cancelNoticeMinutes: Int = 60,
 )
 
 /**
@@ -75,7 +76,7 @@ class CalendarSettingsRepository internal constructor(
     private val reference = db.referenceDao()
 
     val prefs: Flow<CalendarPrefs> = coaches.observeSettings().map { s ->
-        if (s == null) CalendarPrefs() else CalendarPrefs(s.workDayStart, s.workDayEnd, s.dragStepMinutes, s.seriesHorizonWeeks)
+        if (s == null) CalendarPrefs() else CalendarPrefs(s.workDayStart, s.workDayEnd, s.dragStepMinutes, s.seriesHorizonWeeks, s.cancelNoticeMinutes)
     }
 
     /** Часы работы; возвращает ошибку и ничего не пишет, если конец не позже начала. */
@@ -83,6 +84,12 @@ class CalendarSettingsRepository internal constructor(
         CalendarSettingsRules.workHoursProblem(start, end)?.let { return it }
         update { it.copy(workDayStart = start, workDayEnd = end) }
         return null
+    }
+
+    /** Порог отмены без списания (4.2): новые отмены считаются по нему, прошлые не пересчитываются. */
+    suspend fun saveCancelNotice(minutes: Int) {
+        require(minutes in CalendarSettingsRules.CANCEL_NOTICES) { "Порог отмены: $minutes" }
+        update { it.copy(cancelNoticeMinutes = minutes) }
     }
 
     suspend fun saveDragStep(minutes: Int) {

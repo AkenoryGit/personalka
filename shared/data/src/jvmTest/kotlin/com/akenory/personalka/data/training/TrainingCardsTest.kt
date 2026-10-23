@@ -109,6 +109,18 @@ class TrainingCardsTest {
     }
 
     @Test
+    fun noticeFromSettings(): Unit = runBlocking {
+        // «Отмена без списания — если предупредили за 2 часа» (5.16): за 61 минуту — уже со списанием.
+        calendar.settings.saveCancelNotice(120)
+        assertEquals(120, calendar.settings.prefs.first().cancelNoticeMinutes)
+        val orlov = client("Орлов", "Максим")
+        val id = training(at(tuesday, 16, 41), orlov)
+        assertEquals(120, card(id).settings.cancelNoticeMinutes)
+        cards.cancel(id, emptyList(), CancelReasons.CANNOT_COME, now)
+        assertEquals(ParticipationStatus.CANCELLED_CHARGED, statusOf(id, orlov))
+    }
+
+    @Test
     fun switchAndReasonChangeCharge(): Unit = runBlocking {
         val orlov = client("Орлов", "Максим")
         val byCoach = training(at(tuesday, 16, 0), orlov)
