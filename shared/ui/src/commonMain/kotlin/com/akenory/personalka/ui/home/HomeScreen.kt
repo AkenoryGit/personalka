@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
+import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.data.training.TrainingCard
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.HomeFormat
@@ -60,12 +61,14 @@ import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.training.CardAction
+import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.StatusRules
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.calendar.COPIED
 import com.akenory.personalka.ui.calendar.EntryRow
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.PrimaryButton
+import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
@@ -86,6 +89,7 @@ import kotlinx.datetime.plus
 internal const val NEAREST_TAG = "home-nearest"
 internal const val NEAREST_OPEN_TAG = "home-nearest-open"
 internal const val NEAREST_DONE_TAG = "home-nearest-done"
+internal const val NEAREST_DIARY_TAG = "home-nearest-diary"
 internal const val LATER_TAG = "home-later"
 internal const val NEXT_TAG = "home-next"
 internal const val TODO_TAG = "home-todo"
@@ -99,7 +103,8 @@ private val FAB_SPACE = 88.dp
 
 /**
  * Пункт «Нужно сделать» (5.2): значок, текст, подпись, число справа ([count]; `null` — без числа). [trainingId] — что
- * открыть: группу без отметки — её карточку; у пункта про копию — `null`, он ведёт в «Настройки → Данные».
+ * открыть: группу без отметки — её карточку, «Без дневника» — дневник самой ранней; у пункта про копию — `null`,
+ * он ведёт в «Настройки → Данные».
  */
 data class HomeTodo(
     val kind: TodoKind,
@@ -112,11 +117,16 @@ data class HomeTodo(
 internal fun CalendarTraining.slot() = HomeSlot(id, start, durationMin, group, cancelled, marked)
 
 /**
- * Пункты «Нужно сделать» в порядке ТЗ 5.2. С шага 1.16 — группы без отметки и копия (в режиме «Только телефон»);
- * дневник, лист ожидания, «без записи» и деньги добавят свои шаги (2.1, 2.4, этап 3). [backup] `null` — раздела
- * копии нет (тесты). Их число — счётчик дел на значке «Главной».
+ * Пункты «Нужно сделать» в порядке ТЗ 5.2. С шага 1.16 — группы без отметки и копия (в режиме «Только телефон»),
+ * с шага 2.1 — «Без дневника» ([noDiary] — `DiaryRepository.missing`); лист ожидания, «без записи» и деньги добавят
+ * свои шаги (2.4, этап 3). [backup] `null` — раздела копии нет (тесты). Их число — счётчик дел на значке «Главной».
  */
-fun homeTodos(trainings: List<CalendarTraining>, backup: BackupState?, now: LocalDateTime): List<HomeTodo> = buildList {
+fun homeTodos(
+    trainings: List<CalendarTraining>,
+    backup: BackupState?,
+    now: LocalDateTime,
+    noDiary: List<MissingDiary> = emptyList(),
+): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
         val byId = trainings.associateBy { it.id }
@@ -127,6 +137,17 @@ fun homeTodos(trainings: List<CalendarTraining>, backup: BackupState?, now: Loca
                 note = HomeFormat.unmarkedGroupsNote(groups.map { it.start to byId.getValue(it.id).title }, now.date),
                 count = groups.size,
                 trainingId = groups.first().id,
+            ),
+        )
+    }
+    if (noDiary.isNotEmpty()) {
+        add(
+            HomeTodo(
+                kind = TodoKind.NO_DIARY,
+                title = HomeFormat.NO_DIARY,
+                note = HomeFormat.noDiaryNote(noDiary.map { it.start to it.title }, now.date),
+                count = noDiary.size,
+                trainingId = noDiary.first().id,
             ),
         )
     }
@@ -149,6 +170,7 @@ fun homeTodos(trainings: List<CalendarTraining>, backup: BackupState?, now: Loca
  * @param card открытая карточка ([TrainingCardKey]); [onCard] — открыть или закрыть.
  * @param onDay «Ещё сегодня», «Сегодня всё» и «Завтра» — этот день в «Календаре».
  * @param onBackup пункт про копию — «Настройки → Данные».
+ * @param onDiary «Дневник» у «Ближайшей» и в карточке, пункт «Без дневника» — экран дневника (5.7).
  */
 @Composable
 fun HomeScreen(
@@ -165,6 +187,7 @@ fun HomeScreen(
     onEdit: (String) -> Unit,
     onClient: (String) -> Unit,
     onGroup: (String) -> Unit,
+    onDiary: (String) -> Unit = {},
 ) {
     val wide = LocalWide.current
     val scroll = rememberScrollState()
@@ -183,7 +206,14 @@ fun HomeScreen(
             calendar.cards.markDone(id)?.let { result -> messages.showUndo(result.message) { scope.launch { calendar.cards.undo(result.undo) } } }
         }
     }
-    val onTodo: (HomeTodo) -> Unit = { todo -> todo.trainingId?.let(open) ?: onBackup() }
+    val onTodo: (HomeTodo) -> Unit = { todo ->
+        val id = todo.trainingId
+        when {
+            id == null -> onBackup()
+            todo.kind == TodoKind.NO_DIARY -> onDiary(id)
+            else -> open(id)
+        }
+    }
 
     @Composable
     fun Blocks(laterRow: Boolean) {
@@ -194,6 +224,7 @@ fun HomeScreen(
             now = now,
             onOpen = open,
             onDone = done,
+            onDiary = onDiary,
             onDay = onDay,
         )
         if (todos.isNotEmpty()) TodoBlock(todos, onTodo)
@@ -211,6 +242,7 @@ fun HomeScreen(
         onClient = onClient,
         onGroup = onGroup,
         onCopy = { id -> scope.launch { if (calendar.copy(id)) messages.show(COPIED) } },
+        onDiary = onDiary,
     ) {
         if (wide) {
             Row(Modifier.fillMaxSize()) {
@@ -282,6 +314,7 @@ private fun NearestBlock(
     now: LocalDateTime,
     onOpen: (String) -> Unit,
     onDone: (String) -> Unit,
+    onDiary: (String) -> Unit,
     onDay: (LocalDate) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
@@ -301,7 +334,7 @@ private fun NearestBlock(
             }
             return@Block
         }
-        Padded { NearestBody(nearest, card, now, onOpen, onDone) }
+        Padded { NearestBody(nearest, card, now, onOpen, onDone, onDiary) }
         if (later.isNotEmpty()) {
             BlockRow(text = HomeFormat.laterToday(later.size, later.last().start), tag = LATER_TAG, onClick = { onDay(today) })
         }
@@ -315,6 +348,7 @@ private fun NearestBody(
     now: LocalDateTime,
     onOpen: (String) -> Unit,
     onDone: (String) -> Unit,
+    onDiary: (String) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val end = TrainingTime.end(nearest.start, nearest.durationMin)
@@ -361,11 +395,22 @@ private fun NearestBody(
     }
     if (card != null && StatusRules.canMarkDone(card.state, now)) {
         val action = if (card.state.kind == TrainingKind.GROUP) CardAction.ALL_CAME else CardAction.DONE
-        PrimaryButton(
-            text = TrainingCardFormat.action(action),
-            onClick = { onDone(nearest.id) },
-            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space1).testTag(NEAREST_DONE_TAG),
-        )
+        // «Дневник» рядом, как в карточке (5.2): план на следующую пишут сразу после занятия.
+        Row(Modifier.fillMaxWidth().padding(top = Dimens.space1), horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            PrimaryButton(
+                text = TrainingCardFormat.action(action),
+                onClick = { onDone(nearest.id) },
+                modifier = Modifier.weight(1f).testTag(NEAREST_DONE_TAG),
+            )
+            if (DiaryRules.available(card.state, now, card.keepsDiary)) {
+                SecondaryButton(
+                    text = TrainingCardFormat.action(CardAction.DIARY),
+                    onClick = { onDiary(nearest.id) },
+                    modifier = Modifier.weight(1f).testTag(NEAREST_DIARY_TAG),
+                    icon = PIcons.EditNote,
+                )
+            }
+        }
     }
 }
 
@@ -434,6 +479,7 @@ private fun TodoBlock(todos: List<HomeTodo>, onClick: (HomeTodo) -> Unit) {
 private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.UNMARKED_GROUPS -> PIcons.Groups
     TodoKind.BACKUP -> PIcons.FolderOpen
+    TodoKind.NO_DIARY -> PIcons.EditNote
     else -> PIcons.Info
 }
 

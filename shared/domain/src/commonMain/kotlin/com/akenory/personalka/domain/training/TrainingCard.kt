@@ -16,6 +16,9 @@ enum class CardAction {
     CANCEL,
     EDIT,
 
+    /** «Дневник» (5.7) — у идущей и проведённой; у проведённой без дневника — главная. */
+    DIARY,
+
     /** «Вернуть» — единственная кнопка отменённой. */
     RETURN,
 }
@@ -29,25 +32,25 @@ data class CardButtons(val buttons: List<CardAction>, val menu: List<CardMenu>)
 /**
  * Карточка тренировки (ТЗ 5.4): какие кнопки, пункты меню и действия в строках клиентов доступны в каком
  * состоянии. Сами переходы статусов — [StatusRules].
- *
- * Кнопки «Дневник» пока нет — она появится вместе с дневником (шаг 2.1): выключенное не показывается (10.7).
  */
 object TrainingCardRules {
     /**
      * - До начала минус 15 минут: «Отменить», «Изменить».
-     * - С начала минус 15 минут: «Проведено» (у группы — «Все пришли»), «Отменить»; «Изменить» — в «…».
-     * - Проведённая: «Изменить», «Отменить»; удалить её нельзя — только отменить.
+     * - С начала минус 15 минут: «Проведено» (у группы — «Все пришли»), «Дневник», «Отменить»; «Изменить» — в «…».
+     * - Проведённая: «Дневник», «Изменить», «Отменить»; удалить её нельзя — только отменить.
      * - Отменённая: только «Вернуть».
      *
+     * «Дневник» — если он ведётся у этого типа и включён в настройках ([keepsDiary], [DiaryRules.available]).
      * В «…» — «Копировать», «Пропустить дату серии» (будущая тренировка серии, [skippable]) и «Удалить».
      */
-    fun buttons(training: TrainingState, now: LocalDateTime, skippable: Boolean): CardButtons {
+    fun buttons(training: TrainingState, now: LocalDateTime, skippable: Boolean, keepsDiary: Boolean = false): CardButtons {
         val skip = listOfNotNull(CardMenu.SKIP_DATE.takeIf { skippable })
+        val diary = listOfNotNull(CardAction.DIARY.takeIf { DiaryRules.available(training, now, keepsDiary) })
         return when {
             training.status == TrainingStatus.CANCELLED -> CardButtons(listOf(CardAction.RETURN), listOf(CardMenu.COPY, CardMenu.DELETE))
-            training.status == TrainingStatus.DONE -> CardButtons(listOf(CardAction.EDIT, CardAction.CANCEL), listOf(CardMenu.COPY))
+            training.status == TrainingStatus.DONE -> CardButtons(diary + listOf(CardAction.EDIT, CardAction.CANCEL), listOf(CardMenu.COPY))
             StatusRules.canMarkDone(training, now) -> CardButtons(
-                listOf(if (training.kind == TrainingKind.GROUP) CardAction.ALL_CAME else CardAction.DONE, CardAction.CANCEL),
+                listOf(if (training.kind == TrainingKind.GROUP) CardAction.ALL_CAME else CardAction.DONE) + diary + CardAction.CANCEL,
                 listOf(CardMenu.EDIT, CardMenu.COPY) + skip + CardMenu.DELETE,
             )
             else -> CardButtons(listOf(CardAction.CANCEL, CardAction.EDIT), listOf(CardMenu.COPY) + skip + CardMenu.DELETE)

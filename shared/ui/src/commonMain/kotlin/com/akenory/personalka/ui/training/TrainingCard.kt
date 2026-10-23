@@ -153,6 +153,7 @@ private const val WHOLE = ""
  * @param onEdit «Изменить» и «Перенести вместо отмены» — форма тренировки (5.5).
  * @param onClient имя клиента — его карточка (5.9); [onGroup] — название группы — карточка группы (5.10).
  * @param onCopy «Копировать» в «…».
+ * @param onDiary «Дневник» (5.7) — экран дневника поверх приложения.
  */
 @Composable
 fun TrainingCardHost(
@@ -167,6 +168,7 @@ fun TrainingCardHost(
     onClient: (String) -> Unit,
     onGroup: (String) -> Unit,
     onCopy: (String) -> Unit,
+    onDiary: (String) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val id = key?.let(TrainingCardKey::id)
@@ -264,6 +266,7 @@ fun TrainingCardHost(
                             CardAction.CANCEL -> cancelWho = WHOLE
                             CardAction.EDIT -> onEdit(shown.id)
                             CardAction.RETURN -> scope.launch { done(cards.restore(shown.id)) }
+                            CardAction.DIARY -> onDiary(shown.id)
                         }
                     },
                     onMenu = { item ->
@@ -447,7 +450,7 @@ private fun ColumnScope.CardBody(
 ) {
     val colors = PersonalkaTheme.colors
     val state = card.state
-    val buttons = TrainingCardRules.buttons(state, now, card.skippable)
+    val buttons = TrainingCardRules.buttons(state, now, card.skippable, card.keepsDiary)
     val phase = TrainingPhase.of(state, now)
     val isGroup = state.kind == TrainingKind.GROUP
     // Имя в шапке ведёт в карточку: у одного клиента — его, у группы — группы; у сплита — строки клиентов.
@@ -513,6 +516,14 @@ private fun ColumnScope.CardBody(
             SectionLabel(TrainingCardFormat.FACT)
             Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text)
         }
+        // Поведение из дневника (5.7): у одного клиента — «Поведение», у сплита — у каждого с именем.
+        if (!isGroup) {
+            val behaving = card.clients.filter { it.behavior != null }
+            behaving.forEach { c ->
+                SectionLabel(if (card.clients.size > 1) TrainingCardFormat.behaviorOf(c.name) else TrainingCardFormat.BEHAVIOR)
+                Text(c.behavior.orEmpty(), style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            }
+        }
         if (card.noDiary) {
             Row(Modifier.padding(top = Dimens.space4), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(colors.accentGraphic))
@@ -522,7 +533,7 @@ private fun ColumnScope.CardBody(
         }
         Spacer(Modifier.height(Dimens.space4))
     }
-    CardButtonsRow(buttons.buttons, onAction)
+    CardButtonsRow(buttons.buttons, diaryFirst = card.noDiary, onAction = onAction)
 }
 
 /** Кнопка «⋮» с меню карточки: «Удалить» — цветом ошибки. */
@@ -758,9 +769,13 @@ private fun GroupMembers(
     }
 }
 
-/** Кнопки по состоянию (5.4): главная — графитом, «Отменить» первой — заливкой, иначе текстом; «Изменить» — контуром. */
+/**
+ * Кнопки по состоянию (5.4): главная — графитом, «Отменить» первой — заливкой, иначе текстом; «Изменить» — контуром.
+ * «Дневник» — заливкой, у проведённой без дневника ([diaryFirst]) — главная; в ряду из трёх у кнопок нет значков,
+ * кроме «Дневника», — иначе подписи не влезают.
+ */
 @Composable
-private fun CardButtonsRow(actions: List<CardAction>, onAction: (CardAction) -> Unit) {
+private fun CardButtonsRow(actions: List<CardAction>, diaryFirst: Boolean, onAction: (CardAction) -> Unit) {
     val colors = PersonalkaTheme.colors
     Column(Modifier.fillMaxWidth()) {
         HorizontalDivider(thickness = 1.dp, color = colors.divider)
@@ -770,7 +785,13 @@ private fun CardButtonsRow(actions: List<CardAction>, onAction: (CardAction) -> 
                 val modifier = Modifier.weight(1f)
                 when (action) {
                     CardAction.DONE, CardAction.ALL_CAME, CardAction.RETURN -> PrimaryButton(text, { onAction(action) }, modifier)
-                    CardAction.EDIT -> OutlineButton(text, { onAction(action) }, modifier, icon = PIcons.Edit)
+                    CardAction.DIARY ->
+                        if (diaryFirst && i == 0) {
+                            PrimaryButton(text, { onAction(action) }, modifier)
+                        } else {
+                            SecondaryButton(text, { onAction(action) }, modifier, icon = PIcons.EditNote.takeIf { actions.size < 3 || i == 0 })
+                        }
+                    CardAction.EDIT -> OutlineButton(text, { onAction(action) }, modifier, icon = PIcons.Edit.takeIf { actions.size < 3 })
                     CardAction.CANCEL ->
                         if (i == 0) {
                             SecondaryButton(text, { onAction(action) }, modifier, icon = PIcons.EventBusy)

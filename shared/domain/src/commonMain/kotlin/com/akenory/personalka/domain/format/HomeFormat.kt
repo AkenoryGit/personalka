@@ -98,6 +98,20 @@ object HomeFormat {
         return if (rest > 0) "$shown и ещё ${RuText.digits(rest.toLong())}" else shown
     }
 
+    const val NO_DIARY = "Без дневника"
+
+    /**
+     * Подпись «Без дневника»: «Ковалёв / Ковалёва 09:00 · Орлова К. 13:30», не сегодня — «Орлова К. пн 19.10»;
+     * не влезли — «и ещё 3».
+     */
+    fun noDiaryNote(trainings: List<Pair<LocalDateTime, String>>, today: LocalDate): String {
+        val shown = trainings.take(MAX_NAMES).joinToString(DOT) { (start, title) ->
+            title + " " + if (start.date == today) DateFormat.time(start.time) else DateFormat.short(start.date)
+        }
+        val rest = trainings.size - MAX_NAMES
+        return if (rest > 0) "$shown и ещё ${RuText.digits(rest.toLong())}" else shown
+    }
+
     fun backup(todo: BackupTodo): String = when (todo) {
         BackupTodo.NO_FOLDER -> "Выберите папку для копии"
         BackupTodo.STALE -> "Нет копии больше 7 дней"

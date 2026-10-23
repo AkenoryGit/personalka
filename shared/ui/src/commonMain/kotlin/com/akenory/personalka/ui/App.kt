@@ -33,8 +33,10 @@ import com.akenory.personalka.ui.shell.rememberClubNow
 import com.akenory.personalka.ui.shell.rememberShellState
 import com.akenory.personalka.ui.shell.systemMillis
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.training.DiaryScreen
 import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.TrainingFormSheet
+import com.akenory.personalka.ui.training.VoiceInput
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
@@ -49,6 +51,7 @@ import kotlinx.datetime.LocalDate
  * @param calendar тренировки дней для календаря (шаг 1.9), их создание и изменение — `calendar.forms` (шаг 1.13).
  * @param prefs настройки этого телефона: масштаб календаря.
  * @param backup резервная копия и системные окна для неё (шаг 1.15); `null` — раздела «Данные» нет (тесты).
+ * @param voice голосовой ввод в полях дневника (шаг 2.1); `null` — микрофонов нет.
  * @param backHandler «Назад» системы. Платформа передаёт свой обработчик (на Android — `BackHandler`
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
  *   «Назад» закрывает открытый экран, иначе ведёт на «Главную»; с «Главной» приложение сворачивается.
@@ -63,6 +66,7 @@ fun App(
     calendar: CalendarRepository,
     prefs: DevicePrefs = remember { MemoryPrefs() },
     backup: BackupTools? = null,
+    voice: VoiceInput? = null,
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     clock: () -> Long = ::systemMillis,
 ) {
@@ -79,6 +83,8 @@ fun App(
         var card by rememberSaveable { mutableStateOf<String?>(null) }
         // Карточка, открытая с «Главной» (5.2), — своя: календарь её не показывает.
         var homeCard by rememberSaveable { mutableStateOf<String?>(null) }
+        // Открытый дневник (5.7) — поверх всего: его открывают карточка, «Ближайшая» и «Нужно сделать».
+        var diary by rememberSaveable { mutableStateOf<String?>(null) }
         // День, который «Главная» попросила открыть в «Календаре».
         var calendarDay by rememberSaveable { mutableStateOf<String?>(null) }
         // «Главная» (5.2): тренировки и «Нужно сделать» считаются здесь — счётчик дел виден на значке из любого раздела.
@@ -86,7 +92,10 @@ fun App(
             if (hasCoach == true) calendar.homeTrainings(now.date) else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
         val backupState by remember(backup) { backup?.repository?.state ?: flowOf(null) }.collectAsState(initial = null)
-        val todos = remember(home, backupState, now) { homeTodos(home, backupState, now) }
+        val noDiary by remember(calendar, hasCoach) {
+            if (hasCoach == true) calendar.diaries.missing else flowOf(emptyList())
+        }.collectAsState(initial = emptyList())
+        val todos = remember(home, backupState, now, noDiary) { homeTodos(home, backupState, now, noDiary) }
 
         // Серии продлеваются до горизонта при открытии приложения и при смене дня (4.4).
         LaunchedEffect(calendar, hasCoach, now.date) {
@@ -111,6 +120,7 @@ fun App(
                     backHandler(homeCard != null && shell.section == Section.HOME) { homeCard = null }
                     // «Назад» при открытой форме закрывает форму, а не экран под ней.
                     backHandler(form != null) { form = null }
+                    backHandler(diary != null) { diary = null }
                     AppShell(
                         shell = shell,
                         messages = messages,
@@ -151,6 +161,7 @@ fun App(
                                     shell.select(Section.CALENDAR)
                                 }
                             },
+                            onDiary = { diary = it },
                         )
                     }
                     form?.let { key ->
@@ -163,6 +174,32 @@ fun App(
                             messages = messages,
                             scope = scope,
                             onClose = { form = null },
+                        )
+                    }
+                    diary?.let { id ->
+                        // Имя в дневнике ведёт в карточку клиента или группы: дневник и карточка тренировки закрываются.
+                        val leave = {
+                            diary = null
+                            card = null
+                            homeCard = null
+                        }
+                        DiaryScreen(
+                            id = id,
+                            diaries = calendar.diaries,
+                            voice = voice,
+                            scope = scope,
+                            onOpen = { diary = it },
+                            onClient = { clientId ->
+                                leave()
+                                shell.select(Section.CLIENTS)
+                                shell.open(ClientRoute.card(clientId))
+                            },
+                            onGroup = { groupId ->
+                                leave()
+                                shell.select(Section.MORE)
+                                shell.open(GroupRoute.card(groupId))
+                            },
+                            onClose = { diary = null },
                         )
                     }
                 }

@@ -53,13 +53,17 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 
-/** Клиент в карточке тренировки: «Носова Е.» и его итог (4.1); [guest] — ребёнок «на раз» в группе (5.4, 5.10). */
+/**
+ * Клиент в карточке тренировки: «Носова Е.» и его итог (4.1); [guest] — ребёнок «на раз» в группе (5.4, 5.10);
+ * [behavior] — поведение из дневника (5.7).
+ */
 data class CardClient(
     val id: String,
     val name: String,
     val state: ParticipantState,
     val outcome: ClientOutcome,
     val guest: Boolean = false,
+    val behavior: String? = null,
 )
 
 /**
@@ -76,6 +80,7 @@ data class GuestChoice(val id: String, val name: ClientName, val birthDate: Loca
  * @param warnings «Поверх запрета · …», «Поверх дежурства · …».
  * @param skippable «Пропустить дату серии»: будущая тренировка серии без отметок и списаний (4.4).
  * @param noDiary проведена, а дневник не заполнен — строка с оранжевой точкой.
+ * @param keepsDiary дневник включён (3.2) и у типа есть его поля (3.3) — кнопка «Дневник» (5.4).
  */
 data class TrainingCard(
     val id: String,
@@ -92,6 +97,7 @@ data class TrainingCard(
     val skippable: Boolean,
     val noDiary: Boolean,
     val settings: StatusSettings,
+    val keepsDiary: Boolean = false,
 ) {
     /** Итог для метки статуса: у одного клиента — его итог («Отмена со списанием»), иначе — тренировки. */
     val outcome: ClientOutcome
@@ -159,6 +165,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                     state = p.toState(),
                     outcome = ClientOutcome.of(t.status, p.status),
                     guest = p.clientId in guests,
+                    behavior = p.behavior?.takeIf { it.isNotBlank() },
                 )
             }
             val group = t.groupId?.let { clients.group(it) }
@@ -199,6 +206,8 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 skippable = series != null && t.toSeriesTraining(ordered).changeableAt(clubNow),
                 noDiary = DiaryRules.missing(t.status, settingsRow?.diaryEnabled ?: true, type?.diaryFact == true, t.fact),
                 settings = settingsRow.statusSettings(),
+                keepsDiary = (settingsRow?.diaryEnabled ?: true) && type != null &&
+                    DiaryRules.fields(kind, type.diaryPlan, type.diaryFact, type.diaryBehavior).any,
             )
         }
     }

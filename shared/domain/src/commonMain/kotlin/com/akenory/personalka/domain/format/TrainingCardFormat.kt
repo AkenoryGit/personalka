@@ -86,6 +86,10 @@ object TrainingCardFormat {
     const val CLIENTS = "Клиенты"
     const val PLAN = "План"
     const val FACT = "Факт"
+    const val BEHAVIOR = "Поведение"
+
+    /** Поведение у сплита — у каждого: «Поведение · Ковалёв Т.». */
+    fun behaviorOf(name: String): String = BEHAVIOR + DOT + name
     const val REASON = "Причина"
     const val NOTIFIED = "Предупредили"
 
@@ -123,6 +127,7 @@ object TrainingCardFormat {
         CardAction.CANCEL -> "Отменить"
         CardAction.EDIT -> "Изменить"
         CardAction.RETURN -> "Вернуть"
+        CardAction.DIARY -> DiaryFormat.TITLE
     }
 
     fun menu(item: CardMenu): String = when (item) {

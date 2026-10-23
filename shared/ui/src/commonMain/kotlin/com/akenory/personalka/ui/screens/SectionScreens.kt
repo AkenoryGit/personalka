@@ -76,6 +76,7 @@ import kotlinx.datetime.LocalDateTime
  *   с «Главной», [onHomeCard] — открыть или закрыть её.
  * @param calendarDay день, который «Главная» попросила открыть в «Календаре»; [onCalendarDay] — открыть его
  *   (раздел «Календарь» переключается) или `null` — день открыт.
+ * @param onDiary открыть дневник тренировки (шаг 2.1) — экран поверх приложения.
  */
 @Composable
 fun SectionScreen(
@@ -100,6 +101,7 @@ fun SectionScreen(
     onHomeCard: (String?) -> Unit = {},
     calendarDay: LocalDate? = null,
     onCalendarDay: (LocalDate?) -> Unit = {},
+    onDiary: (String) -> Unit = {},
 ) {
     val openClient: (String) -> Unit = { id ->
         shell.select(Section.CLIENTS)
@@ -134,6 +136,7 @@ fun SectionScreen(
                 onHomeCard(null)
                 openGroup(id)
             },
+            onDiary = onDiary,
         )
         Section.CALENDAR -> CalendarScreen(
             calendar = calendar,
@@ -159,6 +162,7 @@ fun SectionScreen(
             },
             goTo = calendarDay,
             onWent = { onCalendarDay(null) },
+            onDiary = onDiary,
         )
         Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm)
         Section.SALARY -> Placeholder(

@@ -176,14 +176,15 @@ class HomeUiTest {
         onNode(hasContentDescription("Нужно сделать: 1") and hasAnyAncestor(hasTestTag(TODO_TAG))).assertIsDisplayed()
         onNode(hasContentDescription("Нужно сделать: 1") and hasAnyAncestor(hasTestTag(navTag(Section.HOME))), useUnmergedTree = true).assertIsDisplayed()
 
-        // Нажатие — карточка группы; «Все пришли» — пункт и счётчик уходят сами.
+        // Нажатие — карточка группы; «Все пришли» — пункт уходит сам, а проведённая группа ждёт дневника (шаг 2.1).
         onNodeWithTag(todoTag(TodoKind.UNMARKED_GROUPS)).performClick()
         awaitNode(inCard(TrainingCardFormat.action(CardAction.ALL_CAME)))
         onNode(inCard(TrainingCardFormat.action(CardAction.ALL_CAME))).performClick()
         waitUntil(timeoutMillis = 5_000) { statusOf(id) == TrainingStatus.DONE }
         assertEquals(List(3) { ParticipationStatus.ATTENDED }, runBlocking { kids.map { db.trainingDao().participationRow(id, it)!!.status } })
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(TODO_TAG)).fetchSemanticsNodes().isEmpty() }
-        assertEquals(0, onAllNodes(hasContentDescription("Нужно сделать: 1"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.UNMARKED_GROUPS))).fetchSemanticsNodes().isEmpty() }
+        awaitNode(hasTestTag(todoTag(TodoKind.NO_DIARY)))
+        onNode(hasContentDescription("Нужно сделать: 1") and hasAnyAncestor(hasTestTag(navTag(Section.HOME))), useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test

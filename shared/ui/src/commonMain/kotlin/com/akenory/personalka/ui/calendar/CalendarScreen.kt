@@ -146,6 +146,7 @@ private const val ID_SEPARATOR = "\n"
  * @param onCreate новая тренировка на это время: удержание на пустом месте и «Новая тренировка на это время».
  * @param onEditZone «Изменить» в окне зоны: форма дежурства или своего запрета (шаг 1.13а).
  * @param goTo открыть этот день — так «Главная» открывает сегодня и завтра (шаг 1.16); [onWent] — день открыт.
+ * @param onDiary «Дневник» в карточке — экран дневника (шаг 2.1).
  */
 @Composable
 fun CalendarScreen(
@@ -163,6 +164,7 @@ fun CalendarScreen(
     onEditZone: (CalendarZone) -> Unit,
     goTo: LocalDate? = null,
     onWent: () -> Unit = {},
+    onDiary: (String) -> Unit = {},
 ) {
     val onOpen: (CalendarTraining) -> Unit = { training -> onCard(TrainingCardKey.card(training.id)) }
     val today = now.date
@@ -344,6 +346,7 @@ fun CalendarScreen(
         onClient = onClient,
         onGroup = onGroup,
         onCopy = { id -> scope.launch { if (calendar.copy(id)) messages.show(COPIED) } },
+        onDiary = onDiary,
     ) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {

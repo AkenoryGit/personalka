@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
         // перекладывает экран под новую ширину, открытый раздел и прокрутка остаются на месте.
         val app = application as PersonalkaApplication
         val backup = BackupTools(app.backup, AndroidFiles(this))
+        val voice = if (AndroidVoice.availableOn(this)) AndroidVoice(this) else null
         setContent {
             App(
                 versionName = BuildConfig.VERSION_NAME,
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
                 calendar = app.calendar,
                 prefs = app.prefs,
                 backup = backup,
+                voice = voice,
                 backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
             )
         }

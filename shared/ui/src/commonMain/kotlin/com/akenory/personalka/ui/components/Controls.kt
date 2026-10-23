@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -167,6 +168,7 @@ fun Field(
     placeholder: String? = null,
     singleLine: Boolean = true,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -207,13 +209,25 @@ fun Field(
                         .heightIn(min = Dimens.field)
                         .background(colors.surface, MaterialTheme.shapes.medium)
                         .border(if (focused || error != null) 2.dp else 1.dp, border, MaterialTheme.shapes.medium)
-                        .padding(horizontal = Dimens.space4, vertical = if (singleLine) 0.dp else Dimens.space4),
+                        .padding(
+                            start = Dimens.space4,
+                            end = if (trailing != null) 0.dp else Dimens.space4,
+                            top = if (singleLine) 0.dp else Dimens.space4,
+                            bottom = if (singleLine) 0.dp else Dimens.space4,
+                        ),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    if (placeholder != null && value.isEmpty()) {
-                        Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
+                    // Значок справа (микрофон дневника, 5.7) — у верхнего края: текст под ним переносится, а не заходит.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top) {
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (placeholder != null && value.isEmpty()) {
+                                Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
+                            }
+                            inner()
+                        }
+                        // Кнопка 48 dp в многострочном поле — вровень с первой строкой, высоту поля не меняет.
+                        if (trailing != null) Box(if (singleLine) Modifier else Modifier.offset(y = (-12).dp)) { trailing() }
                     }
-                    inner()
                 }
             },
         )

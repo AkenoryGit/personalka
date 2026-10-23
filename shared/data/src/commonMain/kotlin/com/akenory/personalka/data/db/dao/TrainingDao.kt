@@ -149,6 +149,30 @@ interface TrainingDao {
     )
     fun observeTrainingsOfClient(clientId: String): Flow<List<TrainingEntity>>
 
+    /** То же один раз: поиск «следующей» тренировки клиента для «Плана на следующую» (4.3, 5.7). */
+    @Query(
+        """
+        SELECT t.* FROM training AS t
+        JOIN participation AS p ON p.trainingId = t.id
+        WHERE p.clientId = :clientId AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        ORDER BY t.start
+        """
+    )
+    suspend fun trainingsOfClient(clientId: String): List<TrainingEntity>
+
+    /**
+     * Проведённые с пустым фактом, по времени: из них правило «нет дневника» (5.7) отбирает те, у чьего типа ведётся
+     * факт, — «Следующая без дневника» и пункт «Нужно сделать» (5.2).
+     */
+    @Query(
+        """
+        SELECT * FROM training
+        WHERE status = :done AND (fact IS NULL OR TRIM(fact) = '') AND deletedAt IS NULL
+        ORDER BY start
+        """
+    )
+    fun observeDoneWithoutFact(done: TrainingStatus): Flow<List<TrainingEntity>>
+
     @Query("SELECT * FROM participation WHERE clientId = :clientId AND deletedAt IS NULL")
     fun observeParticipationsOfClient(clientId: String): Flow<List<ParticipationEntity>>
 

@@ -2,6 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Голосовой ввод в дневнике (шаг 2.1): с Android 11 приложение видит службу распознавания речи
+         и её окно, только если назовёт их здесь. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <!-- Данные клиентов не уходят в облачную копию Google: копии — только свои, зашифрованные (ТЗ 7.6, 10.3).
          allowBackup — для Android 10–11, dataExtractionRules — для Android 12+. -->
     <application
