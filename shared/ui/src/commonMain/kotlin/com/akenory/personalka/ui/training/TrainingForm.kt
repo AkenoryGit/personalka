@@ -60,6 +60,7 @@ import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.data.training.FormClient
 import com.akenory.personalka.data.training.FormGroup
 import com.akenory.personalka.data.training.SaveResult
+import com.akenory.personalka.data.training.StoredSeries
 import com.akenory.personalka.data.training.StoredTraining
 import com.akenory.personalka.data.training.TrainingFormData
 import com.akenory.personalka.data.training.TrainingRepository
@@ -73,6 +74,7 @@ import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.reference.TypePresets
 import com.akenory.personalka.domain.restriction.RestrictionDraft
+import com.akenory.personalka.domain.series.ClientScheduleRules
 import com.akenory.personalka.domain.training.FormField
 import com.akenory.personalka.domain.training.FormType
 import com.akenory.personalka.domain.training.Repeat
@@ -122,14 +124,27 @@ fun formWeekdayTag(day: DayOfWeek) = "form-weekday-$day"
 
 /**
  * Что открыто в форме — строкой, чтобы пережить пересоздание окна: новая запись на время (из календаря)
- * или на ближайший свободный час («+»), изменение тренировки или дежурства, изменение своего запрета.
+ * или на ближайший свободный час («+»), с клиентом из карточки; изменение тренировки или дежурства, изменение
+ * своего запрета, «Изменить с даты…» серии клиента.
  */
 object TrainingFormKey {
     private const val NEW = "new"
     private const val EDIT = "edit:"
     private const val RESTRICTION = "restriction:"
+    private const val SERIES = "series:"
+    private const val CLIENT = '#'
+    private const val WEEKLY = '!'
 
-    fun new(start: LocalDateTime? = null): String = if (start == null) NEW else "$NEW@$start"
+    /**
+     * Новая запись. [clientId] — «+ Тренировка» и «+ Серия» в карточке клиента (5.9): клиент уже выбран;
+     * [weekly] — «+ Серия»: сразу «Каждую неделю».
+     */
+    fun new(start: LocalDateTime? = null, clientId: String? = null, weekly: Boolean = false): String = buildString {
+        append(NEW)
+        if (start != null) append('@').append(start)
+        if (clientId != null) append(CLIENT).append(clientId)
+        if (weekly) append(WEEKLY)
+    }
 
     /** Тренировка или дежурство: форма выбирается по типу. */
     fun edit(id: String): String = EDIT + id
@@ -141,7 +156,18 @@ object TrainingFormKey {
 
     fun restrictionId(key: String): String? = key.takeIf { it.startsWith(RESTRICTION) }?.removePrefix(RESTRICTION)
 
-    fun start(key: String): LocalDateTime? = key.takeIf { it.startsWith("$NEW@") }?.substringAfter('@')?.let(LocalDateTime::parse)
+    /** «Изменить с даты…» серии клиента (5.9). */
+    fun series(id: String): String = SERIES + id
+
+    fun seriesId(key: String): String? = key.takeIf { it.startsWith(SERIES) }?.removePrefix(SERIES)
+
+    fun start(key: String): LocalDateTime? =
+        key.takeIf { it.startsWith("$NEW@") }?.substringAfter('@')?.substringBefore(CLIENT)?.substringBefore(WEEKLY)?.let(LocalDateTime::parse)
+
+    fun clientId(key: String): String? =
+        key.takeIf { it.startsWith(NEW) && CLIENT in it }?.substringAfter(CLIENT)?.removeSuffix(WEEKLY.toString())
+
+    fun weekly(key: String): Boolean = key.startsWith(NEW) && key.endsWith(WEEKLY)
 }
 
 /** Что создаёт форма — переключатель «Тренировка / Дежурство / Запрет» вверху новой записи (5.5, шаг 1.13а). */
@@ -176,9 +202,11 @@ fun TrainingFormSheet(
 ) {
     val editId = TrainingFormKey.editId(key)
     val restrictionId = TrainingFormKey.restrictionId(key)
+    val seriesId = TrainingFormKey.seriesId(key)
     val data by remember(forms) { forms.form() }.collectAsState(initial = null)
     var stored by remember(key) { mutableStateOf<StoredTraining?>(null) }
     var storedRestriction by remember(key) { mutableStateOf<RestrictionDraft?>(null) }
+    var storedSeries by remember(key) { mutableStateOf<StoredSeries?>(null) }
     // Изменение — запись как есть; её уже нет (удалили на другом телефоне) — форма закрывается.
     LaunchedEffect(key) {
         if (editId != null) {
@@ -187,10 +215,13 @@ fun TrainingFormSheet(
         } else if (restrictionId != null) {
             storedRestriction = restrictions.stored(restrictionId)
             if (storedRestriction == null) onClose()
+        } else if (seriesId != null) {
+            storedSeries = forms.storedSeries(seriesId)
+            if (storedSeries == null) onClose()
         }
     }
     var picked by rememberSaveable(key) { mutableStateOf(FormMode.TRAINING.name) }
-    val isNew = editId == null && restrictionId == null
+    val isNew = editId == null && restrictionId == null && seriesId == null
     val modes = listOfNotNull(FormMode.TRAINING, FormMode.DUTY.takeIf { data?.duty != null }, FormMode.RESTRICTION)
     val mode = when {
         restrictionId != null -> FormMode.RESTRICTION
@@ -209,7 +240,7 @@ fun TrainingFormSheet(
             )
         }
     }
-    if ((editId != null && stored == null) || (restrictionId != null && storedRestriction == null)) {
+    if ((editId != null && stored == null) || (restrictionId != null && storedRestriction == null) || (seriesId != null && storedSeries == null)) {
         FormFrame(title = "", onClose = onClose, switch = {}, ready = false, onSave = {}) {}
         return
     }
@@ -217,7 +248,7 @@ fun TrainingFormSheet(
     val holder = rememberSaveableStateHolder()
     holder.SaveableStateProvider(mode.name) {
         when (mode) {
-            FormMode.TRAINING -> TrainingFields(key, editId, stored, data, forms, clients, now, messages, scope, onClose, switch)
+            FormMode.TRAINING -> TrainingFields(key, editId, stored, storedSeries, data, forms, clients, now, messages, scope, onClose, switch)
             FormMode.DUTY -> DutyFields(key, editId, stored, data, forms, messages, scope, onClose, switch)
             FormMode.RESTRICTION -> RestrictionFields(key, restrictionId, storedRestriction, data, restrictions, forms, messages, scope, onClose, switch)
         }
@@ -290,6 +321,10 @@ internal fun FormFrame(
 /**
  * Форма тренировки (макет «Новая тренировка»): тип (последний первым), клиент из недавних или поиском, место, когда,
  * длительность, повтор, план. Новая на пустом месте — за 3 нажатия: удержание → клиент → «Сохранить» (10.7).
+ * Из карточки клиента клиент уже выбран, у «+ Серия» — «Каждую неделю».
+ *
+ * «Изменить с даты…» ([series], 5.9) — та же форма без плана: «с даты», дни недели и всё, что меняет серия (4.4);
+ * конец серии меняет «Завершить».
  *
  * Перед записью — ответы, которых не хватает: «Только эту / Эту и следующие» у тренировки серии (4.4),
  * «Поставить всё равно?» под запретом (4.5); потом — сообщение с «Отменить» (5.20).
@@ -299,6 +334,7 @@ private fun TrainingFields(
     key: String,
     editId: String?,
     stored: StoredTraining?,
+    series: StoredSeries?,
     data: TrainingFormData?,
     forms: TrainingRepository,
     clients: ClientRepository,
@@ -311,8 +347,8 @@ private fun TrainingFields(
     val colors = PersonalkaTheme.colors
     val copied by forms.copied.collectAsState()
     var draft by rememberSaveable(key, stateSaver = DraftSaver) { mutableStateOf<TrainingDraft?>(null) }
-    var keepDuration by rememberSaveable(key) { mutableStateOf(editId != null) }
-    var keepPlace by rememberSaveable(key) { mutableStateOf(editId != null) }
+    var keepDuration by rememberSaveable(key) { mutableStateOf(editId != null || series != null) }
+    var keepPlace by rememberSaveable(key) { mutableStateOf(editId != null || series != null) }
     var ownDuration by rememberSaveable(key) { mutableStateOf(false) }
     var ownText by rememberSaveable(key) { mutableStateOf("") }
     var showErrors by rememberSaveable(key) { mutableStateOf(false) }
@@ -323,13 +359,14 @@ private fun TrainingFields(
     // Новая — тип, место и длительность по умолчанию; изменение — тренировка как есть.
     LaunchedEffect(key, data != null, stored) {
         val loaded = data ?: return@LaunchedEffect
-        if (editId != null) {
-            val s = stored ?: return@LaunchedEffect
+        val kept = stored?.draft ?: series?.draft
+        if (editId != null || series != null) {
+            val s = kept ?: return@LaunchedEffect
             if (draft == null) {
-                draft = s.draft
-                if (s.draft.durationMin !in ReferenceRules.DURATION_CHIPS) {
+                draft = s
+                if (s.durationMin !in ReferenceRules.DURATION_CHIPS) {
                     ownDuration = true
-                    ownText = s.draft.durationMin.toString()
+                    ownText = s.durationMin.toString()
                 }
             }
         } else if (draft == null) {
@@ -339,8 +376,10 @@ private fun TrainingFields(
             draft = TrainingDraft(
                 start = start,
                 typeId = type?.id,
+                clientIds = listOfNotNull(TrainingFormKey.clientId(key)),
                 locationId = type?.let { loaded.lastPlaceByType[it.id] } ?: loaded.places.firstOrNull()?.id,
                 durationMin = minutes,
+                repeat = if (TrainingFormKey.weekly(key)) Repeat(setOf(start.date.dayOfWeek)) else null,
             )
         }
     }
@@ -350,7 +389,7 @@ private fun TrainingFields(
     val type = form.types.firstOrNull { it.id == current?.typeId }
     val status = stored?.status ?: TrainingStatus.PLANNED
     val marked = stored?.marked ?: false
-    val problems = if (showErrors && current != null) TrainingFormRules.problems(current, type, now, status, marked) else emptyMap()
+    val problems = if (showErrors && current != null) formProblems(current, type, now, status, marked, series) else emptyMap()
 
     fun update(change: (TrainingDraft) -> TrainingDraft) {
         draft = draft?.let(change)
@@ -359,9 +398,13 @@ private fun TrainingFields(
     fun save(answer: EditScope? = null, confirmed: Boolean = false) {
         val d = draft ?: return
         showErrors = true
-        if (TrainingFormRules.problems(d, type, now, status, marked).isNotEmpty()) return
+        if (formProblems(d, type, now, status, marked, series).isNotEmpty()) return
         scope.launch {
-            val result = if (editId == null) forms.create(d, confirmed) else forms.update(editId, d, answer, confirmed)
+            val result = when {
+                series != null -> forms.changeFrom(series.id, d, confirmed)
+                editId != null -> forms.update(editId, d, answer, confirmed)
+                else -> forms.create(d, confirmed)
+            }
             when (result) {
                 is SaveResult.Saved -> {
                     onClose()
@@ -393,7 +436,11 @@ private fun TrainingFields(
     }
 
     FormFrame(
-        title = if (editId == null) TrainingFormat.NEW_TITLE else TrainingFormat.EDIT_TITLE,
+        title = when {
+            series != null -> TrainingFormat.SERIES_TITLE
+            editId != null -> TrainingFormat.EDIT_TITLE
+            else -> TrainingFormat.NEW_TITLE
+        },
         onClose = onClose,
         switch = switch,
         ready = current != null && data != null,
@@ -407,7 +454,8 @@ private fun TrainingFields(
                         initial = d.start.date,
                         onPick = { date ->
                             panel = null
-                            update { it.onDate(date) }
+                            // У серии дни выбраны сами по себе: новая дата их не меняет.
+                            update { if (series != null) it.copy(start = LocalDateTime(date, it.start.time)) else it.onDate(date) }
                         },
                         onDismiss = { panel = null },
                     )
@@ -479,7 +527,7 @@ private fun TrainingFields(
     ) {
         if (current == null) return@FormFrame
         val paste = copied
-        if (editId == null && paste != null) {
+        if (editId == null && series == null && paste != null) {
             SecondaryButton(
                 text = TrainingFormat.PASTE,
                 onClick = {
@@ -580,10 +628,11 @@ private fun TrainingFields(
         SectionLabel("Когда")
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
             PickBox(
-                text = TrainingFormat.date(current.start.date),
+                text = if (series != null) TrainingFormat.fromDate(current.start.date) else TrainingFormat.date(current.start.date),
                 icon = PIcons.CalendarMonth,
                 onClick = { panel = Panels.DATE },
                 modifier = Modifier.weight(1f).testTag(FORM_DATE_TAG),
+                error = problems[FormField.DATE],
             )
             PickBox(
                 text = TrainingFormat.timeRange(current.start, TrainingTime.end(current.start, current.durationMin)),
@@ -593,6 +642,7 @@ private fun TrainingFields(
                 error = problems[FormField.TIME],
             )
         }
+        problems[FormField.DATE]?.let { ErrorText(it) }
         problems[FormField.TIME]?.let { ErrorText(it) }
 
         SectionLabel("Длительность, мин")
@@ -637,6 +687,11 @@ private fun TrainingFields(
 
         SectionLabel("Повтор")
         val seriesRepeat = stored?.seriesRepeat
+        val weekdays = current.repeat?.weekdays
+        if (series != null && weekdays != null) {
+            WeekdayRow(weekdays, problems[FormField.WEEKDAYS]) { days -> update { it.copy(repeat = it.repeat?.copy(weekdays = days)) } }
+            return@FormFrame
+        }
         if (seriesRepeat != null) {
             // Повтор серии меняет «Эту и следующие» и «Изменить с даты» (4.4), а не это поле.
             Text(
@@ -845,6 +900,24 @@ private fun SimilarPanel(client: FormClient, onPick: () -> Unit, onCreate: () ->
 }
 
 private fun ClientName.full(): String = listOfNotNull(lastName, firstName, middleName?.takeIf { it.isNotBlank() }).joinToString(" ")
+
+/**
+ * Ошибки формы; у «Изменить с даты…» конец серии не проверяется (его меняет «Завершить»), зато дата —
+ * не в прошлом и не позже конца серии.
+ */
+private fun formProblems(
+    draft: TrainingDraft,
+    type: FormType?,
+    now: LocalDateTime,
+    status: TrainingStatus,
+    marked: Boolean,
+    series: StoredSeries?,
+): Map<FormField, String> {
+    if (series == null) return TrainingFormRules.problems(draft, type, now, status, marked)
+    val problems = TrainingFormRules.problems(draft.copy(repeat = draft.repeat?.copy(until = null)), type, now)
+    val date = ClientScheduleRules.fromProblem(draft.start.date, now.date, series.validTo) ?: return problems
+    return problems + (FormField.DATE to date)
+}
 
 /** Другая дата; день повтора по умолчанию — день даты: сменили дату — сменился и он. */
 internal fun TrainingDraft.onDate(date: LocalDate): TrainingDraft {

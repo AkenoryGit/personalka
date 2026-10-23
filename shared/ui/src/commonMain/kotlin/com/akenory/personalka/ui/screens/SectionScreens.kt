@@ -63,7 +63,8 @@ import kotlinx.datetime.LocalDateTime
  * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
  * @param onForm открыть форму тренировки ([TrainingFormKey]): из календаря — новая на это время или изменение;
  *   до карточки тренировки (шаг 1.14) нажатие на тренировку открывает её форму; «Изменить» в окне зоны — форму
- *   дежурства или своего запрета (шаг 1.13а).
+ *   дежурства или своего запрета (шаг 1.13а); из карточки клиента — новая с этим клиентом и «Изменить с даты…»
+ *   его серии (шаг 1.13б).
  */
 @Composable
 fun SectionScreen(
@@ -100,7 +101,7 @@ fun SectionScreen(
                 onForm(if (zone.kind == ZoneKind.RESTRICTION) TrainingFormKey.restriction(zone.id) else TrainingFormKey.edit(zone.id))
             },
         )
-        Section.CLIENTS -> ClientsScreen(shell, clients, messages, scope, now)
+        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm)
         Section.SALARY -> Placeholder(
             title = "Зарплата",
             icon = PIcons.Payments,

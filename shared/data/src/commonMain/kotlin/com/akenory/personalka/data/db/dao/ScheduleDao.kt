@@ -52,6 +52,17 @@ interface ScheduleDao {
     )
     suspend fun seriesOfClient(clientId: String): List<SeriesEntity>
 
+    /** То же с обновлениями: вкладка «Расписание» карточки клиента (5.9). */
+    @Query(
+        """
+        SELECT s.* FROM series AS s
+        JOIN series_client AS sc ON sc.seriesId = s.id
+        WHERE sc.clientId = :clientId AND sc.deletedAt IS NULL AND s.deletedAt IS NULL
+        ORDER BY s.validFrom
+        """
+    )
+    fun observeSeriesOfClient(clientId: String): Flow<List<SeriesEntity>>
+
     /** Серии, которые идут на [date] или начнутся позже: постоянное расписание в списке клиентов (5.8). */
     @Query("SELECT * FROM series WHERE deletedAt IS NULL AND (validTo IS NULL OR validTo >= :date)")
     fun observeSeriesFrom(date: LocalDate): Flow<List<SeriesEntity>>

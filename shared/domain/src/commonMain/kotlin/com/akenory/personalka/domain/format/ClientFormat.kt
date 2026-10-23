@@ -2,10 +2,13 @@ package com.akenory.personalka.domain.format
 
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.ScheduleLine
+import com.akenory.personalka.domain.format.RuText.DASH
 import com.akenory.personalka.domain.format.RuText.NBSP
 import com.akenory.personalka.domain.model.Sex
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 
 /** Строки о клиентах: список, карточка, форма (5.8, 5.9). */
 object ClientFormat {
@@ -55,6 +58,44 @@ object ClientFormat {
 
     /** «42 клиента». */
     fun clients(count: Int): String = RuText.count(count, "клиент", "клиента", "клиентов")
+
+    // --- Вкладка «Расписание» (5.9, макет ClCardSchedule) ---
+
+    const val SCHEDULE_TITLE = "Постоянное расписание"
+    const val NO_SCHEDULE = "Постоянного расписания нет"
+    const val ADD_TRAINING = "Тренировка"
+    const val ADD_SERIES = "Серия"
+    const val CHANGE_FROM = "Изменить с даты…"
+    const val END_SERIES = "Завершить"
+    const val END_TITLE = "Завершить серию?"
+    const val LAST_DAY = "Последний день"
+    const val END_NOTE = "Тренировки после него удалятся, их планы сохранятся у клиента."
+    const val SERIES_ENDED = "Серия завершена"
+
+    /** Дни и время серии: «Вт, Чт · 08:00–08:50». */
+    fun seriesDays(weekdays: Set<DayOfWeek>, start: LocalTime, durationMin: Int): String {
+        val days = DateFormat.WEEK.filter { it in weekdays }
+            .joinToString(", ") { DateFormat.weekdayShort(it).replaceFirstChar { c -> c.uppercaseChar() } }
+        val from = start.hour * 60 + start.minute
+        return days + DOT + DateFormat.timeRange(from, from + durationMin)
+    }
+
+    /**
+     * Тип, место и период серии: «ПТ · ББ · с 01.09.2026», с концом — «ПТ · ББ · 01.09–31.12.2026»,
+     * прошедшая — «ПТ · ББ · 02.06–31.08.2026 · завершена».
+     */
+    fun seriesPeriod(typeShort: String, placeShort: String, from: LocalDate, to: LocalDate?, today: LocalDate): String {
+        val period = when {
+            to == null -> "с ${DateFormat.full(from)}"
+            to.year == from.year -> "${DateFormat.dayMonth(from)}$DASH${DateFormat.full(to)}"
+            else -> "${DateFormat.full(from)}$DASH${DateFormat.full(to)}"
+        }
+        return listOfNotNull(typeShort.ifEmpty { null }, placeShort.ifEmpty { null }, period, "завершена".takeIf { to != null && to < today })
+            .joinToString(DOT)
+    }
+
+    /** Сообщение после «Изменить с даты…»: «Расписание изменено с вт 27.10». */
+    fun changedFrom(date: LocalDate): String = "Расписание изменено с ${DateFormat.short(date)}"
 
     /** Десятые в счётчик «в месяц»: 74 → «7,4», 10 → «1,0». */
     fun tenths(value: Int): String = "${RuText.digits((value / 10).toLong())},${value % 10}"

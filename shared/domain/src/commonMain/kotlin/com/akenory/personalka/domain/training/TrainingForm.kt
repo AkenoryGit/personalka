@@ -49,7 +49,7 @@ data class FormType(
 )
 
 /** Поля формы, под которыми показывается ошибка. */
-enum class FormField { TYPE, CLIENTS, PLACE, TIME, DURATION, WEEKDAYS, UNTIL }
+enum class FormField { TYPE, CLIENTS, PLACE, DATE, TIME, DURATION, WEEKDAYS, UNTIL }
 
 /**
  * Правила формы тренировки (ТЗ 5.5): порядок типов, выбор клиентов, время по умолчанию и проверки при сохранении.

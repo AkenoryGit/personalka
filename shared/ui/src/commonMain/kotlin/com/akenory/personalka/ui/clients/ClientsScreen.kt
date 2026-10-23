@@ -27,6 +27,7 @@ import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.clients.draft
+import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
@@ -161,14 +162,19 @@ private val ListWidth = 360.dp
  * Поиск, фильтры и прокрутка списка объявлены над веткой ширины, открытое справа стоит на одном месте дерева —
  * сложение и разложение ничего не теряют. У каждого экрана стопки своё сохранённое состояние: «Назад» из
  * карточки родственника возвращает карточку на той же вкладке и прокрутке.
+ *
+ * @param forms серии клиента и их запись — «Расписание» карточки (шаг 1.13б).
+ * @param onForm открыть форму тренировки поверх приложения: «+ Тренировка», «+ Серия», «Изменить с даты…».
  */
 @Composable
 fun ClientsScreen(
     shell: ShellState,
     clients: ClientRepository,
+    forms: TrainingRepository,
     messages: MessageState,
     scope: CoroutineScope,
     now: LocalDateTime,
+    onForm: (String) -> Unit,
 ) {
     val wide = LocalWide.current
     val list = rememberSaveable(saver = ClientListState.Saver) { ClientListState() }
@@ -203,10 +209,12 @@ fun ClientsScreen(
                         screen = top,
                         rows = loaded,
                         clients = clients,
+                        forms = forms,
                         nav = nav,
                         messages = messages,
                         scope = scope,
                         now = now,
+                        onForm = onForm,
                         // На разложенном у первого экрана «Назад» нет: список и так слева.
                         onBack = if (!wide || stack.size > 1) nav::back else null,
                     )
@@ -258,14 +266,16 @@ private fun ClientDetail(
     screen: ClientScreen,
     rows: List<ClientRow>,
     clients: ClientRepository,
+    forms: TrainingRepository,
     nav: ClientNav,
     messages: MessageState,
     scope: CoroutineScope,
     now: LocalDateTime,
+    onForm: (String) -> Unit,
     onBack: (() -> Unit)?,
 ) {
     when (screen) {
-        is ClientScreen.Card -> ClientCard(screen.clientId, rows, clients, nav, messages, scope, now, onBack)
+        is ClientScreen.Card -> ClientCard(screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack)
         is ClientScreen.New -> ClientEditor(
             clientId = null,
             initial = prefillDraft(screen.prefill),

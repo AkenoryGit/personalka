@@ -95,9 +95,9 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
     }
 }
 
-/** Контурная кнопка для редкого действия рядом с главной: «Убрать в архив». */
+/** Контурная кнопка для редкого действия рядом с главной: «Убрать в архив», «+ Серия». */
 @Composable
-fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
     val colors = PersonalkaTheme.colors
     OutlinedButton(
         onClick = onClick,
@@ -106,6 +106,10 @@ fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outline),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.text),
     ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(Dimens.space2))
+        }
         Text(text, style = MaterialTheme.typography.labelLarge)
     }
 }

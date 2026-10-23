@@ -54,28 +54,39 @@ import com.akenory.personalka.data.clients.ClientTrainingRow
 import com.akenory.personalka.data.clients.RelativeRow
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.db.entity.ClientEntity
+import com.akenory.personalka.data.training.SaveResult
+import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.series.ClientScheduleRules
+import com.akenory.personalka.domain.series.ScheduleSeries
 import com.akenory.personalka.domain.training.ClientOutcome
+import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SecondaryButton
-import com.akenory.personalka.ui.components.ChoiceChip
+import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
+import com.akenory.personalka.ui.training.DatePickerPanel
+import com.akenory.personalka.ui.training.ErrorText
+import com.akenory.personalka.ui.training.PickBox
+import com.akenory.personalka.ui.training.TrainingFormKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -85,41 +96,54 @@ const val CARD_MENU_TAG = "client-card-menu"
 const val ADD_RELATIVE_TAG = "add-relative"
 const val DELETE_SURNAME_TAG = "delete-surname"
 fun relativeRowTag(name: String) = "relative-$name"
+const val CARD_ADD_TRAINING_TAG = "card-add-training"
+const val CARD_ADD_SERIES_TAG = "card-add-series"
+const val END_DAY_TAG = "end-day"
 fun cardTabTag(tab: CardTab) = "card-tab-${tab.name}"
+fun changeFromTag(seriesId: String) = "change-from-$seriesId"
+fun endSeriesTag(seriesId: String) = "end-series-$seriesId"
 
-/** Вкладки карточки (5.9). «Результаты» появятся с результатами (2.3), «Расписание» — с формой серии (1.13). */
-enum class CardTab(val title: String) { TRAININGS("Тренировки"), INFO("Инфо") }
+/** Вкладки карточки (5.9). «Результаты» появятся с результатами (2.3) — между «Тренировками» и «Инфо». */
+enum class CardTab(val title: String) { TRAININGS("Тренировки"), INFO("Инфо"), SCHEDULE("Расписание") }
 
 private enum class HistoryFilter(val title: String) { ALL("Все"), DONE("Проведённые"), CANCELLED("Отменённые") }
 
 /**
- * Карточка клиента (5.9, макеты ClCard, ClCardInfo, ClRelInfo): имя, «Ребёнок» или «Взрослый», возраст
- * и расписание; счётчики; вкладки «Тренировки» и «Инфо». Пока тренировок нет, нет ни счётчиков, ни вкладок —
- * сразу «Инфо» (10.7: пустое не показывается).
+ * Карточка клиента (5.9, макеты ClCard, ClCardInfo, ClCardSchedule, ClRelInfo): имя, «Ребёнок» или «Взрослый»,
+ * возраст и расписание; счётчики; «+ Тренировка»; вкладки «Тренировки», «Инфо» и «Расписание». Пока нет ни
+ * тренировок, ни серий, нет ни счётчиков, ни вкладок — сразу «Инфо» (10.7: пустое не показывается).
  *
  * Меню «…»: «Изменить», «Объединить с…», «В архив», «Удалить полностью» — с двойным подтверждением и вводом
- * фамилии. «+ Тренировка», «+ Результат», «Кабинет» и «В лист ожидания…» появятся в своих шагах (1.13, 2.3,
- * 2.13, 2.4).
+ * фамилии. «+ Результат», «Кабинет» и «В лист ожидания…» появятся в своих шагах (2.3, 2.13, 2.4).
+ *
+ * @param onForm открыть форму тренировки ([TrainingFormKey]): «+ Тренировка», «+ Серия», «Изменить с даты…».
  */
 @Composable
 fun ClientCard(
     clientId: String,
     rows: List<ClientRow>,
     clients: ClientRepository,
+    forms: TrainingRepository,
     nav: ClientNav,
     messages: MessageState,
     scope: CoroutineScope,
     now: LocalDateTime,
+    onForm: (String) -> Unit,
     onBack: (() -> Unit)?,
 ) {
     val today = now.date
     val row = rows.firstOrNull { it.client.id == clientId }
     val relatives by remember(clients, clientId, today) { clients.relatives(clientId, today) }.collectAsState(initial = null)
     val trainings by remember(clients, clientId) { clients.trainings(clientId) }.collectAsState(initial = null)
+    val series by remember(forms, clientId) { forms.seriesOf(clientId) }.collectAsState(initial = null)
     val upcomingCount by produceState(initialValue = 4, clients) { value = clients.upcomingInCard() }
     var tab by rememberSaveable(clientId) { mutableStateOf(CardTab.TRAININGS) }
     var deleteStep by rememberSaveable(clientId) { mutableStateOf(0) }
     var surname by rememberSaveable(clientId) { mutableStateOf("") }
+    // «Завершить»: какая серия, последний день и открыт ли выбор даты.
+    var ending by rememberSaveable(clientId) { mutableStateOf<String?>(null) }
+    var lastDay by rememberSaveable(clientId) { mutableStateOf(ClientScheduleRules.defaultLastDay(today).toString()) }
+    var pickingDay by rememberSaveable(clientId) { mutableStateOf(false) }
 
     if (row == null) {
         // Клиента только что удалили или объединили — карточка вот-вот закроется.
@@ -133,6 +157,9 @@ fun ClientCard(
         ClientStats.of(list.map { it.training.start.date to ClientOutcome.of(it.training.status, it.participation.status) }, today)
     }
     val hasTrainings = !loadedTrainings.isNullOrEmpty()
+    val schedule = series?.let { ClientScheduleRules.ordered(it, today) }
+    val active = client.status != ClientStatus.ARCHIVED
+    val showTabs = hasTrainings || !schedule.isNullOrEmpty()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -173,17 +200,83 @@ fun ClientCard(
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 CardHeader(row, today)
                 if (stats != null && !stats.isEmpty) StatsRow(stats)
-                if (loadedTrainings != null) {
-                    if (hasTrainings) {
+                if (active) {
+                    // Клиента в архиве не записывают: сначала «Вернуть из архива».
+                    SecondaryButton(
+                        ClientFormat.ADD_TRAINING,
+                        { onForm(TrainingFormKey.new(clientId = clientId)) },
+                        modifier = Modifier.padding(start = Dimens.space4, top = Dimens.space3).testTag(CARD_ADD_TRAINING_TAG),
+                        icon = PIcons.Add,
+                    )
+                }
+                if (loadedTrainings != null && schedule != null) {
+                    if (showTabs) {
                         Tabs(tab) { tab = it }
                     }
-                    if (hasTrainings && tab == CardTab.TRAININGS) {
-                        TrainingsTab(clientId, loadedTrainings, now, upcomingCount)
-                    } else {
-                        InfoTab(client, relatives.orEmpty(), today, nav, clients, messages, scope)
+                    when (if (showTabs) tab else CardTab.INFO) {
+                        CardTab.TRAININGS -> TrainingsTab(clientId, loadedTrainings, now, upcomingCount)
+                        CardTab.INFO -> InfoTab(client, relatives.orEmpty(), today, nav, clients, messages, scope)
+                        CardTab.SCHEDULE -> ScheduleTab(
+                            list = schedule,
+                            today = today,
+                            active = active,
+                            onChangeFrom = { onForm(TrainingFormKey.series(it)) },
+                            onEnd = {
+                                lastDay = ClientScheduleRules.defaultLastDay(today).toString()
+                                ending = it
+                            },
+                            onAdd = { onForm(TrainingFormKey.new(clientId = clientId, weekly = true)) },
+                        )
                     }
                 }
                 Spacer(Modifier.height(Dimens.space6))
+            }
+        }
+
+        val endingSeries = schedule?.firstOrNull { it.id == ending }
+        if (endingSeries != null) {
+            val day = LocalDate.parse(lastDay)
+            val problem = ClientScheduleRules.lastDayProblem(day, today)
+            Panel(ClientFormat.END_TITLE, onDismiss = { ending = null }) {
+                Text(
+                    ClientFormat.seriesDays(endingSeries.weekdays, endingSeries.startTime, endingSeries.durationMin),
+                    style = MaterialTheme.typography.labelLarge.tabular(),
+                    color = PersonalkaTheme.colors.text,
+                )
+                SectionLabel(ClientFormat.LAST_DAY)
+                PickBox(
+                    text = TrainingFormat.date(day),
+                    icon = PIcons.CalendarMonth,
+                    onClick = { pickingDay = true },
+                    modifier = Modifier.fillMaxWidth().testTag(END_DAY_TAG),
+                    error = problem,
+                )
+                problem?.let { ErrorText(it) }
+                Text(ClientFormat.END_NOTE, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+                PanelActions(
+                    primary = ClientFormat.END_SERIES,
+                    onPrimary = {
+                        val id = endingSeries.id
+                        ending = null
+                        scope.launch {
+                            val result = forms.endSeries(id, day) as? SaveResult.Saved ?: return@launch
+                            messages.showUndo(result.message) { scope.launch { forms.undo(result.undo) } }
+                        }
+                    },
+                    secondary = "Отмена",
+                    onSecondary = { ending = null },
+                    primaryEnabled = problem == null,
+                )
+            }
+            if (pickingDay) {
+                DatePickerPanel(
+                    initial = day,
+                    onPick = {
+                        pickingDay = false
+                        lastDay = it.toString()
+                    },
+                    onDismiss = { pickingDay = false },
+                )
             }
         }
 
@@ -487,6 +580,64 @@ private fun TabSectionTitle(text: String) {
         style = MaterialTheme.typography.labelMedium,
         color = PersonalkaTheme.colors.textMuted,
     )
+}
+
+// --- Расписание ---
+
+/**
+ * «Расписание» (5.9, макет ClCardSchedule): серии клиента — дни и время, тип · место, период. У идущей —
+ * «Изменить с даты…» и «Завершить», завершённая — бледнее и без кнопок; ниже «+ Серия».
+ */
+@Composable
+private fun ScheduleTab(
+    list: List<ScheduleSeries>,
+    today: LocalDate,
+    active: Boolean,
+    onChangeFrom: (String) -> Unit,
+    onEnd: (String) -> Unit,
+    onAdd: () -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    Column(Modifier.padding(horizontal = Dimens.space4), verticalArrangement = Arrangement.spacedBy(Dimens.space3)) {
+        TabSectionTitle(ClientFormat.SCHEDULE_TITLE)
+        if (list.isEmpty()) {
+            Text(ClientFormat.NO_SCHEDULE, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
+        }
+        list.forEach { s ->
+            val ended = s.endedOn(today)
+            ListCard {
+                Column(Modifier.fillMaxWidth().padding(Dimens.space4), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        ClientFormat.seriesDays(s.weekdays, s.startTime, s.durationMin),
+                        style = MaterialTheme.typography.titleMedium.tabular(),
+                        color = if (ended) colors.textMuted else colors.text,
+                    )
+                    Text(
+                        ClientFormat.seriesPeriod(s.typeShort, s.placeShort, s.validFrom, s.validTo, today),
+                        style = MaterialTheme.typography.bodySmall.tabular(),
+                        color = colors.textMuted,
+                    )
+                    if (!ended && active) {
+                        Row(Modifier.padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+                            SecondaryButton(ClientFormat.CHANGE_FROM, { onChangeFrom(s.id) }, modifier = Modifier.testTag(changeFromTag(s.id)))
+                            Spacer(Modifier.width(Dimens.space2))
+                            TextButton(onClick = { onEnd(s.id) }, modifier = Modifier.heightIn(min = Dimens.touch).testTag(endSeriesTag(s.id))) {
+                                Text(ClientFormat.END_SERIES, style = MaterialTheme.typography.labelLarge, color = colors.text)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (active) {
+            OutlineButton(
+                ClientFormat.ADD_SERIES,
+                onAdd,
+                modifier = Modifier.fillMaxWidth().testTag(CARD_ADD_SERIES_TAG),
+                icon = PIcons.Add,
+            )
+        }
+    }
 }
 
 // --- Инфо ---

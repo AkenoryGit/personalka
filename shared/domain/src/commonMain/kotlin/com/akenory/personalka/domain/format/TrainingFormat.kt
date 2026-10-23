@@ -33,6 +33,11 @@ object TrainingFormat {
     /** Поле даты: «вт 20.10.2026». */
     fun date(date: LocalDate): String = "${DateFormat.weekdayShort(date.dayOfWeek)}$NBSP${DateFormat.full(date)}"
 
+    /** «Изменить с даты…» из карточки клиента (5.9): форма серии и поле её даты — «с вт 27.10.2026». */
+    const val SERIES_TITLE = "Изменить расписание"
+
+    fun fromDate(date: LocalDate): String = "с ${date(date)}"
+
     // --- Дежурство и запрет (шаг 1.13а, макет «Запрет») ---
 
     /** Переключатель вверху формы новой записи. */

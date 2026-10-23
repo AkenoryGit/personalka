@@ -24,6 +24,7 @@ import com.akenory.personalka.domain.calendar.DaySpan
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.group.GroupMember
@@ -41,6 +42,8 @@ import com.akenory.personalka.domain.restriction.RestrictionCheck
 import com.akenory.personalka.domain.restriction.RestrictionHit
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.restriction.placement
+import com.akenory.personalka.domain.series.ClientScheduleRules
+import com.akenory.personalka.domain.series.ScheduleSeries
 import com.akenory.personalka.domain.series.SeriesPattern
 import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.series.TrainingEdit
@@ -103,6 +106,12 @@ data class StoredTraining(
     val seriesRepeat: Repeat?,
     val isDuty: Boolean = false,
 )
+
+/**
+ * Серия для формы «Изменить с даты…» (5.9): черновик с даты по умолчанию — время, длительность, тип, место,
+ * клиенты, дни в повторе. [validTo] — последний день серии: позже него менять нечего.
+ */
+data class StoredSeries(val id: String, val draft: TrainingDraft, val validTo: LocalDate?)
 
 /** Ответ на вопрос «Только эту / Эту и следующие» (4.4). */
 enum class EditScope { ONLY_THIS, FOLLOWING }
@@ -459,6 +468,122 @@ class TrainingRepository internal constructor(
     suspend fun undo(undo: Undo) {
         val now = clock()
         db.withWriteTransaction { db.restore(undo, now) }
+    }
+
+    // --- Расписание в карточке клиента (5.9) ---
+
+    /** Серии клиента для вкладки «Расписание»: ПТ, сплит и СПТ, и завершённые; групповые меняет группа (5.10). */
+    fun seriesOf(clientId: String): Flow<List<ScheduleSeries>> = combine(
+        schedule.observeSeriesOfClient(clientId),
+        reference.observeTrainingTypes(),
+        reference.observeLocations(),
+    ) { list, types, places ->
+        val typeShort = types.associate { it.id to it.shortName }
+        val placeShort = places.associate { it.id to it.shortName }
+        list.filter { it.groupId == null }.map {
+            ScheduleSeries(it.id, it.weekdays, it.startTime, it.durationMin, typeShort[it.typeId].orEmpty(), placeShort[it.locationId].orEmpty(), it.validFrom, it.validTo)
+        }
+    }
+
+    /** Серия для формы «Изменить с даты…»; `null` — её уже нет или она закончилась. */
+    suspend fun storedSeries(id: String): StoredSeries? {
+        val s = schedule.series(id)?.takeIf { it.sync.deletedAt == null } ?: return null
+        val today = ClubTime.now(clock()).date
+        if (s.validTo != null && s.validTo < today) return null
+        val from = maxOf(today, s.validFrom)
+        return StoredSeries(
+            id = id,
+            draft = TrainingDraft(
+                start = LocalDateTime(from, s.startTime),
+                typeId = s.typeId,
+                clientIds = if (s.groupId != null) emptyList() else seriesClientIds(id),
+                groupId = s.groupId,
+                locationId = s.locationId,
+                durationMin = s.durationMin,
+                repeat = Repeat(s.weekdays, s.validTo),
+            ),
+            validTo = s.validTo,
+        )
+    }
+
+    /**
+     * «Изменить с даты…» (5.9, 4.4): то же, что «Эту и следующие», с даты черновика — новые дни, время, тип, место,
+     * длительность и клиенты. Прошлое и отмеченное не трогается, план выпавшего дня переходит дальше.
+     * Под запретом — сначала [SaveResult.Confirm] без записи, как у новой серии.
+     */
+    suspend fun changeFrom(seriesId: String, draft: TrainingDraft, confirmed: Boolean = false): SaveResult {
+        val now = clock()
+        val clubNow = ClubTime.now(now)
+        var result: SaveResult = SaveResult.Invalid(emptyMap())
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val series = schedule.series(seriesId)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            val type = draft.typeId?.let { reference.trainingType(it) }
+            val from = draft.start.date
+            // Конец серии здесь не меняется — его меняет «Завершить».
+            val repeat = Repeat(draft.repeat?.weekdays ?: series.weekdays, null)
+            val problems = problems(draft.copy(repeat = repeat), type?.toForm(), clubNow) +
+                listOfNotNull(ClientScheduleRules.fromProblem(from, clubNow.date, series.validTo)?.let { FormField.DATE to it })
+            if (problems.isNotEmpty() || type == null) {
+                result = SaveResult.Invalid(problems)
+                return@withWriteTransaction
+            }
+            val stored = series.toSeries(seriesClientIds(series.id))
+            val pattern = draft.pattern(repeat).copy(typeId = type.id)
+            val all = trainings.trainingsOfSeries(series.id).map { it.toSeriesTraining(trainings.participationsOf(it.id)) }
+            val changes = SeriesRules.changeFrom(
+                series = stored,
+                from = from,
+                pattern = pattern,
+                trainings = all,
+                newSeriesId = Ids.newId(now),
+                now = clubNow,
+                horizonWeeks = horizonWeeks(),
+                members = members(pattern.groupId),
+            )
+            val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
+            val isDuty = { typeId: String -> typeId in duties }
+            val restrictions = schedule.blocks().map { it.toRestriction() }
+            val old = all.associateBy { it.id }
+            val placed = changes.created.map { it.placement(isDuty(it.typeId)) } +
+                changes.updated.filter { u -> old[u.id]?.let { RestrictionRules.moved(it.placement(), u.placement()) } ?: true }
+                    .map { it.placement(isDuty(it.typeId)) }
+            val batch = RestrictionRules.checkAll(placed, restrictions)
+            if (batch != null && !confirmed) {
+                result = SaveResult.Confirm(batchLines(batch))
+                return@withWriteTransaction
+            }
+            val recorder = Recorder(db, now)
+            recorder.write(db, changes, coach.id, now, restrictions, stored.pattern, isDuty)
+            result = SaveResult.Saved(ClientFormat.changedFrom(from), recorder.undo())
+        }
+        return result
+    }
+
+    /**
+     * «Завершить» (5.9, 4.4): [lastDay] — последний день серии, самое раннее вчера. Будущие тренировки после него
+     * удаляются, их планы — в отложенный план клиента (4.3).
+     */
+    suspend fun endSeries(seriesId: String, lastDay: LocalDate): SaveResult {
+        val now = clock()
+        val clubNow = ClubTime.now(now)
+        var result: SaveResult = SaveResult.Invalid(emptyMap())
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val series = schedule.series(seriesId)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            ClientScheduleRules.lastDayProblem(lastDay, clubNow.date)?.let {
+                result = SaveResult.Invalid(mapOf(FormField.DATE to it))
+                return@withWriteTransaction
+            }
+            val stored = series.toSeries(seriesClientIds(series.id))
+            val all = trainings.trainingsOfSeries(series.id).map { it.toSeriesTraining(trainings.participationsOf(it.id)) }
+            val changes = SeriesRules.end(stored, lastDay, all, clubNow)
+            val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
+            val recorder = Recorder(db, now)
+            recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
+            result = SaveResult.Saved(ClientFormat.SERIES_ENDED, recorder.undo())
+        }
+        return result
     }
 
     /**
