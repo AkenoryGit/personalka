@@ -185,6 +185,8 @@ fun TrainingCardHost(
         notifiedAt = notifiedAt?.let(LocalDateTime::parse),
         charged = charged?.toBooleanStrictOrNull(),
     )
+    // Сообщение с «Отменить» стоит внизу поверх экрана: пока оно видно, кнопки карточки поднимаются над ним.
+    val messageGap = if (messages.current != null) MESSAGE_GAP else 0.dp
     val pane: @Composable ColumnScope.() -> Unit = {
         if (shown != null) {
             val who = cancelWho
@@ -249,6 +251,7 @@ fun TrainingCardHost(
                     },
                 )
             }
+            Spacer(Modifier.height(messageGap))
         }
     }
 
@@ -338,6 +341,9 @@ fun TrainingCardHost(
         }
     }
 }
+
+/** Высота сообщения внизу с его отступом (`MessageHost`): 48 + 12 dp. */
+private val MESSAGE_GAP = 60.dp
 
 /** Ширина карточки справа на разложенном Fold (макет «Разложенный Fold · сплит»). */
 private val CARD_WIDTH = 320.dp

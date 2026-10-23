@@ -1044,13 +1044,13 @@ class CalendarUiTest {
         chooseView("День")
         assertSelected(friday, "День после списка")
 
-        // Снова «Список» — с пятницы; «Сегодня» — с сегодня; нажатие на строку — форма тренировки.
+        // Снова «Список» — с пятницы; «Сегодня» — с сегодня; нажатие на строку — карточка тренировки.
         chooseView("Список")
         waitUntil(timeoutMillis = 5_000) { exists(dayTitleTag(friday)) && !exists(dayTitleTag(today)) }
         onNodeWithContentDescription(TODAY_LABEL).performClick()
         awaitNode(hasTestTag(dayTitleTag(today)))
         onNodeWithTag(calendarRowTag(belova)).performClick()
-        awaitNode(hasText(TrainingFormat.EDIT_TITLE))
+        awaitNode(hasTestTag(TRAINING_CARD_TAG))
     }
 
     @Test

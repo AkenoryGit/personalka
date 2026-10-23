@@ -126,7 +126,7 @@ class CalendarSettingsUiTest {
 
         awaitNode(hasText("ДБ 17:00–18:00 — групповая тренировка"))
         onNodeWithText(CalendarSettingsFormat.OWN_RESTRICTIONS).performScrollTo().assertIsDisplayed()
-        onNodeWithText("Каждый вт и чт").assertIsDisplayed()
+        onNodeWithText("Каждый вт и чт").performScrollTo().assertIsDisplayed()
         // Запретов клуба и дежурств нет — их списков тоже.
         onNodeWithText(CalendarSettingsFormat.CLUB_RESTRICTIONS).assertDoesNotExist()
         onNodeWithText(CalendarSettingsFormat.DUTIES).assertDoesNotExist()
