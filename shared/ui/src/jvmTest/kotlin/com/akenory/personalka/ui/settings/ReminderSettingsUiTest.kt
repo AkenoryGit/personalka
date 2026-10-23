@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -93,7 +94,7 @@ class ReminderSettingsUiTest {
         onNodeWithTag(AUTO_DONE_TAG).assertIsOn()
         onNodeWithTag(DIGEST_TAG).assertIsOn()
         onNodeWithTag(DIGEST_TIME_TAG).assertIsDisplayed()
-        onNodeWithTag(followupDaysTag(14)).assertIsSelected()
+        onNodeWithTag(followupDaysTag(14)).onChild().assertIsSelected()
         // Мгновенные — под «Дополнительно», свёрнутым, пока всё выключено.
         assertEquals(0, onAllNodes(hasTestTag(INSTANT_DIARY_TAG)).fetchSemanticsNodes().size)
 
