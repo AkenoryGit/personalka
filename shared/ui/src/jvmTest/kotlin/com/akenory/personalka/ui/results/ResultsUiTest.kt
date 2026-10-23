@@ -136,6 +136,8 @@ class ResultsUiTest {
         runBlocking { clients.results.save(ResultDraft(orlova, LocalDate(2026, 10, 10), free50, 3962, ResultKind.COMPETITION, "Кубок города")) }
         val id = results(orlova).single().id
         openCard("Орлова Ксения")
+        // Вкладка появляется, когда результаты прочитаны из базы.
+        awaitNode(hasTestTag(cardTabTag(CardTab.RESULTS)))
         onNodeWithTag(cardTabTag(CardTab.RESULTS)).performClick()
         awaitNode(hasTestTag(resultRowTag(id)))
         onNodeWithTag(resultRowTag(id)).performScrollTo().performClick()
