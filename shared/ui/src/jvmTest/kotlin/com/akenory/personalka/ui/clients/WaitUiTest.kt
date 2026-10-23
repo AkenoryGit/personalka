@@ -138,7 +138,7 @@ class WaitUiTest {
             val dbPlace = settings.places.first().single { it.shortName == "ДБ" }.id
             calendar.forms.create(TrainingDraft(LocalDateTime(2026, 10, 20, 17, 0), ptId(), listOf(orlov), null, dbPlace, 50))
             val training = db.trainingDao().trainingsAfter(TestData.now).single()
-            assertEquals("Это время ждут: Смирнова И. (разово)", calendar.cards.waitingLine(training.id))
+            assertEquals("Это время ждут: Смирнова\u00A0И. (разово)", calendar.cards.waitingLine(training.id))
             calendar.cards.cancel(training.id, emptyList(), "Не сможет", TestData.now)
         }
         setContent { Box(Modifier.size(412.dp, 960.dp)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), calendar, clock = TestData.clock) } }

@@ -147,7 +147,7 @@ class ClientWaitListTest {
         val training = db.trainingDao().trainingsAfter(now).single()
 
         // В панели отмены — кто ждёт: Смирнова (разово), не Петров.
-        assertEquals("Это время ждут: Смирнова И. (разово)", calendar.cards.waitingLine(training.id))
+        assertEquals("Это время ждут: Смирнова\u00A0И. (разово)", calendar.cards.waitingLine(training.id))
         calendar.cards.cancel(training.id, emptyList(), "Не сможет", now)
 
         val rows = repo.waitlist.observe(now).first()
@@ -174,7 +174,7 @@ class ClientWaitListTest {
         val seriesId = db.scheduleDao().seriesOfClient(kovalev).single().id
 
         // В подтверждении «Завершить» — кто ждёт это время: Морозов постоянно; Смирнова ждёт вечер — нет.
-        assertEquals("Это время ждут: Морозов Д. (постоянно)", repo.waitlist.waitingForSeriesEnd(seriesId, now.date))
+        assertEquals("Это время ждут: Морозов\u00A0Д. (постоянно)", repo.waitlist.waitingForSeriesEnd(seriesId, now.date))
         calendar.forms.endSeries(seriesId, now.date)
 
         val stored = repo.waitlist.entry(entry)!!
