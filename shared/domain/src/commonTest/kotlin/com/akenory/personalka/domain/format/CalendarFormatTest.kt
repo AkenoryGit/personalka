@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.calendar.CalendarView
 import com.akenory.personalka.domain.client.ClientName
 import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
@@ -48,5 +49,14 @@ class CalendarFormatTest {
         assertEquals(s("Ср_21.10 · 12:15–13:05"), CalendarFormat.dragHint(LocalDateTime(2026, 10, 21, 12, 15), LocalDateTime(2026, 10, 21, 13, 5)))
         assertEquals(s("Перенесено на чт_22.10, 17:15"), CalendarFormat.moved(at1715))
         assertEquals(s("вт_20.10, 10:00"), CalendarFormat.at(at10))
+    }
+
+    @Test
+    fun viewLabels() {
+        // Переключатель вида в шапке (макеты «3 дня»): склонение по числу дней.
+        assertEquals("День", CalendarFormat.view(CalendarView.Day))
+        assertEquals(s("3_дня"), CalendarFormat.view(CalendarView.Days(3)))
+        assertEquals(s("5_дней"), CalendarFormat.view(CalendarView.Days(5)))
+        assertEquals(s("7_дней"), CalendarFormat.view(CalendarView.Days(7)))
     }
 }

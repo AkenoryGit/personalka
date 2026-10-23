@@ -258,8 +258,9 @@ private fun MenuLabel(text: String) {
     )
 }
 
+/** Пункт меню с выбором: галочка справа у выбранного. */
 @Composable
-private fun MenuChoice(text: String, selected: Boolean, onClick: () -> Unit) {
+internal fun MenuChoice(text: String, selected: Boolean, onClick: () -> Unit) {
     val colors = PersonalkaTheme.colors
     DropdownMenuItem(
         text = { Text(text, style = MaterialTheme.typography.bodyLarge, color = colors.text) },

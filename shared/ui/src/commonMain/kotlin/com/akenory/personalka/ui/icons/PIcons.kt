@@ -41,6 +41,9 @@ object PIcons {
     /** кнопка «+». */
     val Add: ImageVector by lazy { symbol("add", "M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z") }
 
+    /** Кнопка с выпадающим списком: вид и места в шапке календаря. */
+    val ArrowDropDown: ImageVector by lazy { symbol("arrow_drop_down", "M480-360 280-560h400L480-360Z") }
+
     /** строка ведёт дальше. */
     val ChevronRight: ImageVector by lazy { symbol("chevron_right", "M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z") }
 

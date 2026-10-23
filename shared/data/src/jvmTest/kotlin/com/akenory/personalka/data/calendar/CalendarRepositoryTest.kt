@@ -20,6 +20,7 @@ import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.CoachName
+import com.akenory.personalka.domain.reference.PlaceDraft
 import com.akenory.personalka.domain.reference.ReferenceRules
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -235,6 +236,8 @@ class CalendarRepositoryTest {
         assertEquals("ББ 11:00–15:00 — дежурство", duty.text)
         assertEquals("Дежурство · ББ", duty.label)
         assertEquals("slate", duty.color)
+        // Место зоны — для фильтра мест в шапке (шаг 1.12).
+        assertEquals(placeId("ББ"), duty.placeId)
 
         assertEquals(ZoneKind.RESTRICTION, hatched.kind)
         assertEquals(restriction.id, hatched.id)
@@ -243,6 +246,7 @@ class CalendarRepositoryTest {
         assertEquals("ДБ 17:00–18:00 — групповая тренировка", hatched.text)
         assertEquals("ДБ · групповая тренировка", hatched.label)
         assertEquals("Каждый вт и чт", hatched.repeat)
+        assertEquals(placeId("ДБ"), hatched.placeId)
 
         // Неделя: запрет во вт 20.10 и вт 27.10, чт 22.10 пропущен; дежурство — одно.
         val week = calendar.zones(tuesday, LocalDate(2026, 10, 28)).first()
@@ -406,5 +410,24 @@ class CalendarRepositoryTest {
         val stored = db.coachDao().settings(coach.id)!!
         db.coachDao().upsertSettings(stored.copy(dragStepMinutes = 30))
         assertEquals(30, calendar.dragStep.first())
+    }
+
+    @Test
+    fun weekViewDaysFromSettings(): Unit = runBlocking {
+        assertEquals(3, calendar.weekViewDays.first())
+        val coach = db.coachDao().currentCoach()!!
+        val stored = db.coachDao().settings(coach.id)!!
+        db.coachDao().upsertSettings(stored.copy(weekViewDays = 5))
+        assertEquals(5, calendar.weekViewDays.first())
+    }
+
+    @Test
+    fun placesForFilterInCoachOrderWithoutArchived(): Unit = runBlocking {
+        assertEquals(listOf("ББ", "ДБ", "Зал"), calendar.places.first().map { it.shortName })
+        assertEquals("Большой бассейн", calendar.places.first().first().name)
+        // Порядок — как у тренера в «Местах и типах»; архивное место в фильтре не нужно.
+        settings.reorderPlaces(listOf(placeId("Зал"), placeId("ББ"), placeId("ДБ")))
+        settings.updatePlace(placeId("ДБ"), PlaceDraft("Детский бассейн", "ДБ"), archived = true)
+        assertEquals(listOf("Зал", "ББ"), calendar.places.first().map { it.shortName })
     }
 }

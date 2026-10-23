@@ -1,6 +1,7 @@
 package com.akenory.personalka.ui.calendar
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -23,6 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -230,14 +234,18 @@ class DayGridState(top: Float, hourDp: Float) {
 }
 
 /**
- * Сетка дня (ТЗ 5.3): колонка времени 48 dp и дни, которые листаются свайпом. Прокрутка и щипок — общие для всех
- * дней. Всё рисуется на Canvas, а прокрутка только сдвигает готовую картинку: блоки при ней не перерисовываются.
+ * Сетка дней (ТЗ 5.3): колонка времени 48 dp и [columns] дней рядом — «День» или «Несколько дней», которые
+ * листаются свайпом. Страница листания — один день: в «Нескольких днях» видно [columns] страниц, а бросок
+ * листает не больше чем на [columns] дней (шаг 1.12). Прокрутка и щипок — общие для всех дней. Всё рисуется
+ * на Canvas, а прокрутка только сдвигает готовую картинку: блоки при ней не перерисовываются.
  *
  * Жесты (шаг 1.11): длительное нажатие на пустое место — новая тренировка на время под пальцем; на тренировку —
- * меню, а со сдвигом — перетаскивание с подсказкой, привязкой к шагу, автопрокруткой у верхнего и нижнего края
- * и листанием дня у бокового. Жест разбирает вся сетка, а не колонка дня: при листании колонка меняется,
- * а блок остаётся под пальцем.
+ * меню, а со сдвигом — перетаскивание с подсказкой, привязкой к шагу и автопрокруткой у верхнего и нижнего края.
+ * День под пальцем — по колонке: в «Нескольких днях» блок переносится в соседнюю колонку обычным движением,
+ * а в виде «День» — задержкой у бокового края, которая листает день. Жест разбирает вся сетка, а не колонка дня:
+ * при листании колонка меняется, а блок остаётся под пальцем.
  *
+ * @param columns сколько дней видно рядом: 1 — «День», 3, 5 или 7 — «Несколько дней».
  * @param itemsOf тренировки дня, отменённые тоже.
  * @param zonesOf дежурства и запреты дня.
  * @param step шаг перетаскивания из настроек, минуты.
@@ -249,6 +257,7 @@ class DayGridState(top: Float, hourDp: Float) {
  * @param onMove тренировку перетащили на новое начало — день и время.
  * @param onZoomEnd щипок закончен — масштаб пора запомнить.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun DayGrid(
     pager: PagerState,
@@ -256,6 +265,7 @@ internal fun DayGrid(
     hours: GridHours,
     now: LocalDateTime,
     step: Int,
+    columns: Int,
     itemsOf: (LocalDate) -> List<CalendarTraining>,
     zonesOf: (LocalDate) -> List<CalendarZone>,
     menuId: String?,
@@ -273,10 +283,12 @@ internal fun DayGrid(
     val density = LocalDensity.current.density
     BoxWithConstraints(modifier.background(colors.surface).clipToBounds()) {
         val heightDp = maxHeight.value
-        val pageWidth = (maxWidth - Dimens.timeColumn).value
+        // Ширина колонки дня, dp: у «Дня» — вся ширина сетки, у «Нескольких дней» — её доля.
+        val columnWidth = (maxWidth - Dimens.timeColumn).value / columns
         val currentHours by rememberUpdatedState(hours)
         val currentHeight by rememberUpdatedState(heightDp)
-        val currentWidth by rememberUpdatedState(pageWidth)
+        val currentWidth by rememberUpdatedState(columnWidth)
+        val currentColumns by rememberUpdatedState(columns)
         val currentZoomEnd by rememberUpdatedState(onZoomEnd)
         val hourDp = grid.hourDp
         // Прокрутка читается только при рисовании: при ней не пересобирается ни экран, ни блоки.
@@ -300,7 +312,20 @@ internal fun DayGrid(
         val currentCreate by rememberUpdatedState(onCreate)
         val currentMenu by rememberUpdatedState(onMenu)
         val currentMove by rememberUpdatedState(onMove)
-        // Куда встанет блок: меняется раз в шаг, а не с каждым движением пальца.
+
+        /**
+         * Левый край колонки страницы [page], dp от левого края дней. Читает положение листания — вызывать при
+         * раскладке, рисовании или в обработчике жеста, а не при сборке экрана.
+         */
+        fun columnStart(page: Int): Float = (page - pager.currentPage - pager.currentPageOffsetFraction) * currentWidth
+
+        /** Страница (день) под точкой [x], dp от левого края дней; левее и правее колонок — крайняя видимая. */
+        fun pageAt(x: Float): Int {
+            val inside = x.coerceIn(0f, currentColumns * currentWidth - 0.01f)
+            return floor(inside / currentWidth + pager.currentPage + pager.currentPageOffsetFraction).toInt()
+        }
+
+        // Куда встанет блок: меняется раз в шаг или при переходе в другую колонку, а не с каждым движением пальца.
         val target by remember(drag, grid, pager) {
             derivedStateOf {
                 val training = drag.training
@@ -308,15 +333,18 @@ internal fun DayGrid(
                 val view = grid.view(currentHours, currentHeight)
                 val raw = view.top + (drag.pointer.y / density - drag.grab) / view.dpPerMinute
                 val minute = CalendarDrag.moveMinute(ClubTime.minuteOfDay(training.start), raw, training.durationMin, currentStep)
-                DragTarget(dateOfPage(pager.currentPage), minute)
+                // В виде «День» — день на экране (его листает задержка у края), в «Нескольких днях» — колонка под пальцем.
+                val page = if (currentColumns == 1) pager.currentPage else pageAt(drag.pointer.x / density - Dimens.timeColumn.value)
+                DragTarget(dateOfPage(page), minute)
             }
         }
 
         /** Длительное нажатие в точке сетки [position], px. `true` — палец держит тренировку. */
         fun hold(position: Offset): Boolean {
-            val date = dateOfPage(pager.currentPage)
             val view = grid.view(currentHours, currentHeight)
-            val x = position.x / density - Dimens.timeColumn.value
+            val page = pageAt(position.x / density - Dimens.timeColumn.value)
+            val date = dateOfPage(page)
+            val x = position.x / density - Dimens.timeColumn.value - columnStart(page)
             val y = (view.top - currentHours.startMinute) * view.dpPerMinute + position.y / density
             val items = currentItems(date)
             val day = dayBlocks(items, currentZones(date), currentWidth, currentHours, grid.hourDp)
@@ -342,7 +370,8 @@ internal fun DayGrid(
             if (!drag.moving) return false
             val speed = CalendarDrag.autoScroll(drag.pointer.y / density, currentHeight)
             if (speed != 0f) grid.scrollBy(speed * dt.coerceAtMost(MAX_TICK_MS) / 1000f, currentHours, currentHeight)
-            val side = CalendarDrag.side(drag.pointer.x / density - Dimens.timeColumn.value, currentWidth)
+            // Листание у бокового края — только в виде «День»: в «Нескольких днях» соседний день — соседняя колонка.
+            val side = if (currentColumns == 1) CalendarDrag.side(drag.pointer.x / density - Dimens.timeColumn.value, currentWidth) else 0
             // Пока день листается, задержка не идёт: следующий — через 600 мс после того, как этот встал.
             if (side != drag.edgeSide || pager.isScrollInProgress) {
                 drag.edgeSide = side
@@ -405,9 +434,13 @@ internal fun DayGrid(
         ) {
             TimeColumn(hours, hourDp, scrollPx)
             Box(Modifier.weight(1f).fillMaxHeight()) {
+                val pageSize = remember(columns, columnWidth) { if (columns == 1) PageSize.Fill else PageSize.Fixed(columnWidth.dp) }
+                val snap = remember(columns) { PagerSnapDistance.atMost(columns) }
                 HorizontalPager(
                     state = pager,
                     modifier = Modifier.fillMaxSize().testTag(CALENDAR_PAGER_TAG),
+                    pageSize = pageSize,
+                    flingBehavior = PagerDefaults.flingBehavior(state = pager, pagerSnapDistance = snap),
                     key = { it },
                 ) { page ->
                     val date = dateOfPage(page)
@@ -422,27 +455,31 @@ internal fun DayGrid(
                         scrollPx = scrollPx,
                         ghostId = held?.id?.takeIf { drag.moving && date == drag.from },
                         selectedId = menuId ?: held?.id?.takeIf { !drag.moving },
+                        divider = columns > 1,
                         onOpen = onOpen,
                         onMore = onMore,
                         onZone = onZone,
                     )
                 }
-                DragLayer(drag, target, grid, hours, heightDp, pageWidth)
+                DragLayer(drag, target, grid, hours, heightDp, columnWidth, columns, ::columnStart)
             }
         }
 
-        // Меню — под блоком тренировки, как в макете «Удержание на тренировке».
-        val menuDate = dateOfPage(pager.currentPage)
-        val menuTraining = menuId?.let { id -> itemsOf(menuDate).firstOrNull { it.id == id } }
-        val menuBlock = menuTraining?.let { t ->
-            dayBlocks(itemsOf(menuDate), zonesOf(menuDate), pageWidth, hours, hourDp).blocks.firstOrNull { it.id == t.id }
+        // Меню — под блоком тренировки, как в макете «Удержание на тренировке»: в той колонке, где тренировка.
+        val menuPage = menuId?.let { id ->
+            (pager.currentPage until pager.currentPage + columns).firstOrNull { page -> itemsOf(dateOfPage(page)).any { it.id == id } }
         }
-        if (menuTraining != null && menuBlock != null) {
+        val menuDate = menuPage?.let(::dateOfPage)
+        val menuTraining = menuDate?.let { date -> itemsOf(date).firstOrNull { it.id == menuId } }
+        val menuBlock = menuTraining?.let { t ->
+            dayBlocks(itemsOf(t.start.date), zonesOf(t.start.date), columnWidth, hours, hourDp).blocks.firstOrNull { it.id == t.id }
+        }
+        if (menuPage != null && menuTraining != null && menuBlock != null) {
             val view = grid.view(hours, heightDp)
             val top = menuBlock.y - (view.top - hours.startMinute) * view.dpPerMinute
             Box(
                 Modifier
-                    .offset(x = Dimens.timeColumn + menuBlock.x.dp, y = top.dp)
+                    .offset(x = Dimens.timeColumn + (columnStart(menuPage) + menuBlock.x).dp, y = top.dp)
                     .size(menuBlock.width.dp, menuBlock.height.dp),
             ) {
                 menu(menuTraining)
@@ -605,9 +642,21 @@ private suspend fun AwaitPointerEventScope.consumeUntilUp(id: PointerId) {
  * Перетаскиваемый блок и подсказка над пальцем (ТЗ 5.3, макет «Перенос на другой день»): последний слой сетки,
  * над линией «сейчас». Блок приподнят с тенью и стоит на новом времени с привязкой к шагу, подсказка —
  * «Ср 21.10 · 12:15–13:05». Положение читается при раскладке: движение пальца ничего не пересобирает.
+ *
+ * По горизонтали блок идёт за пальцем в пределах колонки дня, куда встанет: в «Нескольких днях» он переходит
+ * в соседнюю колонку вместе с пальцем. [columnStart] — левый край колонки страницы, dp.
  */
 @Composable
-private fun DragLayer(drag: DragState, target: DragTarget?, grid: DayGridState, hours: GridHours, heightDp: Float, widthDp: Float) {
+private fun DragLayer(
+    drag: DragState,
+    target: DragTarget?,
+    grid: DayGridState,
+    hours: GridHours,
+    heightDp: Float,
+    widthDp: Float,
+    columns: Int,
+    columnStart: (Int) -> Float,
+) {
     val training = drag.training
     val block = drag.block
     if (training == null || block == null || target == null || !drag.moving) return
@@ -653,9 +702,14 @@ private fun DragLayer(drag: DragState, target: DragTarget?, grid: DayGridState, 
         val hint = measurables[1].measure(Constraints(maxWidth = constraints.maxWidth))
         layout(constraints.maxWidth, constraints.maxHeight) {
             val view = grid.view(hours, heightDp)
-            // По вертикали — новое время, по горизонтали блок идёт за пальцем, не выходя из колонки.
+            // По вертикали — новое время, по горизонтали блок идёт за пальцем, не выходя из колонки своего дня.
+            // В виде «День» колонка одна: при листании у края блок остаётся под пальцем, а не уезжает со страницей.
             val dx = drag.pointer.x / density - drag.down.x / density
-            val x = (block.x + dx).coerceIn(0f, (widthDp - block.width).coerceAtLeast(0f)) * density
+            val from = drag.from
+            val targetStart = if (columns == 1) 0f else columnStart(pageOf(target.date))
+            val fromStart = if (columns == 1 || from == null) targetStart else columnStart(pageOf(from))
+            val left = (fromStart + block.x + dx).coerceIn(targetStart, targetStart + (widthDp - block.width).coerceAtLeast(0f))
+            val x = left * density
             val y = (target.minute - view.top) * view.dpPerMinute * density
             lifting.place(x.roundToInt(), y.roundToInt())
             val gap = HINT_GAP.toPx()
@@ -739,6 +793,7 @@ private fun TimeColumn(hours: GridHours, hourDp: Float, scrollPx: () -> Float) {
  * Колонка дня. Слои снизу вверх (ТЗ 5.3): фон дня и приглушённое прошлое → дежурства → запреты и полоски зон →
  * линии сетки → тренировки со значками → линия «сейчас». Перетаскиваемый блок — над всем этим, в [DragLayer];
  * на его старом месте — призрак [ghostId], блок под пальцем и с открытым меню [selectedId] — в обводке.
+ * [divider] — линия по правому краю: в «Нескольких днях» она отделяет колонки (макеты «3 дня»).
  */
 @Composable
 private fun DayColumn(
@@ -751,6 +806,7 @@ private fun DayColumn(
     scrollPx: () -> Float,
     ghostId: String?,
     selectedId: String?,
+    divider: Boolean,
     onOpen: (CalendarTraining) -> Unit,
     onMore: (List<CalendarTraining>) -> Unit,
     onZone: (CalendarZone) -> Unit,
@@ -818,7 +874,7 @@ private fun DayColumn(
                 val label = labels.getOrPut("${zone.kind}/${zone.id}") { measureLabel(measurer, zone, styles.name) }
                 drawZoneLabel(zone, info, label, colors)
             }
-            drawLines(hours, hourDp, colors)
+            drawLines(hours, hourDp, colors, divider)
             day.blocks.forEach { block ->
                 val training = byId[block.id] ?: return@forEach
                 if (block.id == ghostId) {
@@ -1080,8 +1136,8 @@ private fun DrawScope.drawZoneLabel(zone: ZoneInfo, info: CalendarZone, label: T
     }
 }
 
-/** Линии каждый час и пунктир на получасе — над зонами, под тренировками. */
-private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: PersonalkaColors) {
+/** Линии каждый час и пунктир на получасе — над зонами, под тренировками; [divider] — линия между днями справа. */
+private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: PersonalkaColors, divider: Boolean) {
     val hourPx = hourDp.dp.toPx()
     val stroke = 1.dp.toPx()
     val dash = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx()))
@@ -1093,6 +1149,7 @@ private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: Persona
             drawLine(colors.divider, Offset(0f, half), Offset(size.width, half), stroke, pathEffect = dash)
         }
     }
+    if (divider) drawLine(colors.divider, Offset(size.width - stroke / 2, 0f), Offset(size.width - stroke / 2, size.height), stroke)
 }
 
 /**

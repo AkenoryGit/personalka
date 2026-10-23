@@ -105,7 +105,7 @@ internal object CalendarSample {
     fun zones(date: LocalDate): List<CalendarZone> {
         val group = group(date)
         return listOf(
-            CalendarZone.duty("${PREFIX}duty", LocalDateTime(date, LocalTime(11, 0)), 240, "Дежурство", "ББ", "slate"),
+            CalendarZone.duty("${PREFIX}duty", LocalDateTime(date, LocalTime(11, 0)), 240, "Дежурство", "${PREFIX}ББ", "ББ", "slate"),
             CalendarZone.restriction(RestrictionHit(group, LocalDateTime(date, group.startTime), LocalDateTime(date, group.endTime)), "ДБ"),
         )
     }
@@ -140,4 +140,7 @@ internal object CalendarSample {
 
     /** Тренировка примера: перенос и «Копировать» — только в памяти. */
     fun isSample(training: CalendarTraining): Boolean = training.id.startsWith(PREFIX)
+
+    /** Место примера — «sample-ББ»: фильтр мест сверяет у примера короткое имя, а не id. */
+    fun isSamplePlace(placeId: String): Boolean = placeId.startsWith(PREFIX)
 }

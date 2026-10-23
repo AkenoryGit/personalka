@@ -18,6 +18,7 @@ import com.akenory.personalka.domain.calendar.BadgeFacts
 import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarBadges
 import com.akenory.personalka.domain.calendar.CalendarDrag
+import com.akenory.personalka.domain.calendar.CalendarViews
 import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.calendar.ZoneSpan
@@ -110,6 +111,7 @@ data class TrainingCopy(
  * Зона дня (5.3): дежурство или запрет в день [date], минуты суток [start]–[end] по часам клуба; конец 1440 — полночь.
  *
  * @param id id запрета или тренировки-дежурства.
+ * @param placeId место: фильтр мест в шапке скрывает зоны других мест (шаг 1.12).
  * @param color ключ цвета типа дежурства; у запрета пусто — штриховка нейтральная.
  * @param title заголовок окна по нажатию: «Запрет» или название типа дежурства.
  * @param text строка окна: «ДБ 17:00–18:00 — групповая тренировка».
@@ -122,6 +124,7 @@ data class CalendarZone(
     val date: LocalDate,
     val start: Int,
     val end: Int,
+    val placeId: String,
     val placeShort: String,
     val color: String,
     val title: String,
@@ -141,6 +144,7 @@ data class CalendarZone(
                 date = hit.date,
                 start = r.startMinute,
                 end = r.endMinute,
+                placeId = hit.locationId,
                 placeShort = placeShort,
                 color = "",
                 title = ZoneFormat.RESTRICTION,
@@ -151,7 +155,7 @@ data class CalendarZone(
         }
 
         /** Дежурство с [start] на [minutes] минут; через полночь — до конца дня. */
-        fun duty(id: String, start: LocalDateTime, minutes: Int, typeName: String, placeShort: String, color: String): CalendarZone {
+        fun duty(id: String, start: LocalDateTime, minutes: Int, typeName: String, placeId: String, placeShort: String, color: String): CalendarZone {
             val from = ClubTime.minuteOfDay(start)
             val to = minOf(from + minutes, ClubTime.MINUTES_PER_DAY)
             return CalendarZone(
@@ -160,6 +164,7 @@ data class CalendarZone(
                 date = start.date,
                 start = from,
                 end = to,
+                placeId = placeId,
                 placeShort = placeShort,
                 color = color,
                 title = typeName,
@@ -170,6 +175,9 @@ data class CalendarZone(
         }
     }
 }
+
+/** Место в фильтре календаря (5.3): «ББ» на чипе, «Большой бассейн» в списке. */
+data class CalendarPlace(val id: String, val shortName: String, val name: String)
 
 /** Часы работы из настроек — часы сетки (3.2); по умолчанию — часы клуба 07:00–23:00. */
 data class WorkHours(val start: LocalTime = LocalTime(7, 0), val end: LocalTime = LocalTime(23, 0))
@@ -193,6 +201,14 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Шаг перетаскивания из настроек (3.2): 5, 10, 15 или 30 минут. */
     val dragStep: Flow<Int> = coaches.observeSettings().map { it?.dragStepMinutes ?: CalendarDrag.STEP_DEFAULT }
+
+    /** Дней в разложенном виде из настроек (3.2): вид разложенного экрана, пока тренер не выбрал другой. */
+    val weekViewDays: Flow<Int> = coaches.observeSettings().map { it?.weekViewDays ?: CalendarViews.DAY_COUNTS.first() }
+
+    /** Места для фильтра в шапке (5.3) — действующие, в порядке тренера; архивные не фильтруются отдельно. */
+    val places: Flow<List<CalendarPlace>> = reference.observeLocations().map { list ->
+        list.filter { !it.archived }.map { CalendarPlace(it.id, it.shortName, it.name) }
+    }
 
     private val copiedState = MutableStateFlow<TrainingCopy?>(null)
 
@@ -275,7 +291,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
             val duties = list.mapNotNull { t ->
                 val type = typeById[t.typeId]?.takeIf { it.kind == TrainingKind.DUTY } ?: return@mapNotNull null
                 if (t.status == TrainingStatus.CANCELLED) return@mapNotNull null
-                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, placeById[t.locationId]?.shortName.orEmpty(), type.color)
+                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, placeById[t.locationId]?.shortName.orEmpty(), type.color)
             }
             val restrictions = blocks.map { it.toRestriction() }
             val hatched = generateSequence(from) { it.plus(1, DateTimeUnit.DAY) }

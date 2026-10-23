@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.calendar.CalendarView
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.RuText.NBSP
 import kotlinx.datetime.LocalDateTime
@@ -55,4 +56,14 @@ object CalendarFormat {
 
     /** Сообщение после переноса (5.20): «Перенесено на вт 22.10, 17:15». */
     fun moved(start: LocalDateTime): String = "Перенесено на ${at(start)}"
+
+    /** Вид в переключателе шапки: «День», «3 дня», «5 дней». */
+    fun view(view: CalendarView): String = when (view) {
+        CalendarView.Day -> "День"
+        is CalendarView.Days -> RuText.count(view.count, "день", "дня", "дней")
+    }
+
+    /** Фильтр мест без выбора: на кнопке сложенного экрана — «Все места», на чипе разложенного — «Все». */
+    const val ALL_PLACES = "Все места"
+    const val ALL = "Все"
 }

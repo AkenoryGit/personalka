@@ -16,7 +16,10 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
@@ -49,6 +52,7 @@ import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.GridHours
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.ZoneFormat
@@ -80,7 +84,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * «Календарь», вид «День» (шаги 1.9–1.11, ТЗ 5.3). «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
+ * «Календарь»: вид «День» (шаги 1.9–1.11), «Несколько дней», шапка и фильтр мест (шаг 1.12), ТЗ 5.3. «Сейчас» — вт 20.10.2026 15:40. Тренировки пишутся через DAO:
  * формы ещё нет (1.13). Окно тестов на компьютере — 1024 × 768, поэтому экран ниже, чем у Fold, и сетке
  * остаётся 768 − панель 72 − шапка 56 − неделя 64 = 576 dp; что видно при той же высоте, что у Fold, —
  * в `CalendarGridTest`.
@@ -426,27 +430,155 @@ class CalendarUiTest {
         waitUntil(timeoutMillis = 5_000) { grid()[CalendarHours] == GridHours(6, 23) }
     }
 
+    /** Ширина колонки дня и всей сетки с колонкой времени, dp. */
+    private fun ComposeUiTest.columnWidth(date: LocalDate): Float = onNodeWithTag(calendarDayTag(date)).fetchSemanticsNode().size.width / density.density
+
+    private fun ComposeUiTest.gridWidth(): Float = onNodeWithTag(CALENDAR_GRID_TAG).fetchSemanticsNode().size.width / density.density
+
+    private fun ComposeUiTest.chooseView(label: String) {
+        onNodeWithTag(CALENDAR_VIEW_TAG).performClick()
+        onNodeWithText(s(label)).performClick()
+        waitForIdle()
+    }
+
     @Test
-    fun unfoldKeepsDayAndScroll() = runComposeUiTest {
+    fun viewRememberedForEachFoldState() = runComposeUiTest {
         var width by mutableStateOf(folded)
-        training("16:00", 50, "Белова Ева", date = LocalDate(2026, 10, 22))
-        training("16:00", 50, "Гусев Борис", date = LocalDate(2026, 10, 22))
+        val thursday = LocalDate(2026, 10, 22)
+        training("16:00", 50, "Белова Ева", date = thursday)
+        training("16:00", 50, "Гусев Борис", date = thursday)
         openCalendar { width }
-        onNodeWithTag(weekDayTag(LocalDate(2026, 10, 22))).performClick()
+        onNodeWithTag(weekDayTag(thursday)).performClick()
         waitForIdle()
         onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { swipeDown(durationMillis = 100) }
         onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { swipeDown(durationMillis = 100) }
         waitForIdle()
         near(420f, topMinute(), "Начало сетки")
-        awaitBlocks(2, LocalDate(2026, 10, 22))
+        awaitBlocks(2, thursday)
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals("День")
 
+        // Разложили: по умолчанию «3 дня» с того же четверга, прокрутка на месте.
         width = unfolded
         waitForIdle()
-        onNodeWithTag(weekDayTag(LocalDate(2026, 10, 22))).assertIsSelected()
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals(s("3_дня"))
+        onNodeWithTag(weekDayTag(thursday)).assertDoesNotExist()
+        listOf(thursday, LocalDate(2026, 10, 23), LocalDate(2026, 10, 24)).forEach { date ->
+            onNodeWithTag(dayHeaderTag(date)).assertIsDisplayed()
+            onNodeWithTag(calendarDayTag(date)).assertIsDisplayed()
+        }
         near(420f, topMinute(), "Начало сетки после разложения")
-        // Блоки разложены по новой ширине: две колонки поровну.
-        val dayWidth = onNodeWithTag(calendarDayTag(LocalDate(2026, 10, 22))).fetchSemanticsNode().size.width / density.density
-        day(LocalDate(2026, 10, 22)).blocks.forEach { near((dayWidth - 16f) / 2, it.width, "Ширина блока на разложенном") }
+        val column = columnWidth(thursday)
+        near((gridWidth() - 48f) / 3, column, "Колонка трёх дней")
+        // Блоки разложены по ширине колонки: две поровну.
+        day(thursday).blocks.forEach { near((column - 16f) / 2, it.width, "Ширина блока в колонке") }
+
+        // На разложенном выбрали «5 дней» — запомнено для разложенного.
+        chooseView("5_дней")
+        near((gridWidth() - 48f) / 5, columnWidth(thursday), "Колонка пяти дней")
+        onNodeWithTag(calendarDayTag(LocalDate(2026, 10, 26))).assertIsDisplayed()
+        assertEquals("days5", prefs.string(DevicePrefs.CALENDAR_VIEW_WIDE))
+
+        // Проверка шага: сложили — снова «День» на том же четверге; разложили — снова «5 дней».
+        width = folded
+        waitForIdle()
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals("День")
+        onNodeWithTag(weekDayTag(thursday)).assertIsSelected()
+        near(420f, topMinute(), "Начало сетки после сложения")
+        width = unfolded
+        waitForIdle()
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals(s("5_дней"))
+        near((gridWidth() - 48f) / 5, columnWidth(thursday), "Колонка пяти дней после разложения")
+    }
+
+    @Test
+    fun threeDaysFoldedDragToNextColumnAndOpenDay() = runComposeUiTest {
+        val id = training("16:00", 50, "Белова Ева")
+        val wednesday = LocalDate(2026, 10, 21)
+        openCalendar()
+        chooseView("3_дня")
+        assertEquals("days3", prefs.string(DevicePrefs.CALENDAR_VIEW_FOLDED))
+        awaitBlocks(1)
+        // Макет «3 дня · сложенный»: колонки по (412 − 48) / 3 dp, вместо строки недели — дни над колонками.
+        val column = columnWidth(today)
+        near((412f - 48f) / 3, column, "Колонка трёх дней на сложенном")
+        onNodeWithTag(weekDayTag(today)).assertDoesNotExist()
+        onNodeWithTag(dayHeaderTag(LocalDate(2026, 10, 22))).assertIsDisplayed()
+        val block = day().blocks.single()
+
+        // Проверка шага: блок повели в соседнюю колонку и вниз — среда 17:15, без задержки у края.
+        dragDay(block.x + 20f, block.y + 20f, column, yOf("17:17") - yOf("16:00"), release = false)
+        onNodeWithText(s("Ср_21.10 · 17:15–18:05")).assertIsDisplayed()
+        onNodeWithTag(CALENDAR_GRID_TAG).performTouchInput { up() }
+        awaitNode(hasText(s("Перенесено на ср_21.10, 17:15")))
+        assertEquals(at(wednesday, "17:15"), startOf(id))
+        awaitBlocks(1, wednesday)
+        // Колонки не листались: первая — по-прежнему сегодня.
+        onNodeWithTag(dayHeaderTag(today)).assertIsDisplayed()
+
+        // Нажатие на день над колонкой — этот день в виде «День».
+        onNodeWithTag(dayHeaderTag(wednesday)).performClick()
+        waitForIdle()
+        onNodeWithTag(CALENDAR_VIEW_TAG).assertTextEquals("День")
+        assertSelected(wednesday, "День из строки над колонками")
+    }
+
+    @Test
+    fun placeFilterHidesOtherPlacesAndTheirRestrictions() = runComposeUiTest {
+        var width by mutableStateOf(folded)
+        restriction("ДБ", "17:00", "18:00")
+        training("16:00", 50, "Белова Ева", place = "ББ")
+        training("16:00", 50, "Орлов Максим", place = "ДБ")
+        openCalendar { width }
+        awaitBlocks(2)
+        awaitZones(1)
+        fun names() = day().blocks.map { it.lines.first() }
+
+        // Сложенный: «Все места ▾» → «Детский бассейн» — остаются тренировка ДБ и запрет ДБ.
+        onNodeWithTag(CALENDAR_PLACE_TAG).assertTextEquals(CalendarFormat.ALL_PLACES)
+        onNodeWithTag(CALENDAR_PLACE_TAG).performClick()
+        onNodeWithText("Детский бассейн").performClick()
+        awaitBlocks(1)
+        assertEquals(listOf(s("Орлов_М.")), names())
+        assertEquals(1, day().zones.size)
+        onNodeWithTag(CALENDAR_PLACE_TAG).assertTextEquals("ДБ")
+
+        // «Большой бассейн» — запрет ДБ скрыт вместе с её тренировкой.
+        onNodeWithTag(CALENDAR_PLACE_TAG).performClick()
+        onNodeWithText("Большой бассейн").performClick()
+        awaitBlocks(1)
+        assertEquals(listOf(s("Белова_Е.")), names())
+        awaitZones(0)
+
+        // Разложили: фильтр тот же, теперь чипами; «Все» возвращает всё.
+        width = unfolded
+        waitForIdle()
+        onNodeWithTag(CALENDAR_PLACE_TAG).assertDoesNotExist()
+        onNodeWithText("ББ").assertIsSelected()
+        awaitBlocks(1)
+        onNodeWithText(CalendarFormat.ALL).performClick()
+        awaitBlocks(2)
+        awaitZones(1)
+    }
+
+    @Test
+    fun hideCancelledFromViewMenu() = runComposeUiTest {
+        training("10:00", 50, "Зайцева Мария", status = TrainingStatus.CANCELLED)
+        training("16:00", 50, "Белова Ева")
+        openCalendar()
+        awaitBlocks(2)
+
+        // Показ отменённых — в меню вида, по умолчанию включён; выключение помнит этот телефон.
+        onNodeWithTag(CALENDAR_VIEW_TAG).performClick()
+        onNodeWithText(SHOW_CANCELLED).assertIsOn()
+        onNodeWithText(SHOW_CANCELLED).performClick()
+        awaitBlocks(1)
+        assertEquals(listOf(s("Белова_Е.")), day().blocks.map { it.lines.first() })
+        assertEquals(false, prefs.boolean(DevicePrefs.CALENDAR_SHOW_CANCELLED))
+
+        onNodeWithTag(CALENDAR_VIEW_TAG).performClick()
+        onNodeWithText(SHOW_CANCELLED).assertIsOff()
+        onNodeWithText(SHOW_CANCELLED).performClick()
+        awaitBlocks(2)
     }
 
     @Test

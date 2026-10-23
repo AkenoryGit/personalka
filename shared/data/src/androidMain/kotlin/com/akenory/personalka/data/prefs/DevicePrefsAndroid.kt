@@ -11,5 +11,17 @@ fun devicePrefs(context: Context): DevicePrefs {
         override fun putFloat(key: String, value: Float) {
             prefs.edit().putFloat(key, value).apply()
         }
+
+        override fun string(key: String): String? = prefs.getString(key, null)
+
+        override fun putString(key: String, value: String) {
+            prefs.edit().putString(key, value).apply()
+        }
+
+        override fun boolean(key: String): Boolean? = if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+
+        override fun putBoolean(key: String, value: Boolean) {
+            prefs.edit().putBoolean(key, value).apply()
+        }
     }
 }

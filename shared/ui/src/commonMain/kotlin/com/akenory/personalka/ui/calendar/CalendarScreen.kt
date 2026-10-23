@@ -16,14 +16,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -36,12 +35,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.calendar.CalendarPlace
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.CalendarZone
@@ -50,6 +49,8 @@ import com.akenory.personalka.data.calendar.WorkHours
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.domain.calendar.CalendarDrag
 import com.akenory.personalka.domain.calendar.CalendarGrid
+import com.akenory.personalka.domain.calendar.CalendarView
+import com.akenory.personalka.domain.calendar.CalendarViews
 import com.akenory.personalka.domain.calendar.DaySpan
 import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
@@ -64,6 +65,7 @@ import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
@@ -106,12 +108,17 @@ fun weekDayTag(date: LocalDate) = "week-$date"
 private const val ID_SEPARATOR = "\n"
 
 /**
- * «Календарь», вид «День» (ТЗ 5.3): шапка с месяцем и «Сегодня», строка недели пн–вс, сетка дня с дежурствами
- * и запретами под тренировками, жесты — перенос, меню, быстрое создание. Несколько дней, месяц, список и фильтр
- * мест — шаг 1.12.
+ * «Календарь» (ТЗ 5.3): шапка с месяцем, «Сегодня», видом и фильтром мест; вид «День» со строкой недели пн–вс
+ * или «Несколько дней» (3, 5, 7) со строкой дней над колонками; сетка с дежурствами и запретами под тренировками,
+ * жесты — перенос, меню, быстрое создание. Месяц, список и мини-календарь — шаг 1.12а.
  *
- * Выбранный день, положение сетки, открытый список «+N», открытая зона, меню тренировки и окно «Поставить всё
- * равно?» хранятся выше всего, что зависит от ширины экрана: сложение и разложение Fold их не сбрасывают.
+ * Вид запоминается на этом телефоне отдельно для сложенного и разложенного Fold ([DevicePrefs]); по умолчанию
+ * на сложенном — «День», на разложенном — «Несколько дней» по настройке тренера. Фильтр мест скрывает
+ * тренировки, дежурства и запреты других мест; показ отменённых включается в меню вида.
+ *
+ * Выбранный день, положение сетки, фильтр мест, открытый список «+N», открытая зона, меню тренировки и окно
+ * «Поставить всё равно?» хранятся выше всего, что зависит от ширины экрана: сложение и разложение Fold их не
+ * сбрасывают. «День» и «Несколько дней» — одна и та же сетка с одним листанием: первая колонка — выбранный день.
  *
  * @param sample показать «пример дня» на сегодня — до шага 1.13, где тренировки можно будет создавать.
  * @param scope записи из окон: «Пропустить этот день» и его «Отменить» доживают до конца, даже если экран закрыли.
@@ -128,6 +135,7 @@ fun CalendarScreen(
     onOpen: (CalendarTraining) -> Unit,
 ) {
     val today = now.date
+    val wide = LocalWide.current
     val ui = rememberCoroutineScope()
     val pager = rememberPagerState(initialPage = pageOf(today)) { PAGE_COUNT }
     val grid = rememberSaveable(saver = DayGridState.Saver) {
@@ -144,6 +152,22 @@ fun CalendarScreen(
     val day = dateOfPage(pager.currentPage)
     val work by remember(calendar) { calendar.workHours }.collectAsState(initial = WorkHours())
     val step by remember(calendar) { calendar.dragStep }.collectAsState(initial = CalendarDrag.STEP_DEFAULT)
+
+    // Вид — свой у сложенного и разложенного экрана, на этом телефоне; выбор пишется сразу.
+    val weekViewDays by remember(calendar) { calendar.weekViewDays }.collectAsState(initial = CalendarViews.DAY_COUNTS.first())
+    var viewChanges by remember { mutableIntStateOf(0) }
+    val view = remember(wide, weekViewDays, viewChanges) {
+        CalendarViews.parse(prefs.string(viewKey(wide)), wide) ?: CalendarViews.default(wide, weekViewDays)
+    }
+    fun select(next: CalendarView) {
+        prefs.putString(viewKey(wide), next.code)
+        viewChanges++
+    }
+    var showCancelled by remember { mutableStateOf(prefs.boolean(DevicePrefs.CALENDAR_SHOW_CANCELLED) ?: true) }
+    val places by remember(calendar) { calendar.places }.collectAsState(initial = emptyList())
+    var placeId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Место убрали в архив — фильтр снова «Все места».
+    val place = places.firstOrNull { it.id == placeId }
 
     // Тренировки трёх недель вокруг выбранной: соседние дни при листании уже на месте. Пока грузится новое окно,
     // видно старое — дни не мигают пустыми.
@@ -171,7 +195,7 @@ fun CalendarScreen(
     val itemsOf: (LocalDate) -> List<CalendarTraining> = { date ->
         val stored = loaded[date].orEmpty()
         val shown = sampleDay.filter { it.start.date == date }
-        if (shown.isEmpty()) stored else stored + shown
+        (if (shown.isEmpty()) stored else stored + shown).filter { inPlace(place, it.placeId, it.placeShort) && (showCancelled || !it.cancelled) }
     }
 
     // Перенос (ТЗ 5.3, 4.5): под запретом того же места — окно «Поставить всё равно?», потом сообщение с «Отменить».
@@ -210,31 +234,53 @@ fun CalendarScreen(
     }
     val zonesOf: (LocalDate) -> List<CalendarZone> = { date ->
         val stored = loadedZones[date].orEmpty()
-        if (date == today && sampleZones.isNotEmpty()) stored + sampleZones else stored
+        (if (date == today && sampleZones.isNotEmpty()) stored + sampleZones else stored).filter { inPlace(place, it.placeId, it.placeShort) }
     }
 
-    // Часы сетки — по дню, на котором листание остановилось: во время свайпа подписи часов не прыгают.
+    // Часы сетки — по дням, на которых листание остановилось: во время свайпа подписи часов не прыгают.
     // Дежурство — тоже тренировка и расширяет сетку; запрет — нет: «весь день» не должен открывать ночь.
-    val settledDay = dateOfPage(pager.settledPage)
-    val duties = zonesOf(settledDay).filter { it.kind == ZoneKind.DUTY }.map { DaySpan(it.id, it.start, it.end) }
-    val hours = CalendarGrid.hours(work.start, work.end, itemsOf(settledDay).map { it.span() } + duties)
+    val settledDays = (0 until view.columns).map { dateOfPage(pager.settledPage + it) }
+    val duties = settledDays.flatMap { date -> zonesOf(date).filter { it.kind == ZoneKind.DUTY }.map { DaySpan(it.id, it.start, it.end) } }
+    val hours = CalendarGrid.hours(work.start, work.end, settledDays.flatMap { date -> itemsOf(date).map { it.span() } } + duties)
+    val shownDays = (0 until view.columns).map { dateOfPage(pager.currentPage + it) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             CalendarHeader(
                 day = day,
+                view = view,
+                views = CalendarViews.options(wide),
+                showCancelled = showCancelled,
+                places = places,
+                place = place,
+                wide = wide,
                 onToday = {
                     grid.showNow(now.time)
                     ui.launch { pager.animateScrollToPage(pageOf(today)) }
                 },
+                onView = ::select,
+                onShowCancelled = { show ->
+                    showCancelled = show
+                    prefs.putBoolean(DevicePrefs.CALENDAR_SHOW_CANCELLED, show)
+                },
+                onPlace = { placeId = it?.id },
             )
-            WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } })
+            if (view == CalendarView.Day) {
+                WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } })
+            } else {
+                // Нажатие на день над колонкой — этот день в виде «День».
+                DaysHeader(pager, view.columns, today, wide, onOpen = { date ->
+                    select(CalendarView.Day)
+                    ui.launch { pager.scrollToPage(pageOf(date)) }
+                })
+            }
             DayGrid(
                 pager = pager,
                 grid = grid,
                 hours = hours,
                 now = now,
                 step = step,
+                columns = view.columns,
                 itemsOf = itemsOf,
                 zonesOf = zonesOf,
                 menuId = menuId,
@@ -271,7 +317,7 @@ fun CalendarScreen(
             )
         }
 
-        val hidden = moreIds?.split(ID_SEPARATOR)?.let { ids -> itemsOf(day).filter { it.id in ids } }.orEmpty()
+        val hidden = moreIds?.split(ID_SEPARATOR)?.let { ids -> shownDays.flatMap(itemsOf).filter { it.id in ids } }.orEmpty()
         if (hidden.isNotEmpty()) {
             MorePanel(
                 hidden = hidden,
@@ -283,7 +329,7 @@ fun CalendarScreen(
             )
         }
 
-        val zone = zoneKey?.let { key -> zonesOf(day).firstOrNull { zoneKeyOf(it) == key } }
+        val zone = zoneKey?.let { key -> zonesOf(zoneDateOf(key)).firstOrNull { zoneKeyOf(it) == key } }
         if (zone != null) {
             ZonePanel(
                 zone = zone,
@@ -340,26 +386,18 @@ private fun decodeMoves(text: String): Map<String, LocalDateTime> =
 /** Открытая зона: вид, id и день — переживает поворот и сложение, а у повторяющегося запрета id одинаков во все дни. */
 private fun zoneKeyOf(zone: CalendarZone): String = "${zone.kind}/${zone.id}/${zone.date}"
 
-/** Шапка: месяц и год выбранного дня и «Сегодня». Мини-календарь, вид и фильтр мест — шаг 1.12. */
-@Composable
-private fun CalendarHeader(day: LocalDate, onToday: () -> Unit) {
-    val colors = PersonalkaTheme.colors
-    Row(
-        modifier = Modifier.fillMaxWidth().height(Dimens.topBar).padding(start = Dimens.space4, end = Dimens.space1),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = DateFormat.monthYear(day),
-            modifier = Modifier.weight(1f).semantics { heading() },
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.text,
-            maxLines = 1,
-        )
-        IconButton(onClick = onToday) {
-            Icon(PIcons.Today, contentDescription = TODAY_LABEL, tint = colors.text)
-        }
-    }
-}
+/** День открытой зоны: в «Нескольких днях» она может быть в любой колонке. */
+private fun zoneDateOf(key: String): LocalDate = LocalDate.parse(key.substringAfterLast('/'))
+
+/** Где хранится вид: у сложенного и разложенного экрана — свой. */
+private fun viewKey(wide: Boolean): String = if (wide) DevicePrefs.CALENDAR_VIEW_WIDE else DevicePrefs.CALENDAR_VIEW_FOLDED
+
+/**
+ * Тренировка или зона в месте, выбранном фильтром: `null` — все места. Пример дня живёт со своими id мест,
+ * поэтому сверяется его короткое имя.
+ */
+private fun inPlace(place: CalendarPlace?, placeId: String, placeShort: String): Boolean =
+    place == null || placeId == place.id || (CalendarSample.isSamplePlace(placeId) && placeShort == place.shortName)
 
 /** Строка недели пн–вс под шапкой (ТЗ 5.3): нажатие открывает день, сегодняшнее число — в оранжевом кружке. */
 @Composable
