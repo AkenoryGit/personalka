@@ -353,6 +353,7 @@ class TrainingFormUiTest {
 
     /** Вид записи в переключателе формы. */
     private fun ComposeUiTest.mode(label: String) {
+        awaitNode(hasTestTag(FORM_MODE_TAG))
         onNode(hasText(label) and hasAnyAncestor(hasTestTag(FORM_MODE_TAG))).performClick()
     }
 
