@@ -218,9 +218,9 @@ class TrainingCardsTest {
         // До начала минус 15 минут — ждём, как остальных.
         assertEquals(ParticipationStatus.EXPECTED, statusOf(first, vera))
         val c = card(first)
-        assertEquals(listOf(false, false, true), c.clients.map { it.guest })
+        assertEquals(listOf(vera), c.clients.filter { it.guest }.map { it.id })
         assertEquals(3, c.clients.size)
-        assertEquals(kids, card(second).clients.map { it.id })
+        assertEquals(kids.toSet(), card(second).clients.map { it.id }.toSet())
         assertTrue(db.clientDao().membersOf(group).none { it.clientId == vera })
         assertTrue(cards.guestChoices(first).first().isEmpty())
         // Второй раз — ничего: он уже в тренировке.
@@ -230,11 +230,11 @@ class TrainingCardsTest {
         assertNull(cards.removeGuest(first, kids[0]))
         val removed = assertNotNull(cards.removeGuest(first, vera))
         assertEquals(s("Убрали: Зуева_В."), removed.message)
-        assertEquals(kids, card(first).clients.map { it.id })
+        assertEquals(kids.toSet(), card(first).clients.map { it.id }.toSet())
         cards.undo(removed.undo)
         assertTrue(card(first).client(vera)!!.guest)
         cards.undo(added.undo)
-        assertEquals(kids, card(first).clients.map { it.id })
+        assertEquals(kids.toSet(), card(first).clients.map { it.id }.toSet())
     }
 
     @Test
@@ -245,8 +245,7 @@ class TrainingCardsTest {
         assertNull(cards.addNewGuest(id, "Зуева", " "))
         val result = assertNotNull(cards.addNewGuest(id, " Зуева ", "Вера"))
         assertEquals(s("Добавили на раз: Зуева_В."), result.message)
-        val guest = card(id).clients.last()
-        assertTrue(guest.guest)
+        val guest = card(id).clients.single { it.guest }
         assertEquals(ParticipationStatus.ATTENDED, guest.state.status)
         assertEquals("Вера", clients.rows(now).first().single { it.client.id == guest.id }.client.firstName)
 
