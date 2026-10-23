@@ -338,6 +338,7 @@ fun CalendarScreen(
         key = card,
         wide = wide,
         cards = calendar.cards,
+        results = calendar.results,
         now = now,
         messages = messages,
         scope = scope,

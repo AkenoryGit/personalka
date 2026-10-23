@@ -57,6 +57,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.training.CardClient
 import com.akenory.personalka.data.training.CardResult
 import com.akenory.personalka.data.training.GuestChoice
@@ -87,6 +88,8 @@ import com.akenory.personalka.ui.clients.SearchField
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.results.ResultFormPanel
+import com.akenory.personalka.ui.results.ResultWho
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
@@ -162,6 +165,7 @@ fun TrainingCardHost(
     key: String?,
     wide: Boolean,
     cards: TrainingCardRepository,
+    results: ResultRepository,
     now: LocalDateTime,
     messages: MessageState,
     scope: CoroutineScope,
@@ -184,6 +188,8 @@ fun TrainingCardHost(
     var pickDate by rememberSaveable(key) { mutableStateOf<String?>(null) }
     var pickingDate by rememberSaveable(key) { mutableStateOf(false) }
     var askDelete by rememberSaveable(key) { mutableStateOf(false) }
+    // «Добавить результат» (5.11): форма с днём тренировки и её клиентами.
+    var addingResult by rememberSaveable(key) { mutableStateOf(false) }
     // «Добавить на раз»: открыт выбор, набранный поиск, «Новый клиент» с фамилией и именем.
     var addingGuest by rememberSaveable(key) { mutableStateOf(false) }
     var guestQuery by rememberSaveable(key) { mutableStateOf("") }
@@ -288,6 +294,7 @@ fun TrainingCardHost(
                                 done(result)
                             }
                             CardMenu.DELETE -> askDelete = true
+                            CardMenu.RESULT -> addingResult = true
                         }
                     },
                     onToggle = { clientId -> scope.launch { cards.toggleAttendance(shown.id, clientId) } },
@@ -426,6 +433,19 @@ fun TrainingCardHost(
                     onSecondary = { answer(true) },
                 )
             }
+        }
+        if (shown != null && addingResult) {
+            // Отменённых не предлагаем; один клиент — сразу он.
+            val present = shown.clients.filter { it.outcome != ClientOutcome.CANCELLED && it.outcome != ClientOutcome.CANCELLED_CHARGED }
+            ResultFormPanel(
+                who = present.ifEmpty { shown.clients }.map { ResultWho(it.id, it.name) },
+                date = shown.state.start.date,
+                editing = null,
+                results = results,
+                messages = messages,
+                scope = scope,
+                onClose = { addingResult = false },
+            )
         }
         if (pickingDate) {
             DatePickerPanel(
@@ -598,6 +618,7 @@ private fun CardMenuButton(items: List<CardMenu>, onMenu: (CardMenu) -> Unit) {
                         CardMenu.COPY -> PIcons.ContentCopy
                         CardMenu.SKIP_DATE -> PIcons.EventBusy
                         CardMenu.DELETE -> PIcons.Delete
+                        CardMenu.RESULT -> PIcons.Add
                     },
                     onClick = {
                         open = false

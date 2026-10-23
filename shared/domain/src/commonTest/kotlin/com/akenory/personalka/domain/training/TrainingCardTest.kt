@@ -33,15 +33,17 @@ class TrainingCardTest {
         )
         // С 16:45: «Проведено» главная, «Изменить» уходит в «…».
         assertEquals(
-            CardButtons(listOf(CardAction.DONE, CardAction.CANCEL), listOf(CardMenu.EDIT, CardMenu.COPY, CardMenu.DELETE)),
+            CardButtons(listOf(CardAction.DONE, CardAction.CANCEL), listOf(CardMenu.RESULT, CardMenu.EDIT, CardMenu.COPY, CardMenu.DELETE)),
             TrainingCardRules.buttons(planned, at(16, 45), skippable = false),
         )
         assertEquals(CardAction.ALL_CAME, TrainingCardRules.buttons(pt(kind = TrainingKind.GROUP), at(17, 5), false).buttons.first())
         // Проведённую не удалить; отменённая — только «Вернуть».
         assertEquals(
-            CardButtons(listOf(CardAction.EDIT, CardAction.CANCEL), listOf(CardMenu.COPY)),
+            CardButtons(listOf(CardAction.EDIT, CardAction.CANCEL), listOf(CardMenu.RESULT, CardMenu.COPY)),
             TrainingCardRules.buttons(pt(TrainingStatus.DONE), at(18), false),
         )
+        // «Добавить результат» (5.11) — только когда есть чей: у дежурства клиентов нет.
+        assertEquals(listOf(CardMenu.COPY), TrainingCardRules.buttons(pt(TrainingStatus.DONE, TrainingKind.DUTY, clients = emptyList()), at(18), false).menu)
         assertEquals(listOf(CardAction.RETURN), TrainingCardRules.buttons(pt(TrainingStatus.CANCELLED), at(18), false).buttons)
         assertFalse(TrainingCardRules.canDelete(TrainingStatus.DONE))
     }

@@ -61,6 +61,7 @@ import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.ResultFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.model.ClientStatus
@@ -80,6 +81,9 @@ import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.results.ResultFormPanel
+import com.akenory.personalka.ui.results.ResultWho
+import com.akenory.personalka.ui.results.ResultsTab
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
@@ -96,26 +100,29 @@ const val CARD_MENU_TAG = "client-card-menu"
 const val ADD_RELATIVE_TAG = "add-relative"
 const val DELETE_SURNAME_TAG = "delete-surname"
 fun relativeRowTag(name: String) = "relative-$name"
+private const val NEW_RESULT = "new"
 const val CARD_ADD_TRAINING_TAG = "card-add-training"
 const val CARD_NOTE_TAG = "card-note"
 const val CARD_ADD_SERIES_TAG = "card-add-series"
+const val CARD_ADD_RESULT_TAG = "card-add-result"
 const val END_DAY_TAG = "end-day"
 fun cardTabTag(tab: CardTab) = "card-tab-${tab.name}"
 fun changeFromTag(seriesId: String) = "change-from-$seriesId"
 fun endSeriesTag(seriesId: String) = "end-series-$seriesId"
 
-/** Вкладки карточки (5.9). «Результаты» появятся с результатами (2.3) — между «Тренировками» и «Инфо». */
-enum class CardTab(val title: String) { TRAININGS("Тренировки"), INFO("Инфо"), SCHEDULE("Расписание") }
+/** Вкладки карточки (5.9). «Результаты» — только когда они есть (10.7: пустое не показывается). */
+enum class CardTab(val title: String) { TRAININGS("Тренировки"), RESULTS(ResultFormat.TAB), INFO("Инфо"), SCHEDULE("Расписание") }
 
 private enum class HistoryFilter(val title: String) { ALL("Все"), DONE("Проведённые"), CANCELLED("Отменённые") }
 
 /**
- * Карточка клиента (5.9, макеты ClCard, ClCardInfo, ClCardSchedule, ClRelInfo): имя, «Ребёнок» или «Взрослый»,
- * возраст и расписание; счётчики; «+ Тренировка»; вкладки «Тренировки», «Инфо» и «Расписание». Пока нет ни
- * тренировок, ни серий, нет ни счётчиков, ни вкладок — сразу «Инфо» (10.7: пустое не показывается).
+ * Карточка клиента (5.9, макеты ClCard, ClCardResults, ClCardInfo, ClCardSchedule, ClRelInfo): имя, «Ребёнок» или
+ * «Взрослый», возраст и расписание; счётчики; «+ Тренировка» и «+ Результат»; вкладки «Тренировки», «Результаты»
+ * (когда они есть), «Инфо» и «Расписание». Пока нет ни тренировок, ни серий, ни результатов, нет ни счётчиков,
+ * ни вкладок — сразу «Инфо» (10.7: пустое не показывается).
  *
  * Меню «…»: «Изменить», «Объединить с…», «В архив», «Удалить полностью» — с двойным подтверждением и вводом
- * фамилии. «+ Результат», «Кабинет» и «В лист ожидания…» появятся в своих шагах (2.3, 2.13, 2.4).
+ * фамилии. «Кабинет» и «В лист ожидания…» появятся в своих шагах (2.13, 2.4).
  *
  * @param onForm открыть форму тренировки ([TrainingFormKey]): «+ Тренировка», «+ Серия», «Изменить с даты…».
  */
@@ -137,6 +144,7 @@ fun ClientCard(
     val relatives by remember(clients, clientId, today) { clients.relatives(clientId, today) }.collectAsState(initial = null)
     val trainings by remember(clients, clientId) { clients.trainings(clientId) }.collectAsState(initial = null)
     val series by remember(forms, clientId) { forms.seriesOf(clientId) }.collectAsState(initial = null)
+    val results by remember(clients, clientId) { clients.results.results(clientId) }.collectAsState(initial = null)
     val upcomingCount by produceState(initialValue = 4, clients) { value = clients.upcomingInCard() }
     var tab by rememberSaveable(clientId) { mutableStateOf(CardTab.TRAININGS) }
     var deleteStep by rememberSaveable(clientId) { mutableStateOf(0) }
@@ -145,6 +153,8 @@ fun ClientCard(
     var ending by rememberSaveable(clientId) { mutableStateOf<String?>(null) }
     var lastDay by rememberSaveable(clientId) { mutableStateOf(ClientScheduleRules.defaultLastDay(today).toString()) }
     var pickingDay by rememberSaveable(clientId) { mutableStateOf(false) }
+    // Форма результата: NEW_RESULT — новый, иначе id изменяемого.
+    var resultForm by rememberSaveable(clientId) { mutableStateOf<String?>(null) }
 
     if (row == null) {
         // Клиента только что удалили или объединили — карточка вот-вот закроется.
@@ -160,7 +170,9 @@ fun ClientCard(
     val hasTrainings = !loadedTrainings.isNullOrEmpty()
     val schedule = series?.let { ClientScheduleRules.ordered(it, today) }
     val active = client.status != ClientStatus.ARCHIVED
-    val showTabs = hasTrainings || !schedule.isNullOrEmpty()
+    val hasResults = !results.isNullOrEmpty()
+    val showTabs = hasTrainings || !schedule.isNullOrEmpty() || hasResults
+    val tabs = CardTab.entries.filter { it != CardTab.RESULTS || hasResults }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -203,19 +215,33 @@ fun ClientCard(
                 if (stats != null && !stats.isEmpty) StatsRow(stats)
                 if (active) {
                     // Клиента в архиве не записывают: сначала «Вернуть из архива».
-                    SecondaryButton(
-                        ClientFormat.ADD_TRAINING,
-                        { onForm(TrainingFormKey.new(clientId = clientId)) },
-                        modifier = Modifier.padding(start = Dimens.space4, top = Dimens.space3).testTag(CARD_ADD_TRAINING_TAG),
-                        icon = PIcons.Add,
-                    )
-                }
-                if (loadedTrainings != null && schedule != null) {
-                    if (showTabs) {
-                        Tabs(tab) { tab = it }
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space3),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+                    ) {
+                        SecondaryButton(
+                            ClientFormat.ADD_TRAINING,
+                            { onForm(TrainingFormKey.new(clientId = clientId)) },
+                            modifier = Modifier.weight(1f).testTag(CARD_ADD_TRAINING_TAG),
+                            icon = PIcons.Add,
+                        )
+                        SecondaryButton(
+                            ResultFormat.ADD,
+                            { resultForm = NEW_RESULT },
+                            modifier = Modifier.weight(1f).testTag(CARD_ADD_RESULT_TAG),
+                            icon = PIcons.Add,
+                        )
                     }
-                    when (if (showTabs) tab else CardTab.INFO) {
+                }
+                val loadedResults = results
+                if (loadedTrainings != null && schedule != null && loadedResults != null) {
+                    if (showTabs) {
+                        Tabs(tabs, tab) { tab = it }
+                    }
+                    val shownTab = if (!showTabs) CardTab.INFO else tab.takeIf { it in tabs } ?: CardTab.TRAININGS
+                    when (shownTab) {
                         CardTab.TRAININGS -> TrainingsTab(clientId, loadedTrainings, now, upcomingCount)
+                        CardTab.RESULTS -> ResultsTab(clientId, loadedResults, today, onOpen = { resultForm = it.id })
                         CardTab.INFO -> InfoTab(client, relatives.orEmpty(), today, nav, clients, messages, scope)
                         CardTab.SCHEDULE -> ScheduleTab(
                             list = schedule,
@@ -231,6 +257,23 @@ fun ClientCard(
                     }
                 }
                 Spacer(Modifier.height(Dimens.space6))
+            }
+        }
+
+        resultForm?.let { key ->
+            val editing = results?.firstOrNull { it.id == key }
+            if (key == NEW_RESULT || editing != null) {
+                ResultFormPanel(
+                    who = listOf(ResultWho(clientId, name)),
+                    date = today,
+                    editing = editing,
+                    results = clients.results,
+                    messages = messages,
+                    scope = scope,
+                    onClose = { resultForm = null },
+                    // Сохранённый виден сразу: вкладка «Результаты».
+                    onSaved = { tab = CardTab.RESULTS },
+                )
             }
         }
 
@@ -407,11 +450,11 @@ private fun StatsRow(stats: ClientStats) {
 }
 
 @Composable
-private fun Tabs(selected: CardTab, onSelect: (CardTab) -> Unit) {
+private fun Tabs(tabs: List<CardTab>, selected: CardTab, onSelect: (CardTab) -> Unit) {
     val colors = PersonalkaTheme.colors
     Column(Modifier.padding(top = Dimens.space3)) {
         Row(Modifier.fillMaxWidth()) {
-            CardTab.entries.forEach { tab ->
+            tabs.forEach { tab ->
                 val isSelected = tab == selected
                 Column(
                     Modifier

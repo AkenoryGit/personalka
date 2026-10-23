@@ -8,6 +8,7 @@ import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.restrictions.RestrictionRepository
+import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
 import com.akenory.personalka.data.restrictions.recalcRestrictionFlags
@@ -237,6 +238,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Дневник (5.7): поля по типу, черновик при каждом вводе, «План на следующую», «Следующая без дневника». */
     val diaries: DiaryRepository = DiaryRepository(db, clock)
+
+    /** «Добавить результат» в карточке тренировки (5.11): день и клиенты подставлены. */
+    val results: ResultRepository = ResultRepository(db, clock)
 
     /** Форма запрета (5.5): свои запреты, «Удалить запрет» и «Отменить». */
     val restrictions: RestrictionRepository = RestrictionRepository(db, clock)

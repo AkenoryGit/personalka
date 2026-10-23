@@ -218,6 +218,13 @@ interface TrainingDao {
     @Query("SELECT * FROM result WHERE clientId = :clientId AND deletedAt IS NULL ORDER BY date")
     suspend fun resultsOf(clientId: String): List<ResultEntity>
 
+    /** Результаты клиента для карточки (5.9): по дню, в один день — по порядку внесения. */
+    @Query("SELECT * FROM result WHERE clientId = :clientId AND deletedAt IS NULL ORDER BY date, id")
+    fun observeResultsOf(clientId: String): Flow<List<ResultEntity>>
+
+    @Query("SELECT * FROM result WHERE id = :id")
+    suspend fun result(id: String): ResultEntity?
+
     @Query("DELETE FROM result WHERE clientId = :clientId")
     suspend fun eraseResultsOf(clientId: String)
 

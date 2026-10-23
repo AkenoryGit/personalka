@@ -76,6 +76,9 @@ object DateFormat {
     fun monthYear(date: LocalDate): String =
         "${MONTH[date.month.number - 1].replaceFirstChar { it.uppercaseChar() }}$NBSP${date.year}"
 
+    /** «октябрь» — подпись месяца под графиком результатов. */
+    fun month(date: LocalDate): String = MONTH[date.month.number - 1]
+
     /** «октября» — для фраз вида «за 20 октября». */
     fun monthGenitive(date: LocalDate): String = MONTH_GENITIVE[date.month.number - 1]
 

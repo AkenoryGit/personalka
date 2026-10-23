@@ -14,6 +14,7 @@ import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.syncGroupTrainings
 import com.akenory.personalka.data.groups.toSeriesTraining
 import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.series.Recorder
 import com.akenory.personalka.data.series.Undo
 import com.akenory.personalka.data.series.restore
@@ -81,6 +82,9 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     private val trainings = db.trainingDao()
     private val reference = db.referenceDao()
     private val coaches = db.coachDao()
+
+    /** Результаты клиентов (шаг 2.3, ТЗ 5.11). */
+    val results: ResultRepository = ResultRepository(db, clock)
 
     /** Все клиенты, и в архиве, со строкой списка. [now] — «сейчас» клуба: от него ближайшая тренировка. */
     fun rows(now: LocalDateTime): Flow<List<ClientRow>> = combine(

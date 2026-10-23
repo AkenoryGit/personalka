@@ -131,6 +131,7 @@ object TrainingCardFormat {
     }
 
     fun menu(item: CardMenu): String = when (item) {
+        CardMenu.RESULT -> ResultFormat.MENU
         CardMenu.EDIT -> "Изменить"
         CardMenu.COPY -> "Копировать"
         CardMenu.SKIP_DATE -> "Пропустить дату серии"

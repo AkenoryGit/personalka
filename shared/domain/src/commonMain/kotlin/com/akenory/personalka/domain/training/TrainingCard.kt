@@ -24,7 +24,7 @@ enum class CardAction {
 }
 
 /** Пункт меню «…» карточки. */
-enum class CardMenu { EDIT, COPY, SKIP_DATE, DELETE }
+enum class CardMenu { RESULT, EDIT, COPY, SKIP_DATE, DELETE }
 
 /** Кнопки карточки — не больше трёх, по важности; остальное — в меню «…» (10.7). */
 data class CardButtons(val buttons: List<CardAction>, val menu: List<CardMenu>)
@@ -41,17 +41,19 @@ object TrainingCardRules {
      * - Отменённая: только «Вернуть».
      *
      * «Дневник» — если он ведётся у этого типа и включён в настройках ([keepsDiary], [DiaryRules.available]).
-     * В «…» — «Копировать», «Пропустить дату серии» (будущая тренировка серии, [skippable]) и «Удалить».
+     * В «…» — «Копировать», «Пропустить дату серии» (будущая тренировка серии, [skippable]) и «Удалить»; с начала
+     * минус 15 минут и у проведённой первым — «Добавить результат» (5.11), если в тренировке есть клиенты.
      */
     fun buttons(training: TrainingState, now: LocalDateTime, skippable: Boolean, keepsDiary: Boolean = false): CardButtons {
         val skip = listOfNotNull(CardMenu.SKIP_DATE.takeIf { skippable })
+        val result = listOfNotNull(CardMenu.RESULT.takeIf { training.participants.isNotEmpty() })
         val diary = listOfNotNull(CardAction.DIARY.takeIf { DiaryRules.available(training, now, keepsDiary) })
         return when {
             training.status == TrainingStatus.CANCELLED -> CardButtons(listOf(CardAction.RETURN), listOf(CardMenu.COPY, CardMenu.DELETE))
-            training.status == TrainingStatus.DONE -> CardButtons(diary + listOf(CardAction.EDIT, CardAction.CANCEL), listOf(CardMenu.COPY))
+            training.status == TrainingStatus.DONE -> CardButtons(diary + listOf(CardAction.EDIT, CardAction.CANCEL), result + CardMenu.COPY)
             StatusRules.canMarkDone(training, now) -> CardButtons(
                 listOf(if (training.kind == TrainingKind.GROUP) CardAction.ALL_CAME else CardAction.DONE) + diary + CardAction.CANCEL,
-                listOf(CardMenu.EDIT, CardMenu.COPY) + skip + CardMenu.DELETE,
+                result + listOf(CardMenu.EDIT, CardMenu.COPY) + skip + CardMenu.DELETE,
             )
             else -> CardButtons(listOf(CardAction.CANCEL, CardAction.EDIT), listOf(CardMenu.COPY) + skip + CardMenu.DELETE)
         }
