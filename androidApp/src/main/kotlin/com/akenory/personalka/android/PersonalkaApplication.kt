@@ -1,6 +1,8 @@
 package com.akenory.personalka.android
 
 import android.app.Application
+import com.akenory.personalka.data.backup.BackupRepository
+import com.akenory.personalka.data.backup.safBackupFolder
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
@@ -21,6 +23,9 @@ class PersonalkaApplication : Application() {
     val groups: GroupRepository by lazy { GroupRepository(database, System::currentTimeMillis) }
     val calendar: CalendarRepository by lazy { CalendarRepository(database, System::currentTimeMillis) }
 
-    /** Настройки этого телефона: масштаб календаря. */
+    /** Настройки этого телефона: масштаб календаря, папка и ключ копий. */
     val prefs: DevicePrefs by lazy { devicePrefs(this) }
+
+    /** Резервная копия (шаг 1.15): папка — выбранная тренером через системный диалог. */
+    val backup: BackupRepository by lazy { BackupRepository(database, prefs, safBackupFolder(this), System::currentTimeMillis) }
 }

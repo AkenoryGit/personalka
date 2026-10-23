@@ -50,6 +50,7 @@ import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.settings.draft
+import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.TypeFormat
 import com.akenory.personalka.domain.model.TrainingKind
@@ -84,6 +85,7 @@ object SettingsRoute {
     const val PROFILE = "settings/profile"
     const val PLACES = "settings/places"
     const val CALENDAR = "settings/calendar"
+    const val DATA = "settings/data"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
     private const val PLACE = "place/"
@@ -110,8 +112,9 @@ internal fun placeRowTag(shortName: String) = "place-$shortName"
 internal fun typeRowTag(name: String) = "type-$name"
 
 /**
- * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы» и «Календарь» (шаг 1.13г); остальные
- * разделы появятся в своих шагах (ставки — 3.6, данные — 1.15), до этого их не видно (10.7).
+ * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы», «Календарь» (шаг 1.13г) и «Данные»
+ * (шаг 1.15, если платформа дала [backup]); остальные разделы появятся в своих шагах (ставки — 3.6), до этого их
+ * не видно (10.7).
  *
  * @param onForm открыть форму тренировки, дежурства или своего запрета ([com.akenory.personalka.ui.training.TrainingFormKey])
  *   из списков раздела «Календарь».
@@ -128,6 +131,7 @@ fun SettingsScreen(
     scope: CoroutineScope,
     onForm: (String) -> Unit,
     onBack: (() -> Unit)?,
+    backup: BackupTools? = null,
 ) {
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
@@ -138,8 +142,9 @@ fun SettingsScreen(
     val close: () -> Unit = { shell.back() }
 
     when {
-        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, activePlaces.size, activeTypes.size, shell, onBack)
+        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces.size, activeTypes.size, shell, onBack)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
+        route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close) }
         route == SettingsRoute.PROFILE -> ProfileScreen(settings, scope, messages, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
         route == SettingsRoute.NEW_PLACE -> PlaceEditor(
@@ -222,6 +227,7 @@ fun SettingsScreen(
 private fun SettingsHome(
     settings: SettingsRepository,
     calendar: CalendarRepository,
+    backup: BackupTools?,
     places: Int,
     types: Int,
     shell: ShellState,
@@ -252,6 +258,16 @@ private fun SettingsHome(
                 onClick = { shell.open(SettingsRoute.CALENDAR) },
                 modifier = Modifier.testTag(CALENDAR_ROW_TAG),
             )
+            if (backup != null) {
+                val data by backup.repository.state.collectAsState()
+                RowDivider()
+                NavRow(
+                    title = BackupFormat.TITLE,
+                    subtitle = dataSummary(data),
+                    onClick = { shell.open(SettingsRoute.DATA) },
+                    modifier = Modifier.testTag(DATA_ROW_TAG),
+                )
+            }
         }
     }
 }

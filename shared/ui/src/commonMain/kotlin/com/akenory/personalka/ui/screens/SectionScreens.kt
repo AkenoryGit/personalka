@@ -44,6 +44,7 @@ import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
 import com.akenory.personalka.ui.shell.LocalWide
@@ -67,6 +68,7 @@ import kotlinx.datetime.LocalDateTime
  *   дежурства или своего запрета (шаг 1.13а); из карточки клиента — новая с этим клиентом и «Изменить с даты…»
  *   его серии (шаг 1.13б); из «Настройки → Календарь» — свой запрет и дежурство (шаг 1.13г).
  * @param card открытая карточка тренировки в календаре (шаг 1.14); [onCard] — открыть или закрыть её.
+ * @param backup резервная копия для «Настройки → Данные» (шаг 1.15); `null` — раздела нет.
  */
 @Composable
 fun SectionScreen(
@@ -84,6 +86,7 @@ fun SectionScreen(
     onForm: (String) -> Unit,
     card: String? = null,
     onCard: (String?) -> Unit = {},
+    backup: BackupTools? = null,
 ) {
     val today = now.date
     when (section) {
@@ -127,7 +130,7 @@ fun SectionScreen(
         )
         Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
             when {
-                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack)
+                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }

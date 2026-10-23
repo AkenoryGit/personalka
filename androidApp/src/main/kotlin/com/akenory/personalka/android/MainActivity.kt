@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.akenory.personalka.BuildConfig
 import com.akenory.personalka.ui.App
+import com.akenory.personalka.ui.settings.BackupTools
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,6 +17,7 @@ class MainActivity : ComponentActivity() {
         // Сложение и разложение Fold окно не пересоздаёт (configChanges в манифесте): Compose просто
         // перекладывает экран под новую ширину, открытый раздел и прокрутка остаются на месте.
         val app = application as PersonalkaApplication
+        val backup = BackupTools(app.backup, AndroidFiles(this))
         setContent {
             App(
                 versionName = BuildConfig.VERSION_NAME,
@@ -24,6 +26,7 @@ class MainActivity : ComponentActivity() {
                 groups = app.groups,
                 calendar = app.calendar,
                 prefs = app.prefs,
+                backup = backup,
                 backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
             )
         }

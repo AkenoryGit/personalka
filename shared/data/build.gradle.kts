@@ -34,10 +34,15 @@ kotlin {
             api(libs.androidx.room3.runtime)
             api(libs.kotlinx.coroutines.core)
             implementation(libs.androidx.sqlite.bundled)
+            // Файл копии — JSON (ТЗ 7.6): только разбор и сборка дерева, без плагина сериализации.
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        // Шифр, хеш и zip копии на стандартной библиотеке Java — один файл для телефона и компьютера (шаг 1.15).
+        androidMain { kotlin.srcDir("src/javaShared/kotlin") }
+        jvmMain { kotlin.srcDir("src/javaShared/kotlin") }
     }
 }
 

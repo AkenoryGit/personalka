@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.ui.icons.PIcons
@@ -151,7 +152,7 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 /**
  * Поле ввода с подписью над ним (TextField): высота 56, фон surface, рамка 1 dp outline, в фокусе — 2 dp primary.
  * Ошибка — рамка и строка под полем цветом error. [placeholder] — серым внутри пустого поля: «Необязательно».
- * Многострочное ([singleLine] = `false`) растёт вниз по тексту — план тренировки.
+ * Многострочное ([singleLine] = `false`) растёт вниз по тексту — план тренировки. Пароль — с [visualTransformation] точками.
  */
 @Composable
 fun Field(
@@ -165,6 +166,7 @@ fun Field(
     tag: String? = null,
     placeholder: String? = null,
     singleLine: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     val colors = PersonalkaTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -196,6 +198,7 @@ fun Field(
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.text),
             cursorBrush = SolidColor(colors.primary),
             keyboardOptions = keyboardOptions,
+            visualTransformation = visualTransformation,
             interactionSource = interaction,
             decorationBox = { inner ->
                 Box(

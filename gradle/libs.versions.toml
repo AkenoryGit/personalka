@@ -9,6 +9,7 @@ compose-material3 = "1.12.0-alpha03"
 androidx-activity = "1.13.0"
 kotlinx-datetime = "0.8.0"
 kotlinx-coroutines = "1.11.0"
+kotlinx-serialization = "1.12.0"
 # База (шаг 1.1): Room 3 — линия Room для Kotlin Multiplatform (пакет androidx.room3).
 # KSP 2.3.x не привязан к версии Kotlin; 2.3.10+ понимает Kotlin 2.4 и встроенный Kotlin AGP 9.
 room3 = "3.0.3"
@@ -29,6 +30,7 @@ compose-ui-test = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 androidx-room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
 androidx-room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }

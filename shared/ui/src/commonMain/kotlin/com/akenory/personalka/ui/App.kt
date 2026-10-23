@@ -23,6 +23,7 @@ import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.screens.SectionScreen
+import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.setup.FirstRun
 import com.akenory.personalka.ui.shell.AppShell
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.map
  * @param groups группы и их состав (шаг 1.8).
  * @param calendar тренировки дней для календаря (шаг 1.9), их создание и изменение — `calendar.forms` (шаг 1.13).
  * @param prefs настройки этого телефона: масштаб календаря.
+ * @param backup резервная копия и системные окна для неё (шаг 1.15); `null` — раздела «Данные» нет (тесты).
  * @param backHandler «Назад» системы. Платформа передаёт свой обработчик (на Android — `BackHandler`
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
  *   «Назад» закрывает открытый экран, иначе ведёт на «Главную»; с «Главной» приложение сворачивается.
@@ -57,6 +59,7 @@ fun App(
     groups: GroupRepository,
     calendar: CalendarRepository,
     prefs: DevicePrefs = remember { MemoryPrefs() },
+    backup: BackupTools? = null,
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     clock: () -> Long = ::systemMillis,
 ) {
@@ -79,6 +82,10 @@ fun App(
         // Прошедшие закрываются в конце (4.1): при открытии приложения и каждую минуту.
         LaunchedEffect(calendar, hasCoach, now) {
             if (hasCoach == true) calendar.cards.closeEnded()
+        }
+        // Автокопия в папку (7.6): при открытии приложения и раз в час — если пора.
+        LaunchedEffect(backup, hasCoach, now.date, now.hour) {
+            if (hasCoach == true) backup?.repository?.autoBackup()
         }
 
         Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
@@ -118,6 +125,7 @@ fun App(
                             onForm = { form = it },
                             card = card,
                             onCard = { card = it },
+                            backup = backup,
                         )
                     }
                     form?.let { key ->
