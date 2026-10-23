@@ -2,6 +2,8 @@ package com.akenory.personalka.data.training
 
 import androidx.room3.withWriteTransaction
 import com.akenory.personalka.data.calendar.TrainingCopy
+import com.akenory.personalka.data.clients.closeWaitForSeries
+import com.akenory.personalka.data.clients.recordFreed
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.GroupEntity
@@ -310,6 +312,8 @@ class TrainingRepository internal constructor(
                     created.copy(created = created.created.mapIndexed { i, t -> if (i == first) t.copy(plan = plan) else t })
                 }
                 recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty = { duty })
+                // Серия для клиента закрывает его запись «постоянно» в листе ожидания (4.16).
+                if (draft.groupId == null && !duty) db.closeWaitForSeries(draft.clientIds, now)
                 result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.undo())
             }
         }
@@ -464,6 +468,8 @@ class TrainingRepository internal constructor(
                 }
             }
         }
+        // Освободилось время — кто его ждёт из листа ожидания (4.16).
+        (result as? SaveResult.Saved)?.let { db.recordFreed(it.undo, clock()) }
         return result
     }
 
@@ -560,6 +566,8 @@ class TrainingRepository internal constructor(
             recorder.write(db, changes, coach.id, now, restrictions, stored.pattern, isDuty)
             result = SaveResult.Saved(ClientFormat.changedFrom(from), recorder.undo())
         }
+        // Освободилось время — кто его ждёт из листа ожидания (4.16).
+        (result as? SaveResult.Saved)?.let { db.recordFreed(it.undo, clock()) }
         return result
     }
 
@@ -586,6 +594,8 @@ class TrainingRepository internal constructor(
             recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
             result = SaveResult.Saved(ClientFormat.SERIES_ENDED, recorder.undo())
         }
+        // Освободилось время — кто его ждёт из листа ожидания (4.16).
+        (result as? SaveResult.Saved)?.let { db.recordFreed(it.undo, clock()) }
         return result
     }
 

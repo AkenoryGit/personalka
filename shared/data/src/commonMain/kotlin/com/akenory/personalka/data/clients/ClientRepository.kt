@@ -89,6 +89,9 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     /** «Без записи» (4.15): список, метка «Нет записи», «Написал» и «Пауза до…». */
     val followup = ClientFollowup(db, clock)
 
+    /** Лист ожидания (4.16): «Ждут время», «+ В ожидание», «Записать», «Больше не ждёт». */
+    val waitlist = ClientWaitList(db, clock)
+
     /** Все клиенты, и в архиве, со строкой списка. [now] — «сейчас» клуба: от него ближайшая тренировка. */
     fun rows(now: LocalDateTime): Flow<List<ClientRow>> = combine(
         clients.observeAllClients(),
@@ -203,7 +206,10 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
                 }
                 db.syncGroupTrainings(groupId, before, now)
             }
-            undo = ArchiveUndo(id, changed, endSeriesOf(id, now))
+            val series = endSeriesOf(id, now)
+            undo = ArchiveUndo(id, changed, series)
+            // Серии ушедшего клиента освободили время — кто его ждёт (4.16).
+            series?.let { db.recordFreed(it, now) }
         }
         return undo
     }

@@ -54,6 +54,7 @@ import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.data.clients.ClientTrainingRow
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.RelativeRow
+import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.training.SaveResult
@@ -63,10 +64,11 @@ import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
-import com.akenory.personalka.domain.format.ResultFormat
 import com.akenory.personalka.domain.format.FollowupFormat
+import com.akenory.personalka.domain.format.ResultFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -77,6 +79,7 @@ import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
@@ -94,6 +97,7 @@ import com.akenory.personalka.ui.training.DatePickerPanel
 import com.akenory.personalka.ui.training.ErrorText
 import com.akenory.personalka.ui.training.PickBox
 import com.akenory.personalka.ui.training.TrainingFormKey
+import com.akenory.personalka.ui.training.WAIT_LINE_TAG
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -142,8 +146,10 @@ fun ClientCard(
     onForm: (String) -> Unit,
     onBack: (() -> Unit)?,
     followup: Followup = Followup.EMPTY,
+    waiting: List<WaitRow> = emptyList(),
 ) {
     val today = now.date
+    val waits = waiting.firstOrNull { it.client.id == clientId }
     val row = rows.firstOrNull { it.client.id == clientId }
     val relatives by remember(clients, clientId, today) { clients.relatives(clientId, today) }.collectAsState(initial = null)
     val trainings by remember(clients, clientId) { clients.trainings(clientId) }.collectAsState(initial = null)
@@ -185,6 +191,13 @@ fun ClientCard(
                     close()
                     nav.open(ClientRoute.edit(clientId))
                 })
+                if (active) {
+                    // Лист ожидания (4.16): нет записи — новая с этим клиентом, есть — «Изменить» её.
+                    MenuAction(if (waits == null) WaitFormat.TO_WAITLIST else WaitFormat.TITLE_EDIT, PIcons.Schedule, {
+                        close()
+                        nav.open(waits?.let { ClientRoute.waitEdit(it.entry.id) } ?: ClientRoute.waitNew(clientId))
+                    })
+                }
                 if (rows.size > 1) {
                     MenuAction("Объединить с…", PIcons.CallMerge, {
                         close()
@@ -215,7 +228,7 @@ fun ClientCard(
                 }, danger = true)
             }
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                CardHeader(row, today, noBooking = clientId in followup.noBooking)
+                CardHeader(row, today, noBooking = clientId in followup.noBooking, waits = waits != null)
                 if (stats != null && !stats.isEmpty) StatsRow(stats)
                 if (active) {
                     // Клиента в архиве не записывают: сначала «Вернуть из архива».
@@ -285,6 +298,8 @@ fun ClientCard(
         if (endingSeries != null) {
             val day = LocalDate.parse(lastDay)
             val problem = ClientScheduleRules.lastDayProblem(day, today)
+            // Кто ждёт это время из листа ожидания (4.16) — до того, как серию завершат.
+            val waitLine by produceState<String?>(null, endingSeries.id, day) { value = clients.waitlist.waitingForSeriesEnd(endingSeries.id, day) }
             Panel(ClientFormat.END_TITLE, onDismiss = { ending = null }) {
                 Text(
                     ClientFormat.seriesDays(endingSeries.weekdays, endingSeries.startTime, endingSeries.durationMin),
@@ -301,6 +316,7 @@ fun ClientCard(
                 )
                 problem?.let { ErrorText(it) }
                 Text(ClientFormat.END_NOTE, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+                waitLine?.let { Note(it, Modifier.testTag(WAIT_LINE_TAG)) }
                 PanelActions(
                     primary = ClientFormat.END_SERIES,
                     onPrimary = {
@@ -392,7 +408,7 @@ private fun CardTopBar(onBack: (() -> Unit)?, menu: (@Composable (close: () -> U
 
 /** Имя, метки и строка «11 лет · Вт, Чт 13:30 · ПТ ББ». */
 @Composable
-private fun CardHeader(row: ClientRow, today: LocalDate, noBooking: Boolean) {
+private fun CardHeader(row: ClientRow, today: LocalDate, noBooking: Boolean, waits: Boolean) {
     val colors = PersonalkaTheme.colors
     val client = row.client
     Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space4)) {
@@ -408,6 +424,7 @@ private fun CardHeader(row: ClientRow, today: LocalDate, noBooking: Boolean) {
             OutlineLabel(ClientFormat.adult(client.adultOn(today)))
             if (client.status == ClientStatus.ARCHIVED) OutlineLabel("В архиве")
             if (noBooking) OutlineLabel(FollowupFormat.NO_BOOKING, PIcons.EventBusy)
+            if (waits) OutlineLabel(WaitFormat.LABEL, PIcons.Schedule)
             if (line.isNotEmpty()) {
                 Text(line.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
             }

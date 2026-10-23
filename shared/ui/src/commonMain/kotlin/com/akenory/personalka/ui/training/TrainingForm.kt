@@ -69,6 +69,7 @@ import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.ReferenceRules
@@ -87,6 +88,7 @@ import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.SecondaryButton
@@ -137,12 +139,14 @@ object TrainingFormKey {
     private const val TYPE = '$'
     private const val PLACE = '%'
     private const val WEEKLY = '!'
-    private val MARKS = charArrayOf(START, CLIENT, TYPE, PLACE, WEEKLY)
+    private const val WAIT = '&'
+    private val MARKS = charArrayOf(START, CLIENT, TYPE, PLACE, WEEKLY, WAIT)
 
     /**
      * Новая запись. [clientId] — «+ Тренировка» и «+ Серия» в карточке клиента (5.9): клиент уже выбран;
      * [weekly] — «+ Серия»: сразу «Каждую неделю». [typeId] и [locationId] — «Записать» из «Без записи» (5.8):
-     * тот же тип и место, что у последнего посещения.
+     * тот же тип и место, что у последнего посещения. [waitId] — «Записать» из листа ожидания (4.16): после
+     * сохранения разовой тренировки запись листа закрывается («Убран из листа ожидания»), серию закрывает база сама.
      */
     fun new(
         start: LocalDateTime? = null,
@@ -150,12 +154,14 @@ object TrainingFormKey {
         weekly: Boolean = false,
         typeId: String? = null,
         locationId: String? = null,
+        waitId: String? = null,
     ): String = buildString {
         append(NEW)
         if (start != null) append(START).append(start)
         if (clientId != null) append(CLIENT).append(clientId)
         if (typeId != null) append(TYPE).append(typeId)
         if (locationId != null) append(PLACE).append(locationId)
+        if (waitId != null) append(WAIT).append(waitId)
         if (weekly) append(WEEKLY)
     }
 
@@ -181,6 +187,8 @@ object TrainingFormKey {
     fun typeId(key: String): String? = part(key, TYPE)
 
     fun locationId(key: String): String? = part(key, PLACE)
+
+    fun waitId(key: String): String? = part(key, WAIT)
 
     fun weekly(key: String): Boolean = key.startsWith(NEW) && key.endsWith(WEEKLY)
 
@@ -434,6 +442,13 @@ private fun TrainingFields(
                 is SaveResult.Saved -> {
                     onClose()
                     messages.showUndo(result.message) { scope.launch { forms.undo(result.undo) } }
+                    // «Записать» из листа ожидания разово (4.16): запись «только разово» закрывается с «Вернуть».
+                    val waitId = TrainingFormKey.waitId(key)
+                    if (waitId != null && d.repeat == null) {
+                        clients.waitlist.bookedOnce(waitId)?.let { before ->
+                            messages.show(WaitFormat.BOOKED, WaitFormat.RETURN) { scope.launch { clients.waitlist.restore(before) } }
+                        }
+                    }
                 }
                 is SaveResult.AskScope -> panel = Panels.scope(result.date, result.question)
                 is SaveResult.Confirm -> panel = Panels.conflict(answer, result.conflicts)
@@ -551,6 +566,7 @@ private fun TrainingFields(
         },
     ) {
         if (current == null) return@FormFrame
+        if (TrainingFormKey.waitId(key) != null) Note(WaitFormat.FORM_BANNER, Modifier.padding(top = Dimens.space2))
         val paste = copied
         if (editId == null && series == null && paste != null) {
             SecondaryButton(

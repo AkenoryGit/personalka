@@ -38,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -88,8 +89,7 @@ import com.akenory.personalka.ui.clients.SearchField
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
-import com.akenory.personalka.ui.results.ResultFormPanel
-import com.akenory.personalka.ui.results.ResultWho
+import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
@@ -98,6 +98,8 @@ import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.SwitchRow
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.results.ResultFormPanel
+import com.akenory.personalka.ui.results.ResultWho
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
@@ -208,6 +210,10 @@ fun TrainingCardHost(
         }
     }
     val shown = card?.takeIf { it.id == id }
+    // «Это время ждут» (4.16) — в панели отмены и в подтверждении удаления; пересчитывается, когда они открываются.
+    val waitLine by produceState<String?>(null, id, cancelWho != null, askDelete) {
+        value = if (id != null && (cancelWho != null || askDelete)) cards.waitingLine(id) else null
+    }
     val guestChoices by remember(id, addingGuest) {
         if (id != null && addingGuest) cards.guestChoices(id) else flowOf(emptyList())
     }.collectAsState(emptyList())
@@ -310,6 +316,7 @@ fun TrainingCardHost(
                     card = shown,
                     draft = draft,
                     now = now,
+                    waitLine = waitLine,
                     onBack = { cancelWho = null },
                     onWho = { cancelWho = it },
                     onReason = { picked ->
@@ -386,6 +393,7 @@ fun TrainingCardHost(
         if (shown != null && askDelete) {
             Panel(title = TrainingCardFormat.DELETE_TITLE, onDismiss = { askDelete = false }) {
                 Text(TrainingCardFormat.deleteText(shown.title, shown.state.start), style = MaterialTheme.typography.bodyLarge.tabular(), color = PersonalkaTheme.colors.text)
+                waitLine?.let { Note(it, Modifier.testTag(WAIT_LINE_TAG)) }
                 PanelActions(
                     primary = TrainingCardFormat.DELETE,
                     onPrimary = {
@@ -983,11 +991,15 @@ private const val GUEST_SHORT_LIST = 8
 
 // --- Панель отмены (5.6) ---
 
+/** Строка «Это время ждут: Петров К. (разово)» (4.16) в подтверждениях. */
+const val WAIT_LINE_TAG = "wait-line"
+
 @Composable
 private fun ColumnScope.CancelBody(
     card: TrainingCard,
     draft: CancelDraft,
     now: LocalDateTime,
+    waitLine: String?,
     onBack: () -> Unit,
     onWho: (String) -> Unit,
     onReason: (String?) -> Unit,
@@ -1101,6 +1113,11 @@ private fun ColumnScope.CancelBody(
             if (summary.switchable) {
                 SwitchRow(TrainingCardFormat.CHARGE_SWITCH, summary.charged, onCharged, Modifier.testTag(CHARGE_SWITCH_TAG))
             }
+        }
+        // Время освобождается, только когда отменяют всю тренировку.
+        if (whole && waitLine != null) {
+            Spacer(Modifier.height(Dimens.space3))
+            Note(waitLine, Modifier.testTag(WAIT_LINE_TAG))
         }
         Spacer(Modifier.height(Dimens.space4))
     }

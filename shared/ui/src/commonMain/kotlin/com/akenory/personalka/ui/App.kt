@@ -112,7 +112,11 @@ fun App(
         val followup by remember(clients, hasCoach, now) {
             if (hasCoach == true) clients.followup.observe(now) else flowOf(Followup.EMPTY)
         }.collectAsState(initial = Followup.EMPTY)
-        val todos = remember(home, backupState, now, noDiary, followup) { homeTodos(home, backupState, now, noDiary, followup) }
+        // Лист ожидания (4.16) с освободившимся временем: раздел «Клиентов», метка «Ждёт», пункт «Нужно сделать».
+        val waiting by remember(clients, hasCoach, now) {
+            if (hasCoach == true) clients.waitlist.observe(now) else flowOf(emptyList())
+        }.collectAsState(initial = emptyList())
+        val todos = remember(home, backupState, now, noDiary, followup, waiting) { homeTodos(home, backupState, now, noDiary, followup, waiting) }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()
 
@@ -150,6 +154,10 @@ fun App(
                 }
             }
             onLink()
+        }
+        // Лист ожидания (4.16): разовые с прошедшим сроком закрываются, закрытые старше 90 дней удаляются — раз в день.
+        LaunchedEffect(clients, hasCoach, now.date) {
+            if (hasCoach == true) clients.waitlist.tidy()
         }
         // Автокопия в папку (7.6): при открытии приложения и раз в час — если пора.
         LaunchedEffect(backup, hasCoach, now.date, now.hour) {
@@ -212,6 +220,8 @@ fun App(
                             clientList = clientList,
                             reminders = reminders,
                             notifications = notifications,
+                            voice = voice,
+                            waiting = waiting,
                         )
                     }
                     form?.let { key ->

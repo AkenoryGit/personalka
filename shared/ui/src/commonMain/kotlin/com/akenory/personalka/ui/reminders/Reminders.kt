@@ -82,7 +82,14 @@ class Reminders(
         val notices = due.mapNotNull { reminder ->
             when (reminder) {
                 Reminder.Digest -> {
-                    val todos = homeTodos(home, backup?.state?.value, now, noDiary, clients.followup.observe(now).first())
+                    val todos = homeTodos(
+                        home,
+                        backup?.state?.value,
+                        now,
+                        noDiary,
+                        clients.followup.observe(now).first(),
+                        clients.waitlist.observe(now).first(),
+                    )
                     if (todos.isEmpty()) {
                         null
                     } else {

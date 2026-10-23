@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.data.clients.Followup
+import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.clients.draft
 import com.akenory.personalka.data.training.TrainingRepository
@@ -41,6 +42,7 @@ import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.ShellState
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.training.VoiceInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -58,7 +60,19 @@ object ClientRoute {
     fun relation(id: String, relationId: String) = "$PREFIX$id/relation/$relationId"
     fun merge(id: String) = "$PREFIX$id/merge"
 
+    private const val WAIT = "client/wait/"
+
+    /** «+ В ожидание» (4.16); [clientId] — клиент уже выбран: «В лист ожидания…» из его карточки. */
+    fun waitNew(clientId: String? = null): String = WAIT + "new" + (clientId?.let { "/$it" } ?: "")
+
+    /** «Изменить» записи листа ожидания. */
+    fun waitEdit(entryId: String): String = WAIT + entryId
+
     fun parse(route: String): ClientScreen? {
+        if (route.startsWith(WAIT)) {
+            val parts = route.removePrefix(WAIT).split('/')
+            return if (parts[0] == "new") ClientScreen.Wait(null, parts.getOrNull(1)) else ClientScreen.Wait(parts[0], null)
+        }
         if (route == NEW) return ClientScreen.New("")
         if (route.startsWith("$NEW/")) return ClientScreen.New(route.removePrefix("$NEW/"))
         if (!route.startsWith(PREFIX)) return null
@@ -89,6 +103,9 @@ sealed interface ClientScreen {
     data class AddRelative(override val clientId: String) : ClientScreen
     data class EditRelation(override val clientId: String, val relationId: String) : ClientScreen
     data class Merge(override val clientId: String) : ClientScreen
+
+    /** Запись листа ожидания: новая ([entryId] `null`) или «Изменить». */
+    data class Wait(val entryId: String?, override val clientId: String?) : ClientScreen
 }
 
 /** Чипы списка (5.8): «Активные», «Без записи» (4.15, 4.16), «Архив». */
@@ -176,6 +193,7 @@ private val ListWidth = 360.dp
  * @param followup «Без записи» (4.15): раздел списка и метка «Нет записи» в карточке; считает приложение — пункт
  *   «Нужно сделать» на «Главной» нужен из любого раздела.
  * @param list поиск и фильтры списка: «Главная» открывает «Без записи» ([ClientListState.filter]).
+ * @param waiting лист ожидания (4.16) с освободившимся временем — его тоже считает приложение (пункт «Главной»).
  */
 @Composable
 fun ClientsScreen(
@@ -188,6 +206,8 @@ fun ClientsScreen(
     onForm: (String) -> Unit,
     followup: Followup = Followup.EMPTY,
     list: ClientListState = rememberClientListState(),
+    voice: VoiceInput? = null,
+    waiting: List<WaitRow> = emptyList(),
 ) {
     val wide = LocalWide.current
     val scroll = rememberLazyListState()
@@ -211,9 +231,9 @@ fun ClientsScreen(
                 selectedId = top?.clientId,
                 onOpen = nav::openFromList,
                 onNew = nav::newFromList,
-                noBookingCount = followup.rows.size,
+                noBookingCount = followup.rows.size + waiting.size,
                 noBooking = { modifier ->
-                    FollowupList(followup, list.query, followupScroll, clients, messages, scope, now, nav::openFromList, onForm, modifier)
+                    FollowupList(followup, waiting, list.query, followupScroll, clients, messages, scope, now, nav, onForm, modifier)
                 },
                 modifier = if (wide) Modifier.width(ListWidth).fillMaxHeight() else Modifier.weight(1f).fillMaxHeight(),
             )
@@ -226,6 +246,8 @@ fun ClientsScreen(
                         screen = top,
                         rows = loaded,
                         followup = followup,
+                        waiting = waiting,
+                        voice = voice,
                         clients = clients,
                         forms = forms,
                         nav = nav,
@@ -268,6 +290,9 @@ class ClientNav(private val shell: ShellState, private val wide: Boolean) {
 
     fun newFromList(prefill: String) = if (wide) shell.reset(ClientRoute.new(prefill)) else shell.open(ClientRoute.new(prefill))
 
+    /** Форма из списка: на разложенном сменяет открытое справа. */
+    fun formFromList(route: String) = if (wide) shell.reset(route) else shell.open(route)
+
     /** Поверх открытого: карточка родственника, формы карточки. */
     fun open(route: String) = shell.open(route)
 
@@ -284,6 +309,8 @@ private fun ClientDetail(
     screen: ClientScreen,
     rows: List<ClientRow>,
     followup: Followup,
+    waiting: List<WaitRow>,
+    voice: VoiceInput?,
     clients: ClientRepository,
     forms: TrainingRepository,
     nav: ClientNav,
@@ -294,7 +321,8 @@ private fun ClientDetail(
     onBack: (() -> Unit)?,
 ) {
     when (screen) {
-        is ClientScreen.Card -> ClientCard(screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack, followup)
+        is ClientScreen.Card -> ClientCard(screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack, followup, waiting)
+        is ClientScreen.Wait -> WaitEditor(screen.entryId, screen.clientId, rows, followup, clients, nav, messages, scope, now.date, voice)
         is ClientScreen.New -> ClientEditor(
             clientId = null,
             initial = prefillDraft(screen.prefill),
