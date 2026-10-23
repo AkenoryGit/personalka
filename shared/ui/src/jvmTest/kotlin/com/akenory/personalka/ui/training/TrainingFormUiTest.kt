@@ -19,6 +19,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -150,6 +151,8 @@ class TrainingFormUiTest {
 
     private fun ComposeUiTest.save() = onNodeWithText(TrainingFormat.SAVE).performClick()
 
+    // У чипа метка теста — на зоне нажатия 48 dp, а «выбран» и «включён» — на самом чипе внутри: `onChild()`.
+
     @Test
     fun createOnEmptyPlaceInThreeTaps() = runComposeUiTest {
         val belova = client("Белова", "Ева")
@@ -209,7 +212,7 @@ class TrainingFormUiTest {
         onNodeWithText("Новый клиент «Дельфенурова Алиса»").performScrollTo().performClick()
         awaitNode(hasText("Похожий клиент уже есть"))
         onNodeWithText("Да, выбрать").performClick()
-        onNodeWithTag(formClientTag(alisa)).assertIsSelected()
+        onNodeWithTag(formClientTag(alisa)).onChild().assertIsSelected()
 
         // Нового нет среди похожих — создаётся сразу и выбирается.
         tap(formTypeTag(typeId("Сплит")))
@@ -218,7 +221,7 @@ class TrainingFormUiTest {
         // У сплита клиентов двое — чипы-флажки.
         awaitNode(hasText(s("Петров_И.")))
         onNodeWithText(s("Петров_И.")).assertIsOn()
-        onNodeWithTag(formClientTag(alisa)).assertIsOn()
+        onNodeWithTag(formClientTag(alisa)).onChild().assertIsOn()
         save()
         awaitNode(hasText(s("Создано: вт_20.10, 16:00")))
         val petrov = runBlocking { db.clientDao().observeAllClients().first().single { it.lastName == "Петров" } }
@@ -234,8 +237,8 @@ class TrainingFormUiTest {
         tap(formClientTag(morozov))
         tap(FORM_WEEKLY_TAG)
         // День повтора по умолчанию — день даты.
-        onNodeWithTag(formWeekdayTag(DayOfWeek.TUESDAY)).assertIsOn()
-        onNodeWithTag(formWeekdayTag(DayOfWeek.THURSDAY)).assertIsOff()
+        onNodeWithTag(formWeekdayTag(DayOfWeek.TUESDAY)).onChild().assertIsOn()
+        onNodeWithTag(formWeekdayTag(DayOfWeek.THURSDAY)).onChild().assertIsOff()
         save()
         awaitNode(hasText("Создано: каждый вт, 17:15"))
         // До горизонта 8 недель — по вт 15.12: 9 тренировок, и прошлая разовая.
@@ -309,7 +312,7 @@ class TrainingFormUiTest {
         onNodeWithTag(FAB_TAG).performClick()
         awaitNode(hasText(TrainingFormat.PASTE))
         onNodeWithText(TrainingFormat.PASTE).performClick()
-        onNodeWithTag(formClientTag(belova)).assertIsSelected()
+        onNodeWithTag(formClientTag(belova)).onChild().assertIsSelected()
         awaitNode(hasText("17:00–18:00"))
         save()
         awaitNode(hasText(s("Создано: вт_20.10, 17:00")))
@@ -329,7 +332,7 @@ class TrainingFormUiTest {
         // Разложили Fold — выбранный клиент и недописанный план на месте.
         width = unfolded
         waitForIdle()
-        onNodeWithTag(formClientTag(gusev)).assertIsSelected()
+        onNodeWithTag(formClientTag(gusev)).onChild().assertIsSelected()
         onNodeWithTag(FORM_PLAN_TAG).assert(hasText("Кроль 8 × 25 м"))
         save()
         awaitNode(hasText(s("Создано: вт_20.10, 16:00")))
