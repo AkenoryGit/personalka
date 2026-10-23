@@ -137,6 +137,8 @@ class TrainingCardUiTest {
         // Карточка: время, статус, кнопки «Отменить» и «Изменить» (макет «Позже сегодня»).
         tapBlock("Орлов_М.")
         awaitNode(hasTestTag(TRAINING_CARD_TAG))
+        // Панель появляется раньше данных карточки — ждём саму строку, а не только панель.
+        awaitNode(hasText(s("вт_20.10 · 16:20–17:10 · 50_мин")))
         onNodeWithText(s("вт_20.10 · 16:20–17:10 · 50_мин")).assertIsDisplayed()
         onNode(inCard("Запланировано")).assertIsDisplayed()
         onNode(inCard(s("через 40_мин"))).assertIsDisplayed()
