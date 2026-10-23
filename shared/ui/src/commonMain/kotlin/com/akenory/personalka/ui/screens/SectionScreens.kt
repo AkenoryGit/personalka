@@ -30,12 +30,12 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.calendar.CalendarRepository
+import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.calendar.ZoneKind
-import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.ui.calendar.CalendarScreen
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.components.EmptyState
@@ -43,6 +43,8 @@ import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
+import com.akenory.personalka.ui.home.HomeScreen
+import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
@@ -55,12 +57,13 @@ import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import com.akenory.personalka.ui.training.TrainingFormKey
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
 /**
  * Экраны разделов. С шага 1.5 — заготовки: заголовок и пустой экран с тем, в каком шаге раздел появится.
  * Каждый следующий шаг заменяет свою заготовку настоящим экраном: «Ещё → Настройки» — с шага 1.6,
- * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8, «Календарь» — с шага 1.9.
+ * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8, «Календарь» — с шага 1.9, «Главная» — с шага 1.16.
  *
  * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
  * @param onForm открыть форму тренировки ([TrainingFormKey]): из календаря — новая на это время, из карточки
@@ -69,6 +72,10 @@ import kotlinx.datetime.LocalDateTime
  *   его серии (шаг 1.13б); из «Настройки → Календарь» — свой запрет и дежурство (шаг 1.13г).
  * @param card открытая карточка тренировки в календаре (шаг 1.14); [onCard] — открыть или закрыть её.
  * @param backup резервная копия для «Настройки → Данные» (шаг 1.15); `null` — раздела нет.
+ * @param home тренировки «Главной» и [todos] — пункты «Нужно сделать» (шаг 1.16); [homeCard] — карточка, открытая
+ *   с «Главной», [onHomeCard] — открыть или закрыть её.
+ * @param calendarDay день, который «Главная» попросила открыть в «Календаре»; [onCalendarDay] — открыть его
+ *   (раздел «Календарь» переключается) или `null` — день открыт.
  */
 @Composable
 fun SectionScreen(
@@ -87,14 +94,46 @@ fun SectionScreen(
     card: String? = null,
     onCard: (String?) -> Unit = {},
     backup: BackupTools? = null,
+    home: List<CalendarTraining> = emptyList(),
+    todos: List<HomeTodo> = emptyList(),
+    homeCard: String? = null,
+    onHomeCard: (String?) -> Unit = {},
+    calendarDay: LocalDate? = null,
+    onCalendarDay: (LocalDate?) -> Unit = {},
 ) {
-    val today = now.date
+    val openClient: (String) -> Unit = { id ->
+        shell.select(Section.CLIENTS)
+        shell.open(ClientRoute.card(id))
+    }
+    val openGroup: (String) -> Unit = { id ->
+        shell.select(Section.MORE)
+        shell.open(GroupRoute.card(id))
+    }
     when (section) {
-        Section.HOME -> Placeholder(
-            title = DateFormat.header(today),
-            icon = PIcons.Home,
-            heading = "Здесь будет ближайшая тренировка",
-            text = "И список «Нужно сделать». Появится в шаге 1.16.",
+        Section.HOME -> HomeScreen(
+            calendar = calendar,
+            trainings = home,
+            todos = todos,
+            now = now,
+            messages = messages,
+            scope = scope,
+            card = homeCard,
+            onCard = onHomeCard,
+            onDay = { date -> onCalendarDay(date) },
+            onBackup = {
+                shell.select(Section.MORE)
+                shell.reset(SettingsRoute.HOME)
+                shell.open(SettingsRoute.DATA)
+            },
+            onEdit = { id -> onForm(TrainingFormKey.edit(id)) },
+            onClient = { id ->
+                onHomeCard(null)
+                openClient(id)
+            },
+            onGroup = { id ->
+                onHomeCard(null)
+                openGroup(id)
+            },
         )
         Section.CALENDAR -> CalendarScreen(
             calendar = calendar,
@@ -108,18 +147,18 @@ fun SectionScreen(
             // Карточка клиента или группы открывается в своём разделе; карточка тренировки закрывается.
             onClient = { id ->
                 onCard(null)
-                shell.select(Section.CLIENTS)
-                shell.open(ClientRoute.card(id))
+                openClient(id)
             },
             onGroup = { id ->
                 onCard(null)
-                shell.select(Section.MORE)
-                shell.open(GroupRoute.card(id))
+                openGroup(id)
             },
             onCreate = { start -> onForm(TrainingFormKey.new(start)) },
             onEditZone = { zone ->
                 onForm(if (zone.kind == ZoneKind.RESTRICTION) TrainingFormKey.restriction(zone.id) else TrainingFormKey.edit(zone.id))
             },
+            goTo = calendarDay,
+            onWent = { onCalendarDay(null) },
         )
         Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm)
         Section.SALARY -> Placeholder(

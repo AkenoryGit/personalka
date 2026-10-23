@@ -38,11 +38,14 @@ import com.akenory.personalka.domain.restriction.RestrictionHit
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.TrainingTime
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -60,6 +63,7 @@ import kotlinx.datetime.plus
  * @param shade оттенок типа (`TrainingType.shade`): 1 — светлый … 4 — тёмный; фон блока — цвет места этим оттенком.
  * @param badges значки по важности (`CalendarBadges`); сколько из них видно, решает высота блока.
  * @param marked проведена или в ней отмечены пришедшие: в будущее её не перенести (`CalendarDrag.problem`).
+ * @param done проведена; [group] — групповая (тип GROUP): для «Главной» (5.2).
  */
 data class CalendarTraining(
     val id: String,
@@ -75,6 +79,8 @@ data class CalendarTraining(
     val marked: Boolean = false,
     val shade: Int = ReferenceRules.SHADE_LIGHT,
     val typeName: String = typeShort,
+    val done: Boolean = false,
+    val group: Boolean = false,
 )
 
 /** Что вышло из переноса тренировки (5.3). */
@@ -293,6 +299,17 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     }
 
     /**
+     * Тренировки для «Главной» (5.2): от самой ранней запланированной (группы без отметки) или с [today] — и на
+     * [HOME_DAYS] дней вперёд, где ищется «Ближайшая», если до неё далеко.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun homeTrainings(today: LocalDate): Flow<List<CalendarTraining>> =
+        trainings.observeEarliestPlanned(TrainingStatus.PLANNED)
+            .map { earliest -> earliest?.date?.takeIf { it < today } ?: today }
+            .distinctUntilChanged()
+            .flatMapLatest { from -> trainings(from, today.plus(HOME_DAYS, DateTimeUnit.DAY)) }
+
+    /**
      * Зоны дней с [from] по [to] не включая (5.3): дежурства, кроме отменённых, и запреты — свои и клуба, во всех
      * местах. Дежурство, которое переходит за полночь, — до конца своего дня.
      */
@@ -389,6 +406,11 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
         }
     }
 
+    companion object {
+        /** Насколько вперёд «Главная» ищет «Ближайшую»: дальше — «Впереди тренировок нет». */
+        const val HOME_DAYS = 62
+    }
+
     private class Names(
         val types: Map<String, TrainingTypeEntity>,
         val places: Map<String, LocationEntity>,
@@ -419,4 +441,6 @@ private fun TrainingEntity.toCalendar(
     cancelled = status == TrainingStatus.CANCELLED,
     badges = badges,
     marked = marked,
+    done = status == TrainingStatus.DONE,
+    group = type?.kind == TrainingKind.GROUP,
 )

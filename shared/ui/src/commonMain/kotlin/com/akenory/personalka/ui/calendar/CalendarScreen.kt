@@ -145,6 +145,7 @@ private const val ID_SEPARATOR = "\n"
  * @param onClient имя клиента в карточке — его карточка; [onGroup] — карточка группы.
  * @param onCreate новая тренировка на это время: удержание на пустом месте и «Новая тренировка на это время».
  * @param onEditZone «Изменить» в окне зоны: форма дежурства или своего запрета (шаг 1.13а).
+ * @param goTo открыть этот день — так «Главная» открывает сегодня и завтра (шаг 1.16); [onWent] — день открыт.
  */
 @Composable
 fun CalendarScreen(
@@ -160,6 +161,8 @@ fun CalendarScreen(
     onGroup: (String) -> Unit,
     onCreate: (LocalDateTime) -> Unit,
     onEditZone: (CalendarZone) -> Unit,
+    goTo: LocalDate? = null,
+    onWent: () -> Unit = {},
 ) {
     val onOpen: (CalendarTraining) -> Unit = { training -> onCard(TrainingCardKey.card(training.id)) }
     val today = now.date
@@ -254,6 +257,16 @@ fun CalendarScreen(
         pickedPage = pageOf(date)
         pager.requestScrollToPage(pickedPage)
         select(CalendarView.Day)
+    }
+    // «Ещё сегодня» и «Завтра» с «Главной»: день выбран во всех видах сразу — с какого бы ни открылся календарь.
+    LaunchedEffect(goTo) {
+        val date = goTo ?: return@LaunchedEffect
+        pickedPage = pageOf(date)
+        pager.requestScrollToPage(pickedPage)
+        months.requestScrollToPage(MonthRules.page(date))
+        agenda.jump(date)
+        agendaList.requestScrollToItem(0)
+        onWent()
     }
     var showCancelled by remember { mutableStateOf(prefs.boolean(DevicePrefs.CALENDAR_SHOW_CANCELLED) ?: true) }
     val places by remember(calendar) { calendar.places }.collectAsState(initial = emptyList())

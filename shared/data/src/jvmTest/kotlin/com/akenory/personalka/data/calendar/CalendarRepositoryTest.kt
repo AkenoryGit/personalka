@@ -443,4 +443,26 @@ class CalendarRepositoryTest {
         settings.updatePlace(placeId("ДБ"), PlaceDraft("Детский бассейн", "ДБ"), archived = true)
         assertEquals(listOf("Зал", "ББ"), calendar.places.first().map { it.shortName })
     }
+
+    @Test
+    fun homeTrainingsFromOldestUnmarkedGroupAndAhead(): Unit = runBlocking {
+        // Главная (1.16): группа неделю назад так и не отмечена — она в списке; отмеченная и проведённая старые — нет.
+        val groupId = groups.create(GroupDraft("Вт, Чт 18:00 ДБ", typeId("Группа"), placeId("ДБ")))
+        val kid = client("Белова", "Ева")
+        val weekAgo = tuesday.plus(-7, DateTimeUnit.DAY)
+        val unmarked = training("Группа", "ДБ", at(weekAgo, 18), minutes = 60, clientIds = listOf(kid), groupId = groupId)
+        training("ПТ", "ББ", at(tuesday.plus(-14, DateTimeUnit.DAY), 9), status = TrainingStatus.DONE)
+        val today = training("ПТ", "ББ", at(tuesday, 17), clientIds = listOf(client("Орлов", "Максим")))
+        val far = training("ПТ", "ББ", at(tuesday.plus(40, DateTimeUnit.DAY), 7))
+        training("ПТ", "ББ", at(tuesday.plus(CalendarRepository.HOME_DAYS, DateTimeUnit.DAY), 7))
+        val list = calendar.homeTrainings(tuesday).first()
+        assertEquals(listOf(unmarked, today, far), list.map { it.id })
+        assertTrue(list.first().group)
+        assertFalse(list[1].group)
+        // Отметили — список начинается с сегодня.
+        db.trainingDao().upsertTraining(db.trainingDao().training(unmarked)!!.copy(status = TrainingStatus.DONE))
+        val after = calendar.homeTrainings(tuesday).first()
+        assertEquals(listOf(today, far), after.map { it.id })
+        assertFalse(after.first().done)
+    }
 }

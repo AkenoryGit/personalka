@@ -39,6 +39,13 @@ interface TrainingDao {
     @Query("SELECT * FROM training WHERE status = :planned AND start < :before AND deletedAt IS NULL ORDER BY start")
     suspend fun plannedBefore(before: LocalDateTime, planned: TrainingStatus): List<TrainingEntity>
 
+    /**
+     * Начало самой ранней запланированной тренировки: с него «Главная» ищет группы без отметки (5.2) — прошедшие
+     * закрываются сами в конце (4.1), запланированными в прошлом остаются только они.
+     */
+    @Query("SELECT MIN(start) FROM training WHERE status = :planned AND deletedAt IS NULL")
+    fun observeEarliestPlanned(planned: TrainingStatus): Flow<LocalDateTime?>
+
     /** Тренировки, которые начинаются в промежутке [from, to), по времени начала. Отменённые тоже. */
     @Query(
         """

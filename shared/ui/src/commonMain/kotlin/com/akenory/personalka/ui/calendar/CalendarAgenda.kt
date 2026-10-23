@@ -197,8 +197,12 @@ private fun DutyRow(zone: CalendarZone, onClick: () -> Unit) {
     )
 }
 
+/**
+ * Строка тренировки или дежурства: время, полоса, имя и строка под ним, значки справа. Ею же рисуется расписание дня
+ * на «Главной» (5.2): там справа ещё [status] («идёт»), а ближайшая выделена фоном ([highlighted]).
+ */
 @Composable
-private fun EntryRow(
+internal fun EntryRow(
     time: String,
     stripe: Color,
     title: String,
@@ -207,6 +211,8 @@ private fun EntryRow(
     badges: List<CalendarBadge>,
     tag: String,
     onClick: () -> Unit,
+    status: String? = null,
+    highlighted: Boolean = false,
 ) {
     val colors = PersonalkaTheme.colors
     val decoration = if (crossed) TextDecoration.LineThrough else null
@@ -215,6 +221,7 @@ private fun EntryRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = ROW_HEIGHT)
+            .then(if (highlighted) Modifier.clip(MaterialTheme.shapes.medium).background(colors.surface) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {}
             .testTag(tag)
@@ -228,6 +235,7 @@ private fun EntryRow(
             Text(title, style = MaterialTheme.typography.labelLarge, color = main, textDecoration = decoration, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(line, style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        if (status != null) Text(status, style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
         if (badges.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 badges.forEach { RowBadge(it) }
