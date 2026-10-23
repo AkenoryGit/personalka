@@ -248,7 +248,7 @@ internal fun Chips(options: List<Int>, selected: Int, label: (Int) -> String, ta
 }
 
 @Composable
-internal fun Hint(text: String) {
+private fun Hint(text: String) {
     Text(
         text,
         modifier = Modifier.padding(top = Dimens.space2),
