@@ -67,8 +67,6 @@ fun App(
         // Записи из экранов идут здесь: экран закрывается сразу, запись и «Отменить» доживают до конца.
         val scope = rememberCoroutineScope()
         val hasCoach by remember(settings) { settings.coach.map { it != null } }.collectAsState(initial = null)
-        // Пример дня в календаре — дежурство и запрет, пока их не создать формой (до шага 1.13а).
-        var sample by rememberSaveable { mutableStateOf(false) }
         // Открытая форма тренировки (5.5) — поверх всего приложения: «+» есть и на «Главной», и в «Календаре».
         var form by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -107,10 +105,8 @@ fun App(
                             groups = groups,
                             calendar = calendar,
                             prefs = prefs,
-                            sample = sample,
                             messages = messages,
                             scope = scope,
-                            onSample = { sample = it },
                             onForm = { form = it },
                         )
                     }
@@ -118,6 +114,7 @@ fun App(
                         TrainingFormSheet(
                             key = key,
                             forms = calendar.forms,
+                            restrictions = calendar.restrictions,
                             clients = clients,
                             now = now,
                             messages = messages,

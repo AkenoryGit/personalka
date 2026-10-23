@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
@@ -40,6 +41,7 @@ import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
+import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.training.TrainingDraft
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
@@ -48,6 +50,7 @@ import com.akenory.personalka.ui.calendar.CALENDAR_GRID_TAG
 import com.akenory.personalka.ui.calendar.COPY_TRAINING
 import com.akenory.personalka.ui.calendar.CalendarBlocks
 import com.akenory.personalka.ui.calendar.DayBlocks
+import com.akenory.personalka.ui.calendar.EDIT_ZONE
 import com.akenory.personalka.ui.calendar.calendarDayTag
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.shell.FAB_TAG
@@ -66,7 +69,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Форма тренировки (шаг 1.13, ТЗ 5.5, макеты «Новая тренировка» и «Изменение тренировки серии»). «Сейчас» —
+ * Форма тренировки (шаг 1.13, ТЗ 5.5, макеты «Новая тренировка» и «Изменение тренировки серии»), дежурства
+ * и запрета (шаг 1.13а, макет «Запрет»). «Сейчас» —
  * вт 20.10.2026 15:40. Окно тестов — 1024 × 768: часть формы ниже края, поэтому до неё прокручивают.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -337,5 +341,123 @@ class TrainingFormUiTest {
         save()
         awaitNode(hasText(s("Создано: вт_20.10, 16:00")))
         assertEquals("Кроль 8 × 25 м", trainings().single { it.start.date == today }.plan)
+    }
+
+    // Дежурство и запрет (шаг 1.13а).
+
+    private fun ComposeUiTest.awaitZones(count: Int) {
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodes(hasTestTag(calendarDayTag(today))).fetchSemanticsNodes().isNotEmpty() && day().zones.size == count
+        }
+    }
+
+    /** Вид записи в переключателе формы. */
+    private fun ComposeUiTest.mode(label: String) {
+        onNode(hasText(label) and hasAnyAncestor(hasTestTag(FORM_MODE_TAG))).performClick()
+    }
+
+    @Test
+    fun restrictionFromFormHatchesAndAsks() = runComposeUiTest {
+        val orlov = client("Орлов", "Максим")
+        pt(at(today.plus(-7, DateTimeUnit.DAY), "10:00"), orlov)
+        openCalendar()
+
+        // Удержание на 17:00 → «Запрет»: время из места нажатия, на час (макет «Запрет»).
+        holdDay(150f, yOf("17:00") + 0.5f)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        mode(TrainingFormat.MODE_RESTRICTION)
+        awaitNode(hasText(TrainingFormat.NEW_RESTRICTION_TITLE))
+        onNodeWithText("с 17:00").assertIsDisplayed()
+        onNodeWithText("до 18:00").assertIsDisplayed()
+        tap(formPlaceTag(placeId("ДБ")))
+        onNodeWithTag(FORM_REASON_TAG).performScrollTo().performTextInput("Групповая тренировка")
+        tap(FORM_WEEKLY_TAG)
+        tap(formWeekdayTag(DayOfWeek.THURSDAY))
+        // «Для всего клуба» — только администратору (этап 2): у тренера его нет.
+        onNodeWithText("Для всего клуба").assertDoesNotExist()
+        save()
+        awaitNode(hasText(TrainingFormat.RESTRICTION_CREATED))
+        val block = runBlocking { db.scheduleDao().blocks().single() }
+        assertEquals(setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY), block.weekdays)
+        assertEquals(Scope.COACH, block.scope)
+
+        // Проверка шага: запрет виден штриховкой и спрашивает при постановке тренировки.
+        awaitZones(1)
+        assertEquals(s("ДБ · групповая тренировка"), day().zones.single().label)
+        holdDay(150f, yOf("17:23") + 0.5f)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        tap(formClientTag(orlov))
+        tap(formPlaceTag(placeId("ДБ")))
+        save()
+        awaitNode(hasText(ZoneFormat.CONFLICT_QUESTION))
+        onNodeWithText("Детский бассейн 17:00–18:00: групповая тренировка").assertIsDisplayed()
+    }
+
+    @Test
+    fun dutySeriesFromSwitchAndEditFromZone() = runComposeUiTest {
+        openCalendar()
+        holdDay(150f, yOf("18:00") + 0.5f)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        mode(TrainingFormat.MODE_DUTY)
+        // Дежурство — на длительность типа: 4 часа, место — первое.
+        awaitNode(hasText(TrainingFormat.NEW_DUTY_TITLE))
+        onNodeWithText("с 18:00").assertIsDisplayed()
+        onNodeWithText("до 22:00").assertIsDisplayed()
+        tap(FORM_WEEKLY_TAG)
+        save()
+        awaitNode(hasText("Создано: каждый вт, 18:00"))
+        // По вт до горизонта 8 недель — 9 дежурств; в календаре это заливка, а не блок.
+        assertEquals(9, trainings().size)
+        awaitZones(1)
+        awaitBlocks(0)
+
+        // Нажатие на заливку → «Изменить» → форма дежурства с повтором серии строкой.
+        val zone = day().zones.single()
+        tapDay(300f, zone.y + 30f)
+        onNodeWithText(EDIT_ZONE).performClick()
+        awaitNode(hasText(TrainingFormat.EDIT_DUTY_TITLE))
+        onNodeWithText("Каждый вт · бессрочно").performScrollTo().assertIsDisplayed()
+        onNodeWithTag(FORM_MODE_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun switchKeepsWhatWasChosen() = runComposeUiTest {
+        val gusev = client("Гусев", "Борис")
+        pt(at(today.plus(-7, DateTimeUnit.DAY), "10:00"), gusev)
+        openCalendar()
+        onNodeWithTag(FAB_TAG).performClick()
+        tap(formClientTag(gusev))
+
+        // «Запрет» и обратно — выбранный клиент на месте.
+        mode(TrainingFormat.MODE_RESTRICTION)
+        awaitNode(hasText(TrainingFormat.NEW_RESTRICTION_TITLE))
+        mode(TrainingFormat.MODE_TRAINING)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        onNodeWithTag(formClientTag(gusev)).onChild().assertIsSelected()
+    }
+
+    @Test
+    fun ownRestrictionEditAndDelete() = runComposeUiTest {
+        runBlocking {
+            calendar.restrictions.save(
+                null,
+                RestrictionDraft(placeId("ББ"), LocalTime(19, 0), LocalTime(20, 0), "Секция", weekly = true, weekdays = setOf(DayOfWeek.TUESDAY), date = LocalDate(2026, 9, 1)),
+            )
+        }
+        openCalendar()
+        awaitZones(1)
+        val zone = day().zones.single()
+        tapDay(2f, zone.y + 30f)
+        onNodeWithText(EDIT_ZONE).performClick()
+        awaitNode(hasText(TrainingFormat.EDIT_RESTRICTION_TITLE))
+        onNodeWithTag(FORM_REASON_TAG).assert(hasText("Секция"))
+        onNodeWithText("с 01.09.2026").performScrollTo().assertIsDisplayed()
+
+        // «Удалить запрет» — штриховки нет; «Отменить» — снова есть.
+        onNodeWithText(TrainingFormat.DELETE_RESTRICTION).performScrollTo().performClick()
+        awaitNode(hasText(TrainingFormat.RESTRICTION_DELETED))
+        awaitZones(0)
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        awaitZones(1)
     }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.restrictions.RestrictionRepository
 import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.data.training.FormClient
 import com.akenory.personalka.data.training.FormGroup
@@ -69,6 +72,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.reference.TypePresets
+import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.training.FormField
 import com.akenory.personalka.domain.training.FormType
 import com.akenory.personalka.domain.training.Repeat
@@ -85,6 +89,7 @@ import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
+import com.akenory.personalka.ui.components.Segmented
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
@@ -107,6 +112,7 @@ const val FORM_UNTIL_TAG = "form-until"
 const val FORM_PLAN_TAG = "form-plan"
 const val FORM_OWN_DURATION_TAG = "form-own-duration"
 const val FORM_WEEKLY_TAG = "form-weekly"
+const val FORM_MODE_TAG = "form-mode"
 
 fun formTypeTag(id: String) = "form-type-$id"
 fun formClientTag(id: String) = "form-client-$id"
@@ -115,31 +121,43 @@ fun formPlaceTag(id: String) = "form-place-$id"
 fun formWeekdayTag(day: DayOfWeek) = "form-weekday-$day"
 
 /**
- * Что открыто в форме — строкой, чтобы пережить пересоздание окна: новая тренировка на время (из календаря)
- * или на ближайший свободный час («+»), или изменение тренировки.
+ * Что открыто в форме — строкой, чтобы пережить пересоздание окна: новая запись на время (из календаря)
+ * или на ближайший свободный час («+»), изменение тренировки или дежурства, изменение своего запрета.
  */
 object TrainingFormKey {
     private const val NEW = "new"
     private const val EDIT = "edit:"
+    private const val RESTRICTION = "restriction:"
 
     fun new(start: LocalDateTime? = null): String = if (start == null) NEW else "$NEW@$start"
 
+    /** Тренировка или дежурство: форма выбирается по типу. */
     fun edit(id: String): String = EDIT + id
 
+    /** Свой запрет — «Изменить» в окне зоны (5.3). */
+    fun restriction(id: String): String = RESTRICTION + id
+
     fun editId(key: String): String? = key.takeIf { it.startsWith(EDIT) }?.removePrefix(EDIT)
+
+    fun restrictionId(key: String): String? = key.takeIf { it.startsWith(RESTRICTION) }?.removePrefix(RESTRICTION)
 
     fun start(key: String): LocalDateTime? = key.takeIf { it.startsWith("$NEW@") }?.substringAfter('@')?.let(LocalDateTime::parse)
 }
 
+/** Что создаёт форма — переключатель «Тренировка / Дежурство / Запрет» вверху новой записи (5.5, шаг 1.13а). */
+enum class FormMode(val label: String) {
+    TRAINING(TrainingFormat.MODE_TRAINING),
+    DUTY(TrainingFormat.MODE_DUTY),
+    RESTRICTION(TrainingFormat.MODE_RESTRICTION),
+}
+
 /**
- * Форма тренировки (ТЗ 5.5, макет «Новая тренировка»): нижняя панель почти во весь экран, «Сохранить» прибита
- * к низу. Тип (последний первым), клиент из недавних или поиском, место, когда, длительность, повтор, план.
- * Новая на пустом месте — за 3 нажатия: удержание → клиент → «Сохранить» (10.7).
+ * Форма тренировки, дежурства и запрета (ТЗ 5.5, макеты «Новая тренировка» и «Запрет»): нижняя панель почти
+ * во весь экран, «Сохранить» прибита к низу. У новой записи вверху переключатель «Тренировка / Дежурство /
+ * Запрет» — время из места нажатия переходит в каждую форму, а недописанное в одной не теряется при переходе
+ * в другую. Изменение открывает форму того, что меняют, без переключателя. Дежурства в переключателе нет,
+ * если у тренера нет типа дежурства (10.7).
  *
- * Перед записью — ответы, которых не хватает: «Только эту / Эту и следующие» у тренировки серии (4.4),
- * «Поставить всё равно?» под запретом (4.5); потом — сообщение с «Отменить» (5.20).
- *
- * Переключателя «Тренировка / Дежурство / Запрет» до шага 1.13а нет: выключенное не показывается (10.7).
  * Форма стоит поверх всего приложения на одном месте дерева: выбранное и недописанное переживает сложение Fold.
  *
  * @param key [TrainingFormKey].
@@ -149,19 +167,150 @@ object TrainingFormKey {
 fun TrainingFormSheet(
     key: String,
     forms: TrainingRepository,
+    restrictions: RestrictionRepository,
     clients: ClientRepository,
     now: LocalDateTime,
     messages: MessageState,
     scope: CoroutineScope,
     onClose: () -> Unit,
 ) {
+    val editId = TrainingFormKey.editId(key)
+    val restrictionId = TrainingFormKey.restrictionId(key)
+    val data by remember(forms) { forms.form() }.collectAsState(initial = null)
+    var stored by remember(key) { mutableStateOf<StoredTraining?>(null) }
+    var storedRestriction by remember(key) { mutableStateOf<RestrictionDraft?>(null) }
+    // Изменение — запись как есть; её уже нет (удалили на другом телефоне) — форма закрывается.
+    LaunchedEffect(key) {
+        if (editId != null) {
+            stored = forms.stored(editId)
+            if (stored == null) onClose()
+        } else if (restrictionId != null) {
+            storedRestriction = restrictions.stored(restrictionId)
+            if (storedRestriction == null) onClose()
+        }
+    }
+    var picked by rememberSaveable(key) { mutableStateOf(FormMode.TRAINING.name) }
+    val isNew = editId == null && restrictionId == null
+    val modes = listOfNotNull(FormMode.TRAINING, FormMode.DUTY.takeIf { data?.duty != null }, FormMode.RESTRICTION)
+    val mode = when {
+        restrictionId != null -> FormMode.RESTRICTION
+        stored?.isDuty == true -> FormMode.DUTY
+        editId != null -> FormMode.TRAINING
+        else -> modes.firstOrNull { it.name == picked } ?: FormMode.TRAINING
+    }
+    val switch: @Composable () -> Unit = {
+        if (isNew && data != null) {
+            Segmented(
+                options = modes,
+                selected = mode,
+                label = { it.label },
+                onSelect = { picked = it.name },
+                modifier = Modifier.padding(start = Dimens.space4, end = Dimens.space4, bottom = Dimens.space2).testTag(FORM_MODE_TAG),
+            )
+        }
+    }
+    if ((editId != null && stored == null) || (restrictionId != null && storedRestriction == null)) {
+        FormFrame(title = "", onClose = onClose, switch = {}, ready = false, onSave = {}) {}
+        return
+    }
+    // Каждая форма помнит своё: «Запрет» и обратно не сбрасывает выбранное в «Тренировке».
+    val holder = rememberSaveableStateHolder()
+    holder.SaveableStateProvider(mode.name) {
+        when (mode) {
+            FormMode.TRAINING -> TrainingFields(key, editId, stored, data, forms, clients, now, messages, scope, onClose, switch)
+            FormMode.DUTY -> DutyFields(key, editId, stored, data, forms, messages, scope, onClose, switch)
+            FormMode.RESTRICTION -> RestrictionFields(key, restrictionId, storedRestriction, data, restrictions, forms, messages, scope, onClose, switch)
+        }
+    }
+}
+
+/**
+ * Рамка формы: затемнение, панель с «✕» и заголовком, переключатель, поля с прокруткой и «Сохранить» внизу;
+ * [panels] — окна поверх (выбор даты, вопрос для серии, «Поставить всё равно?»). Нажатие мимо панели форму
+ * не закрывает: недописанное не должно теряться от случайного касания.
+ *
+ * @param ready данные загружены: до этого полей и «Сохранить» нет.
+ */
+@Composable
+internal fun FormFrame(
+    title: String,
+    onClose: () -> Unit,
+    switch: @Composable () -> Unit,
+    ready: Boolean,
+    onSave: () -> Unit,
+    panels: @Composable () -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val colors = PersonalkaTheme.colors
     val wide = LocalWide.current
-    val editId = TrainingFormKey.editId(key)
-    val data by remember(forms) { forms.form() }.collectAsState(initial = null)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(colors.scrim)
+            .pointerInput(Unit) { detectTapGestures { } },
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            Modifier
+                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+                .imePadding()
+                .padding(top = 40.dp)
+                .then(if (wide) Modifier.widthIn(max = 600.dp) else Modifier)
+                .fillMaxWidth()
+                .fillMaxSize()
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(colors.bg)
+                .testTag(TRAINING_FORM_TAG),
+        ) {
+            Box(Modifier.fillMaxWidth().padding(top = Dimens.space2), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(width = 32.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(colors.outline))
+            }
+            TopBar(title, onBack = onClose, close = true)
+            switch()
+            if (!ready) {
+                Spacer(Modifier.weight(1f))
+            } else {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = Dimens.space4),
+                ) {
+                    content()
+                    Spacer(Modifier.height(Dimens.space4))
+                }
+            }
+            BottomAction(TrainingFormat.SAVE, onClick = onSave, enabled = ready)
+        }
+        panels()
+    }
+}
+
+/**
+ * Форма тренировки (макет «Новая тренировка»): тип (последний первым), клиент из недавних или поиском, место, когда,
+ * длительность, повтор, план. Новая на пустом месте — за 3 нажатия: удержание → клиент → «Сохранить» (10.7).
+ *
+ * Перед записью — ответы, которых не хватает: «Только эту / Эту и следующие» у тренировки серии (4.4),
+ * «Поставить всё равно?» под запретом (4.5); потом — сообщение с «Отменить» (5.20).
+ */
+@Composable
+private fun TrainingFields(
+    key: String,
+    editId: String?,
+    stored: StoredTraining?,
+    data: TrainingFormData?,
+    forms: TrainingRepository,
+    clients: ClientRepository,
+    now: LocalDateTime,
+    messages: MessageState,
+    scope: CoroutineScope,
+    onClose: () -> Unit,
+    switch: @Composable () -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
     val copied by forms.copied.collectAsState()
     var draft by rememberSaveable(key, stateSaver = DraftSaver) { mutableStateOf<TrainingDraft?>(null) }
-    var stored by remember(key) { mutableStateOf<StoredTraining?>(null) }
     var keepDuration by rememberSaveable(key) { mutableStateOf(editId != null) }
     var keepPlace by rememberSaveable(key) { mutableStateOf(editId != null) }
     var ownDuration by rememberSaveable(key) { mutableStateOf(false) }
@@ -172,15 +321,10 @@ fun TrainingFormSheet(
     var panel by rememberSaveable(key) { mutableStateOf<String?>(null) }
 
     // Новая — тип, место и длительность по умолчанию; изменение — тренировка как есть.
-    LaunchedEffect(key, data != null) {
+    LaunchedEffect(key, data != null, stored) {
         val loaded = data ?: return@LaunchedEffect
         if (editId != null) {
-            val s = forms.stored(editId)
-            if (s == null) {
-                onClose()
-                return@LaunchedEffect
-            }
-            stored = s
+            val s = stored ?: return@LaunchedEffect
             if (draft == null) {
                 draft = s.draft
                 if (s.draft.durationMin !in ReferenceRules.DURATION_CHIPS) {
@@ -248,311 +392,277 @@ fun TrainingFormSheet(
         query = ""
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(colors.scrim)
-            // Нажатие мимо панели форму не закрывает: недописанное не должно теряться от случайного касания.
-            .pointerInput(Unit) { detectTapGestures { } },
-        contentAlignment = Alignment.BottomCenter,
-    ) {
-        Column(
-            Modifier
-                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
-                .imePadding()
-                .padding(top = 40.dp)
-                .then(if (wide) Modifier.widthIn(max = 600.dp) else Modifier)
-                .fillMaxWidth()
-                .fillMaxSize()
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(colors.bg)
-                .testTag(TRAINING_FORM_TAG),
-        ) {
-            Box(Modifier.fillMaxWidth().padding(top = Dimens.space2), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(width = 32.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(colors.outline))
-            }
-            TopBar(if (editId == null) TrainingFormat.NEW_TITLE else TrainingFormat.EDIT_TITLE, onBack = onClose, close = true)
-            if (current == null || data == null) {
-                Spacer(Modifier.weight(1f))
-            } else {
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = Dimens.space4),
-                ) {
-                    val paste = copied
-                    if (editId == null && paste != null) {
-                        SecondaryButton(
-                            text = TrainingFormat.PASTE,
-                            onClick = {
-                                update {
-                                    it.copy(
-                                        typeId = paste.typeId,
-                                        locationId = paste.locationId,
-                                        durationMin = paste.durationMin,
-                                        clientIds = paste.clientIds,
-                                        groupId = paste.groupId,
-                                    )
-                                }
-                                keepDuration = true
-                                keepPlace = true
-                                ownDuration = paste.durationMin !in ReferenceRules.DURATION_CHIPS
-                                ownText = paste.durationMin.toString()
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2),
-                            icon = PIcons.ContentCopy,
-                        )
-                    }
-
-                    // Тип: пять чипов, остальные — под «Ещё N»; выбранный виден всегда.
-                    SectionLabel("Тип")
-                    val index = form.types.indexOfFirst { it.id == current.typeId }
-                    val showAll = moreTypes || index >= TrainingFormRules.TYPE_CHIPS
-                    // Точка типа — цвет выбранного места его оттенком: так блок будет выглядеть в календаре.
-                    val placeColor = PlaceColor.of(form.places.firstOrNull { it.id == current.locationId }?.color)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                        form.types.take(if (showAll) form.types.size else TrainingFormRules.TYPE_CHIPS).forEach { t ->
-                            ChoiceChip(
-                                text = t.name,
-                                selected = t.id == current.typeId,
-                                onClick = {
-                                    if (t.id == current.typeId) return@ChoiceChip
-                                    update { d ->
-                                        val next = TrainingFormRules.withType(d, t, keepDuration)
-                                        if (keepPlace) next else next.copy(locationId = form.lastPlaceByType[t.id] ?: next.locationId)
-                                    }
-                                    if (!keepDuration) ownDuration = false
-                                },
-                                modifier = Modifier.testTag(formTypeTag(t.id)),
-                                dot = placeColor.shade(colors.isDark, t.shade),
-                            )
-                        }
-                        if (!showAll && form.types.size > TrainingFormRules.TYPE_CHIPS) {
-                            ChoiceChip(
-                                text = TrainingFormat.moreTypes(form.types.size - TrainingFormRules.TYPE_CHIPS),
-                                selected = false,
-                                onClick = { moreTypes = true },
-                                icon = PIcons.ArrowDropDown,
-                            )
-                        }
-                    }
-                    problems[FormField.TYPE]?.let { ErrorText(it) }
-
-                    if (type != null) {
-                        People(
-                            draft = current,
-                            type = type,
-                            form = form,
-                            query = query,
-                            error = problems[FormField.CLIENTS],
-                            onQuery = { query = it },
-                            onClient = ::select,
-                            onGroup = { group ->
-                                update { d ->
-                                    if (d.groupId == group.id) {
-                                        d.copy(groupId = null)
-                                    } else {
-                                        d.copy(groupId = group.id, clientIds = emptyList(), locationId = if (keepPlace) d.locationId else group.locationId)
-                                    }
-                                }
-                            },
-                            onNewClient = { name ->
-                                val similar = ClientRules.similar(name, form.clients) { it.name }.firstOrNull()
-                                if (similar != null) panel = Panels.similar(similar.id, query) else createClient(name)
-                            },
-                        )
-                    }
-
-                    SectionLabel("Место")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                        form.places.forEach { place ->
-                            ChoiceChip(
-                                text = place.shortName,
-                                selected = place.id == current.locationId,
-                                onClick = {
-                                    keepPlace = true
-                                    update { it.copy(locationId = place.id) }
-                                },
-                                modifier = Modifier.testTag(formPlaceTag(place.id)),
-                            )
-                        }
-                    }
-                    problems[FormField.PLACE]?.let { ErrorText(it) }
-
-                    SectionLabel("Когда")
-                    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                        PickBox(
-                            text = TrainingFormat.date(current.start.date),
-                            icon = PIcons.CalendarMonth,
-                            onClick = { panel = Panels.DATE },
-                            modifier = Modifier.weight(1f).testTag(FORM_DATE_TAG),
-                        )
-                        PickBox(
-                            text = TrainingFormat.timeRange(current.start, TrainingTime.end(current.start, current.durationMin)),
-                            icon = PIcons.Schedule,
-                            onClick = { panel = Panels.TIME },
-                            modifier = Modifier.weight(1f).testTag(FORM_TIME_TAG),
-                            error = problems[FormField.TIME],
-                        )
-                    }
-                    problems[FormField.TIME]?.let { ErrorText(it) }
-
-                    SectionLabel("Длительность, мин")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                        ReferenceRules.DURATION_CHIPS.forEach { minutes ->
-                            ChoiceChip(
-                                text = minutes.toString(),
-                                selected = !ownDuration && current.durationMin == minutes,
-                                onClick = {
-                                    ownDuration = false
-                                    keepDuration = true
-                                    update { it.copy(durationMin = minutes) }
-                                },
-                            )
-                        }
-                        ChoiceChip(
-                            text = TrainingFormat.OWN_DURATION,
-                            selected = ownDuration || current.durationMin !in ReferenceRules.DURATION_CHIPS,
-                            onClick = {
-                                ownDuration = true
-                                keepDuration = true
-                                ownText = current.durationMin.toString()
-                            },
-                        )
-                    }
-                    if (ownDuration) {
-                        Field(
-                            label = "Своя длительность, мин",
-                            value = ownText,
-                            onValueChange = { text ->
-                                ownText = text.filter { it.isDigit() }.take(3)
-                                ownText.toIntOrNull()?.let { minutes -> update { it.copy(durationMin = minutes) } }
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2),
-                            error = problems[FormField.DURATION],
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            tag = FORM_OWN_DURATION_TAG,
-                        )
-                    } else {
-                        problems[FormField.DURATION]?.let { ErrorText(it) }
-                    }
-
-                    SectionLabel("Повтор")
-                    val seriesRepeat = stored?.seriesRepeat
-                    if (seriesRepeat != null) {
-                        // Повтор серии меняет «Эту и следующие» и «Изменить с даты» (4.4), а не это поле.
-                        Text(
-                            TrainingFormat.seriesRepeat(seriesRepeat.weekdays, seriesRepeat.until),
-                            style = MaterialTheme.typography.bodyLarge.tabular(),
-                            color = colors.text,
-                        )
-                    } else {
-                        RepeatChoice(
-                            draft = current,
-                            weekdaysError = problems[FormField.WEEKDAYS],
-                            untilError = problems[FormField.UNTIL],
-                            onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
-                            onUntil = { panel = Panels.UNTIL },
-                        )
-                    }
-
-                    Field(
-                        label = "План",
-                        value = current.plan,
-                        onValueChange = { text -> update { it.copy(plan = text) } },
-                        modifier = Modifier.fillMaxWidth().padding(top = Dimens.space5),
-                        tag = FORM_PLAN_TAG,
-                        placeholder = "Необязательно",
-                        singleLine = false,
+    FormFrame(
+        title = if (editId == null) TrainingFormat.NEW_TITLE else TrainingFormat.EDIT_TITLE,
+        onClose = onClose,
+        switch = switch,
+        ready = current != null && data != null,
+        onSave = { save() },
+        panels = {
+            val open = panel
+            val d = current
+            if (open != null && d != null) {
+                when {
+                    open == Panels.DATE -> DatePickerPanel(
+                        initial = d.start.date,
+                        onPick = { date ->
+                            panel = null
+                            update { it.onDate(date) }
+                        },
+                        onDismiss = { panel = null },
                     )
-                    Spacer(Modifier.height(Dimens.space4))
-                }
-            }
-            BottomAction(TrainingFormat.SAVE, onClick = { save() }, enabled = current != null && data != null)
-        }
-
-        val open = panel
-        val d = current
-        if (open != null && d != null) {
-            when {
-                open == Panels.DATE -> DatePickerPanel(
-                    initial = d.start.date,
-                    onPick = { date ->
-                        panel = null
-                        update { old ->
-                            // День повтора по умолчанию — день даты: сменили дату — сменился и он.
-                            val repeat = old.repeat?.let { r -> if (r.weekdays == setOf(old.start.date.dayOfWeek)) r.copy(weekdays = setOf(date.dayOfWeek)) else r }
-                            old.copy(start = LocalDateTime(date, old.start.time), repeat = repeat)
+                    open == Panels.TIME -> TimePickerPanel(
+                        initial = d.start.time,
+                        onPick = { time ->
+                            panel = null
+                            update { it.copy(start = LocalDateTime(it.start.date, time)) }
+                        },
+                        onDismiss = { panel = null },
+                    )
+                    open == Panels.UNTIL -> DatePickerPanel(
+                        initial = d.repeat?.until ?: d.start.date,
+                        onPick = { date ->
+                            panel = null
+                            update { it.copy(repeat = it.repeat?.copy(until = date)) }
+                        },
+                        onDismiss = { panel = null },
+                        onClear = {
+                            panel = null
+                            update { it.copy(repeat = it.repeat?.copy(until = null)) }
+                        },
+                    )
+                    Panels.isScope(open) -> ScopePanel(
+                        title = TrainingFormat.SCOPE_EDIT_TITLE,
+                        question = Panels.scopeQuestion(open),
+                        date = Panels.scopeDate(open),
+                        back = TrainingFormat.BACK_TO_EDIT,
+                        onOnlyThis = {
+                            panel = null
+                            save(EditScope.ONLY_THIS)
+                        },
+                        onFollowing = {
+                            panel = null
+                            save(EditScope.FOLLOWING)
+                        },
+                        onDismiss = { panel = null },
+                    )
+                    Panels.isConflict(open) -> ConflictPanel(
+                        conflicts = Panels.conflicts(open),
+                        onDismiss = { panel = null },
+                        onPlace = {
+                            val answer = Panels.conflictScope(open)
+                            panel = null
+                            save(answer, confirmed = true)
+                        },
+                    )
+                    Panels.isSimilar(open) -> {
+                        val similar = form.clients.firstOrNull { it.id == Panels.similarId(open) }
+                        if (similar != null) {
+                            SimilarPanel(
+                                client = similar,
+                                onPick = {
+                                    panel = null
+                                    select(similar)
+                                },
+                                onCreate = {
+                                    val text = Panels.similarText(open)
+                                    panel = null
+                                    newClientName(text)?.let(::createClient)
+                                },
+                                onDismiss = { panel = null },
+                            )
                         }
-                    },
-                    onDismiss = { panel = null },
-                )
-                open == Panels.TIME -> TimePickerPanel(
-                    initial = d.start.time,
-                    onPick = { time ->
-                        panel = null
-                        update { it.copy(start = LocalDateTime(it.start.date, time)) }
-                    },
-                    onDismiss = { panel = null },
-                )
-                open == Panels.UNTIL -> DatePickerPanel(
-                    initial = d.repeat?.until ?: d.start.date,
-                    onPick = { date ->
-                        panel = null
-                        update { it.copy(repeat = it.repeat?.copy(until = date)) }
-                    },
-                    onDismiss = { panel = null },
-                    onClear = {
-                        panel = null
-                        update { it.copy(repeat = it.repeat?.copy(until = null)) }
-                    },
-                )
-                Panels.isScope(open) -> ScopePanel(
-                    title = TrainingFormat.SCOPE_EDIT_TITLE,
-                    question = Panels.scopeQuestion(open),
-                    date = Panels.scopeDate(open),
-                    back = TrainingFormat.BACK_TO_EDIT,
-                    onOnlyThis = {
-                        panel = null
-                        save(EditScope.ONLY_THIS)
-                    },
-                    onFollowing = {
-                        panel = null
-                        save(EditScope.FOLLOWING)
-                    },
-                    onDismiss = { panel = null },
-                )
-                Panels.isConflict(open) -> ConflictPanel(
-                    conflicts = Panels.conflicts(open),
-                    onDismiss = { panel = null },
-                    onPlace = {
-                        val answer = Panels.conflictScope(open)
-                        panel = null
-                        save(answer, confirmed = true)
-                    },
-                )
-                Panels.isSimilar(open) -> {
-                    val similar = form.clients.firstOrNull { it.id == Panels.similarId(open) }
-                    if (similar != null) {
-                        SimilarPanel(
-                            client = similar,
-                            onPick = {
-                                panel = null
-                                select(similar)
-                            },
-                            onCreate = {
-                                val text = Panels.similarText(open)
-                                panel = null
-                                newClientName(text)?.let(::createClient)
-                            },
-                            onDismiss = { panel = null },
-                        )
                     }
                 }
             }
+        },
+    ) {
+        if (current == null) return@FormFrame
+        val paste = copied
+        if (editId == null && paste != null) {
+            SecondaryButton(
+                text = TrainingFormat.PASTE,
+                onClick = {
+                    update {
+                        it.copy(
+                            typeId = paste.typeId,
+                            locationId = paste.locationId,
+                            durationMin = paste.durationMin,
+                            clientIds = paste.clientIds,
+                            groupId = paste.groupId,
+                        )
+                    }
+                    keepDuration = true
+                    keepPlace = true
+                    ownDuration = paste.durationMin !in ReferenceRules.DURATION_CHIPS
+                    ownText = paste.durationMin.toString()
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2),
+                icon = PIcons.ContentCopy,
+            )
         }
+
+        // Тип: пять чипов, остальные — под «Ещё N»; выбранный виден всегда.
+        SectionLabel("Тип")
+        val index = form.types.indexOfFirst { it.id == current.typeId }
+        val showAll = moreTypes || index >= TrainingFormRules.TYPE_CHIPS
+        // Точка типа — цвет выбранного места его оттенком: так блок будет выглядеть в календаре.
+        val placeColor = PlaceColor.of(form.places.firstOrNull { it.id == current.locationId }?.color)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            form.types.take(if (showAll) form.types.size else TrainingFormRules.TYPE_CHIPS).forEach { t ->
+                ChoiceChip(
+                    text = t.name,
+                    selected = t.id == current.typeId,
+                    onClick = {
+                        if (t.id == current.typeId) return@ChoiceChip
+                        update { d ->
+                            val next = TrainingFormRules.withType(d, t, keepDuration)
+                            if (keepPlace) next else next.copy(locationId = form.lastPlaceByType[t.id] ?: next.locationId)
+                        }
+                        if (!keepDuration) ownDuration = false
+                    },
+                    modifier = Modifier.testTag(formTypeTag(t.id)),
+                    dot = placeColor.shade(colors.isDark, t.shade),
+                )
+            }
+            if (!showAll && form.types.size > TrainingFormRules.TYPE_CHIPS) {
+                ChoiceChip(
+                    text = TrainingFormat.moreTypes(form.types.size - TrainingFormRules.TYPE_CHIPS),
+                    selected = false,
+                    onClick = { moreTypes = true },
+                    icon = PIcons.ArrowDropDown,
+                )
+            }
+        }
+        problems[FormField.TYPE]?.let { ErrorText(it) }
+
+        if (type != null) {
+            People(
+                draft = current,
+                type = type,
+                form = form,
+                query = query,
+                error = problems[FormField.CLIENTS],
+                onQuery = { query = it },
+                onClient = ::select,
+                onGroup = { group ->
+                    update { d ->
+                        if (d.groupId == group.id) {
+                            d.copy(groupId = null)
+                        } else {
+                            d.copy(groupId = group.id, clientIds = emptyList(), locationId = if (keepPlace) d.locationId else group.locationId)
+                        }
+                    }
+                },
+                onNewClient = { name ->
+                    val similar = ClientRules.similar(name, form.clients) { it.name }.firstOrNull()
+                    if (similar != null) panel = Panels.similar(similar.id, query) else createClient(name)
+                },
+            )
+        }
+
+        SectionLabel("Место")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            form.places.forEach { place ->
+                ChoiceChip(
+                    text = place.shortName,
+                    selected = place.id == current.locationId,
+                    onClick = {
+                        keepPlace = true
+                        update { it.copy(locationId = place.id) }
+                    },
+                    modifier = Modifier.testTag(formPlaceTag(place.id)),
+                )
+            }
+        }
+        problems[FormField.PLACE]?.let { ErrorText(it) }
+
+        SectionLabel("Когда")
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            PickBox(
+                text = TrainingFormat.date(current.start.date),
+                icon = PIcons.CalendarMonth,
+                onClick = { panel = Panels.DATE },
+                modifier = Modifier.weight(1f).testTag(FORM_DATE_TAG),
+            )
+            PickBox(
+                text = TrainingFormat.timeRange(current.start, TrainingTime.end(current.start, current.durationMin)),
+                icon = PIcons.Schedule,
+                onClick = { panel = Panels.TIME },
+                modifier = Modifier.weight(1f).testTag(FORM_TIME_TAG),
+                error = problems[FormField.TIME],
+            )
+        }
+        problems[FormField.TIME]?.let { ErrorText(it) }
+
+        SectionLabel("Длительность, мин")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            ReferenceRules.DURATION_CHIPS.forEach { minutes ->
+                ChoiceChip(
+                    text = minutes.toString(),
+                    selected = !ownDuration && current.durationMin == minutes,
+                    onClick = {
+                        ownDuration = false
+                        keepDuration = true
+                        update { it.copy(durationMin = minutes) }
+                    },
+                )
+            }
+            ChoiceChip(
+                text = TrainingFormat.OWN_DURATION,
+                selected = ownDuration || current.durationMin !in ReferenceRules.DURATION_CHIPS,
+                onClick = {
+                    ownDuration = true
+                    keepDuration = true
+                    ownText = current.durationMin.toString()
+                },
+            )
+        }
+        if (ownDuration) {
+            Field(
+                label = "Своя длительность, мин",
+                value = ownText,
+                onValueChange = { text ->
+                    ownText = text.filter { it.isDigit() }.take(3)
+                    ownText.toIntOrNull()?.let { minutes -> update { it.copy(durationMin = minutes) } }
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2),
+                error = problems[FormField.DURATION],
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                tag = FORM_OWN_DURATION_TAG,
+            )
+        } else {
+            problems[FormField.DURATION]?.let { ErrorText(it) }
+        }
+
+        SectionLabel("Повтор")
+        val seriesRepeat = stored?.seriesRepeat
+        if (seriesRepeat != null) {
+            // Повтор серии меняет «Эту и следующие» и «Изменить с даты» (4.4), а не это поле.
+            Text(
+                TrainingFormat.seriesRepeat(seriesRepeat.weekdays, seriesRepeat.until),
+                style = MaterialTheme.typography.bodyLarge.tabular(),
+                color = colors.text,
+            )
+        } else {
+            RepeatChoice(
+                draft = current,
+                weekdaysError = problems[FormField.WEEKDAYS],
+                untilError = problems[FormField.UNTIL],
+                onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
+                onUntil = { panel = Panels.UNTIL },
+            )
+        }
+
+        Field(
+            label = "План",
+            value = current.plan,
+            onValueChange = { text -> update { it.copy(plan = text) } },
+            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space5),
+            tag = FORM_PLAN_TAG,
+            placeholder = "Необязательно",
+            singleLine = false,
+        )
     }
 }
 
@@ -645,7 +755,7 @@ private fun People(
 
 /** «Не повторять / Каждую неделю», дни недели (по умолчанию — день даты) и «до — бессрочно» или «до даты». */
 @Composable
-private fun RepeatChoice(
+internal fun RepeatChoice(
     draft: TrainingDraft,
     weekdaysError: String?,
     untilError: String?,
@@ -663,19 +773,7 @@ private fun RepeatChoice(
         )
     }
     if (repeat == null) return
-    Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        DateFormat.WEEK.forEach { day ->
-            ChoiceChip(
-                text = DateFormat.weekdayShort(day),
-                selected = day in repeat.weekdays,
-                onClick = { onRepeat(repeat.copy(weekdays = if (day in repeat.weekdays) repeat.weekdays - day else repeat.weekdays + day)) },
-                modifier = Modifier.weight(1f).testTag(formWeekdayTag(day)),
-                toggle = true,
-                fill = true,
-            )
-        }
-    }
-    weekdaysError?.let { ErrorText(it) }
+    WeekdayRow(repeat.weekdays, weekdaysError) { days -> onRepeat(repeat.copy(weekdays = days)) }
     PickBox(
         text = repeat.until?.let(TrainingFormat::until) ?: TrainingFormat.FOREVER,
         icon = PIcons.CalendarMonth,
@@ -686,9 +784,27 @@ private fun RepeatChoice(
     untilError?.let { ErrorText(it) }
 }
 
+/** Дни недели пн–вс чипами во всю ширину; нажатие добавляет или снимает день. */
+@Composable
+internal fun WeekdayRow(weekdays: Set<DayOfWeek>, error: String?, onChange: (Set<DayOfWeek>) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        DateFormat.WEEK.forEach { day ->
+            ChoiceChip(
+                text = DateFormat.weekdayShort(day),
+                selected = day in weekdays,
+                onClick = { onChange(if (day in weekdays) weekdays - day else weekdays + day) },
+                modifier = Modifier.weight(1f).testTag(formWeekdayTag(day)),
+                toggle = true,
+                fill = true,
+            )
+        }
+    }
+    error?.let { ErrorText(it) }
+}
+
 /** Поле, которое открывает выбор: значок и значение, рамка как у поля ввода. */
 @Composable
-private fun PickBox(text: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier, error: String? = null) {
+internal fun PickBox(text: String, icon: ImageVector?, onClick: () -> Unit, modifier: Modifier = Modifier, error: String? = null) {
     val colors = PersonalkaTheme.colors
     Row(
         modifier
@@ -704,14 +820,16 @@ private fun PickBox(text: String, icon: ImageVector, onClick: () -> Unit, modifi
             .padding(horizontal = Dimens.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(Dimens.space2))
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(Dimens.space2))
+        }
         Text(text, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text, maxLines = 1)
     }
 }
 
 @Composable
-private fun ErrorText(text: String) {
+internal fun ErrorText(text: String) {
     Text(text, modifier = Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.error)
 }
 
@@ -728,6 +846,12 @@ private fun SimilarPanel(client: FormClient, onPick: () -> Unit, onCreate: () ->
 
 private fun ClientName.full(): String = listOfNotNull(lastName, firstName, middleName?.takeIf { it.isNotBlank() }).joinToString(" ")
 
+/** Другая дата; день повтора по умолчанию — день даты: сменили дату — сменился и он. */
+internal fun TrainingDraft.onDate(date: LocalDate): TrainingDraft {
+    val days = repeat?.let { r -> if (r.weekdays == setOf(start.date.dayOfWeek)) r.copy(weekdays = setOf(date.dayOfWeek)) else r }
+    return copy(start = LocalDateTime(date, start.time), repeat = days)
+}
+
 /** Новый клиент из строки поиска: фамилия и имя, дальше — отчество; одного слова мало. */
 private fun newClientName(text: String): ClientName? {
     val words = text.trim().split(' ').filter { it.isNotEmpty() }.map { w -> w.replaceFirstChar { it.uppercaseChar() } }
@@ -736,10 +860,13 @@ private fun newClientName(text: String): ClientName? {
 }
 
 /** Открытое окно формы — строкой, чтобы пережить пересоздание: вид и что в нём. */
-private object Panels {
+internal object Panels {
     const val DATE = "date"
     const val TIME = "time"
     const val UNTIL = "until"
+
+    /** Конец «до» у дежурства и запрета. */
+    const val END = "end"
     private const val SCOPE = "scope"
     private const val CONFLICT = "conflict"
     private const val SIMILAR = "similar"
@@ -762,7 +889,7 @@ private object Panels {
 }
 
 /** Черновик формы сохраняется списком строк: переживает пересоздание окна и выгрузку из памяти. */
-private val DraftSaver: Saver<TrainingDraft?, Any> = Saver(
+internal val DraftSaver: Saver<TrainingDraft?, Any> = Saver(
     save = { d ->
         if (d == null) {
             arrayListOf<String>()

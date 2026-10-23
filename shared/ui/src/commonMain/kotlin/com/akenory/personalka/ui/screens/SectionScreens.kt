@@ -34,10 +34,9 @@ import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.DateFormat
-import com.akenory.personalka.ui.calendar.CalendarSample
 import com.akenory.personalka.ui.calendar.CalendarScreen
-import com.akenory.personalka.ui.calendar.SAMPLE_READ_ONLY
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
@@ -62,9 +61,9 @@ import kotlinx.datetime.LocalDateTime
  * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8, «Календарь» — с шага 1.9.
  *
  * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
- * @param sample показать в календаре пример дня — до шага 1.13а.
  * @param onForm открыть форму тренировки ([TrainingFormKey]): из календаря — новая на это время или изменение;
- *   до карточки тренировки (шаг 1.14) нажатие на тренировку открывает её форму.
+ *   до карточки тренировки (шаг 1.14) нажатие на тренировку открывает её форму; «Изменить» в окне зоны — форму
+ *   дежурства или своего запрета (шаг 1.13а).
  */
 @Composable
 fun SectionScreen(
@@ -77,10 +76,8 @@ fun SectionScreen(
     groups: GroupRepository,
     calendar: CalendarRepository,
     prefs: DevicePrefs,
-    sample: Boolean,
     messages: MessageState,
     scope: CoroutineScope,
-    onSample: (Boolean) -> Unit,
     onForm: (String) -> Unit,
 ) {
     val today = now.date
@@ -95,14 +92,13 @@ fun SectionScreen(
             calendar = calendar,
             prefs = prefs,
             now = now,
-            sample = sample,
             messages = messages,
             scope = scope,
-            onOpen = { training ->
-                if (CalendarSample.isSample(training)) messages.show(SAMPLE_READ_ONLY) else onForm(TrainingFormKey.edit(training.id))
-            },
+            onOpen = { training -> onForm(TrainingFormKey.edit(training.id)) },
             onCreate = { start -> onForm(TrainingFormKey.new(start)) },
-            onSample = onSample,
+            onEditZone = { zone ->
+                onForm(if (zone.kind == ZoneKind.RESTRICTION) TrainingFormKey.restriction(zone.id) else TrainingFormKey.edit(zone.id))
+            },
         )
         Section.CLIENTS -> ClientsScreen(shell, clients, messages, scope, now)
         Section.SALARY -> Placeholder(

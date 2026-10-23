@@ -69,12 +69,12 @@ import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
-import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.TypePresets
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.clients.MenuAction
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.Panel
+import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
@@ -93,12 +93,10 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
-/** Нажатие на тренировку примера: её нет в базе — ни формы, ни карточки. */
-internal const val SAMPLE_READ_ONLY = "Это пример дня — его не изменить"
-
 internal const val TODAY_LABEL = "Сегодня"
 
-/** Кнопка окна запрета (ТЗ 5.3). «Изменить» появится с формой запрета в шаге 1.13а. */
+/** Кнопки окна зоны (ТЗ 5.3, макет «Нажатие на запрет»). */
+internal const val EDIT_ZONE = "Изменить"
 internal const val SKIP_DAY = "Пропустить этот день"
 
 /** Меню по длительному нажатию на тренировку (ТЗ 5.3, макет «Удержание на тренировке»). */
@@ -138,23 +136,21 @@ private const val ID_SEPARATOR = "\n"
  * зона, меню тренировки, вопрос для серии и окно «Поставить всё равно?» хранятся выше всего, что зависит от ширины
  * экрана: сложение и разложение Fold их не сбрасывают.
  *
- * @param sample показать «пример дня» на сегодня — с дежурством и запретом, пока их не создать формой (до 1.13а).
  * @param scope записи из окон: «Пропустить этот день» и его «Отменить» доживают до конца, даже если экран закрыли.
  * @param onOpen нажатие на тренировку.
  * @param onCreate новая тренировка на это время: удержание на пустом месте и «Новая тренировка на это время».
- * @param onSample пример дня в меню вида.
+ * @param onEditZone «Изменить» в окне зоны: форма дежурства или своего запрета (шаг 1.13а).
  */
 @Composable
 fun CalendarScreen(
     calendar: CalendarRepository,
     prefs: DevicePrefs,
     now: LocalDateTime,
-    sample: Boolean,
     messages: MessageState,
     scope: CoroutineScope,
     onOpen: (CalendarTraining) -> Unit,
     onCreate: (LocalDateTime) -> Unit,
-    onSample: (Boolean) -> Unit,
+    onEditZone: (CalendarZone) -> Unit,
 ) {
     val today = now.date
     val wide = LocalWide.current
@@ -174,9 +170,6 @@ fun CalendarScreen(
     var menuId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingKey by rememberSaveable { mutableStateOf<String?>(null) }
     var askKey by rememberSaveable { mutableStateOf<String?>(null) }
-    // Пропущенные зоны и перенесённые тренировки примера — только в памяти, как и сам пример.
-    var sampleSkipped by rememberSaveable { mutableStateOf("") }
-    var sampleMoves by rememberSaveable { mutableStateOf("") }
 
     val work by remember(calendar) { calendar.workHours }.collectAsState(initial = WorkHours())
     val step by remember(calendar) { calendar.dragStep }.collectAsState(initial = CalendarDrag.STEP_DEFAULT)
@@ -285,18 +278,8 @@ fun CalendarScreen(
             loadedZones = list.groupBy { it.date }
         }
     }
-    val restrictionSkipped = CalendarSample.RESTRICTION_ID in sampleSkipped.split(ID_SEPARATOR)
-    val moves = remember(sampleMoves) { decodeMoves(sampleMoves) }
-    val sampleDay = remember(sample, today, moves, restrictionSkipped) {
-        if (sample) CalendarSample.day(today, moves, restrictionSkipped) else emptyList()
-    }
-    val sampleZones = remember(sample, today, sampleSkipped) {
-        if (sample) CalendarSample.zones(today).filter { it.id !in sampleSkipped.split(ID_SEPARATOR) } else emptyList()
-    }
     val itemsOf: (LocalDate) -> List<CalendarTraining> = { date ->
-        val stored = loaded[date].orEmpty()
-        val shown = sampleDay.filter { it.start.date == date }
-        (if (shown.isEmpty()) stored else stored + shown).filter { inPlace(place, it.placeId, it.placeShort) && (showCancelled || !it.cancelled) }
+        loaded[date].orEmpty().filter { inPlace(place, it.placeId) && (showCancelled || !it.cancelled) }
     }
 
     // Перенос (ТЗ 5.3, 4.4, 4.5): у тренировки серии — «Только эту / Эту и следующие», под запретом того же места —
@@ -315,29 +298,8 @@ fun CalendarScreen(
             }
         }
     }
-    fun moveSample(training: CalendarTraining, start: LocalDateTime, confirmed: Boolean) {
-        val status = if (training.cancelled) TrainingStatus.CANCELLED else TrainingStatus.PLANNED
-        when (CalendarDrag.problem(status, training.marked, start, now)) {
-            MoveProblem.MARKED_IN_FUTURE -> messages.show(MARKED_STAYS)
-            MoveProblem.CANCELLED -> Unit
-            null -> {
-                val conflicts = if (confirmed) emptyList() else CalendarSample.conflicts(training, start, today, restrictionSkipped)
-                if (conflicts.isNotEmpty()) {
-                    pendingKey = encodePending(training.id, start, null, conflicts)
-                } else {
-                    val before = moves
-                    sampleMoves = encodeMoves(moves + (training.id to start))
-                    messages.showUndo(CalendarFormat.moved(start)) { sampleMoves = encodeMoves(before) }
-                }
-            }
-        }
-    }
-    fun move(training: CalendarTraining, start: LocalDateTime, confirmed: Boolean) {
-        if (CalendarSample.isSample(training)) moveSample(training, start, confirmed) else moveStored(training.id, start, confirmed)
-    }
     val zonesOf: (LocalDate) -> List<CalendarZone> = { date ->
-        val stored = loadedZones[date].orEmpty()
-        (if (date == today && sampleZones.isNotEmpty()) stored + sampleZones else stored).filter { inPlace(place, it.placeId, it.placeShort) }
+        loadedZones[date].orEmpty().filter { inPlace(place, it.placeId) }
     }
 
     // Часы сетки — по дням, на которых листание остановилось: во время свайпа подписи часов не прыгают.
@@ -356,7 +318,6 @@ fun CalendarScreen(
                 view = view,
                 views = CalendarViews.options(wide),
                 showCancelled = showCancelled,
-                sample = sample,
                 places = places,
                 place = place,
                 wide = wide,
@@ -369,7 +330,6 @@ fun CalendarScreen(
                     showCancelled = show
                     prefs.putBoolean(DevicePrefs.CALENDAR_SHOW_CANCELLED, show)
                 },
-                onSample = onSample,
                 onPlace = { placeId = it?.id },
                 onPick = { date -> go(date, animate = false) },
             )
@@ -451,11 +411,7 @@ fun CalendarScreen(
                         },
                         onCopy = {
                             menuId = null
-                            if (CalendarSample.isSample(training)) {
-                                messages.show(COPIED)
-                            } else {
-                                scope.launch { if (calendar.copy(training.id)) messages.show(COPIED) }
-                            }
+                            scope.launch { if (calendar.copy(training.id)) messages.show(COPIED) }
                         },
                     )
                 },
@@ -464,7 +420,7 @@ fun CalendarScreen(
                 onZone = onZone,
                 onCreate = onCreate,
                 onMenu = { training -> menuId = training.id },
-                onMove = { training, start -> move(training, start, confirmed = false) },
+                onMove = { training, start -> moveStored(training.id, start, confirmed = false) },
                 onZoomEnd = { prefs.putFloat(DevicePrefs.CALENDAR_HOUR, grid.hourDp) },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
@@ -489,16 +445,14 @@ fun CalendarScreen(
                 // Пропустить можно сегодняшний и будущий день запрета: прошлый уже ни на что не влияет.
                 canSkip = zone.kind == ZoneKind.RESTRICTION && zone.date >= today,
                 onDismiss = { zoneKey = null },
+                onEdit = {
+                    zoneKey = null
+                    onEditZone(zone)
+                },
                 onSkip = {
                     zoneKey = null
-                    val text = ZoneFormat.skipped(zone.date)
-                    if (CalendarSample.isSample(zone)) {
-                        sampleSkipped += ID_SEPARATOR + zone.id
-                        messages.showUndo(text) { sampleSkipped = sampleSkipped.replace(ID_SEPARATOR + zone.id, "") }
-                    } else {
-                        scope.launch { calendar.skipRestrictionDay(zone.id, zone.date) }
-                        messages.showUndo(text) { scope.launch { calendar.unskipRestrictionDay(zone.id, zone.date) } }
-                    }
+                    scope.launch { calendar.skipRestrictionDay(zone.id, zone.date) }
+                    messages.showUndo(ZoneFormat.skipped(zone.date)) { scope.launch { calendar.unskipRestrictionDay(zone.id, zone.date) } }
                 },
             )
         }
@@ -529,12 +483,7 @@ fun CalendarScreen(
                 onDismiss = { pendingKey = null },
                 onPlace = {
                     pendingKey = null
-                    val training = sampleDay.firstOrNull { it.id == pending.id }
-                    if (training != null) {
-                        moveSample(training, pending.start, confirmed = true)
-                    } else {
-                        moveStored(pending.id, pending.start, confirmed = true, answer = pending.answer)
-                    }
+                    moveStored(pending.id, pending.start, confirmed = true, answer = pending.answer)
                 },
             )
         }
@@ -566,13 +515,6 @@ private fun decodeAsk(text: String): AskMove {
     return AskMove(lines[0], LocalDateTime.parse(lines[1]), LocalDate.parse(lines[2]), lines.drop(3).joinToString(ID_SEPARATOR))
 }
 
-/** Перенесённые тренировки примера: «id=2026-10-20T12:15» построчно. */
-private fun encodeMoves(moves: Map<String, LocalDateTime>): String =
-    moves.entries.joinToString(ID_SEPARATOR) { "${it.key}=${it.value}" }
-
-private fun decodeMoves(text: String): Map<String, LocalDateTime> =
-    text.split(ID_SEPARATOR).filter { it.isNotBlank() }.associate { it.substringBefore('=') to LocalDateTime.parse(it.substringAfter('=')) }
-
 /** Открытая зона: вид, id и день — переживает поворот и сложение, а у повторяющегося запрета id одинаков во все дни. */
 private fun zoneKeyOf(zone: CalendarZone): String = "${zone.kind}/${zone.id}/${zone.date}"
 
@@ -582,12 +524,8 @@ private fun zoneDateOf(key: String): LocalDate = LocalDate.parse(key.substringAf
 /** Где хранится вид: у сложенного и разложенного экрана — свой. */
 private fun viewKey(wide: Boolean): String = if (wide) DevicePrefs.CALENDAR_VIEW_WIDE else DevicePrefs.CALENDAR_VIEW_FOLDED
 
-/**
- * Тренировка или зона в месте, выбранном фильтром: `null` — все места. Пример дня живёт со своими id мест,
- * поэтому сверяется его короткое имя.
- */
-private fun inPlace(place: CalendarPlace?, placeId: String, placeShort: String): Boolean =
-    place == null || placeId == place.id || (CalendarSample.isSamplePlace(placeId) && placeShort == place.shortName)
+/** Тренировка или зона в месте, выбранном фильтром: `null` — все места. */
+private fun inPlace(place: CalendarPlace?, placeId: String): Boolean = place == null || placeId == place.id
 
 /**
  * Строка недели пн–вс под шапкой (ТЗ 5.3): нажатие открывает день, сегодняшнее число — в оранжевом кружке.
@@ -653,15 +591,17 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
 }
 
 /**
- * Окно зоны (ТЗ 5.3, макет «Нажатие на запрет»): «ДБ 17:00–18:00 — групповая тренировка», как повторяется
- * и «Пропустить этот день». «Изменить» — с формой запрета и дежурства (1.13): выключенное не показывается (10.7).
+ * Окно зоны (ТЗ 5.3, макет «Нажатие на запрет»): «ДБ 17:00–18:00 — групповая тренировка», как повторяется,
+ * «Изменить» (дежурство и свой запрет — форма, шаг 1.13а) и «Пропустить этот день». Запрет клуба меняет только
+ * администратор (этап 2): у него «Изменить» нет (10.7).
  */
 @Composable
-private fun ZonePanel(zone: CalendarZone, canSkip: Boolean, onDismiss: () -> Unit, onSkip: () -> Unit) {
+private fun ZonePanel(zone: CalendarZone, canSkip: Boolean, onDismiss: () -> Unit, onEdit: () -> Unit, onSkip: () -> Unit) {
     val colors = PersonalkaTheme.colors
     Panel(title = zone.title, onDismiss = onDismiss) {
         Text(text = zone.text, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text)
         zone.repeat?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted) }
+        if (zone.editable) PrimaryButton(EDIT_ZONE, onEdit, Modifier.fillMaxWidth())
         if (canSkip) SecondaryButton(SKIP_DAY, onSkip, Modifier.fillMaxWidth(), icon = PIcons.EventBusy)
     }
 }

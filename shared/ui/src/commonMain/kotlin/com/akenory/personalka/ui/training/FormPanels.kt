@@ -114,12 +114,12 @@ internal fun DatePickerPanel(
     }
 }
 
-/** Выбор времени начала — циферблат Material, 24 часа. */
+/** Выбор времени — циферблат Material, 24 часа; [title] — «Начало» и «Конец» у дежурства и запрета. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TimePickerPanel(initial: LocalTime, onPick: (LocalTime) -> Unit, onDismiss: () -> Unit) {
+internal fun TimePickerPanel(initial: LocalTime, onPick: (LocalTime) -> Unit, onDismiss: () -> Unit, title: String = "Время") {
     val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
-    PickerCard(title = "Время", onDismiss = onDismiss) {
+    PickerCard(title = title, onDismiss = onDismiss) {
         TimePicker(state = state, modifier = Modifier.padding(top = Dimens.space4))
         PickerButtons(onDismiss = onDismiss, onDone = { onPick(LocalTime(state.hour, state.minute)) }, onClear = null)
     }

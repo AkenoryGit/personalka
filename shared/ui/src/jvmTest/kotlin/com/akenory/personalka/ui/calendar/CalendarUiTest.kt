@@ -178,12 +178,6 @@ class CalendarUiTest {
         awaitNode(hasTestTag(CALENDAR_GRID_TAG))
     }
 
-    /** Пример дня — в меню вида. */
-    private fun ComposeUiTest.toggleSample() {
-        onNodeWithTag(CALENDAR_VIEW_TAG).performClick()
-        onNodeWithText(SAMPLE_DAY).performClick()
-    }
-
     private fun ComposeUiTest.day(date: LocalDate = today): DayBlocks =
         onNodeWithTag(calendarDayTag(date)).fetchSemanticsNode().config[CalendarBlocks]
 
@@ -627,22 +621,6 @@ class CalendarUiTest {
     }
 
     @Test
-    fun sampleDayFromViewMenu() = runComposeUiTest {
-        openCalendar()
-        // С шага 1.13 «+» открывает форму, а пример дня — в меню вида (до шага 1.13а).
-        toggleSample()
-        // 19 тренировок примера: пять на 20:00 — это три блока и «+2».
-        awaitBlocks(17)
-        assertEquals(listOf(2), day().more.map { it.ids.size })
-        assertEquals(GridHours(6, 23), grid()[CalendarHours])
-
-        toggleSample()
-        awaitBlocks(0)
-        onNodeWithTag(FAB_TAG).performClick()
-        awaitNode(hasTestTag(TRAINING_FORM_TAG))
-    }
-
-    @Test
     fun restrictionVisibleUnderTraining() = runComposeUiTest {
         restriction("ДБ", "17:00", "18:00")
         training("17:00", 50, "Орлов Максим", place = "ДБ", overRestriction = true)
@@ -691,6 +669,8 @@ class CalendarUiTest {
         onNodeWithText(ZoneFormat.RESTRICTION).assertIsDisplayed()
         onNodeWithText("ДБ 17:00–18:00 — групповая тренировка").assertIsDisplayed()
         onNodeWithText("Каждый вт и чт").assertIsDisplayed()
+        // Запрет клуба меняет только администратор (этап 2) — «Изменить» нет.
+        onNodeWithText(EDIT_ZONE).assertDoesNotExist()
 
         // «Пропустить этот день»: запрет исчезает, флаг тренировки пересчитан — треугольника нет.
         onNodeWithText(SKIP_DAY).performClick()
@@ -725,6 +705,12 @@ class CalendarUiTest {
         onNodeWithText("Дежурство").assertIsDisplayed()
         onNodeWithText("ББ 11:00–15:00 — дежурство").assertIsDisplayed()
         onNodeWithText(SKIP_DAY).assertDoesNotExist()
+
+        // «Изменить» — форма дежурства (шаг 1.13а) с его временем.
+        onNodeWithText(EDIT_ZONE).performClick()
+        awaitNode(hasText(TrainingFormat.EDIT_DUTY_TITLE))
+        onNodeWithText("с 11:00").assertIsDisplayed()
+        onNodeWithText("до 15:00").assertIsDisplayed()
     }
 
     @Test
@@ -746,27 +732,6 @@ class CalendarUiTest {
             ),
             day().blocks.sortedBy { it.y }.map { it.badges },
         )
-    }
-
-    @Test
-    fun sampleZonesAndBadges() = runComposeUiTest {
-        openCalendar()
-        toggleSample()
-        awaitBlocks(17)
-        awaitZones(2)
-        val byName = day().blocks.associate { it.lines.first() to it.badges }
-        assertEquals(listOf(CalendarBadge.NO_DIARY), byName["Ковалёв / Ковалёва"])
-        assertEquals(listOf(CalendarBadge.CHARGED), byName[s("Зайцева_М.")])
-        assertEquals(listOf(CalendarBadge.OVER_DUTY), byName[s("Никитин_А.")])
-        assertEquals(listOf(CalendarBadge.OVER_RESTRICTION), byName[s("Орлов_М.")])
-
-        // Запрет примера пропускается только в памяти и возвращается «Отменить».
-        val restriction = day().zones.single { it.kind == ZoneKind.RESTRICTION }
-        tapDay(2f, restriction.y + 30f)
-        onNodeWithText(SKIP_DAY).performClick()
-        awaitZones(1)
-        onNodeWithText(MessageState.UNDO_LABEL).performClick()
-        awaitZones(2)
     }
 
     @Test
@@ -904,27 +869,6 @@ class CalendarUiTest {
         holdDay(block.x + 40f, block.y + 20f)
         onNodeWithText(COPY_TRAINING).assertIsDisplayed()
         onNodeWithText(CANCEL_TRAINING).assertDoesNotExist()
-    }
-
-    @Test
-    fun sampleMovesInMemory() = runComposeUiTest {
-        openCalendar()
-        toggleSample()
-        awaitBlocks(17)
-        fun sokolova() = day().blocks.single { it.lines.first() == s("Соколова_В.") }
-
-        // Соколова В. 15:00 ДБ → 17:15: запрет примера спрашивает, как настоящий; сетка примера — с 06:00.
-        val block = sokolova()
-        near(yOf("15:00", fromHour = 6), block.y, "Соколова до переноса")
-        dragDay(block.x + 40f, block.y + 20f, 0f, yOf("17:15") - yOf("15:00"))
-        awaitNode(hasText(ZoneFormat.CONFLICT_QUESTION))
-        onNodeWithText(ZoneFormat.CONFLICT_PLACE).performClick()
-        waitUntil(timeoutMillis = 5_000) { abs(sokolova().y - yOf("17:15", fromHour = 6)) < 0.5f }
-        assertEquals(listOf(CalendarBadge.OVER_RESTRICTION), sokolova().badges)
-
-        onNodeWithText(MessageState.UNDO_LABEL).performClick()
-        waitUntil(timeoutMillis = 5_000) { abs(sokolova().y - yOf("15:00", fromHour = 6)) < 0.5f }
-        assertEquals(emptyList(), sokolova().badges)
     }
 
     // «Месяц», «Список» и мини-календарь (шаг 1.12а).

@@ -73,12 +73,6 @@ const val CALENDAR_MONTH_TAG = "calendar-month"
 /** Пункт меню вида: показ отменённых (ТЗ 5.3) — на этом телефоне, по умолчанию включён. */
 internal const val SHOW_CANCELLED = "Показывать отменённые"
 
-/**
- * Пункт меню вида до шага 1.13а: пример дня из макета с дежурством и запретом — их ещё не создать формой.
- * С шага 1.13 «+» открывает форму тренировки, поэтому пример переехал сюда.
- */
-internal const val SAMPLE_DAY = "Пример дня"
-
 /** День в строке над колонками «Нескольких дней». */
 fun dayHeaderTag(date: LocalDate) = "day-header-$date"
 
@@ -112,7 +106,7 @@ private const val PLACE_CHIPS_MAX = 4
  *
  * @param month какой месяц и год написать: на сетке — месяц выбранного дня, в «Месяце» — листаемый месяц.
  * @param day выбранный день: мини-календарь открывается на его месяце и отмечает его.
- * @param views виды этого состояния Fold; в меню вида под ними — «Показывать отменённые» и «Пример дня».
+ * @param views виды этого состояния Fold; в меню вида под ними — «Показывать отменённые».
  * @param place выбранное место; `null` — все.
  * @param onPick день из мини-календаря.
  */
@@ -124,14 +118,12 @@ internal fun CalendarHeader(
     view: CalendarView,
     views: List<CalendarView>,
     showCancelled: Boolean,
-    sample: Boolean,
     places: List<CalendarPlace>,
     place: CalendarPlace?,
     wide: Boolean,
     onToday: () -> Unit,
     onView: (CalendarView) -> Unit,
     onShowCancelled: (Boolean) -> Unit,
-    onSample: (Boolean) -> Unit,
     onPlace: (CalendarPlace?) -> Unit,
     onPick: (LocalDate) -> Unit,
 ) {
@@ -194,10 +186,6 @@ internal fun CalendarHeader(
             MenuToggle(SHOW_CANCELLED, showCancelled) {
                 close()
                 onShowCancelled(!showCancelled)
-            }
-            MenuToggle(SAMPLE_DAY, sample) {
-                close()
-                onSample(!sample)
             }
         }
         if (filter && !chips) {
