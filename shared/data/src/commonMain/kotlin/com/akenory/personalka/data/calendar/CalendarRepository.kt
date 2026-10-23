@@ -227,6 +227,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     /** Форма запрета (5.5): свои запреты, «Удалить запрет» и «Отменить». */
     val restrictions: RestrictionRepository = RestrictionRepository(db, clock)
 
+    /** Раздел «Календарь» в настройках (5.16): часы, шаг, горизонт серий, «Отпуск», списки запретов и дежурств. */
+    val settings: CalendarSettingsRepository = CalendarSettingsRepository(db, clock, forms)
+
     /**
      * Тренировки, которые начинаются в дни с [from] по [to] не включая, по времени; отменённые тоже.
      * Дежурств среди них нет: в календаре они не блоки, а зоны ([zones]).

@@ -45,10 +45,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.settings.draft
+import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.TypeFormat
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.CoachName
@@ -74,12 +76,14 @@ import com.akenory.personalka.ui.theme.dutyFill
 import com.akenory.personalka.ui.theme.shade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDateTime
 
 /** Экраны настроек в стопке раздела «Ещё». */
 object SettingsRoute {
     const val HOME = "settings"
     const val PROFILE = "settings/profile"
     const val PLACES = "settings/places"
+    const val CALENDAR = "settings/calendar"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
     private const val PLACE = "place/"
@@ -106,9 +110,11 @@ internal fun placeRowTag(shortName: String) = "place-$shortName"
 internal fun typeRowTag(name: String) = "type-$name"
 
 /**
- * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль» и «Места и типы»; остальные разделы появятся
- * в своих шагах (ставки — 3.6, календарь — 1.9–1.12, данные — 1.15), до этого их не видно (10.7).
+ * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы» и «Календарь» (шаг 1.13г); остальные
+ * разделы появятся в своих шагах (ставки — 3.6, данные — 1.15), до этого их не видно (10.7).
  *
+ * @param onForm открыть форму тренировки, дежурства или своего запрета ([com.akenory.personalka.ui.training.TrainingFormKey])
+ *   из списков раздела «Календарь».
  * Записи в базу идут в [scope] приложения: экран закрывается сразу, а запись и «Отменить» доживают до конца.
  */
 @Composable
@@ -116,8 +122,11 @@ fun SettingsScreen(
     route: String,
     shell: ShellState,
     settings: SettingsRepository,
+    calendar: CalendarRepository,
+    now: LocalDateTime,
     messages: MessageState,
     scope: CoroutineScope,
+    onForm: (String) -> Unit,
     onBack: (() -> Unit)?,
 ) {
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
@@ -129,7 +138,8 @@ fun SettingsScreen(
     val close: () -> Unit = { shell.back() }
 
     when {
-        route == SettingsRoute.HOME -> SettingsHome(settings, activePlaces.size, activeTypes.size, shell, onBack)
+        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, activePlaces.size, activeTypes.size, shell, onBack)
+        route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.PROFILE -> ProfileScreen(settings, scope, messages, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
         route == SettingsRoute.NEW_PLACE -> PlaceEditor(
@@ -209,8 +219,16 @@ fun SettingsScreen(
 
 /** «Настройки»: разделы строками со стрелкой. */
 @Composable
-private fun SettingsHome(settings: SettingsRepository, places: Int, types: Int, shell: ShellState, onBack: (() -> Unit)?) {
+private fun SettingsHome(
+    settings: SettingsRepository,
+    calendar: CalendarRepository,
+    places: Int,
+    types: Int,
+    shell: ShellState,
+    onBack: (() -> Unit)?,
+) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
+    val prefs by remember(calendar) { calendar.settings.prefs }.collectAsState(initial = null)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         TopBar("Настройки", onBack = onBack)
         ListCard(Modifier.padding(horizontal = Dimens.space4)) {
@@ -226,6 +244,13 @@ private fun SettingsHome(settings: SettingsRepository, places: Int, types: Int, 
                 subtitle = TypeFormat.placesAndTypes(places, types),
                 onClick = { shell.open(SettingsRoute.PLACES) },
                 modifier = Modifier.testTag(PLACES_ROW_TAG),
+            )
+            RowDivider()
+            NavRow(
+                title = CalendarSettingsFormat.TITLE,
+                subtitle = prefs?.let { calendarSummary(it) },
+                onClick = { shell.open(SettingsRoute.CALENDAR) },
+                modifier = Modifier.testTag(CALENDAR_ROW_TAG),
             )
         }
     }

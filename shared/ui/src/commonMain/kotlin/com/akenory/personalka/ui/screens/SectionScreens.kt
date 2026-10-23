@@ -64,7 +64,7 @@ import kotlinx.datetime.LocalDateTime
  * @param onForm открыть форму тренировки ([TrainingFormKey]): из календаря — новая на это время или изменение;
  *   до карточки тренировки (шаг 1.14) нажатие на тренировку открывает её форму; «Изменить» в окне зоны — форму
  *   дежурства или своего запрета (шаг 1.13а); из карточки клиента — новая с этим клиентом и «Изменить с даты…»
- *   его серии (шаг 1.13б).
+ *   его серии (шаг 1.13б); из «Настройки → Календарь» — свой запрет и дежурство (шаг 1.13г).
  */
 @Composable
 fun SectionScreen(
@@ -110,7 +110,7 @@ fun SectionScreen(
         )
         Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
             when {
-                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, messages, scope, onBack)
+                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }
@@ -131,7 +131,7 @@ enum class MoreItem(
     SLOTS("slots", "Свободные слоты", PIcons.EventAvailable, "Здесь будут свободные окна", "Поиск окон за период — шаг 4.3."),
     RECONCILE("reconcile", "Сверка с 1С", PIcons.FactCheck, "Здесь будет сверка с 1С", "Отчёт клуба против календаря — шаги 4.1 и 4.2."),
     // У «Настроек» с шага 1.6 свой экран (ui/settings), заготовка не показывается.
-    SETTINGS("settings", "Настройки", PIcons.Settings, "Настройки", "Профиль, места и типы."),
+    SETTINGS("settings", "Настройки", PIcons.Settings, "Настройки", "Профиль, места и типы, календарь."),
     // «Клуб» — только администратору (ТЗ 5.1). Администратор бывает только с сервером (этап 2),
     // а выключенное не показывается (10.7), поэтому пункта пока нет.
 }
