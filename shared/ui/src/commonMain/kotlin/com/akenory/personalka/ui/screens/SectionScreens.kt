@@ -40,6 +40,7 @@ import com.akenory.personalka.ui.calendar.CalendarScreen
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.icons.PIcons
@@ -61,10 +62,11 @@ import kotlinx.datetime.LocalDateTime
  * «Клиенты» — с шага 1.7, «Ещё → Группы» — с шага 1.8, «Календарь» — с шага 1.9.
  *
  * @param now «сейчас» по клубу: от него сегодняшняя дата, возраст и ближайшие тренировки.
- * @param onForm открыть форму тренировки ([TrainingFormKey]): из календаря — новая на это время или изменение;
- *   до карточки тренировки (шаг 1.14) нажатие на тренировку открывает её форму; «Изменить» в окне зоны — форму
+ * @param onForm открыть форму тренировки ([TrainingFormKey]): из календаря — новая на это время, из карточки
+ *   тренировки — изменение (шаг 1.14); «Изменить» в окне зоны — форму
  *   дежурства или своего запрета (шаг 1.13а); из карточки клиента — новая с этим клиентом и «Изменить с даты…»
  *   его серии (шаг 1.13б); из «Настройки → Календарь» — свой запрет и дежурство (шаг 1.13г).
+ * @param card открытая карточка тренировки в календаре (шаг 1.14); [onCard] — открыть или закрыть её.
  */
 @Composable
 fun SectionScreen(
@@ -80,6 +82,8 @@ fun SectionScreen(
     messages: MessageState,
     scope: CoroutineScope,
     onForm: (String) -> Unit,
+    card: String? = null,
+    onCard: (String?) -> Unit = {},
 ) {
     val today = now.date
     when (section) {
@@ -95,7 +99,20 @@ fun SectionScreen(
             now = now,
             messages = messages,
             scope = scope,
-            onOpen = { training -> onForm(TrainingFormKey.edit(training.id)) },
+            card = card,
+            onCard = onCard,
+            onEdit = { id -> onForm(TrainingFormKey.edit(id)) },
+            // Карточка клиента или группы открывается в своём разделе; карточка тренировки закрывается.
+            onClient = { id ->
+                onCard(null)
+                shell.select(Section.CLIENTS)
+                shell.open(ClientRoute.card(id))
+            },
+            onGroup = { id ->
+                onCard(null)
+                shell.select(Section.MORE)
+                shell.open(GroupRoute.card(id))
+            },
             onCreate = { start -> onForm(TrainingFormKey.new(start)) },
             onEditZone = { zone ->
                 onForm(if (zone.kind == ZoneKind.RESTRICTION) TrainingFormKey.restriction(zone.id) else TrainingFormKey.edit(zone.id))

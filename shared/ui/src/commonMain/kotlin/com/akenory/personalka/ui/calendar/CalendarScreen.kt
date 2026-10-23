@@ -80,6 +80,8 @@ import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.training.ConflictPanel
 import com.akenory.personalka.ui.training.ScopePanel
+import com.akenory.personalka.ui.training.TrainingCardHost
+import com.akenory.personalka.ui.training.TrainingCardKey
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.Motion
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -103,9 +105,6 @@ internal const val SKIP_DAY = "Пропустить этот день"
 internal const val NEW_AT_THIS_TIME = "Новая тренировка на это время"
 internal const val CANCEL_TRAINING = "Отменить"
 internal const val COPY_TRAINING = "Копировать"
-
-/** Что «Отменить» в меню отвечает до шага 1.14, где появится отмена из карточки (5.6). */
-internal const val CANCEL_LATER = "Отмена тренировки — в шаге 1.14"
 
 /** После «Копировать»: вставить её предлагает форма новой тренировки (5.5). */
 internal const val COPIED = "Тренировка скопирована"
@@ -136,8 +135,14 @@ private const val ID_SEPARATOR = "\n"
  * зона, меню тренировки, вопрос для серии и окно «Поставить всё равно?» хранятся выше всего, что зависит от ширины
  * экрана: сложение и разложение Fold их не сбрасывают.
  *
+ * Нажатие на тренировку открывает её карточку (5.4, шаг 1.14) — снизу на сложенном, справа на разложенном
+ * ([TrainingCardHost]); «Отменить» в меню блока — сразу её панель отмены (5.6).
+ *
  * @param scope записи из окон: «Пропустить этот день» и его «Отменить» доживают до конца, даже если экран закрыли.
- * @param onOpen нажатие на тренировку.
+ * @param card открытая карточка ([TrainingCardKey]); хранится в приложении: «Назад» закрывает сначала её.
+ * @param onCard открыть другую карточку или закрыть (`null`).
+ * @param onEdit «Изменить» и «Перенести вместо отмены» в карточке — форма тренировки.
+ * @param onClient имя клиента в карточке — его карточка; [onGroup] — карточка группы.
  * @param onCreate новая тренировка на это время: удержание на пустом месте и «Новая тренировка на это время».
  * @param onEditZone «Изменить» в окне зоны: форма дежурства или своего запрета (шаг 1.13а).
  */
@@ -148,10 +153,15 @@ fun CalendarScreen(
     now: LocalDateTime,
     messages: MessageState,
     scope: CoroutineScope,
-    onOpen: (CalendarTraining) -> Unit,
+    card: String?,
+    onCard: (String?) -> Unit,
+    onEdit: (String) -> Unit,
+    onClient: (String) -> Unit,
+    onGroup: (String) -> Unit,
     onCreate: (LocalDateTime) -> Unit,
     onEditZone: (CalendarZone) -> Unit,
 ) {
+    val onOpen: (CalendarTraining) -> Unit = { training -> onCard(TrainingCardKey.card(training.id)) }
     val today = now.date
     val wide = LocalWide.current
     val ui = rememberCoroutineScope()
@@ -309,183 +319,197 @@ fun CalendarScreen(
     val hours = CalendarGrid.hours(work.start, work.end, settledDays.flatMap { date -> itemsOf(date).map { it.span() } } + duties)
     val shownDays = (0 until view.columns).map { dateOfPage(pager.currentPage + it) }
 
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            CalendarHeader(
-                month = if (view == CalendarView.Month) MonthRules.firstOf(months.currentPage) else day,
-                day = day,
-                today = today,
-                view = view,
-                views = CalendarViews.options(wide),
-                showCancelled = showCancelled,
-                places = places,
-                place = place,
-                wide = wide,
-                onToday = {
-                    if (view.grid) grid.showNow(now.time)
-                    go(today, animate = true)
-                },
-                onView = ::select,
-                onShowCancelled = { show ->
-                    showCancelled = show
-                    prefs.putBoolean(DevicePrefs.CALENDAR_SHOW_CANCELLED, show)
-                },
-                onPlace = { placeId = it?.id },
-                onPick = { date -> go(date, animate = false) },
-            )
-            // Свайп по строке дней — неделя вперёд или назад, тот же день недели.
-            val onWeek: (Int) -> Unit = { days ->
-                ui.launch { pager.animateScrollToPage((pager.currentPage + days).coerceIn(0, PAGE_COUNT - 1)) }
-            }
-            val onZone: (CalendarZone) -> Unit = { zone -> zoneKey = zoneKeyOf(zone) }
-            if (view == CalendarView.Month) {
-                MonthView(
-                    months = months,
-                    selected = picked,
+    TrainingCardHost(
+        key = card,
+        wide = wide,
+        cards = calendar.cards,
+        now = now,
+        messages = messages,
+        scope = scope,
+        onClose = { onCard(null) },
+        onEdit = onEdit,
+        onClient = onClient,
+        onGroup = onGroup,
+        onCopy = { id -> scope.launch { if (calendar.copy(id)) messages.show(COPIED) } },
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                CalendarHeader(
+                    month = if (view == CalendarView.Month) MonthRules.firstOf(months.currentPage) else day,
+                    day = day,
                     today = today,
+                    view = view,
+                    views = CalendarViews.options(wide),
+                    showCancelled = showCancelled,
+                    places = places,
+                    place = place,
                     wide = wide,
-                    itemsOf = itemsOf,
-                    zonesOf = zonesOf,
-                    onSelect = { date ->
-                        pickedPage = pageOf(date)
-                        // День соседнего месяца — листаем на его месяц.
-                        val page = MonthRules.page(date)
-                        if (page != months.currentPage) ui.launch { months.animateScrollToPage(page) }
+                    onToday = {
+                        if (view.grid) grid.showNow(now.time)
+                        go(today, animate = true)
                     },
-                    onDay = ::openDay,
-                    onOpen = onOpen,
-                    onZone = onZone,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            } else if (view == CalendarView.Agenda) {
-                AgendaView(
-                    state = agenda,
-                    list = agendaList,
-                    ready = loadedRange == range,
-                    itemsOf = itemsOf,
-                    zonesOf = zonesOf,
-                    onTop = { date -> pickedPage = pageOf(date) },
-                    onDay = ::openDay,
-                    onOpen = onOpen,
-                    onZone = onZone,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            } else if (view == CalendarView.Day) {
-                WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } }, onWeek = onWeek)
-            } else {
-                // Нажатие на день над колонкой — этот день в виде «День».
-                DaysHeader(
-                    pager = pager,
-                    columns = view.columns,
-                    today = today,
-                    wide = wide,
-                    onOpen = { date ->
-                        select(CalendarView.Day)
-                        ui.launch { pager.scrollToPage(pageOf(date)) }
+                    onView = ::select,
+                    onShowCancelled = { show ->
+                        showCancelled = show
+                        prefs.putBoolean(DevicePrefs.CALENDAR_SHOW_CANCELLED, show)
                     },
-                    onWeek = onWeek,
+                    onPlace = { placeId = it?.id },
+                    onPick = { date -> go(date, animate = false) },
                 )
-            }
-            if (view.grid) DayGrid(
-                pager = pager,
-                grid = grid,
-                hours = hours,
-                now = now,
-                step = step,
-                columns = view.columns,
-                newDuration = newDuration,
-                itemsOf = itemsOf,
-                zonesOf = zonesOf,
-                menuId = menuId,
-                menu = { training ->
-                    TrainingMenu(
-                        training = training,
-                        onDismiss = { menuId = null },
-                        onNew = {
-                            menuId = null
-                            onCreate(training.start)
+                // Свайп по строке дней — неделя вперёд или назад, тот же день недели.
+                val onWeek: (Int) -> Unit = { days ->
+                    ui.launch { pager.animateScrollToPage((pager.currentPage + days).coerceIn(0, PAGE_COUNT - 1)) }
+                }
+                val onZone: (CalendarZone) -> Unit = { zone -> zoneKey = zoneKeyOf(zone) }
+                if (view == CalendarView.Month) {
+                    MonthView(
+                        months = months,
+                        selected = picked,
+                        today = today,
+                        wide = wide,
+                        itemsOf = itemsOf,
+                        zonesOf = zonesOf,
+                        onSelect = { date ->
+                            pickedPage = pageOf(date)
+                            // День соседнего месяца — листаем на его месяц.
+                            val page = MonthRules.page(date)
+                            if (page != months.currentPage) ui.launch { months.animateScrollToPage(page) }
                         },
-                        onCancel = {
-                            menuId = null
-                            messages.show(CANCEL_LATER)
-                        },
-                        onCopy = {
-                            menuId = null
-                            scope.launch { if (calendar.copy(training.id)) messages.show(COPIED) }
-                        },
+                        onDay = ::openDay,
+                        onOpen = onOpen,
+                        onZone = onZone,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
-                },
-                onOpen = onOpen,
-                onMore = { hidden -> moreIds = hidden.joinToString(ID_SEPARATOR) { it.id } },
-                onZone = onZone,
-                onCreate = onCreate,
-                onMenu = { training -> menuId = training.id },
-                onMove = { training, start -> moveStored(training.id, start, confirmed = false) },
-                onZoomEnd = { prefs.putFloat(DevicePrefs.CALENDAR_HOUR, grid.hourDp) },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
-        }
+                } else if (view == CalendarView.Agenda) {
+                    AgendaView(
+                        state = agenda,
+                        list = agendaList,
+                        ready = loadedRange == range,
+                        itemsOf = itemsOf,
+                        zonesOf = zonesOf,
+                        onTop = { date -> pickedPage = pageOf(date) },
+                        onDay = ::openDay,
+                        onOpen = onOpen,
+                        onZone = onZone,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                } else if (view == CalendarView.Day) {
+                    WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } }, onWeek = onWeek)
+                } else {
+                    // Нажатие на день над колонкой — этот день в виде «День».
+                    DaysHeader(
+                        pager = pager,
+                        columns = view.columns,
+                        today = today,
+                        wide = wide,
+                        onOpen = { date ->
+                            select(CalendarView.Day)
+                            ui.launch { pager.scrollToPage(pageOf(date)) }
+                        },
+                        onWeek = onWeek,
+                    )
+                }
+                if (view.grid) DayGrid(
+                    pager = pager,
+                    grid = grid,
+                    hours = hours,
+                    now = now,
+                    step = step,
+                    columns = view.columns,
+                    newDuration = newDuration,
+                    itemsOf = itemsOf,
+                    zonesOf = zonesOf,
+                    menuId = menuId,
+                    menu = { training ->
+                        TrainingMenu(
+                            training = training,
+                            onDismiss = { menuId = null },
+                            onNew = {
+                                menuId = null
+                                onCreate(training.start)
+                            },
+                            onCancel = {
+                                menuId = null
+                                onCard(TrainingCardKey.cancel(training.id))
+                            },
+                            onCopy = {
+                                menuId = null
+                                scope.launch { if (calendar.copy(training.id)) messages.show(COPIED) }
+                            },
+                        )
+                    },
+                    onOpen = onOpen,
+                    onMore = { hidden -> moreIds = hidden.joinToString(ID_SEPARATOR) { it.id } },
+                    onZone = onZone,
+                    onCreate = onCreate,
+                    onMenu = { training -> menuId = training.id },
+                    onMove = { training, start -> moveStored(training.id, start, confirmed = false) },
+                    onZoomEnd = { prefs.putFloat(DevicePrefs.CALENDAR_HOUR, grid.hourDp) },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            }
 
-        val hidden = moreIds?.split(ID_SEPARATOR)?.let { ids -> shownDays.flatMap(itemsOf).filter { it.id in ids } }.orEmpty()
-        if (hidden.isNotEmpty()) {
-            MorePanel(
-                hidden = hidden,
-                onDismiss = { moreIds = null },
-                onOpen = {
-                    moreIds = null
-                    onOpen(it)
-                },
-            )
-        }
+            val hidden = moreIds?.split(ID_SEPARATOR)?.let { ids -> shownDays.flatMap(itemsOf).filter { it.id in ids } }.orEmpty()
+            if (hidden.isNotEmpty()) {
+                MorePanel(
+                    hidden = hidden,
+                    onDismiss = { moreIds = null },
+                    onOpen = {
+                        moreIds = null
+                        onOpen(it)
+                    },
+                )
+            }
 
-        val zone = zoneKey?.let { key -> zonesOf(zoneDateOf(key)).firstOrNull { zoneKeyOf(it) == key } }
-        if (zone != null) {
-            ZonePanel(
-                zone = zone,
-                // Пропустить можно сегодняшний и будущий день запрета: прошлый уже ни на что не влияет.
-                canSkip = zone.kind == ZoneKind.RESTRICTION && zone.date >= today,
-                onDismiss = { zoneKey = null },
-                onEdit = {
-                    zoneKey = null
-                    onEditZone(zone)
-                },
-                onSkip = {
-                    zoneKey = null
-                    scope.launch { calendar.skipRestrictionDay(zone.id, zone.date) }
-                    messages.showUndo(ZoneFormat.skipped(zone.date)) { scope.launch { calendar.unskipRestrictionDay(zone.id, zone.date) } }
-                },
-            )
-        }
+            val zone = zoneKey?.let { key -> zonesOf(zoneDateOf(key)).firstOrNull { zoneKeyOf(it) == key } }
+            if (zone != null) {
+                ZonePanel(
+                    zone = zone,
+                    // Пропустить можно сегодняшний и будущий день запрета: прошлый уже ни на что не влияет.
+                    canSkip = zone.kind == ZoneKind.RESTRICTION && zone.date >= today,
+                    onDismiss = { zoneKey = null },
+                    onEdit = {
+                        zoneKey = null
+                        onEditZone(zone)
+                    },
+                    onSkip = {
+                        zoneKey = null
+                        scope.launch { calendar.skipRestrictionDay(zone.id, zone.date) }
+                        messages.showUndo(ZoneFormat.skipped(zone.date)) { scope.launch { calendar.unskipRestrictionDay(zone.id, zone.date) } }
+                    },
+                )
+            }
 
-        val ask = askKey?.let(::decodeAsk)
-        if (ask != null) {
-            ScopePanel(
-                title = TrainingFormat.SCOPE_MOVE_TITLE,
-                question = ask.question,
-                date = ask.date,
-                back = ZoneFormat.CONFLICT_CANCEL,
-                onOnlyThis = {
-                    askKey = null
-                    moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.ONLY_THIS)
-                },
-                onFollowing = {
-                    askKey = null
-                    moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.FOLLOWING)
-                },
-                onDismiss = { askKey = null },
-            )
-        }
+            val ask = askKey?.let(::decodeAsk)
+            if (ask != null) {
+                ScopePanel(
+                    title = TrainingFormat.SCOPE_MOVE_TITLE,
+                    question = ask.question,
+                    date = ask.date,
+                    back = ZoneFormat.CONFLICT_CANCEL,
+                    onOnlyThis = {
+                        askKey = null
+                        moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.ONLY_THIS)
+                    },
+                    onFollowing = {
+                        askKey = null
+                        moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.FOLLOWING)
+                    },
+                    onDismiss = { askKey = null },
+                )
+            }
 
-        val pending = pendingKey?.let(::decodePending)
-        if (pending != null) {
-            ConflictPanel(
-                conflicts = pending.conflicts,
-                onDismiss = { pendingKey = null },
-                onPlace = {
-                    pendingKey = null
-                    moveStored(pending.id, pending.start, confirmed = true, answer = pending.answer)
-                },
-            )
+            val pending = pendingKey?.let(::decodePending)
+            if (pending != null) {
+                ConflictPanel(
+                    conflicts = pending.conflicts,
+                    onDismiss = { pendingKey = null },
+                    onPlace = {
+                        pendingKey = null
+                        moveStored(pending.id, pending.start, confirmed = true, answer = pending.answer)
+                    },
+                )
+            }
         }
     }
 }

@@ -1,0 +1,823 @@
+package com.akenory.personalka.ui.training
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.training.CardClient
+import com.akenory.personalka.data.training.CardResult
+import com.akenory.personalka.data.training.TrainingCard
+import com.akenory.personalka.data.training.TrainingCardRepository
+import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.calendar.CalendarBadge
+import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.TrainingCardFormat
+import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.training.CancelReasons
+import com.akenory.personalka.domain.training.CancelRules
+import com.akenory.personalka.domain.training.CardAction
+import com.akenory.personalka.domain.training.CardMenu
+import com.akenory.personalka.domain.training.ClientOutcome
+import com.akenory.personalka.domain.training.TrainingCardRules
+import com.akenory.personalka.domain.training.TrainingPhase
+import com.akenory.personalka.domain.training.came
+import com.akenory.personalka.ui.clients.MenuAction
+import com.akenory.personalka.ui.components.ChoiceChip
+import com.akenory.personalka.ui.components.Field
+import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.OutlineButton
+import com.akenory.personalka.ui.components.Panel
+import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.components.PrimaryButton
+import com.akenory.personalka.ui.components.SecondaryButton
+import com.akenory.personalka.ui.components.SectionLabel
+import com.akenory.personalka.ui.components.SwitchRow
+import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.theme.Dimens
+import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.theme.tabular
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+
+const val TRAINING_CARD_TAG = "training-card"
+const val CANCEL_PANEL_TAG = "cancel-panel"
+const val CARD_MENU_TAG = "card-menu"
+const val CARD_SCRIM_TAG = "card-scrim"
+const val CHARGE_SWITCH_TAG = "charge-switch"
+const val OWN_REASON_TAG = "own-reason"
+
+fun cardClientTag(id: String) = "card-client-$id"
+fun cardClientActionTag(id: String) = "card-client-action-$id"
+fun cancelWhoTag(id: String) = "cancel-who-$id"
+const val CANCEL_WHOLE_TAG = "cancel-whole"
+
+/**
+ * Что открыто в карточке — строкой, чтобы пережить пересоздание окна: тренировка или сразу её панель отмены
+ * («Отменить» в меню блока календаря, 5.3).
+ */
+object TrainingCardKey {
+    private const val CANCEL = "#cancel"
+
+    fun card(id: String): String = id
+
+    fun cancel(id: String): String = id + CANCEL
+
+    fun id(key: String): String = key.removeSuffix(CANCEL)
+
+    fun opensCancel(key: String): Boolean = key.endsWith(CANCEL)
+}
+
+/** Кого отменяем — строкой: «Всю тренировку» или клиенты через запятую. */
+private const val WHOLE = ""
+
+/**
+ * Карточка тренировки (ТЗ 5.4) и панель отмены (5.6) над [content] — календарём. На сложенном Fold — панель снизу
+ * поверх затемнения, нажатие мимо закрывает; на разложенном — справа без затемнения, календарь слева остаётся
+ * рабочим: нажатие на другую тренировку меняет карточку (макет «Разложенный Fold · сплит»).
+ *
+ * Открытая панель отмены, всё выбранное в ней и окна поверх хранятся здесь, выше ветки по ширине: сложение Fold
+ * их не сбрасывает.
+ *
+ * @param key [TrainingCardKey]; `null` — карточка закрыта.
+ * @param onEdit «Изменить» и «Перенести вместо отмены» — форма тренировки (5.5).
+ * @param onClient имя клиента — его карточка (5.9); [onGroup] — название группы — карточка группы (5.10).
+ * @param onCopy «Копировать» в «…».
+ */
+@Composable
+fun TrainingCardHost(
+    key: String?,
+    wide: Boolean,
+    cards: TrainingCardRepository,
+    now: LocalDateTime,
+    messages: MessageState,
+    scope: CoroutineScope,
+    onClose: () -> Unit,
+    onEdit: (String) -> Unit,
+    onClient: (String) -> Unit,
+    onGroup: (String) -> Unit,
+    onCopy: (String) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val id = key?.let(TrainingCardKey::id)
+    // Панель отмены: null — карточка; WHOLE — «Всю тренировку»; иначе id выбранных клиентов через запятую.
+    var cancelWho by rememberSaveable(key) { mutableStateOf(if (key != null && TrainingCardKey.opensCancel(key)) WHOLE else null) }
+    var reason by rememberSaveable(key) { mutableStateOf<String?>(CancelReasons.CANNOT_COME) }
+    var ownReason by rememberSaveable(key) { mutableStateOf("") }
+    var notifiedAt by rememberSaveable(key) { mutableStateOf<String?>(null) }
+    var charged by rememberSaveable(key) { mutableStateOf<String?>(null) }
+    // «Другое время»: сначала дата, потом время.
+    var pickDate by rememberSaveable(key) { mutableStateOf<String?>(null) }
+    var pickingDate by rememberSaveable(key) { mutableStateOf(false) }
+    var askDelete by rememberSaveable(key) { mutableStateOf(false) }
+
+    var card by remember(id) { mutableStateOf<TrainingCard?>(null) }
+    LaunchedEffect(id) {
+        if (id == null) return@LaunchedEffect
+        cards.card(id).collect { loaded ->
+            // Тренировку удалили — карточка закрывается.
+            if (loaded == null) onClose() else card = loaded
+        }
+    }
+    val shown = card?.takeIf { it.id == id }
+
+    fun done(result: CardResult?) {
+        if (result != null) messages.showUndo(result.message) { scope.launch { cards.undo(result.undo) } }
+    }
+
+    val draft = CancelDraft(
+        who = cancelWho,
+        reason = reason,
+        ownReason = ownReason,
+        notifiedAt = notifiedAt?.let(LocalDateTime::parse),
+        charged = charged?.toBooleanStrictOrNull(),
+    )
+    val pane: @Composable ColumnScope.() -> Unit = {
+        if (shown != null) {
+            val who = cancelWho
+            if (who == null) {
+                CardBody(
+                    card = shown,
+                    now = now,
+                    wide = wide,
+                    onClose = onClose,
+                    onAction = { action ->
+                        when (action) {
+                            CardAction.DONE, CardAction.ALL_CAME -> scope.launch { done(cards.markDone(shown.id)) }
+                            CardAction.CANCEL -> cancelWho = WHOLE
+                            CardAction.EDIT -> onEdit(shown.id)
+                            CardAction.RETURN -> scope.launch { done(cards.restore(shown.id)) }
+                        }
+                    },
+                    onMenu = { item ->
+                        when (item) {
+                            CardMenu.EDIT -> onEdit(shown.id)
+                            CardMenu.COPY -> onCopy(shown.id)
+                            CardMenu.SKIP_DATE -> scope.launch {
+                                val result = cards.skipDate(shown.id)
+                                if (result != null) onClose()
+                                done(result)
+                            }
+                            CardMenu.DELETE -> askDelete = true
+                        }
+                    },
+                    onToggle = { clientId -> scope.launch { cards.toggleAttendance(shown.id, clientId) } },
+                    onCancelClient = { clientId -> cancelWho = clientId },
+                    onReturnClient = { clientId -> scope.launch { done(cards.restoreClient(shown.id, clientId)) } },
+                    onClient = onClient,
+                    onGroup = onGroup,
+                )
+            } else {
+                CancelBody(
+                    card = shown,
+                    draft = draft,
+                    now = now,
+                    onBack = { cancelWho = null },
+                    onWho = { cancelWho = it },
+                    onReason = { picked ->
+                        reason = picked
+                        charged = null
+                    },
+                    onOwnReason = { ownReason = it },
+                    onNow = {
+                        notifiedAt = null
+                        charged = null
+                    },
+                    onOtherTime = { pickingDate = true },
+                    onCharged = { charged = it.toString() },
+                    onCancel = { clientIds ->
+                        val at = draft.notifiedAt ?: now
+                        cancelWho = null
+                        scope.launch { done(cards.cancel(shown.id, clientIds, draft.reasonText, at, draft.charged)) }
+                    },
+                    onMove = {
+                        cancelWho = null
+                        onEdit(shown.id)
+                    },
+                )
+            }
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        if (wide) {
+            Row(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxHeight()) { content() }
+                if (key != null) {
+                    VerticalDivider(color = PersonalkaTheme.colors.divider)
+                    Column(
+                        Modifier
+                            .width(CARD_WIDTH)
+                            .fillMaxHeight()
+                            .background(PersonalkaTheme.colors.bg)
+                            .semantics { paneTitle = shown?.title.orEmpty() }
+                            .testTag(TRAINING_CARD_TAG),
+                    ) { pane() }
+                }
+            }
+        } else {
+            content()
+            if (key != null) {
+                BoxWithConstraints(
+                    Modifier
+                        .fillMaxSize()
+                        .background(PersonalkaTheme.colors.scrim)
+                        .pointerInput(onClose) { detectTapGestures { onClose() } }
+                        .testTag(CARD_SCRIM_TAG),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = maxHeight * 0.88f)
+                            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                            .background(PersonalkaTheme.colors.bg)
+                            .pointerInput(Unit) { detectTapGestures { } }
+                            .semantics { paneTitle = shown?.title.orEmpty() }
+                            .testTag(TRAINING_CARD_TAG),
+                    ) {
+                        Box(Modifier.fillMaxWidth().padding(top = Dimens.space2), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(width = 32.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(PersonalkaTheme.colors.outline))
+                        }
+                        pane()
+                    }
+                }
+            }
+        }
+
+        if (shown != null && askDelete) {
+            Panel(title = TrainingCardFormat.DELETE_TITLE, onDismiss = { askDelete = false }) {
+                Text(TrainingCardFormat.deleteText(shown.title, shown.state.start), style = MaterialTheme.typography.bodyLarge.tabular(), color = PersonalkaTheme.colors.text)
+                PanelActions(
+                    primary = TrainingCardFormat.DELETE,
+                    onPrimary = {
+                        askDelete = false
+                        scope.launch {
+                            val result = cards.delete(shown.id)
+                            if (result != null) onClose()
+                            done(result)
+                        }
+                    },
+                    secondary = TrainingCardFormat.KEEP,
+                    onSecondary = { askDelete = false },
+                )
+            }
+        }
+        if (pickingDate) {
+            DatePickerPanel(
+                initial = (draft.notifiedAt ?: now).date,
+                onPick = { date ->
+                    pickingDate = false
+                    pickDate = date.toString()
+                },
+                onDismiss = { pickingDate = false },
+            )
+        }
+        pickDate?.let { date ->
+            TimePickerPanel(
+                initial = (draft.notifiedAt ?: now).time,
+                onPick = { time ->
+                    pickDate = null
+                    notifiedAt = ClubTime.toMinute(LocalDateTime(LocalDate.parse(date), time)).toString()
+                    charged = null
+                },
+                onDismiss = { pickDate = null },
+            )
+        }
+    }
+}
+
+/** Ширина карточки справа на разложенном Fold (макет «Разложенный Fold · сплит»). */
+private val CARD_WIDTH = 320.dp
+
+/** Что выбрано в панели отмены. [who] — [WHOLE] или id клиентов через запятую. */
+private class CancelDraft(
+    val who: String?,
+    val reason: String?,
+    val ownReason: String,
+    val notifiedAt: LocalDateTime?,
+    val charged: Boolean?,
+) {
+    val whole: Boolean get() = who.isNullOrEmpty()
+    val clientIds: List<String> get() = if (whole) emptyList() else who.orEmpty().split(',')
+
+    /** Причина: чип или свой текст. */
+    val reasonText: String? get() = if (reason == null) ownReason.trim().ifEmpty { null } else reason
+}
+
+// --- Карточка ---
+
+@Composable
+private fun ColumnScope.CardBody(
+    card: TrainingCard,
+    now: LocalDateTime,
+    wide: Boolean,
+    onClose: () -> Unit,
+    onAction: (CardAction) -> Unit,
+    onMenu: (CardMenu) -> Unit,
+    onToggle: (String) -> Unit,
+    onCancelClient: (String) -> Unit,
+    onReturnClient: (String) -> Unit,
+    onClient: (String) -> Unit,
+    onGroup: (String) -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    val state = card.state
+    val buttons = TrainingCardRules.buttons(state, now, card.skippable)
+    val phase = TrainingPhase.of(state, now)
+    val isGroup = state.kind == TrainingKind.GROUP
+    // Имя в шапке ведёт в карточку: у одного клиента — его, у группы — группы; у сплита — строки клиентов.
+    val single = card.clients.singleOrNull()?.takeIf { !isGroup }
+    val titleLink: (() -> Unit)? = single?.let { c -> { onClient(c.id) } } ?: card.groupId?.let { g -> { onGroup(g) } }
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
+        Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+            if (wide) {
+                IconButton(onClick = onClose) { Icon(PIcons.Close, contentDescription = "Закрыть", tint = colors.text) }
+            }
+            Row(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = Dimens.touch)
+                    .then(if (titleLink != null) Modifier.clickable(role = Role.Button, onClick = titleLink) else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    card.title,
+                    modifier = Modifier.weight(1f, fill = false).semantics { heading() },
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = colors.text,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (titleLink != null) Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+            }
+            CardMenuButton(buttons.menu, onMenu)
+        }
+        val end = state.end
+        Text(TrainingCardFormat.whenLine(state.start, end, state.durationMin), style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.textMuted)
+        Text(TrainingCardFormat.typeLine(card.typeShort, card.placeShort, card.seriesWeekdays), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+
+        val came = if (isGroup) state.participants.count { it.came } else null
+        StatusLine(
+            outcome = card.outcome,
+            phase = phase,
+            note = TrainingCardFormat.statusNote(card.outcome, phase, now, state.start, end, came, TrainingCardRules.groupTotal(state), state.doneAt),
+        )
+        card.warnings.forEach { WarningLine(it) }
+
+        // Отменённая целиком или отменённый единственный клиент: причина и когда предупредили.
+        val cancelled = card.clients.singleOrNull()?.state?.takeIf { it.isCancelled && !isGroup }
+        val reason = cancelled?.cancelReason ?: state.cancelReason.takeIf { state.status == TrainingStatus.CANCELLED }
+        if (reason != null) InfoRow(TrainingCardFormat.REASON, reason)
+        cancelled?.notifiedAt?.let { InfoRow(TrainingCardFormat.NOTIFIED, TrainingCardFormat.notified(it, state.start)) }
+
+        if (isGroup) {
+            GroupMembers(card, now, onToggle, onCancelClient, onReturnClient, onClient)
+        } else if (TrainingCardRules.perClient(state)) {
+            SectionLabel(TrainingCardFormat.CLIENTS)
+            card.clients.forEachIndexed { i, c ->
+                if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
+                ClientLine(card, c, onCancelClient, onReturnClient, onClient)
+            }
+        }
+
+        card.plan?.let {
+            SectionLabel(TrainingCardFormat.PLAN)
+            Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+        }
+        card.fact?.let {
+            SectionLabel(TrainingCardFormat.FACT)
+            Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+        }
+        if (card.noDiary) {
+            Row(Modifier.padding(top = Dimens.space4), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(colors.accentGraphic))
+                Spacer(Modifier.width(Dimens.space2))
+                Text(CalendarFormat.badge(CalendarBadge.NO_DIARY), style = MaterialTheme.typography.bodyMedium, color = colors.text)
+            }
+        }
+        Spacer(Modifier.height(Dimens.space4))
+    }
+    CardButtonsRow(buttons.buttons, onAction)
+}
+
+/** Кнопка «⋮» с меню карточки: «Удалить» — цветом ошибки. */
+@Composable
+private fun CardMenuButton(items: List<CardMenu>, onMenu: (CardMenu) -> Unit) {
+    if (items.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.testTag(CARD_MENU_TAG)) {
+            Icon(PIcons.MoreVert, contentDescription = TrainingCardFormat.MORE, tint = PersonalkaTheme.colors.text)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = PersonalkaTheme.colors.surface) {
+            items.forEach { item ->
+                MenuAction(
+                    text = TrainingCardFormat.menu(item),
+                    icon = when (item) {
+                        CardMenu.EDIT -> PIcons.Edit
+                        CardMenu.COPY -> PIcons.ContentCopy
+                        CardMenu.SKIP_DATE -> PIcons.EventBusy
+                        CardMenu.DELETE -> PIcons.Delete
+                    },
+                    onClick = {
+                        open = false
+                        onMenu(item)
+                    },
+                    danger = item == CardMenu.DELETE,
+                )
+            }
+        }
+    }
+}
+
+/** Метка статуса и пояснение: «Идёт · до конца 30 мин», «Отмена со списанием». */
+@Composable
+private fun StatusLine(outcome: ClientOutcome, phase: TrainingPhase, note: String?) {
+    val colors = PersonalkaTheme.colors
+    val label = TrainingCardFormat.statusLabel(outcome, phase)
+    Row(Modifier.padding(top = Dimens.space3), verticalAlignment = Alignment.CenterVertically) {
+        val (bg, fg, icon) = when (outcome) {
+            ClientOutcome.DONE -> Triple(colors.doneContainer, colors.onDoneContainer, PIcons.Check)
+            ClientOutcome.CANCELLED_CHARGED -> Triple(colors.chargedContainer, colors.onChargedContainer, PIcons.BadgeRuble)
+            ClientOutcome.CANCELLED -> Triple(colors.surfaceAlt, colors.text, PIcons.Close)
+            ClientOutcome.PLANNED -> Triple(Color.Transparent, colors.text, PIcons.Schedule)
+        }
+        StatusChip(label, bg, fg, icon, outlined = outcome == ClientOutcome.PLANNED)
+        if (note != null) {
+            Spacer(Modifier.width(Dimens.space2))
+            Text(note, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.textMuted)
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(label: String, bg: Color, fg: Color, icon: ImageVector, outlined: Boolean = false) {
+    val shape = MaterialTheme.shapes.small
+    Row(
+        Modifier
+            .height(32.dp)
+            .clip(shape)
+            .background(bg, shape)
+            .then(if (outlined) Modifier.border(1.dp, PersonalkaTheme.colors.outline, shape) else Modifier)
+            .padding(horizontal = Dimens.space2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = fg)
+    }
+}
+
+@Composable
+private fun WarningLine(text: String) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        Modifier
+            .padding(top = Dimens.space3)
+            .fillMaxWidth()
+            .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+            .padding(Dimens.space3),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(PIcons.BadgeLayers, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(18.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text)
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    val colors = PersonalkaTheme.colors
+    Row(Modifier.fillMaxWidth().padding(top = Dimens.space3), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+        Spacer(Modifier.width(Dimens.space3))
+        Text(value, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text)
+    }
+}
+
+/** Строка клиента сплита: имя ведёт в его карточку, итог, значок отмены или «Вернуть» (5.4). */
+@Composable
+private fun ClientLine(
+    card: TrainingCard,
+    c: CardClient,
+    onCancelClient: (String) -> Unit,
+    onReturnClient: (String) -> Unit,
+    onClient: (String) -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(cardClientTag(c.id)), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f).heightIn(min = Dimens.touch).clickable(role = Role.Button) { onClient(c.id) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(c.name, style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+        }
+        val (bg, fg) = when (c.outcome) {
+            ClientOutcome.DONE -> colors.doneContainer to colors.onDoneContainer
+            ClientOutcome.CANCELLED_CHARGED -> colors.chargedContainer to colors.onChargedContainer
+            else -> colors.surfaceAlt to colors.text
+        }
+        Text(
+            c.outcome.label,
+            modifier = Modifier.clip(MaterialTheme.shapes.small).background(bg).padding(horizontal = Dimens.space2, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = fg,
+        )
+        ClientActionIcon(card, c, onCancelClient, onReturnClient)
+    }
+}
+
+/** Значок в строке клиента: отменить его одного или вернуть отменённого. */
+@Composable
+private fun ClientActionIcon(card: TrainingCard, c: CardClient, onCancelClient: (String) -> Unit, onReturnClient: (String) -> Unit) {
+    val colors = PersonalkaTheme.colors
+    when {
+        TrainingCardRules.canCancelClient(card.state, c.id) ->
+            IconButton(onClick = { onCancelClient(c.id) }, modifier = Modifier.testTag(cardClientActionTag(c.id))) {
+                Icon(PIcons.EventBusy, contentDescription = TrainingCardFormat.cancelClient(c.name), tint = colors.textMuted)
+            }
+        TrainingCardRules.canReturnClient(card.state, c.id) ->
+            IconButton(onClick = { onReturnClient(c.id) }, modifier = Modifier.testTag(cardClientActionTag(c.id))) {
+                Icon(PIcons.Unarchive, contentDescription = TrainingCardFormat.returnClient(c.name), tint = colors.textMuted)
+            }
+        else -> Spacer(Modifier.width(Dimens.touch))
+    }
+}
+
+/**
+ * Состав группы (5.4, макет «Группа идёт»): «Пришли» сверху, «Ещё не отмечены» ниже; нажатие на ребёнка отмечает
+ * «пришёл» и обратно. До начала минус 15 минут отмечать нельзя — нажатие ведёт в карточку ребёнка.
+ */
+@Composable
+private fun GroupMembers(
+    card: TrainingCard,
+    now: LocalDateTime,
+    onToggle: (String) -> Unit,
+    onCancelClient: (String) -> Unit,
+    onReturnClient: (String) -> Unit,
+    onClient: (String) -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    val state = card.state
+    val toggle = TrainingCardRules.canToggle(state, now)
+    SectionLabel(TrainingCardFormat.members(card.clients.size))
+    if (toggle && state.status == TrainingStatus.PLANNED) {
+        Text(TrainingCardFormat.MARK_HINT, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+    }
+    val came = card.clients.filter { it.state.came }
+    val noShow = card.clients.filter { TrainingCardRules.noShow(state, it.state) }
+    val waiting = card.clients.filter { it.state.status == ParticipationStatus.EXPECTED }
+    val cancelled = card.clients.filter { it.state.isCancelled && !TrainingCardRules.noShow(state, it.state) }
+    val sections = listOf(
+        TrainingCardFormat.cameSection(came.size) to came,
+        TrainingCardFormat.notMarkedSection(waiting.size) to waiting,
+        TrainingCardFormat.noShowSection(noShow.size) to noShow,
+        TrainingCardFormat.cancelledSection(cancelled.size) to cancelled,
+    )
+    sections.filter { it.second.isNotEmpty() }.forEach { (label, list) ->
+        Text(label, modifier = Modifier.padding(top = Dimens.space3), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
+        list.forEachIndexed { i, c ->
+            if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Dimens.touch)
+                    .clickable(role = Role.Checkbox) { if (toggle) onToggle(c.id) else onClient(c.id) }
+                    .semantics { selected = c.state.came }
+                    .testTag(cardClientTag(c.id)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (c.state.came) {
+                    Icon(PIcons.CheckCircle, contentDescription = null, tint = colors.done, modifier = Modifier.size(22.dp))
+                } else {
+                    Box(Modifier.size(22.dp).padding(2.dp).border(2.dp, colors.outline, CircleShape))
+                }
+                Spacer(Modifier.width(Dimens.space3))
+                Text(c.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                ClientActionIcon(card, c, onCancelClient, onReturnClient)
+            }
+        }
+    }
+}
+
+/** Кнопки по состоянию (5.4): главная — графитом, «Отменить» первой — заливкой, иначе текстом; «Изменить» — контуром. */
+@Composable
+private fun CardButtonsRow(actions: List<CardAction>, onAction: (CardAction) -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalDivider(thickness = 1.dp, color = colors.divider)
+        Row(Modifier.fillMaxWidth().padding(Dimens.space4), horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            actions.forEachIndexed { i, action ->
+                val text = TrainingCardFormat.action(action)
+                val modifier = Modifier.weight(1f)
+                when (action) {
+                    CardAction.DONE, CardAction.ALL_CAME, CardAction.RETURN -> PrimaryButton(text, { onAction(action) }, modifier)
+                    CardAction.EDIT -> OutlineButton(text, { onAction(action) }, modifier, icon = PIcons.Edit)
+                    CardAction.CANCEL ->
+                        if (i == 0) {
+                            SecondaryButton(text, { onAction(action) }, modifier, icon = PIcons.EventBusy)
+                        } else {
+                            TextButton(onClick = { onAction(action) }, modifier = modifier.heightIn(min = Dimens.button)) {
+                                Text(text, style = MaterialTheme.typography.labelLarge, color = colors.text)
+                            }
+                        }
+                }
+            }
+        }
+    }
+}
+
+// --- Панель отмены (5.6) ---
+
+@Composable
+private fun ColumnScope.CancelBody(
+    card: TrainingCard,
+    draft: CancelDraft,
+    now: LocalDateTime,
+    onBack: () -> Unit,
+    onWho: (String) -> Unit,
+    onReason: (String?) -> Unit,
+    onOwnReason: (String) -> Unit,
+    onNow: () -> Unit,
+    onOtherTime: () -> Unit,
+    onCharged: (Boolean) -> Unit,
+    onCancel: (List<String>) -> Unit,
+    onMove: () -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    val state = card.state
+    val asksWho = CancelRules.asksWho(state)
+    val open = CancelRules.open(state).toSet()
+    // Выбранные клиенты, которых уже отменили (на другом телефоне), не считаются.
+    val clientIds = draft.clientIds.filter { it in open }
+    val whole = draft.whole || clientIds.isEmpty()
+    val notified = draft.notifiedAt ?: now
+    val summary = CancelRules.summary(state, whole, draft.reasonText, notified, card.settings, draft.charged)
+    Column(
+        Modifier
+            .weight(1f, fill = false)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = Dimens.space4)
+            .testTag(CANCEL_PANEL_TAG),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (asksWho) TrainingCardFormat.CANCEL_CLIENT_TITLE else TrainingCardFormat.CANCEL_TITLE,
+                modifier = Modifier.weight(1f).semantics { heading() },
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.text,
+            )
+            IconButton(onClick = onBack) { Icon(PIcons.Close, contentDescription = "Закрыть", tint = colors.text) }
+        }
+        Text(
+            card.title + " · " + CalendarFormat.at(state.start) + "–" + DateFormat.time(state.end.time),
+            style = MaterialTheme.typography.bodyMedium.tabular(),
+            color = colors.textMuted,
+        )
+        Text(TrainingCardFormat.typeLine(card.typeShort, card.placeShort, null), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+
+        if (asksWho) {
+            SectionLabel(TrainingCardFormat.WHO)
+            Chips {
+                card.clients.filter { it.id in open }.forEach { c ->
+                    ChoiceChip(
+                        text = c.name,
+                        selected = !whole && c.id in clientIds,
+                        onClick = {
+                            val next = if (c.id in clientIds) clientIds - c.id else clientIds + c.id
+                            onWho(next.joinToString(","))
+                        },
+                        modifier = Modifier.testTag(cancelWhoTag(c.id)),
+                        toggle = true,
+                    )
+                }
+                ChoiceChip(TrainingCardFormat.WHOLE, selected = whole, onClick = { onWho(WHOLE) }, modifier = Modifier.testTag(CANCEL_WHOLE_TAG))
+            }
+        }
+
+        SectionLabel(TrainingCardFormat.REASON)
+        Chips {
+            CancelReasons.DEFAULT_CHIPS.forEach { chip ->
+                ChoiceChip(chip, selected = draft.reason == chip, onClick = { onReason(chip) })
+            }
+            ChoiceChip(TrainingCardFormat.OWN_REASON, selected = draft.reason == null, onClick = { onReason(null) }, icon = PIcons.Edit)
+        }
+        if (draft.reason == null) {
+            Field(
+                label = TrainingCardFormat.OWN_REASON,
+                value = draft.ownReason,
+                onValueChange = onOwnReason,
+                placeholder = TrainingCardFormat.REASON_HINT,
+                tag = OWN_REASON_TAG,
+            )
+        }
+
+        if (summary.decision != null) {
+            SectionLabel(TrainingCardFormat.WHEN_NOTIFIED)
+            Chips {
+                ChoiceChip(TrainingCardFormat.nowChip(now), selected = draft.notifiedAt == null, onClick = onNow)
+                ChoiceChip(
+                    text = draft.notifiedAt?.let(TrainingCardFormat::timeChip) ?: TrainingCardFormat.OTHER_TIME,
+                    selected = draft.notifiedAt != null,
+                    onClick = onOtherTime,
+                    icon = PIcons.Schedule,
+                )
+            }
+        }
+
+        Column(
+            Modifier
+                .padding(top = Dimens.space4)
+                .fillMaxWidth()
+                .border(1.dp, colors.divider, MaterialTheme.shapes.medium)
+                .padding(horizontal = Dimens.space3, vertical = Dimens.space2),
+        ) {
+            Row(Modifier.heightIn(min = Dimens.touch), verticalAlignment = Alignment.CenterVertically) {
+                val (bg, fg, icon) = if (summary.charged) {
+                    Triple(colors.chargedContainer, colors.onChargedContainer, PIcons.BadgeRuble)
+                } else {
+                    Triple(colors.surfaceAlt, colors.text, PIcons.Close)
+                }
+                StatusChip(TrainingCardFormat.summaryLabel(summary.charged), bg, fg, icon)
+                TrainingCardFormat.summaryNote(summary.decision)?.let {
+                    Spacer(Modifier.width(Dimens.space2))
+                    Text(it, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text)
+                }
+            }
+            if (summary.switchable) {
+                SwitchRow(TrainingCardFormat.CHARGE_SWITCH, summary.charged, onCharged, Modifier.testTag(CHARGE_SWITCH_TAG))
+            }
+        }
+        Spacer(Modifier.height(Dimens.space4))
+    }
+    Column(Modifier.fillMaxWidth().padding(Dimens.space4), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        if (whole) {
+            PrimaryButton(TrainingCardFormat.CANCEL_TRAINING, { onCancel(emptyList()) }, Modifier.fillMaxWidth())
+            if (state.status == TrainingStatus.PLANNED) {
+                OutlineButton(TrainingCardFormat.MOVE_INSTEAD, onMove, Modifier.fillMaxWidth(), icon = PIcons.SyncAlt)
+            }
+        } else {
+            PrimaryButton(TrainingCardFormat.cancelFor(card.clients.filter { it.id in clientIds }.map { it.name }), { onCancel(clientIds) }, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun Chips(content: @Composable () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) { content() }
+}

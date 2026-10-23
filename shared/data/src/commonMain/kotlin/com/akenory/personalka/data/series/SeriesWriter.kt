@@ -69,6 +69,12 @@ internal class Recorder(private val db: PersonalkaDatabase, private val now: Lon
         }
     }
 
+    /** Записать участия тренировки как есть: отметки, отмену, списание (4.1, 4.2). */
+    suspend fun saveParticipations(trainingId: String, items: List<ParticipationEntity>) {
+        rememberParticipants(trainingId)
+        trainingDao.upsertParticipations(items)
+    }
+
     /** Удалить тренировку вместе с участиями (мягко). */
     suspend fun deleteTraining(id: String) {
         val item = trainingDao.training(id)?.takeIf { it.sync.deletedAt == null } ?: return

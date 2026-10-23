@@ -38,10 +38,12 @@ import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.restriction.RestrictionDraft
+import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.TrainingDraft
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
@@ -251,7 +253,10 @@ class TrainingFormUiTest {
         // Изменить место у серии: вопрос «Только эту / Эту и следующие».
         awaitBlocks(1)
         val block = day().blocks.single()
+        // Нажатие на блок — карточка (шаг 1.14), в ней «Изменить» — форма.
         tapDay(block.x + 20f, block.y + 20f)
+        awaitNode(hasTestTag(TRAINING_CARD_TAG))
+        onNodeWithText(TrainingCardFormat.action(CardAction.EDIT)).performClick()
         awaitNode(hasText(TrainingFormat.EDIT_TITLE))
         awaitNode(hasText("Каждый вт · бессрочно"))
         tap(formPlaceTag(placeId("ДБ")))

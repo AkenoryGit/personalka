@@ -76,6 +76,7 @@ import com.akenory.personalka.ui.shell.navTag
 import com.akenory.personalka.ui.theme.LightColors
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.training.FORM_TIME_TAG
+import com.akenory.personalka.ui.training.TRAINING_CARD_TAG
 import com.akenory.personalka.ui.training.TRAINING_FORM_TAG
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -340,20 +341,21 @@ class CalendarUiTest {
         onNodeWithText(s("Лаптева_А.")).assertIsDisplayed()
         onNodeWithText(s("Егорова_Л.")).performClick()
         onNodeWithTag(PANEL_TAG).assertDoesNotExist()
-        awaitNode(hasText(TrainingFormat.EDIT_TITLE))
+        awaitNode(hasTestTag(TRAINING_CARD_TAG))
+        onNodeWithText(s("Егорова_Л.")).assertIsDisplayed()
     }
 
     @Test
-    fun tapOnBlockOpensItsForm() = runComposeUiTest {
-        // До карточки тренировки (шаг 1.14) нажатие на блок открывает форму изменения.
+    fun tapOnBlockOpensCard() = runComposeUiTest {
+        // Нажатие на блок — карточка тренировки (шаг 1.14), подробно — TrainingCardUiTest.
         training("16:00", 50, "Белова Ева")
         openCalendar()
         awaitBlocks(1)
         val block = day().blocks.single()
         tapDay(block.x + 20f, block.y + 20f)
-        awaitNode(hasText(TrainingFormat.EDIT_TITLE))
-        awaitNode(hasText("16:00–16:50"))
-        onNodeWithText(s("Белова_Е.")).assertIsSelected()
+        awaitNode(hasTestTag(TRAINING_CARD_TAG))
+        onNodeWithText(s("вт_20.10 · 16:00–16:50 · 50_мин")).assertIsDisplayed()
+        onNodeWithText(s("через 20_мин")).assertIsDisplayed()
     }
 
     @Test

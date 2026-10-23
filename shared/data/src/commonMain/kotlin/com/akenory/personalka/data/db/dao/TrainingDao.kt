@@ -28,6 +28,17 @@ interface TrainingDao {
     @Query("SELECT * FROM training WHERE id = :id")
     suspend fun training(id: String): TrainingEntity?
 
+    /** Тренировка для карточки (5.4): карточка обновляется сама после каждого действия. */
+    @Query("SELECT * FROM training WHERE id = :id")
+    fun observeTraining(id: String): Flow<TrainingEntity?>
+
+    /**
+     * Запланированные тренировки, начатые раньше [before]: закрытие в конце (4.1). Статус передаётся параметром:
+     * Room хранит перечисления именами.
+     */
+    @Query("SELECT * FROM training WHERE status = :planned AND start < :before AND deletedAt IS NULL ORDER BY start")
+    suspend fun plannedBefore(before: LocalDateTime, planned: TrainingStatus): List<TrainingEntity>
+
     /** Тренировки, которые начинаются в промежутке [from, to), по времени начала. Отменённые тоже. */
     @Query(
         """
@@ -116,6 +127,9 @@ interface TrainingDao {
 
     @Query("SELECT * FROM participation WHERE trainingId = :trainingId AND deletedAt IS NULL")
     suspend fun participationsOf(trainingId: String): List<ParticipationEntity>
+
+    @Query("SELECT * FROM participation WHERE trainingId = :trainingId AND deletedAt IS NULL")
+    fun observeParticipationsOf(trainingId: String): Flow<List<ParticipationEntity>>
 
     /** Тренировки клиента по его участию, отменённые тоже, по времени: карточка клиента (5.9). */
     @Query(

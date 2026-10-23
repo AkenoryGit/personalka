@@ -69,10 +69,16 @@ fun App(
         val hasCoach by remember(settings) { settings.coach.map { it != null } }.collectAsState(initial = null)
         // Открытая форма тренировки (5.5) — поверх всего приложения: «+» есть и на «Главной», и в «Календаре».
         var form by rememberSaveable { mutableStateOf<String?>(null) }
+        // Открытая карточка тренировки в календаре (5.4): «Назад» закрывает сначала её.
+        var card by rememberSaveable { mutableStateOf<String?>(null) }
 
         // Серии продлеваются до горизонта при открытии приложения и при смене дня (4.4).
         LaunchedEffect(calendar, hasCoach, now.date) {
             if (hasCoach == true) calendar.forms.extendSeries()
+        }
+        // Прошедшие закрываются в конце (4.1): при открытии приложения и каждую минуту.
+        LaunchedEffect(calendar, hasCoach, now) {
+            if (hasCoach == true) calendar.cards.closeEnded()
         }
 
         Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
@@ -81,6 +87,7 @@ fun App(
                 false -> FirstRun(settings, backHandler, onDone = { shell.select(Section.CALENDAR) })
                 true -> {
                     backHandler(shell.canGoBack) { shell.back() }
+                    backHandler(card != null && shell.section == Section.CALENDAR) { card = null }
                     // «Назад» при открытой форме закрывает форму, а не экран под ней.
                     backHandler(form != null) { form = null }
                     AppShell(
@@ -108,6 +115,8 @@ fun App(
                             messages = messages,
                             scope = scope,
                             onForm = { form = it },
+                            card = card,
+                            onCard = { card = it },
                         )
                     }
                     form?.let { key ->

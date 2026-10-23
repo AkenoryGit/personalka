@@ -15,6 +15,7 @@ import com.akenory.personalka.data.restrictions.toRestriction
 import com.akenory.personalka.data.series.Undo
 import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.data.training.SaveResult
+import com.akenory.personalka.data.training.TrainingCardRepository
 import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.BadgeFacts
@@ -223,6 +224,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Форма тренировки и дежурства (5.5): создание, изменение, продление серий. */
     val forms: TrainingRepository = TrainingRepository(db, clock, copied)
+
+    /** Карточка тренировки (5.4) и отмена (5.6): «Проведено», отметка детей, «Вернуть», «Удалить». */
+    val cards: TrainingCardRepository = TrainingCardRepository(db, clock)
 
     /** Форма запрета (5.5): свои запреты, «Удалить запрет» и «Отменить». */
     val restrictions: RestrictionRepository = RestrictionRepository(db, clock)
