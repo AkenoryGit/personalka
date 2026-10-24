@@ -2,7 +2,7 @@ package com.akenory.personalka.server
 
 /**
  * Настройки сервера — из переменных окружения (ТЗ 2.4, 7.4). На VPS их задаёт файл окружения службы
- * `/etc/trener/trener.env` с правами только для неё; образец — `deploy/trener.env.example`.
+ * `/etc/trener/trener.env` с правами только для неё; его пишет `deploy/setup.sh`.
  */
 data class ServerConfig(
     /** Адрес базы, например `jdbc:postgresql://127.0.0.1:5432/trener`. */

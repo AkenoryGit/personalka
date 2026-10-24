@@ -4,7 +4,7 @@
 #   server.sh rollback     — вернуть ближайшую младшую версию, которая не падала (кнопка «Откат сервера»)
 #   server.sh status       — какая версия включена и что отвечает /health
 # Версии лежат в /opt/trener/releases/<N>/personalka-server.jar, включённая — ссылка /opt/trener/current.
-# Пользователю выкладки нужно право `sudo systemctl restart trener` без пароля (deploy/README.md).
+# Запускается от root (выкладка заходит root, как у Planovo); кладёт его deploy/setup.sh.
 set -euo pipefail
 
 ROOT=${TRENER_ROOT:-/opt/trener}
@@ -30,7 +30,9 @@ healthy() {
 link() {
     ln -sfn "releases/$1" "$ROOT/current.new"
     mv -T "$ROOT/current.new" "$ROOT/current"
-    sudo systemctl restart trener
+    # Ручной перезапуск — не «падения подряд»: без сброса после упавшей версии systemd не запустит и прежнюю.
+    systemctl reset-failed trener 2>/dev/null || true
+    systemctl restart trener
 }
 
 enable() {
@@ -45,7 +47,7 @@ enable() {
     fi
     echo "::error title=Сервер::Версия 0.1.$target не ответила на /health за $WAIT с"
     touch "$ROOT/releases/$target/failed"   # «Откат сервера» на неё не вернёт
-    sudo journalctl -u trener -n 30 --no-pager || true
+    journalctl -u trener -n 30 --no-pager || true
     if [ -n "$previous" ] && [ "$previous" != "$target" ]; then
         link "$previous"
         if healthy "$previous"; then

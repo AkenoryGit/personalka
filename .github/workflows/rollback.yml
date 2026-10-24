@@ -1,5 +1,6 @@
 # Ручная кнопка «Откат сервера» (ТЗ 7.4): Actions → «Откат сервера» → Run workflow.
 # Включает ближайшую младшую версию, которая не падала, и проверяет /health (deploy/server.sh rollback).
+# Схема базы назад не откатывается: новые версии только добавляют таблицы и столбцы.
 name: Откат сервера
 
 on:
@@ -15,24 +16,21 @@ permissions:
 jobs:
   rollback:
     name: Откат
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
-    if: vars.TRENER_SSH_HOST != ''
-    env:
-      USER_AT: ${{ vars.TRENER_SSH_USER }}@${{ vars.TRENER_SSH_HOST }}
-      PORT: ${{ vars.TRENER_PORT || '8090' }}
     steps:
-      - name: Доступ по SSH
-        shell: bash
+      - name: Откат на предыдущую версию
         env:
-          KEY: ${{ secrets.TRENER_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.TRENER_SSH_KNOWN_HOSTS }}
+          HOST: ${{ secrets.PERSONALKA_SERVER }}
+          SSH_KEY: ${{ secrets.PERSONALKA_SSH_KEY }}
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
-
-      - name: Откат
-        shell: bash
-        run: ssh "$USER_AT" "TRENER_PORT=$PORT /opt/trener/bin/server.sh rollback"
+          if [ -z "$HOST" ] || [ -z "$SSH_KEY" ]; then
+            echo "::error title=Откат::нет секретов PERSONALKA_SERVER и PERSONALKA_SSH_KEY"
+            exit 1
+          fi
+          HOST=$(printf '%s' "$HOST" | tr -d '[:space:]')
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "root@$HOST" /opt/trener/bin/server.sh rollback
+          rm -f ~/.ssh/deploy

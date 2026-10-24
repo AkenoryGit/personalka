@@ -1,10 +1,9 @@
-# Письмо тренеру, когда trener.service упал несколько раз подряд и systemd его больше не перезапускает.
-# /etc/systemd/system/trener-alert.service; адрес — TRENER_ALERT_EMAIL в /etc/trener/trener.env.
-# Нужна команда `mail` (пакет mailutils, или та, которой уже пишет Planovo) — проверить на шаге 2.7а.
+# Письмо, когда trener.service упал 5 раз за 10 минут и systemd его больше не перезапускает.
+# /etc/systemd/system/trener-alert.service, кладёт deploy/setup.sh. Письмо уходит через planovo-alert —
+# ящик Planovo и адрес ALERT_EMAIL из его секретов: своего ящика у «Персоналки» нет. Нет planovo-alert — только журнал.
 [Unit]
 Description=Письмо о падениях сервера «Персоналки»
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/trener/trener.env
-ExecStart=/bin/sh -c 'journalctl -u trener -n 60 --no-pager | mail -s "Персоналка: сервер упал и не запускается" "$TRENER_ALERT_EMAIL"'
+ExecStart=/bin/sh -c 'if [ -x /usr/local/bin/planovo-alert ]; then exec /usr/local/bin/planovo-alert "Персоналка: сервер упал и не запускается" "Служба trener упала 5 раз за 10 минут и больше не перезапускается. Журнал: journalctl -u trener -n 100. Откат: Actions → Откат сервера в репозитории personalka."; else echo "trener-alert: нет planovo-alert, письмо не отправлено" >&2; fi'

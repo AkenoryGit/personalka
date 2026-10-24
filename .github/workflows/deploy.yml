@@ -1,6 +1,8 @@
-# Выкладка сервера на VPS (ТЗ 7.4): тесты и сборка — «Сборка» (build.yml) в main, отсюда — копирование по SSH,
-# переключение версии и проверка /health; не ответил — сервер сам возвращает прежнюю версию (deploy/server.sh).
-# Пока на GitHub не заданы переменная TRENER_SSH_HOST и секреты доступа (deploy/README.md), выкладка пропускается.
+# Выкладка сервера на VPS Planovo (ТЗ 7.4) — по образцу «Сервера» Planovo. Тесты и jar — «Сборка» (build.yml) в main.
+# Здесь: «Проверка установки» — deploy/setup.sh и переключение версий на чистой Ubuntu 24.04, потом «Выкладка» —
+# по SSH от root (секреты PERSONALKA_SERVER и PERSONALKA_SSH_KEY): setup.sh ставит или обновляет пользователя,
+# базу, службу и блок Caddy, server.sh включает новую версию; не ответила на /health — сервер сам возвращает прежнюю.
+# Без секретов выкладка пропускается. Проверка установки идёт и в ветках, где менялись deploy/ или этот файл.
 name: Выкладка сервера
 
 on:
@@ -8,29 +10,116 @@ on:
     workflows: ["Сборка"]
     types: [completed]
     branches: [main]
+  push:
+    branches-ignore: [main]
+    paths:
+      - 'deploy/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
-
-# Одна выкладка или откат за раз; начатую не прерывать — иначе сервер останется между версиями.
-concurrency:
-  group: server
-  cancel-in-progress: false
 
 permissions:
   contents: read
 
+env:
+  DOMAIN: trener.planovo-app.ru
+
 jobs:
-  deploy:
-    name: Выкладка
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  setup-check:
+    name: Проверка установки
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     if: >-
-      vars.TRENER_SSH_HOST != '' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     env:
       GH_TOKEN: ${{ github.token }}
-      USER_AT: ${{ vars.TRENER_SSH_USER }}@${{ vars.TRENER_SSH_HOST }}
-      PORT: ${{ vars.TRENER_PORT || '8090' }}
+    steps:
+      - name: Код
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # В ветке jar — из main: проверяется установка, а сервер тот же.
+      - name: Сервер из «Последней сборки»
+        run: |
+          gh release download latest-build --pattern personalka-server.jar
+          VERSION=$(unzip -p personalka-server.jar META-INF/MANIFEST.MF | tr -d '\r' | sed -n 's/^Implementation-Version: //p')
+          [[ "$VERSION" =~ ^0\.1\.[0-9]+$ ]] || { echo "::error title=Проверка установки::Нет номера версии в personalka-server.jar"; exit 1; }
+          echo "N=${VERSION#0.1.}" >> "$GITHUB_ENV"
+
+      - name: Установка рядом с Planovo, переключение, откат
+        run: |
+          set -euxo pipefail
+          # Как на VPS: Caddy уже стоит, в Caddyfile — сайт Planovo.
+          sudo apt-get install -y -qq --no-install-recommends caddy >/dev/null
+          printf '%s\n' 'planovo.test {' '	tls internal' '	respond "planovo"' '}' | sudo tee /etc/caddy/Caddyfile >/dev/null
+          sudo systemctl reload caddy
+          sudo TRENER_TEST=1 bash deploy/setup.sh
+          sudo install -d /opt/trener/releases/$N
+          sudo install -m 644 personalka-server.jar /opt/trener/releases/$N/
+          sudo /opt/trener/bin/server.sh switch $N
+          # Ответ через Caddy по поддомену: ok и нужная версия (ответ — в переменную, чтобы grep -q не обрывал curl).
+          health() {
+            local body
+            body=$(curl -fsSk --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/health")
+            grep -qx ok <<<"$body" && grep -qx "версия 0.1.$1" <<<"$body"
+          }
+          planovo() { test "$(curl -fsSk --resolve planovo.test:443:127.0.0.1 https://planovo.test)" = planovo; }
+          health $N
+          planovo
+          # Повторная установка ничего не ломает: тот же пароль базы, одна строка import, сервер отвечает.
+          PASS=$(sudo cat /etc/trener/db-password)
+          sudo TRENER_TEST=1 bash deploy/setup.sh
+          test "$(sudo cat /etc/trener/db-password)" = "$PASS"
+          test "$(grep -cxF 'import /etc/caddy/sites/*.caddy' /etc/caddy/Caddyfile)" = 1
+          health $N
+          planovo
+          # Выкладка Planovo переписывает Caddyfile целиком (со строкой import) — сайт «Персоналки» остаётся.
+          printf '%s\n' 'planovo.test {' '	tls internal' '	respond "planovo"' '}' 'import /etc/caddy/sites/*.caddy' \
+            | sudo tee /etc/caddy/Caddyfile >/dev/null
+          sudo systemctl reload caddy
+          health $N
+          planovo
+          # Версия, которая не ответила своим номером, не остаётся: сервер возвращает прежнюю и помечает её упавшей.
+          M=$((N + 1))
+          sudo install -d /opt/trener/releases/$M
+          sudo install -m 644 personalka-server.jar /opt/trener/releases/$M/
+          if sudo TRENER_WAIT=20 /opt/trener/bin/server.sh switch $M; then echo "упавшая версия осталась" >&2; exit 1; fi
+          test "$(readlink -f /opt/trener/current)" = /opt/trener/releases/$N
+          test -f /opt/trener/releases/$M/failed
+          health $N
+          # Откатываться некуда — откат честно говорит об этом.
+          if sudo /opt/trener/bin/server.sh rollback; then echo "откат без версии старше" >&2; exit 1; fi
+          # Секреты: настройки — root и служба, пароль базы — только root; к базе trener чужие роли не подключаются.
+          test "$(sudo stat -c '%a %U:%G' /etc/trener/trener.env)" = "640 root:trener"
+          test "$(sudo stat -c '%a %U' /etc/trener/db-password)" = "600 root"
+          sudo -u postgres psql -qc "CREATE ROLE stranger LOGIN"
+          test "$(sudo -u postgres psql -tAc "SELECT has_database_privilege('stranger', 'trener', 'CONNECT')")" = f
+          # Письмо о падениях без planovo-alert — только запись в журнал, не ошибка.
+          sudo systemctl start trener-alert.service
+          systemctl is-enabled trener caddy postgresql
+
+      - name: Журнал при ошибке
+        if: failure()
+        run: |
+          for unit in trener caddy postgresql; do
+            body=$(sudo journalctl -u "$unit" -n 25 --no-pager 2>&1 | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')
+            echo "::error title=Журнал $unit::$body"
+          done
+
+  deploy:
+    name: Выкладка
+    needs: setup-check
+    # Из main: после зелёной «Сборки» или кнопкой Run workflow (первая выкладка — сразу после того, как добавлены секреты).
+    if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Одна выкладка или откат за раз; начатую не прерывать — иначе сервер останется между версиями.
+    concurrency:
+      group: server
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Код
         uses: actions/checkout@v7
@@ -38,7 +127,6 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Сервер из «Последней сборки»
-        shell: bash
         run: |
           WANT="${{ github.event.workflow_run.head_sha }}"
           TARGET=$(gh release view latest-build --json targetCommitish --jq .targetCommitish)
@@ -52,23 +140,60 @@ jobs:
           [[ "$VERSION" =~ ^0\.1\.[0-9]+$ ]] || { echo "::error title=Выкладка::Нет номера версии в personalka-server.jar"; exit 1; }
           echo "N=${VERSION#0.1.}" >> "$GITHUB_ENV"
 
-      - name: Доступ по SSH
+      - name: Установка и переключение версии
         if: env.SKIP != '1'
-        shell: bash
         env:
-          KEY: ${{ secrets.TRENER_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.TRENER_SSH_KNOWN_HOSTS }}
+          HOST: ${{ secrets.PERSONALKA_SERVER }}
+          SSH_KEY: ${{ secrets.PERSONALKA_SSH_KEY }}
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          if [ -z "$HOST" ] || [ -z "$SSH_KEY" ]; then
+            echo "::notice title=Выкладка::сервер ещё не подключён (нет секретов PERSONALKA_SERVER и PERSONALKA_SSH_KEY) — пропускаю"
+            exit 0
+          fi
+          set -euo pipefail
+          HOST=$(printf '%s' "$HOST" | tr -d '[:space:]')
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          OPTS=(-i ~/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          tar -czf deploy.tar.gz deploy
+          scp "${OPTS[@]}" personalka-server.jar deploy.tar.gz "root@$HOST:/root/"
+          if ! ssh "${OPTS[@]}" "root@$HOST" "set -e
+            rm -rf /root/personalka-deploy && mkdir /root/personalka-deploy
+            tar -xzf /root/deploy.tar.gz -C /root/personalka-deploy
+            TRENER_DOMAIN=$DOMAIN bash /root/personalka-deploy/deploy/setup.sh
+            install -d /opt/trener/releases/$N
+            install -m 644 /root/personalka-server.jar /opt/trener/releases/$N/personalka-server.jar
+            rm -f /root/personalka-server.jar /root/deploy.tar.gz
+            /opt/trener/bin/server.sh switch $N" 2>&1 | tee deploy.log; then
+            rm -f ~/.ssh/deploy
+            body=$(tail -25 deploy.log | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')
+            echo "::error title=Выкладка не удалась::$body"
+            exit 1
+          fi
+          rm -f ~/.ssh/deploy
+          # Журнал выкладки из облачной сессии не скачать — главное выносим в итоги сборки.
+          grep '^ИТОГ: ' deploy.log | tail -1 | sed 's/^ИТОГ: /::notice title=Сервер настроен::/' || true
+          echo "CHECK=1" >> "$GITHUB_ENV"
 
-      - name: Копирование и переключение версии
-        if: env.SKIP != '1'
-        shell: bash
+      - name: Снаружи по HTTPS
+        if: env.CHECK == '1'
         run: |
-          ssh "$USER_AT" "mkdir -p /opt/trener/releases/$N /opt/trener/bin"
-          scp personalka-server.jar "$USER_AT:/opt/trener/releases/$N/personalka-server.jar.part"
-          scp deploy/server.sh "$USER_AT:/opt/trener/bin/server.sh"
-          ssh "$USER_AT" "mv /opt/trener/releases/$N/personalka-server.jar.part /opt/trener/releases/$N/personalka-server.jar && chmod +x /opt/trener/bin/server.sh && TRENER_PORT=$PORT /opt/trener/bin/server.sh switch $N"
+          # Первый сертификат Let's Encrypt Caddy получает за десятки секунд.
+          ok=""
+          for _ in $(seq 1 18); do
+            if body=$(curl -fsS --max-time 10 "https://$DOMAIN/health"); then ok=1; break; fi
+            sleep 10
+          done
+          if [ -n "$ok" ]; then
+            echo "$body"
+            echo "::notice title=Выкладка::версия 0.1.$N работает: https://$DOMAIN/health"
+          else
+            echo "::warning title=Выкладка::сервер запущен, но https://$DOMAIN ещё не отвечает — проверьте запись A в DNS (сертификат Caddy получит сам)"
+          fi
+          # Planovo на том же сервере — работает как раньше.
+          if curl -fsS --max-time 10 -o /dev/null https://planovo-app.ru/health; then
+            echo "::notice title=Planovo::https://planovo-app.ru/health отвечает"
+          else
+            echo "::warning title=Planovo::https://planovo-app.ru/health не отвечает — проверить Planovo"
+          fi
