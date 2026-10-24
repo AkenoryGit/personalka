@@ -6,6 +6,7 @@ import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.Samples
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.domain.format.AccountFormat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -169,6 +170,48 @@ class CabinetRepositoryTest {
         assertTrue(consent.photo)
         assertEquals("Лебедева Анна", consent.givenBy)
         assertEquals(Samples.NOW, consent.revokedAt)
+    }
+
+    @Test
+    fun revokedConsentIsDueUntilTheClientIsDeletedAndSurvivesOffline(): Unit = runBlocking {
+        val a = phone()
+        val other = Samples.client("Соколов", "Пётр")
+        a.db.clientDao().upsertClient(client)
+        a.db.clientDao().upsertClient(other)
+        server.consents[client.id] = consentJson(client.id, photo = true, revokedAt = Samples.NOW)
+        server.consents[other.id] = consentJson(other.id, photo = false, revokedAt = null)
+        assertTrue(a.cabinets.due.first().isEmpty(), "до ответа сервера пунктов нет")
+
+        a.cabinets.refresh()
+        assertEquals(setOf(client.id, other.id), a.cabinets.consents.value.keys)
+        val due = a.cabinets.due.first().single()
+        assertEquals(client.id, due.clientId)
+        assertEquals("Лебедева", due.name.lastName)
+
+        // Без связи и после перезапуска (новый репозиторий с тем же хранилищем) пункт на месте.
+        server.offline = true
+        a.cabinets.refresh()
+        val again = CabinetRepository(a.db, CabinetApi(server.client) { "https://trener.example.ru/" }, a.tokens, a.secrets, { Samples.NOW })
+        assertEquals(client.id, again.due.first().single().clientId)
+        server.offline = false
+
+        // «Удалить полностью» — пункт уходит.
+        a.db.clientDao().eraseClient(client.id)
+        assertTrue(a.cabinets.due.first().isEmpty())
+
+        // Сервер согласий больше не отдаёт — память стирается.
+        server.consents.clear()
+        a.cabinets.refresh()
+        assertTrue(a.cabinets.consents.value.isEmpty())
+        assertNull(a.secrets.read(CabinetRepository.CONSENTS_KEY))
+    }
+
+    private fun consentJson(id: String, photo: Boolean, revokedAt: Long?) = buildJsonObject {
+        put("client_id", id)
+        put("accepted_at", Samples.NOW - 86_400_000L)
+        put("photo", photo)
+        put("given_by_name", "Родитель Тестовый")
+        put("revoked_at", revokedAt)
     }
 
     @Test

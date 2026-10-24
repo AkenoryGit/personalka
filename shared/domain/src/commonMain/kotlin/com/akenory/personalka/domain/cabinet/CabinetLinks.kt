@@ -1,6 +1,7 @@
 package com.akenory.personalka.domain.cabinet
 
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import kotlinx.datetime.LocalDate
 
@@ -14,6 +15,9 @@ data class ConsentInfo(val acceptedAt: Long, val photo: Boolean, val givenBy: St
 data class ConsentLine(val text: String, val state: ConsentState)
 
 enum class ConsentState { GIVEN, NONE, REVOKED }
+
+/** Клиент, чьи данные надо удалить после отзыва согласия (6.1, шаг 2.13а): [deleteBy] — последний день срока. */
+data class ConsentDue(val clientId: String, val name: ClientName, val deleteBy: LocalDate)
 
 /**
  * Ссылки кабинетов в приложении (ТЗ 5.9, 6.1, 3.7; шаг 2.13): адрес, код доступа, текст «Отправить», состояние
@@ -64,4 +68,24 @@ object CabinetLinkRules {
         val given: LocalDate = ClubTime.now(info.acceptedAt).date
         return ConsentLine(CabinetLinkFormat.consentGiven(given, info.photo), ConsentState.GIVEN)
     }
+
+    /** До какого дня удалить данные клиента (6.1): 30 дней от отзыва по часам клуба; не отозвано — `null`. */
+    fun deleteBy(info: ConsentInfo?): LocalDate? = info?.revokedAt?.let { ConsentRules.deleteBy(ClubTime.now(it).date) }
+
+    /**
+     * Пометка «Нет согласия на фото» у ссылки в «Инфо» (6.1): родитель отметил согласие без галочки фото или отозвал
+     * его — ссылки «Фото и видео» в кабинете нет. Согласия ещё нет — пометки нет: окно «Кабинет» говорит,
+     * что его пока нет, а тренеру без кабинетов пометка ни к чему (10.7).
+     */
+    fun noPhoto(info: ConsentInfo?): Boolean = info != null && (info.revokedAt != null || !info.photo)
+
+    /**
+     * Пункт «Удалить данные клиента» в «Нужно сделать» (5.2, 6.1): отозванные согласия клиентов, которые ещё есть
+     * в телефоне ([names] — по id; «Удалить полностью» убирает клиента — уходит и пункт), ближайший срок первым.
+     */
+    fun due(consents: Map<String, ConsentInfo>, names: Map<String, ClientName>): List<ConsentDue> =
+        consents.mapNotNull { (id, info) ->
+            val name = names[id] ?: return@mapNotNull null
+            deleteBy(info)?.let { ConsentDue(id, name, it) }
+        }.sortedWith(compareBy({ it.deleteBy }, { it.name.lastName }, { it.name.firstName }))
 }

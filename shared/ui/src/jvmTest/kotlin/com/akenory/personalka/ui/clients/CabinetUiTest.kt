@@ -27,9 +27,11 @@ import com.akenory.personalka.data.sync.SyncApi
 import com.akenory.personalka.data.sync.SyncRepository
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.CabinetLinkFormat
+import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.home.todoTag
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.settings.SyncTools
@@ -37,6 +39,8 @@ import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -144,6 +148,36 @@ class CabinetUiTest {
         onNodeWithTag(CABINET_SEND_TAG).performClick()
         assertFalse(shared.last() == text)
         assertFalse("Код для входа" in shared.last())
+    }
+
+    @Test
+    fun revokedConsentIsATodoAndNoPhotoIsMarkedInInfo() = runComposeUiTest {
+        val noPhoto = runBlocking { clients.create(ClientDraft("Орлова", "Ксения", mediaUrl = "https://disk.yandex.ru/d/abc")) }
+        val revoked = runBlocking { clients.create(ClientDraft("Соколов", "Пётр")) }
+        server.consents[noPhoto] = consent(noPhoto, photo = false, revokedAt = null)
+        server.consents[revoked] = consent(revoked, photo = true, revokedAt = TestData.clock())
+        runBlocking { settings.saveCabinets(true, "+7 912 000-00-00") }
+        show()
+
+        // «Нужно сделать»: «Удалить данные клиента» со сроком 30 дней, нажатие — карточка клиента.
+        awaitNode(hasTestTag(todoTag(TodoKind.CONSENT_REVOKED)))
+        onNodeWithText("Удалить данные клиента").assertExists()
+        onNodeWithText("Соколов\u00A0П. · осталось 30\u00A0дней").assertExists()
+        onNodeWithTag(todoTag(TodoKind.CONSENT_REVOKED)).performClick()
+        awaitNode(hasText("Соколов Пётр"))
+
+        // «Инфо»: у ссылки на фото — «Нет согласия на фото»; у клиента с согласием на фото пометки бы не было.
+        openCard("Орлова Ксения")
+        awaitNode(hasTestTag(CLIENT_NO_PHOTO_TAG))
+        onNodeWithText(CabinetLinkFormat.NO_PHOTO).assertExists()
+    }
+
+    private fun consent(id: String, photo: Boolean, revokedAt: Long?) = buildJsonObject {
+        put("client_id", id)
+        put("accepted_at", TestData.clock() - 86_400_000L)
+        put("photo", photo)
+        put("given_by_name", "Родитель Тестовый")
+        put("revoked_at", revokedAt)
     }
 
     @Test

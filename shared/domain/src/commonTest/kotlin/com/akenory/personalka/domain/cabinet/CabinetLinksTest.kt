@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.cabinet
 
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -78,5 +79,45 @@ class CabinetLinksTest {
         assertEquals("Кабинет · Орлова К.", CabinetLinkFormat.title("Орлова", "Ксения"))
         assertEquals("4719 · спрашивается при входе", CabinetLinkFormat.codeOn("4719"))
         assertEquals("Спрашивается при входе", CabinetLinkFormat.codeOn(null))
+    }
+
+    @Test
+    fun noPhotoMarkOnlyWhenParentSaidNoOrRevoked() {
+        assertEquals(false, CabinetLinkRules.noPhoto(null), "согласия ещё нет — пометки нет")
+        assertEquals(false, CabinetLinkRules.noPhoto(ConsentInfo(now, photo = true, givenBy = null, revokedAt = null)))
+        assertTrue(CabinetLinkRules.noPhoto(ConsentInfo(now, photo = false, givenBy = null, revokedAt = null)))
+        assertTrue(CabinetLinkRules.noPhoto(ConsentInfo(now, photo = true, givenBy = null, revokedAt = now)))
+    }
+
+    @Test
+    fun revokedConsentsAreDueNearestFirstAndOnlyForClientsInThePhone() {
+        val day = 86_400_000L
+        val consents = mapOf(
+            "a" to ConsentInfo(now - 10 * day, photo = true, givenBy = "Орлова Анна", revokedAt = now),
+            "b" to ConsentInfo(now - 10 * day, photo = false, givenBy = null, revokedAt = now - 5 * day),
+            "c" to ConsentInfo(now - 10 * day, photo = true, givenBy = null, revokedAt = null),
+            "gone" to ConsentInfo(now - 10 * day, photo = true, givenBy = null, revokedAt = now),
+        )
+        val names = mapOf("a" to ClientName("Орлова", "Ксения"), "b" to ClientName("Соколов", "Пётр"), "c" to ClientName("Белова", "Ия"))
+        val due = CabinetLinkRules.due(consents, names)
+        assertEquals(listOf("b", "a"), due.map { it.clientId })
+        assertEquals(LocalDate(2026, 11, 14), due[0].deleteBy, "отозвано 15.10 — удалить до 14.11")
+        assertEquals(LocalDate(2026, 11, 19), CabinetLinkRules.deleteBy(consents["a"]))
+        assertNull(CabinetLinkRules.deleteBy(consents["c"]))
+
+        assertEquals("Удалить данные клиента", CabinetLinkFormat.deleteData(1))
+        assertEquals("Удалить данные клиентов", CabinetLinkFormat.deleteData(2))
+        assertEquals("Соколов\u00A0П., Орлова\u00A0К. · осталось 25\u00A0дней", CabinetLinkFormat.deleteNote(due.map { it.name }, due[0].deleteBy, today))
+    }
+
+    @Test
+    fun daysLeft() {
+        val by = LocalDate(2026, 11, 19)
+        assertEquals("осталось 30\u00A0дней", CabinetLinkFormat.left(by, LocalDate(2026, 10, 20)))
+        assertEquals("остался 21\u00A0день", CabinetLinkFormat.left(by, LocalDate(2026, 10, 29)))
+        assertEquals("осталось 2\u00A0дня", CabinetLinkFormat.left(by, LocalDate(2026, 11, 17)))
+        assertEquals("остался 1\u00A0день", CabinetLinkFormat.left(by, LocalDate(2026, 11, 18)))
+        assertEquals("сегодня последний день", CabinetLinkFormat.left(by, by))
+        assertEquals("срок прошёл 19.11", CabinetLinkFormat.left(by, LocalDate(2026, 11, 20)))
     }
 }

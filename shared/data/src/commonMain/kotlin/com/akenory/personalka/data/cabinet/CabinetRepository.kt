@@ -6,9 +6,17 @@ import com.akenory.personalka.data.account.string
 import com.akenory.personalka.data.backup.BackupPlatform
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.domain.cabinet.CabinetLinkRules
+import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.domain.cabinet.ConsentInfo
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.AccountFormat
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -68,6 +76,9 @@ sealed interface CabinetResult {
  * SHA-256 токена; код сервер хэширует сам. Выключатель «Кабинет открыт» — `client.cabinetEnabled`, он уходит
  * на сервер обычной синхронизацией.
  *
+ * Согласия всех клиентов (шаг 2.13а) — [consents]: каждый ответ сервера их обновляет, телефон помнит последний ответ
+ * в [secrets] — «Удалить данные клиента» в «Нужно сделать» не пропадает без связи и после перезапуска.
+ *
  * @param tokens токен сессии тренера — тот же, что у входа.
  */
 class CabinetRepository(
@@ -79,6 +90,30 @@ class CabinetRepository(
     private val random: (Int) -> ByteArray = BackupPlatform::randomBytes,
 ) {
     private val clients = db.clientDao()
+
+    private val consentState by lazy { MutableStateFlow(loadConsents()) }
+
+    /** Последнее согласие каждого клиента по id — из последнего ответа сервера. */
+    val consents: StateFlow<Map<String, ConsentInfo>> get() = consentState.asStateFlow()
+
+    /** «Удалить данные клиента» (5.2, 6.1): отозванные согласия клиентов, которые ещё есть в телефоне. */
+    val due: Flow<List<ConsentDue>>
+        get() = combine(consentState, clients.observeAllClients()) { consents, all ->
+            CabinetLinkRules.due(consents, all.associate { it.id to ClientName(it.lastName, it.firstName) })
+        }
+
+    /** Обновить согласия с сервера — после синхронизации; без связи остаётся прежнее. */
+    suspend fun refresh() {
+        val token = tokens.read() ?: return
+        val json = try {
+            api.list(token)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AccountException) {
+            return
+        }
+        remember(json)
+    }
 
     /** Ссылка и согласие клиента: с сервера, без связи — что помнит телефон. */
     suspend fun status(clientId: String): CabinetStatus {
@@ -93,8 +128,7 @@ class CabinetRepository(
             return offline.copy(problem = e.message)
         }
         val server = (json["cabinets"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.firstOrNull { it.string("client_id") == clientId }
-        val consent = (json["consents"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
-            .firstOrNull { it.string("client_id") == clientId }?.let(::consent)
+        val consent = remember(json)[clientId]
         if (server == null) {
             // Ссылку отозвали (отзыв согласия, «Отключиться от сервера») — помнить её незачем.
             if (local != null) secrets.write(key(clientId), null)
@@ -166,6 +200,28 @@ class CabinetRepository(
         secrets.write(key(clientId), link.token + (link.pin?.let { ":$it" } ?: ""))
     }
 
+    /** Согласия из ответа сервера — в [consents] и в память телефона. */
+    private fun remember(json: JsonObject): Map<String, ConsentInfo> {
+        val array = (json["consents"] as? JsonArray) ?: JsonArray(emptyList())
+        val map = consents(array)
+        if (map != consentState.value) {
+            consentState.value = map
+            secrets.write(CONSENTS_KEY, if (array.isEmpty()) null else array.toString())
+        }
+        return map
+    }
+
+    private fun loadConsents(): Map<String, ConsentInfo> {
+        val text = secrets.read(CONSENTS_KEY) ?: return emptyMap()
+        val array = runCatching { Json.parseToJsonElement(text) as? JsonArray }.getOrNull() ?: return emptyMap()
+        return consents(array)
+    }
+
+    private fun consents(array: JsonArray): Map<String, ConsentInfo> = array.mapNotNull { it as? JsonObject }.mapNotNull { item ->
+        val id = item.string("client_id") ?: return@mapNotNull null
+        consent(item)?.let { id to it }
+    }.toMap()
+
     private fun consent(json: JsonObject): ConsentInfo? {
         val accepted = (json["accepted_at"] as? JsonPrimitive)?.longOrNull ?: return null
         return ConsentInfo(
@@ -178,6 +234,9 @@ class CabinetRepository(
 
     internal companion object {
         fun key(clientId: String) = "cabinet.$clientId"
+
+        /** Согласия из последнего ответа сервера — JSON-массив `consents` как он пришёл. */
+        const val CONSENTS_KEY = "cabinet-consents"
 
         /** SHA-256 токена в base64url без «=» — как его ждёт сервер (7.1). */
         fun hash(token: String): String =

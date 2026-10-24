@@ -143,8 +143,14 @@ fun App(
         val syncTodo = syncState?.takeIf { it.connected }?.let { s ->
             SyncTodo(SyncRules.late(pending, oldest, s.lastSync, clock()), s.lastSync?.let { ClubTime.now(it) })
         }
-        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo) {
-            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo)
+        // Отозванные согласия (6.1): «Удалить данные клиента» — из последнего ответа сервера, который помнит телефон,
+        // поэтому пункт виден и без связи. Обновляется после каждой синхронизации.
+        val consentDue by remember(cabinets) { cabinets?.repository?.due ?: flowOf(emptyList()) }.collectAsState(initial = emptyList())
+        LaunchedEffect(cabinets, cabinetsOpen, syncState?.lastSync) {
+            if (cabinetsOpen) cabinets?.repository?.refresh()
+        }
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue)
         }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()

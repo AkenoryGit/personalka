@@ -54,7 +54,9 @@ import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.data.training.TrainingCard
+import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.domain.client.ClientName
+import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
@@ -111,7 +113,7 @@ private val FAB_SPACE = 88.dp
 /**
  * Пункт «Нужно сделать» (5.2): значок, текст, подпись, число справа ([count]; `null` — без числа). [trainingId] — что
  * открыть: группу без отметки — её карточку, «Без дневника» — дневник самой ранней; у пункта про копию — `null`,
- * он ведёт в «Настройки → Данные».
+ * он ведёт в «Настройки → Данные». [clientId] — карточка клиента: «Удалить данные клиента» — с ближайшим сроком.
  */
 data class HomeTodo(
     val kind: TodoKind,
@@ -119,6 +121,7 @@ data class HomeTodo(
     val note: String,
     val count: Int?,
     val trainingId: String? = null,
+    val clientId: String? = null,
 )
 
 internal fun CalendarTraining.slot() = HomeSlot(id, start, durationMin, group, cancelled, marked)
@@ -130,7 +133,8 @@ data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
  * Пункты «Нужно сделать» в порядке ТЗ 5.2. С шага 1.16 — группы без отметки и копия (в режиме «Только телефон»),
  * с шага 2.1 — «Без дневника» ([noDiary] — `DiaryRepository.missing`), с шага 2.4 — клиенты без записи ([followup]),
  * с шага 2.4б — освободившееся время листа ожидания ([waiting]), с шага 2.10а — [sync]: сервер подключён — вместо
- * копии «Изменения не отправлены больше суток»; деньги добавит этап 3. [backup] `null` — раздела копии нет (тесты). Их число —
+ * копии «Изменения не отправлены больше суток»; с шага 2.13а — отозванные согласия ([consents] —
+ * `CabinetRepository.due`); деньги добавит этап 3. [backup] `null` — раздела копии нет (тесты). Их число —
  * счётчик дел на значке «Главной».
  */
 fun homeTodos(
@@ -141,6 +145,7 @@ fun homeTodos(
     followup: Followup = Followup.EMPTY,
     waiting: List<WaitRow> = emptyList(),
     sync: SyncTodo? = null,
+    consents: List<ConsentDue> = emptyList(),
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -182,6 +187,18 @@ fun homeTodos(
         HomeRules.backup(backup.folder != null, backup.last, now)?.let { todo ->
             add(HomeTodo(TodoKind.BACKUP, HomeFormat.backup(todo), HomeFormat.backupNote(todo, backup.last), count = null))
         }
+    }
+    if (consents.isNotEmpty()) {
+        // Отозванные согласия (6.1): данные клиента удаляются в течение 30 дней, ближайший срок — в подписи.
+        add(
+            HomeTodo(
+                kind = TodoKind.CONSENT_REVOKED,
+                title = CabinetLinkFormat.deleteData(consents.size),
+                note = CabinetLinkFormat.deleteNote(consents.map { it.name }, consents.first().deleteBy, now.date),
+                count = consents.size,
+                clientId = consents.first().clientId,
+            ),
+        )
     }
 }.sortedBy { it.kind }
 
@@ -237,8 +254,10 @@ fun HomeScreen(
     }
     val onTodo: (HomeTodo) -> Unit = { todo ->
         val id = todo.trainingId
+        val client = todo.clientId
         when {
             todo.kind == TodoKind.NOT_BOOKED || todo.kind == TodoKind.FREED_TIME -> onNoBooking()
+            client != null -> onClient(client)
             id == null -> onBackup()
             todo.kind == TodoKind.NO_DIARY -> onDiary(id)
             else -> open(id)
@@ -513,6 +532,7 @@ private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.FREED_TIME -> PIcons.EventAvailable
     TodoKind.BACKUP -> PIcons.FolderOpen
     TodoKind.NO_DIARY -> PIcons.EditNote
+    TodoKind.CONSENT_REVOKED -> PIcons.Delete
     else -> PIcons.Info
 }
 

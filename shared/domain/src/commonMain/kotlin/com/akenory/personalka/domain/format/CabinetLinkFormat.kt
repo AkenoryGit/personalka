@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.client.ClientName
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
@@ -67,6 +68,28 @@ object CabinetLinkFormat {
     /** «Согласие отозвано 24.10 — удалите данные клиента до 23.11.2026». */
     fun consentRevoked(day: LocalDate, deleteBy: LocalDate): String =
         "Согласие отозвано ${DateFormat.dayMonth(day)} — удалите данные клиента до ${DateFormat.full(deleteBy)}"
+
+    // --- Согласие в «Инфо» и «Нужно сделать» (6.1, 5.2; шаг 2.13а) ---
+
+    /** Пометка у ссылки «Фото и видео» в «Инфо». */
+    const val NO_PHOTO = "Нет согласия на фото"
+
+    /** «Удалить данные клиента»; нескольких — «Удалить данные клиентов». */
+    fun deleteData(count: Int): String = if (count == 1) "Удалить данные клиента" else "Удалить данные клиентов"
+
+    /** Подпись пункта: «Орлова К. · осталось 12 дней»; срок — ближайший. */
+    fun deleteNote(names: List<ClientName>, deleteBy: LocalDate, today: LocalDate): String =
+        FollowupFormat.todoNote(names) + " · " + left(deleteBy, today)
+
+    /** «остался 1 день», «осталось 12 дней», «сегодня последний день», «срок прошёл 23.11». */
+    fun left(deleteBy: LocalDate, today: LocalDate): String {
+        val days = (deleteBy.toEpochDays() - today.toEpochDays()).toLong()
+        return when {
+            days < 0 -> "срок прошёл ${DateFormat.dayMonth(deleteBy)}"
+            days == 0L -> "сегодня последний день"
+            else -> RuText.plural(days, "остался", "осталось", "осталось") + " " + RuText.count(days, "день", "дня", "дней")
+        }
+    }
 
     // --- Настройки «Кабинеты» (5.16) ---
 

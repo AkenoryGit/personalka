@@ -62,6 +62,7 @@ import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
+import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
@@ -100,6 +101,7 @@ import com.akenory.personalka.ui.training.PickBox
 import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.WAIT_LINE_TAG
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -111,6 +113,7 @@ fun relativeRowTag(name: String) = "relative-$name"
 private const val NEW_RESULT = "new"
 const val CARD_ADD_TRAINING_TAG = "card-add-training"
 const val CARD_NOTE_TAG = "card-note"
+const val CLIENT_NO_PHOTO_TAG = "client-no-photo"
 const val CARD_ADD_SERIES_TAG = "card-add-series"
 const val CARD_ADD_RESULT_TAG = "card-add-result"
 const val END_DAY_TAG = "end-day"
@@ -170,6 +173,8 @@ fun ClientCard(
     var resultForm by rememberSaveable(clientId) { mutableStateOf<String?>(null) }
     // Окно «Кабинет» (2.13).
     var cabinetOpen by rememberSaveable(clientId) { mutableStateOf(false) }
+    // Согласия из кабинета (6.1, шаг 2.13а): «Нет согласия на фото» у ссылки в «Инфо».
+    val consents by remember(cabinet) { cabinet?.repository?.consents ?: flowOf(emptyMap()) }.collectAsState(initial = emptyMap())
 
     if (row == null) {
         // Клиента только что удалили или объединили — карточка вот-вот закроется.
@@ -274,7 +279,16 @@ fun ClientCard(
                     when (shownTab) {
                         CardTab.TRAININGS -> TrainingsTab(clientId, loadedTrainings, now, upcomingCount)
                         CardTab.RESULTS -> ResultsTab(clientId, loadedResults, today, onOpen = { resultForm = it.id })
-                        CardTab.INFO -> InfoTab(client, relatives.orEmpty(), today, nav, clients, messages, scope)
+                        CardTab.INFO -> InfoTab(
+                            client,
+                            relatives.orEmpty(),
+                            today,
+                            nav,
+                            clients,
+                            messages,
+                            scope,
+                            noPhoto = cabinet != null && CabinetLinkRules.noPhoto(consents[client.id]),
+                        )
                         CardTab.SCHEDULE -> ScheduleTab(
                             list = schedule,
                             today = today,
@@ -744,6 +758,7 @@ private fun InfoTab(
     clients: ClientRepository,
     messages: MessageState,
     scope: CoroutineScope,
+    noPhoto: Boolean,
 ) {
     val colors = PersonalkaTheme.colors
     val uri = LocalUriHandler.current
@@ -812,6 +827,9 @@ private fun InfoTab(
                 InfoLine(
                     label = "Фото и видео",
                     value = media.removePrefix("https://").removePrefix("http://"),
+                    // Родитель не дал согласия на фото (6.1): в кабинете ссылки нет.
+                    warning = if (noPhoto) CabinetLinkFormat.NO_PHOTO else null,
+                    tag = CLIENT_NO_PHOTO_TAG.takeIf { noPhoto },
                     action = {
                         IconButton(onClick = { runCatching { uri.openUri(if ("://" in media) media else "https://$media") } }) {
                             Icon(PIcons.OpenInNew, contentDescription = "Открыть ссылку", tint = colors.text)
@@ -862,9 +880,16 @@ private fun NoteLine(text: String) {
     }
 }
 
-/** Строка «Инфо»: подпись мелко, значение под ней, справа — действие. */
+/** Строка «Инфо»: подпись мелко, значение под ней, справа — действие; [warning] — пометка под значением. */
 @Composable
-private fun InfoLine(label: String, value: String, muted: Boolean = false, action: (@Composable () -> Unit)? = null) {
+private fun InfoLine(
+    label: String,
+    value: String,
+    muted: Boolean = false,
+    warning: String? = null,
+    tag: String? = null,
+    action: (@Composable () -> Unit)? = null,
+) {
     val colors = PersonalkaTheme.colors
     Row(
         Modifier.fillMaxWidth().heightIn(min = Dimens.row).padding(start = Dimens.space4, end = 4.dp, top = Dimens.space2, bottom = Dimens.space2),
@@ -879,6 +904,14 @@ private fun InfoLine(label: String, value: String, muted: Boolean = false, actio
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (warning != null) {
+                Text(
+                    warning,
+                    Modifier.then(if (tag != null) Modifier.testTag(tag) else Modifier),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.error,
+                )
+            }
         }
         if (action != null) action() else Spacer(Modifier.width(Dimens.space3))
     }
