@@ -1,6 +1,6 @@
 # Блок для общего Caddyfile на VPS (рядом с блоком Planovo, его не трогать).
 # Сертификат Let's Encrypt Caddy выпускает сам, как только поддомен указывает на VPS.
-trener.example.ru {
+trener.planovo-app.ru {
 	encode gzip
 	reverse_proxy 127.0.0.1:8090
 }
