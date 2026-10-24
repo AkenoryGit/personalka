@@ -2,7 +2,9 @@ package com.akenory.personalka.ui.clients
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -58,6 +60,7 @@ class CabinetUiTest {
     private val clients = TestData.clientsOf(settings)
     private val shared = mutableListOf<String>()
     private val copied = mutableListOf<String>()
+    private lateinit var sync: SyncRepository
 
     private fun ComposeUiTest.show(cabinetsOpen: Boolean = true) {
         server.signedUp(EMAIL, PASSWORD)
@@ -68,7 +71,7 @@ class CabinetUiTest {
         val account = AccountRepository(server.api(url), tokens, prefs, "Samsung SM-F976B") { settings.coach.first()?.id }
         runBlocking { account.login(EMAIL, PASSWORD) }
         val db = TestData.dbOf(settings)
-        val sync = SyncRepository(db, SyncApi(server.client) { url }, tokens, prefs, TestData.clock)
+        sync = SyncRepository(db, SyncApi(server.client) { url }, tokens, prefs, TestData.clock)
         val cabinets = CabinetRepository(db, CabinetApi(server.client) { url }, tokens, MemorySecrets(), TestData.clock)
         setContent {
             Box(Modifier.size(412.dp, 900.dp)) {
@@ -76,7 +79,9 @@ class CabinetUiTest {
                     "0.1.0", settings, clients, TestData.groupsOf(settings), TestData.calendarOf(settings),
                     account = account,
                     sync = SyncTools(sync) {},
-                    cabinets = CabinetTools(cabinets, { shared += it }, { copied += it }),
+                    cabinets = CabinetTools(cabinets, { shared += it }, { copied += it }, sync) { address, _, modifier ->
+                        Text(address, modifier.testTag(BROWSER_TAG))
+                    },
                     clock = TestData.clock,
                 )
             }
@@ -172,6 +177,49 @@ class CabinetUiTest {
         onNodeWithText(CabinetLinkFormat.NO_PHOTO).assertExists()
     }
 
+    @Test
+    fun previewOpensTheCabinetAndTellsWhatParentDoesNotSee() = runComposeUiTest {
+        val id = runBlocking { clients.create(ClientDraft("Орлова", "Ксения")) }
+        runBlocking { settings.saveCabinets(true, "+7 912 000-00-00") }
+        show()
+        openCard("Орлова Ксения")
+        awaitNode(hasTestTag(CARD_CABINET_TAG))
+        onNodeWithTag(CARD_CABINET_TAG).performClick()
+        onNodeWithTag(CABINET_OPEN_TAG).performClick()
+        awaitNode(hasTestTag(CABINET_LINK_TAG))
+
+        // Сервер обновляется — правки не уходят, но кабинет показывается: с плашкой, сколько правок родитель не видит.
+        server.schemaVersion -= 1
+        onNodeWithTag(CABINET_PREVIEW_TAG).assertTextContains(CabinetLinkFormat.preview(adult = false))
+        onNodeWithTag(CABINET_PREVIEW_TAG).performClick()
+        awaitNode(hasTestTag(PREVIEW_SCREEN_TAG))
+        onNodeWithTag(BROWSER_TAG).assertTextContains("$url/p/preview-$id")
+        val pending = runBlocking { sync.pendingNow() }
+        assertTrue(pending > 0)
+        onNodeWithTag(PREVIEW_NOT_SEEN_TAG).assertTextContains(CabinetLinkFormat.notSeen(pending, adult = false))
+        assertEquals(listOf(id), server.previews)
+
+        // Крестик — обратно к окну «Кабинет».
+        onNodeWithTag(PREVIEW_CLOSE_TAG).performClick()
+        awaitNode(hasTestTag(CABINET_LINK_TAG))
+
+        // Правки ушли — плашки нет.
+        server.schemaVersion += 1
+        onNodeWithTag(CABINET_PREVIEW_TAG).performClick()
+        awaitNode(hasTestTag(PREVIEW_SCREEN_TAG))
+        assertEquals(0, runBlocking { sync.pendingNow() })
+        assertTrue(onAllNodes(hasTestTag(PREVIEW_NOT_SEEN_TAG)).fetchSemanticsNodes().isEmpty())
+        onNodeWithTag(PREVIEW_CLOSE_TAG).performClick()
+        awaitNode(hasTestTag(CABINET_PREVIEW_TAG))
+
+        // Без связи — «Нужен интернет», кабинет не открывается.
+        server.offline = true
+        onNodeWithTag(CABINET_PREVIEW_TAG).performClick()
+        awaitNode(hasText(CabinetLinkFormat.NEED_INTERNET))
+        assertTrue(onAllNodes(hasTestTag(PREVIEW_SCREEN_TAG)).fetchSemanticsNodes().isEmpty())
+        assertEquals(2, server.previews.size)
+    }
+
     private fun consent(id: String, photo: Boolean, revokedAt: Long?) = buildJsonObject {
         put("client_id", id)
         put("accepted_at", TestData.clock() - 86_400_000L)
@@ -194,6 +242,7 @@ class CabinetUiTest {
 
     private companion object {
         const val EMAIL = "coach@example.ru"
+        const val BROWSER_TAG = "test-browser"
         const val PASSWORD = "пароль-тренера"
     }
 }

@@ -5,11 +5,13 @@ import com.akenory.personalka.data.account.TokenStore
 import com.akenory.personalka.data.account.string
 import com.akenory.personalka.data.backup.BackupPlatform
 import com.akenory.personalka.data.db.PersonalkaDatabase
+import com.akenory.personalka.data.sync.SyncRepository
 import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.domain.cabinet.ConsentInfo
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.AccountFormat
+import com.akenory.personalka.domain.format.CabinetLinkFormat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +70,13 @@ sealed interface CabinetResult {
     data object Done : CabinetResult
 
     data class Failed(val message: String) : CabinetResult
+}
+
+/** «Как видит родитель» (6.4): адрес предпросмотра и сколько правок ещё не ушло на сервер — или текст ошибки. */
+sealed interface CabinetPreview {
+    data class Ready(val url: String, val pending: Int) : CabinetPreview
+
+    data class Failed(val message: String) : CabinetPreview
 }
 
 /**
@@ -172,6 +181,24 @@ class CabinetRepository(
         if (!open) return CabinetResult.Done
         val status = status(clientId)
         return if (status.online && status.link == null) issue(clientId, withPin) else CabinetResult.Done
+    }
+
+    /**
+     * «Как видит родитель» (6.4, шаг 2.13б): сначала обмен [sync] — родитель видит то, что уже на сервере, — потом
+     * токен предпросмотра на 15 минут; [CabinetPreview.Ready.pending] — правки, которые так и не ушли. Без связи —
+     * «Нужен интернет».
+     */
+    suspend fun preview(clientId: String, sync: SyncRepository?): CabinetPreview {
+        val token = tokens.read() ?: return CabinetPreview.Failed(AccountFormat.EXPIRED)
+        sync?.sync()
+        return try {
+            val preview = api.preview(token, clientId).string("token") ?: return CabinetPreview.Failed(AccountFormat.SERVER_ERROR)
+            CabinetPreview.Ready(CabinetLinkRules.previewUrl(api.server(), preview), sync?.pendingNow() ?: 0)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AccountException) {
+            CabinetPreview.Failed(if (e.code == AccountException.OFFLINE) CabinetLinkFormat.NEED_INTERNET else e.message)
+        }
     }
 
     /** Адрес для родителя по токену. */

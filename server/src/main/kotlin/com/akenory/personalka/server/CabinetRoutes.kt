@@ -42,6 +42,8 @@ import java.util.concurrent.ConcurrentHashMap
  * по которой кабинет закрыт, — одинаковый 404 «Ссылка больше не действует». Заголовки защиты и предел 30 запросов в
  * минуту с одного IP (6.2); `robots.txt` запрещает `/c/`. Перед кабинетом — согласие (6.1): `POST /c/{токен}/consent`;
  * отзыв — `GET /c/{токен}/revoke` (подтверждение) и `POST` (отозвать). Политика обработки — `GET /policy/{id тренера}`.
+ * «Как видит родитель» (6.4): `GET /p/{токен предпросмотра}` — тот же кабинет без кода и согласия; «последний раз
+ * открывали» не меняется, отозвать согласие оттуда нельзя.
  *
  * Для приложения (шаг 2.13), с токеном тренера и открытыми «Кабинетами»:
  * - `PUT /api/v1/cabinets/{client_id}` `{token_hash, pin?}` — новая ссылка (прежняя отзывается); `token_hash` —
@@ -50,13 +52,15 @@ import java.util.concurrent.ConcurrentHashMap
  * - `DELETE /api/v1/cabinets/{client_id}` — отозвать ссылку;
  * - `GET /api/v1/cabinets` — действующие ссылки: `client_id`, `created_at`, `last_opened_at`, `pin` (есть ли код),
  *   `token_hash` (телефон узнаёт свою ссылку); и последнее согласие
- *   каждого клиента (`consents`): `client_id`, `accepted_at`, `photo`, `given_by_name`, `revoked_at`.
+ *   каждого клиента (`consents`): `client_id`, `accepted_at`, `photo`, `given_by_name`, `revoked_at`;
+ * - `POST /api/v1/cabinets/{client_id}/preview` — `{token, expires_in}`: токен предпросмотра на 15 минут для
+ *   `/p/{токен}` (шаг 2.13б); кабинет закрыт или ссылки нет — 404 `cabinet_closed`.
  */
 fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: RateLimit) {
     val accounts = auth.accounts
 
     get("/robots.txt") {
-        call.respondText("User-agent: *\nDisallow: /c/\n", ContentType.Text.Plain)
+        call.respondText("User-agent: *\nDisallow: /c/\nDisallow: /p/\n", ContentType.Text.Plain)
     }
 
     get(CabinetHtml.CSS_PATH) {
@@ -71,6 +75,20 @@ fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: Ra
         val doc = database.tx { c -> cabinets.policy(c, accounts, call.parameters["coach"].orEmpty()) }
             ?: return@get call.cabinetHtml(HttpStatusCode.NotFound) { CabinetHtml.message(this, CabinetFormat.POLICY_MISSING, CabinetFormat.POLICY_MISSING_TEXT) }
         call.cabinetHtml { CabinetHtml.policy(this, doc) }
+    }
+
+    // «Как видит родитель» (6.4): признак предпросмотра — короткий токен по сессии тренера, а не параметр в адресе —
+    // посторонний его не подделает. Без кода и согласия, `opened` не пишется; согласия ещё нет — кабинет как после
+    // согласия без фото.
+    get("/p/{token}") {
+        if (!call.withinLimit(limit)) return@get
+        val token = call.parameters["token"].orEmpty()
+        val chartKey = call.request.queryParameters["d"]?.takeIf { it.length <= 32 }
+        val page = database.tx { c ->
+            val access = cabinets.previewAccess(c, accounts, token) ?: return@tx null
+            CabinetView.Page(CabinetRules.page(cabinets.input(c, access, cabinets.consent(c, access)), chartKey), access.coachId)
+        } ?: return@get call.invalid()
+        call.cabinetHtml { CabinetHtml.page(this, page.page, CabinetLinks(policy = policyPath(page.coachId), revoke = null)) }
     }
 
     route("/c/{token}") {
@@ -279,6 +297,22 @@ fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: Ra
             call.respondJson(buildJsonObject { put("status", "ok") })
         }
 
+        post("/{client}/preview") {
+            val token = call.bearer()
+            val clientId = clientId(call)
+            val preview = database.tx { c ->
+                val coach = cabinetCoach(c, token)
+                cabinets.openFor(c, accounts, coach.id, clientId) ?: throw Errors.cabinetClosed()
+                cabinets.preview(coach.id, clientId)
+            }
+            call.respondJson(
+                buildJsonObject {
+                    put("token", preview)
+                    put("expires_in", Cabinets.PREVIEW_MINUTES * 60)
+                },
+            )
+        }
+
         delete("/{client}") {
             val token = call.bearer()
             val clientId = clientId(call)
@@ -392,7 +426,8 @@ private suspend fun ApplicationCall.seeOther(token: String) {
     respond(HttpStatusCode.SeeOther)
 }
 
-/** Адрес в журнале: токен кабинета замаскирован (6.2) — `/c/AbCd…`. */
-fun maskCabinet(path: String): String = CABINET_PATH.replace(path) { "/c/" + it.groupValues[1].take(4) + "…" }
+/** Адрес в журнале: токен кабинета и предпросмотра замаскирован (6.2) — `/c/AbCd…`, `/p/AbCd…`. */
+fun maskCabinet(path: String): String = CABINET_PATH.replace(path) { "/" + it.groupValues[1] + "/" + it.groupValues[2].take(4) + "…" }
 
-private val CABINET_PATH = Regex("/c/([^/?#]+)")
+/** Ссылка кабинета `/c/` и предпросмотр `/p/` (6.4). */
+private val CABINET_PATH = Regex("/([cp])/([^/?#]+)")

@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
         val app = application as PersonalkaApplication
         val backup = BackupTools(app.backup, AndroidFiles(this))
         val sync = SyncTools(app.sync, app.syncRunner::now)
-        val cabinets = CabinetTools(app.cabinets, ::share, ::copy)
+        val cabinets = CabinetTools(app.cabinets, ::share, ::copy, app.sync) { url, onClose, modifier -> AndroidBrowser(url, onClose, modifier) }
         val voice = if (AndroidVoice.availableOn(this)) AndroidVoice(this) else null
         val notifications = AndroidNotifications(this, app.prefs, app::remindersChanged)
         // Пересоздание окна при смене темы не открывает уведомление второй раз.

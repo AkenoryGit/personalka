@@ -62,8 +62,8 @@ import kotlinx.html.tr
 import kotlinx.html.ul
 import kotlinx.html.unsafe
 
-/** Адреса подвала кабинета: политика тренера и отзыв согласия. */
-data class CabinetLinks(val policy: String, val revoke: String)
+/** Адреса подвала кабинета: политика тренера и отзыв согласия; [revoke] `null` — предпросмотр тренера (6.4), там не нажать. */
+data class CabinetLinks(val policy: String, val revoke: String?)
 
 /**
  * HTML кабинета родителя (ТЗ 6.3, макеты 0.7): без JavaScript — сворачивание на `<details>`, код — обычной формой;
@@ -154,7 +154,7 @@ object CabinetHtml {
             p { +CabinetFormat.FOOTER }
             page.consentLine?.let { p("mut num") { +it } }
             a(href = links.policy) { +CabinetFormat.POLICY_LINK }
-            a(href = links.revoke, classes = "dng") { +CabinetFormat.REVOKE }
+            if (links.revoke != null) a(href = links.revoke, classes = "dng") { +CabinetFormat.REVOKE } else span("dng") { +CabinetFormat.REVOKE }
         }
     }
 

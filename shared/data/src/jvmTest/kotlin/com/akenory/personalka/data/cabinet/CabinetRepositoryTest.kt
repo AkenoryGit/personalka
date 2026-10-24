@@ -5,6 +5,10 @@ import com.akenory.personalka.data.account.MemoryTokens
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.Samples
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
+import com.akenory.personalka.data.prefs.MemoryPrefs
+import com.akenory.personalka.data.sync.SyncApi
+import com.akenory.personalka.data.sync.SyncRepository
+import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.AccountFormat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -88,6 +92,36 @@ class CabinetRepositoryTest {
         // Повторное «открыто» новую ссылку не выпускает.
         a.cabinets.setOpen(client.id, open = true, withPin = true)
         assertEquals(url, a.cabinets.status(client.id).link!!.url)
+    }
+
+    @Test
+    fun previewSyncsFirstAndCountsWhatParentDoesNotSee(): Unit = runBlocking {
+        val a = phone()
+        server.serverCopy += EMAIL
+        val prefs = MemoryPrefs().apply { putBoolean(SyncRepository.CONNECTED, true) }
+        val sync = SyncRepository(a.db, SyncApi(server.client) { "https://trener.example.ru" }, a.tokens, prefs) { Samples.NOW }
+        a.db.clientDao().upsertClient(client.copy(sync = client.sync.touched(Samples.NOW)))
+        a.cabinets.setOpen(client.id, open = true, withPin = true)
+        assertTrue(sync.pendingNow() > 0)
+
+        // Сначала обмен: правки на сервере до токена предпросмотра — родитель видит то же, что тренер.
+        val ready = assertIs<CabinetPreview.Ready>(a.cabinets.preview(client.id, sync))
+        assertEquals("https://trener.example.ru/p/preview-${client.id}", ready.url)
+        assertEquals(0, ready.pending)
+        assertTrue(server.liveRows(EMAIL, "client").any { it.id == client.id }, "клиент ушёл на сервер до предпросмотра")
+        assertEquals(listOf(client.id), server.previews)
+
+        // Без связи — «Нужен интернет», токена нет.
+        a.db.clientDao().upsertClient(a.db.clientDao().client(client.id)!!.let { it.copy(sync = it.sync.touched(Samples.NOW + 1), firstName = "Ксюша") })
+        server.offline = true
+        assertEquals(CabinetPreview.Failed(CabinetLinkFormat.NEED_INTERNET), a.cabinets.preview(client.id, sync))
+        server.offline = false
+        assertEquals(1, server.previews.size)
+
+        // Ссылки нет — сервер отвечает, что родитель кабинет не видит.
+        val other = Samples.client("Орлова", "Мария")
+        val closed = assertIs<CabinetPreview.Failed>(a.cabinets.preview(other.id, sync))
+        assertTrue("не видит" in closed.message, closed.message)
     }
 
     @Test

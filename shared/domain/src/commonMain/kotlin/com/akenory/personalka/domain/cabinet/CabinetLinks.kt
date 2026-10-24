@@ -33,6 +33,9 @@ object CabinetLinkRules {
     /** Адрес кабинета: `https://trener.planovo-app.ru/c/<токен>`. */
     fun url(server: String, token: String): String = server.trimEnd('/') + "/c/" + token
 
+    /** Предпросмотр «Как видит родитель» (6.4): `https://trener.planovo-app.ru/p/<токен на 15 минут>`. */
+    fun previewUrl(server: String, token: String): String = server.trimEnd('/') + "/p/" + token
+
     /**
      * Код доступа — 4 цифры из случайных байтов [random] (не меньше 4): 0000–9999 почти поровну — перекос
      * от остатка деления 2³² на 10 000 меньше миллионной доли.

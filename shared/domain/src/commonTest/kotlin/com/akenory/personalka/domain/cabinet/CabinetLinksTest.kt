@@ -2,6 +2,7 @@ package com.akenory.personalka.domain.cabinet
 
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CabinetLinkFormat
+import com.akenory.personalka.domain.format.RuText
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
@@ -79,6 +80,18 @@ class CabinetLinksTest {
         assertEquals("Кабинет · Орлова К.", CabinetLinkFormat.title("Орлова", "Ксения"))
         assertEquals("4719 · спрашивается при входе", CabinetLinkFormat.codeOn("4719"))
         assertEquals("Спрашивается при входе", CabinetLinkFormat.codeOn(null))
+    }
+
+    @Test
+    fun previewStrings() {
+        assertEquals("https://trener.example.ru/p/AbC", CabinetLinkRules.previewUrl("https://trener.example.ru/", "AbC"))
+        assertEquals("Как видит родитель", CabinetLinkFormat.preview(adult = false))
+        assertEquals("Как видит клиент", CabinetLinkFormat.preview(adult = true))
+        val nb = RuText.NBSP
+        assertEquals("Родитель пока не видит 1${nb}последнее изменение", CabinetLinkFormat.notSeen(1, adult = false))
+        assertEquals("Родитель пока не видит 3${nb}последних изменения", CabinetLinkFormat.notSeen(3, adult = false))
+        assertEquals("Клиент пока не видит 12${nb}последних изменений", CabinetLinkFormat.notSeen(12, adult = true))
+        assertEquals("Родитель пока не видит 21${nb}последнее изменение", CabinetLinkFormat.notSeen(21, adult = false))
     }
 
     @Test

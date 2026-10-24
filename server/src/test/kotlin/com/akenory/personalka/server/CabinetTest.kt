@@ -300,7 +300,7 @@ class CabinetTest {
         assertEquals("noindex, nofollow", response.headers["X-Robots-Tag"])
         assertEquals("no-referrer", response.headers["Referrer-Policy"])
         assertEquals("private, no-store", response.headers[HttpHeaders.CacheControl])
-        assertEquals("User-agent: *\nDisallow: /c/\n", client.get("/robots.txt").bodyAsText())
+        assertEquals("User-agent: *\nDisallow: /c/\nDisallow: /p/\n", client.get("/robots.txt").bodyAsText())
         val css = client.get("/cabinet.css")
         assertEquals(HttpStatusCode.OK, css.status)
         assertTrue("prefers-color-scheme:dark" in css.bodyAsText())
@@ -449,7 +449,65 @@ class CabinetTest {
     fun tokenIsMaskedInLogs() {
         assertEquals("/c/AbCd…", maskCabinet("/c/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde"))
         assertEquals("/c/AbCd…", maskCabinet("/c/AbCdEfGh?x=1").substringBefore('?'))
+        assertEquals("/p/AbCd…", maskCabinet("/p/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde"))
         assertEquals("/api/v1/sync/pull", maskCabinet("/api/v1/sync/pull"))
+    }
+
+    /** Токен предпросмотра «Как видит родитель» (6.4) клиента [clientId]; ответ сервера — целиком. */
+    private suspend fun HttpClient.preview(token: String?, clientId: String = childId(0)): HttpResponse = post("/api/v1/cabinets/$clientId/preview") {
+        token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+    }
+
+    private suspend fun HttpClient.previewToken(token: String, clientId: String = childId(0)): String {
+        val response = preview(token, clientId)
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        assertEquals("900", response.obj()["expires_in"].toString())
+        return response.obj()["token"]!!.jsonPrimitive.content
+    }
+
+    @Test
+    fun previewDoesNotChangeLastOpened() = withServer { db ->
+        val (token, _) = setUp(db, pin = "4721", consented = false)
+        suspend fun links() = client.get("/api/v1/cabinets") { header(HttpHeaders.Authorization, "Bearer $token") }.obj()["cabinets"]!!.jsonArray
+        val preview = client.previewToken(token)
+        // Тот же кабинет без кода и без согласия: согласия нет — как после согласия без фото.
+        val page = client.get("/p/$preview").html()
+        listOf("Данилова Ева", "Тренер: Дмитрий Дудник", "Ближайшие", "Отозвать согласие").forEach { assertTrue(it in page, it) }
+        assertFalse("Введите код" in page || "Ваши фамилия и имя" in page)
+        assertFalse("/c/" in page, "ни ссылки родителя, ни отзыва согласия")
+        assertEquals("default-src 'self'", client.get("/p/$preview").headers["Content-Security-Policy"])
+        // Чипы графика работают и в предпросмотре.
+        client.get("/p/$preview?d=50-freestyle-25").html()
+        assertEquals("null", links().single().jsonObject["last_opened_at"].toString(), "предпросмотр — не открытие родителем")
+        assertEquals(0, db.tx { c -> c.queryOne("SELECT count(*) FROM consent_record") { it.getInt(1) } })
+    }
+
+    @Test
+    fun previewTokenIsForCoachOnly() = withServer { db ->
+        val (token, link) = setUp(db)
+        assertEquals(HttpStatusCode.Unauthorized, client.preview(null).status)
+        // Ссылка родителя на месте токена предпросмотра и выдуманный токен — «Ссылка больше не действует».
+        assertTrue("Ссылка больше не действует" in client.get("/p/$link").html(HttpStatusCode.NotFound))
+        assertTrue("Ссылка больше не действует" in client.get("/p/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").html(HttpStatusCode.NotFound))
+
+        // Через 15 минут токен не действует.
+        val preview = client.previewToken(token)
+        client.get("/p/$preview").html()
+        clock += 15 * 60_000L
+        client.get("/p/$preview").html(HttpStatusCode.NotFound)
+
+        // Без ссылки или с закрытым кабинетом предпросмотра нет: родитель не видит ничего.
+        assertEquals(HttpStatusCode.NotFound, client.preview(token, childId(5)).status)
+        val fresh = client.previewToken(token)
+        client.push(token, listOf(row("client", childId(0)) { put("lastName", "Данилова"); put("firstName", "Ева"); put("cabinetEnabled", 0) }.withTime(clock)))
+        client.get("/p/$fresh").html(HttpStatusCode.NotFound)
+        val closed = client.preview(token)
+        assertEquals(HttpStatusCode.NotFound, closed.status)
+        assertEquals("cabinet_closed", closed.obj()["code"]!!.jsonPrimitive.content)
+
+        // Чужой тренер не получит предпросмотр чужого клиента.
+        val (other, _) = signUp(db, "trener@example.ru", features = listOf("cabinets"))
+        assertEquals(HttpStatusCode.NotFound, client.preview(other, childId(1)).status)
     }
 
     @Test

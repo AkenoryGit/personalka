@@ -70,6 +70,9 @@ class FakeServer {
 
     /** Ссылки кабинетов по id клиента и последние согласия (`consents`, 2.12) — их задаёт тест. */
     val cabinets = mutableMapOf<String, Cabinet>()
+
+    /** Клиенты, для которых выдан токен «Как видит родитель» (6.4), по порядку. */
+    val previews = mutableListOf<String>()
     val consents = mutableMapOf<String, JsonObject>()
 
     /** Почты, у которых открыты «Кабинеты» (у администратора открыто всё). */
@@ -200,6 +203,11 @@ class FakeServer {
                     parts.size == 1 && request.method == HttpMethod.Put -> {
                         cabinets[parts[0]] = Cabinet(text("token_hash"), text("pin").ifEmpty { null })
                         respondJson(buildJsonObject { put("status", "ok") })
+                    }
+                    parts.size == 2 && parts[1] == "preview" && request.method == HttpMethod.Post -> {
+                        if (parts[0] !in cabinets) return error(HttpStatusCode.NotFound, "cabinet_closed", "Кабинет закрыт или ссылки нет — родитель его не видит")
+                        previews += parts[0]
+                        respondJson(buildJsonObject { put("token", "preview-${parts[0]}"); put("expires_in", 900) })
                     }
                     parts.size == 2 && parts[1] == "pin" -> {
                         val link = cabinets[parts[0]] ?: return error(HttpStatusCode.NotFound, "no_link", "Ссылки нет — выпустите новую")

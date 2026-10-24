@@ -28,10 +28,12 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 import java.security.SecureRandom
 import java.sql.Connection
+import java.sql.ResultSet
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 
 /** Действующая ссылка на кабинет. */
 data class CabinetAccess(
@@ -137,21 +139,64 @@ class Cabinets(
             WHERE token_hash = ? AND revoked_at IS NULL
             """.trimIndent(),
             Accounts.tokenHash(token),
-        ) {
-            CabinetAccess(
-                it.getLong(1), it.getString(2), it.getString(3), it.getString(4), it.getInt(5),
-                it.getObject(6, OffsetDateTime::class.java)?.toInstant()?.toEpochMilli(),
-            )
-        } ?: return null
-        val coach = accounts.byId(c, access.coachId) ?: return null
-        if (coach.suspended) return null
-        if (Feature.CABINETS !in AccountRules.open(accounts.grants(c, coach), ClubTime.today(now()))) return null
-        val settings = row(c, coach.id, "coach_settings", "coachId", coach.id) ?: return null
-        if (!settings.flag("cabinetsEnabled")) return null
-        val client = row(c, coach.id, "client", "id", access.clientId) ?: return null
-        if (!client.flag("cabinetEnabled")) return null
-        return access
+            row = ::access,
+        ) ?: return null
+        return access.takeIf { isOpen(c, accounts, it) }
     }
+
+    /** Действующая ссылка клиента [clientId] тренера [coachId], если кабинет открыт (как в [open]). */
+    fun openFor(c: Connection, accounts: Accounts, coachId: String, clientId: String): CabinetAccess? = c.queryOne(
+        """
+        SELECT id, coach_id, client_id, pin_hash, pin_failures, pin_blocked_until FROM cabinet_access
+        WHERE coach_id = ? AND client_id = ? AND revoked_at IS NULL
+        """.trimIndent(),
+        coachId, clientId,
+        row = ::access,
+    )?.takeIf { isOpen(c, accounts, it) }
+
+    private fun access(row: ResultSet) = CabinetAccess(
+        row.getLong(1), row.getString(2), row.getString(3), row.getString(4), row.getInt(5),
+        row.getObject(6, OffsetDateTime::class.java)?.toInstant()?.toEpochMilli(),
+    )
+
+    private fun isOpen(c: Connection, accounts: Accounts, access: CabinetAccess): Boolean {
+        val coach = accounts.byId(c, access.coachId) ?: return false
+        if (coach.suspended) return false
+        if (Feature.CABINETS !in AccountRules.open(accounts.grants(c, coach), ClubTime.today(now()))) return false
+        val settings = row(c, coach.id, "coach_settings", "coachId", coach.id) ?: return false
+        if (!settings.flag("cabinetsEnabled")) return false
+        val client = row(c, coach.id, "client", "id", access.clientId) ?: return false
+        return client.flag("cabinetEnabled")
+    }
+
+    // --- «Как видит родитель» (6.4, шаг 2.13б) ---
+
+    private data class Preview(val coachId: String, val clientId: String, val until: Long)
+
+    /** Токены предпросмотра — в памяти сервера: живут 15 минут, после перезапуска их нет — тренер нажмёт ещё раз. */
+    private val previews = ConcurrentHashMap<String, Preview>()
+
+    /**
+     * Токен предпросмотра кабинета клиента [clientId] для тренера [coachId]: 32 случайных байта в base64url на
+     * [PREVIEW_MINUTES] минут. Сервер хранит только SHA-256 — как у ссылок.
+     */
+    fun preview(coachId: String, clientId: String): String {
+        val now = now()
+        previews.entries.removeIf { it.value.until <= now }
+        val bytes = ByteArray(32).also(random::nextBytes)
+        val token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        previews[previewKey(token)] = Preview(coachId, clientId, now + PREVIEW_MINUTES * 60_000L)
+        return token
+    }
+
+    /** Ссылка клиента по токену предпросмотра, если он не просрочен и кабинет открыт; иначе null. */
+    fun previewAccess(c: Connection, accounts: Accounts, token: String): CabinetAccess? {
+        if (token.length !in TOKEN_LENGTH) return null
+        val preview = previews[previewKey(token)]?.takeIf { it.until > now() } ?: return null
+        return openFor(c, accounts, preview.coachId, preview.clientId)
+    }
+
+    private fun previewKey(token: String): String = Base64.getEncoder().encodeToString(Accounts.tokenHash(token))
 
     /** Пропуск из cookie подходит к ссылке и не просрочен. */
     fun passValid(c: Connection, access: CabinetAccess, pass: String?): Boolean {
@@ -413,6 +458,7 @@ class Cabinets(
         /** Токен — 32 байта в base64url: 43 знака; с запасом на другую длину, но не строки любой длины. */
         val TOKEN_LENGTH = 40..64
         const val PIN_ATTEMPTS = 5
+        const val PREVIEW_MINUTES = 15
         const val BLOCK_MINUTES = 15
         const val PASS_DAYS = 30
         const val DAY_MS = 24 * 60 * 60 * 1000L

@@ -4,6 +4,7 @@ import com.akenory.personalka.data.account.serverCall
 import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -28,6 +29,10 @@ class CabinetApi(private val client: HttpClient, private val baseUrl: suspend ()
     suspend fun changePin(token: String, clientId: String, pin: String?) {
         put(token, "/$clientId/pin", "pin" to pin)
     }
+
+    /** «Как видит родитель» (6.4): `token` — токен предпросмотра на 15 минут для `/p/<токен>`. */
+    suspend fun preview(token: String, clientId: String): JsonObject =
+        serverCall { client.post(url("/$clientId/preview")) { bearerAuth(token) } }
 
     /** Адрес сервера — для ссылки, которую увидит родитель. */
     suspend fun server(): String = baseUrl().trimEnd('/')

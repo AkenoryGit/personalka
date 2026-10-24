@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,13 +28,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.cabinet.CabinetPreview
 import com.akenory.personalka.data.cabinet.CabinetRepository
 import com.akenory.personalka.data.cabinet.CabinetResult
 import com.akenory.personalka.data.cabinet.CabinetStatus
 import com.akenory.personalka.data.db.entity.ClientEntity
+import com.akenory.personalka.data.sync.SyncRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.cabinet.ConsentState
@@ -62,18 +67,37 @@ const val CABINET_NEW_TAG = "cabinet-new"
 const val CABINET_ISSUE_TAG = "cabinet-issue"
 const val CABINET_CONSENT_TAG = "cabinet-consent"
 
+const val CABINET_PREVIEW_TAG = "cabinet-preview"
+const val PREVIEW_SCREEN_TAG = "cabinet-preview-screen"
+const val PREVIEW_NOT_SEEN_TAG = "cabinet-preview-not-seen"
+const val PREVIEW_CLOSE_TAG = "cabinet-preview-close"
+
+/**
+ * Встроенный браузер платформы для «Как видит родитель» (6.4): открывает [url] на всё отведённое место; «Назад»
+ * системы — назад по страницам, а с первой — [onClose].
+ */
+typealias CabinetBrowser = @Composable (url: String, onClose: () -> Unit, modifier: Modifier) -> Unit
+
 /**
  * Кабинет в приложении (шаг 2.13): ссылки на сервере и то, что даёт платформа, — системное «Поделиться» [share]
  * и буфер обмена [copy]. Есть только в режиме «С сервером» с открытыми «Кабинетами» (5.9).
+ * «Как видит родитель» (шаг 2.13б) — когда платформа даёт [browser]; перед ним — обмен [sync].
  */
-class CabinetTools(val repository: CabinetRepository, val share: (String) -> Unit, val copy: (String) -> Unit)
+class CabinetTools(
+    val repository: CabinetRepository,
+    val share: (String) -> Unit,
+    val copy: (String) -> Unit,
+    val sync: SyncRepository? = null,
+    val browser: CabinetBrowser? = null,
+)
 
 /**
  * Окно «Кабинет» карточки клиента (5.9, макет ClCabinet): «Кабинет открыт», отметка согласия (6.1), ссылка
  * с «Отправить» и «Скопировать», «Код доступа», «Выпустить новую ссылку», «Последний раз открывали». Без связи —
  * ссылка, которую помнит телефон, её можно отправить; код и новая ссылка — когда сервер ответит.
  *
- * Действия идут в [scope] приложения: окно можно закрыть, не дожидаясь сервера.
+ * Действия идут в [scope] приложения: окно можно закрыть, не дожидаясь сервера. «Как видит родитель» открывает
+ * кабинет на месте окна, «Назад» и крестик возвращают к окну.
  */
 @Composable
 fun CabinetPanel(
@@ -89,8 +113,16 @@ fun CabinetPanel(
     var reload by remember { mutableIntStateOf(0) }
     var status by remember(client.id) { mutableStateOf<CabinetStatus?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var preview by remember(client.id) { mutableStateOf<CabinetPreview.Ready?>(null) }
     LaunchedEffect(client.id, reload) { status = repository.status(client.id) }
     val adult = ClientRules.isAdult(client.birthDate, client.isAdult, today)
+    val browser = tools.browser
+    preview?.let { ready ->
+        if (browser != null) {
+            CabinetPreviewScreen(ready, adult, browser, onClose = { preview = null; reload++ })
+            return
+        }
+    }
 
     fun run(done: String? = null, action: suspend () -> CabinetResult) {
         busy = true
@@ -193,7 +225,36 @@ fun CabinetPanel(
                 subtitle = if (link.pinOn) CabinetLinkFormat.codeOn(link.pin) else CabinetLinkFormat.CODE_OFF,
                 modifier = Modifier.testTag(CABINET_CODE_TAG),
             )
-            HorizontalDivider(color = colors.divider)
+        }
+        if (link != null && (loaded.online || browser != null)) HorizontalDivider(color = colors.divider)
+        // «Как видит родитель» (6.4) — и без связи: нажатие скажет «Нужен интернет».
+        if (link != null && browser != null) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clickable(role = Role.Button, enabled = !busy) {
+                        busy = true
+                        messages.show(CabinetLinkFormat.PREVIEW_LOADING)
+                        scope.launch {
+                            when (val result = repository.preview(client.id, tools.sync)) {
+                                is CabinetPreview.Ready -> preview = result
+                                is CabinetPreview.Failed -> messages.show(result.message)
+                            }
+                            busy = false
+                        }
+                    }
+                    .padding(vertical = Dimens.space2)
+                    .testTag(CABINET_PREVIEW_TAG),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(PIcons.Visibility, contentDescription = null, tint = colors.text, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(Dimens.space4))
+                Text(CabinetLinkFormat.preview(adult), style = MaterialTheme.typography.bodyLarge, color = colors.text, modifier = Modifier.weight(1f))
+                Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+            }
+        }
+        if (link != null && loaded.online) {
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -220,5 +281,43 @@ fun CabinetPanel(
                 color = colors.textMuted,
             )
         }
+    }
+}
+
+/**
+ * «Как видит родитель» (6.4): тот же кабинет во встроенном браузере на месте окна. Сверху — заголовок с крестиком
+ * и, если часть правок не ушла на сервер, плашка «Родитель пока не видит N последних изменений».
+ */
+@Composable
+private fun CabinetPreviewScreen(preview: CabinetPreview.Ready, adult: Boolean, browser: CabinetBrowser, onClose: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Column(Modifier.fillMaxSize().background(colors.bg).testTag(PREVIEW_SCREEN_TAG)) {
+        Row(
+            Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = Dimens.space2, vertical = Dimens.space1),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onClose, Modifier.testTag(PREVIEW_CLOSE_TAG)) { Icon(PIcons.Close, contentDescription = "Закрыть", tint = colors.text) }
+            Column(Modifier.weight(1f).padding(start = Dimens.space2)) {
+                Text(
+                    CabinetLinkFormat.preview(adult),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.text,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(CabinetLinkFormat.PREVIEW_NOTE, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+            }
+        }
+        if (preview.pending > 0) {
+            Row(
+                Modifier.fillMaxWidth().background(colors.errorContainer).padding(Dimens.space3)
+                    .semantics(mergeDescendants = true) {}.testTag(PREVIEW_NOT_SEEN_TAG),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(PIcons.Info, contentDescription = null, tint = colors.onErrorContainer, modifier = Modifier.size(18.dp))
+                Text(CabinetLinkFormat.notSeen(preview.pending, adult), style = MaterialTheme.typography.bodySmall, color = colors.onErrorContainer)
+            }
+        }
+        browser(preview.url, onClose, Modifier.fillMaxWidth().weight(1f))
     }
 }

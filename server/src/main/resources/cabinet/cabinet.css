@@ -110,6 +110,7 @@ h3{margin:0;font:500 16px/24px var(--ff)}
 .b{font-weight:500}
 .ft a{display:inline-flex;align-items:center;min-height:44px;align-self:flex-start}
 .ft a.dng{color:var(--error)}
+.ft span.dng{display:inline-flex;align-items:center;min-height:44px;align-self:flex-start;color:var(--error);text-decoration:underline;text-underline-offset:3px}
 .rv{margin-top:24px}
 .note{padding:16px;display:flex;flex-direction:column;gap:12px}
 .btns{display:flex;flex-direction:column;gap:8px;margin-top:8px}
