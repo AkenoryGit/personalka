@@ -356,6 +356,8 @@ class CalendarUiTest {
         val block = day().blocks.single()
         tapDay(block.x + 20f, block.y + 20f)
         awaitNode(hasTestTag(TRAINING_CARD_TAG))
+        // Рамка карточки — сразу, тренировка в ней — когда прочитается из базы: ждём строку, а не только рамку.
+        awaitNode(hasText(s("вт_20.10 · 16:00–16:50 · 50_мин")))
         onNodeWithText(s("вт_20.10 · 16:00–16:50 · 50_мин")).assertIsDisplayed()
         onNodeWithText(s("через 20_мин")).assertIsDisplayed()
     }
