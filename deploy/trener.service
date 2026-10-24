@@ -1,0 +1,35 @@
+# Служба сервера «Персоналки» (ТЗ 7.4): /etc/systemd/system/trener.service.
+# Отдельно от Planovo: свой пользователь, своя база, свой порт; Java — не больше 384 МБ.
+[Unit]
+Description=Сервер «Персоналки»
+After=network-online.target postgresql.service
+Wants=network-online.target
+# Пять падений за 10 минут — systemd перестаёт перезапускать и отправляет письмо (trener-alert.service).
+StartLimitIntervalSec=600
+StartLimitBurst=5
+OnFailure=trener-alert.service
+
+[Service]
+User=trener
+Group=trener
+EnvironmentFile=/etc/trener/trener.env
+ExecStart=/usr/bin/java -Xmx384m -XX:MaxMetaspaceSize=96m -XX:+UseSerialGC -Xss512k -jar /opt/trener/current/personalka-server.jar
+# 143 — обычная остановка Java по SIGTERM.
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+# Урезанные права: служба только читает свои файлы и ходит в сеть.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=600M
+
+[Install]
+WantedBy=multi-user.target

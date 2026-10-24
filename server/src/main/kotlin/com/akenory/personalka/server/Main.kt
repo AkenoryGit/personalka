@@ -1,8 +1,47 @@
 package com.akenory.personalka.server
 
-import com.akenory.personalka.domain.ClubTime
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationStopped
+import io.ktor.server.application.install
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
+import io.ktor.server.plugins.calllogging.CallLogging
+import io.ktor.server.routing.routing
+import org.slf4j.LoggerFactory
+import kotlin.system.exitProcess
 
-/** Каркас сервера. Ktor, PostgreSQL и выкладка на VPS — шаг 2.7. */
+/** Версия сборки (0.1.N) — из манифеста файла сервера; при запуске из Gradle — «разработка». */
+val serverVersion: String = Database::class.java.`package`?.implementationVersion ?: "разработка"
+
+/** Всё приложение сервера: подключается и в службе, и в тестах (`testApplication`). */
+fun Application.trener(database: Database, version: String = serverVersion) {
+    install(CallLogging)
+    monitor.subscribe(ApplicationStopped) { database.close() }
+    routing {
+        health(version, database)
+    }
+}
+
+/**
+ * Запуск службы `trener.service` (ТЗ 7.4): настройки из окружения, миграции, затем порт.
+ * Ошибка настроек или базы — выход с кодом 1: systemd перезапустит через 5 секунд, а выкладка увидит,
+ * что /health не отвечает, и откатит версию.
+ */
 fun main() {
-    println("Сервер «Персоналки»: каркас. Пояс клуба по умолчанию — ${ClubTime.DEFAULT_ZONE_ID}.")
+    val log = LoggerFactory.getLogger("trener")
+    val config = try {
+        ServerConfig.fromEnv()
+    } catch (e: IllegalArgumentException) {
+        log.error(e.message)
+        exitProcess(1)
+    }
+    log.info("Сервер «Персоналки» $serverVersion: $config")
+    val database = try {
+        Database.connect(config)
+    } catch (e: Exception) {
+        log.error("База не открылась: ${e.message}", e)
+        exitProcess(1)
+    }
+    log.info("Схема базы — версия ${database.schemaVersion}")
+    embeddedServer(Netty, port = config.port, host = config.host) { trener(database) }.start(wait = true)
 }

@@ -1,0 +1,13 @@
+<!-- Журнал сервера — в стандартный вывод: на VPS его собирает journald (`journalctl -u trener`). -->
+<configuration>
+    <appender name="OUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%-5level %logger{20} — %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="OUT"/>
+    </root>
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+</configuration>

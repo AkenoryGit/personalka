@@ -1,0 +1,10 @@
+# Письмо тренеру, когда trener.service упал несколько раз подряд и systemd его больше не перезапускает.
+# /etc/systemd/system/trener-alert.service; адрес — TRENER_ALERT_EMAIL в /etc/trener/trener.env.
+# Нужна команда `mail` (пакет mailutils, или та, которой уже пишет Planovo) — проверить на шаге 2.7а.
+[Unit]
+Description=Письмо о падениях сервера «Персоналки»
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/trener/trener.env
+ExecStart=/bin/sh -c 'journalctl -u trener -n 60 --no-pager | mail -s "Персоналка: сервер упал и не запускается" "$TRENER_ALERT_EMAIL"'

@@ -1,0 +1,74 @@
+# Выкладка сервера на VPS (ТЗ 7.4): тесты и сборка — «Сборка» (build.yml) в main, отсюда — копирование по SSH,
+# переключение версии и проверка /health; не ответил — сервер сам возвращает прежнюю версию (deploy/server.sh).
+# Пока на GitHub не заданы переменная TRENER_SSH_HOST и секреты доступа (deploy/README.md), выкладка пропускается.
+name: Выкладка сервера
+
+on:
+  workflow_run:
+    workflows: ["Сборка"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Одна выкладка или откат за раз; начатую не прерывать — иначе сервер останется между версиями.
+concurrency:
+  group: server
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Выкладка
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      vars.TRENER_SSH_HOST != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    env:
+      GH_TOKEN: ${{ github.token }}
+      USER_AT: ${{ vars.TRENER_SSH_USER }}@${{ vars.TRENER_SSH_HOST }}
+      PORT: ${{ vars.TRENER_PORT || '8090' }}
+    steps:
+      - name: Код
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Сервер из «Последней сборки»
+        shell: bash
+        run: |
+          WANT="${{ github.event.workflow_run.head_sha }}"
+          TARGET=$(gh release view latest-build --json targetCommitish --jq .targetCommitish)
+          if [ -n "$WANT" ] && [ "$TARGET" != "$WANT" ]; then
+            echo "::notice title=Выкладка::В «Последней сборке» уже более новый коммит ${TARGET::7} — его выложит своя выкладка"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          gh release download latest-build --pattern personalka-server.jar
+          VERSION=$(unzip -p personalka-server.jar META-INF/MANIFEST.MF | tr -d '\r' | sed -n 's/^Implementation-Version: //p')
+          [[ "$VERSION" =~ ^0\.1\.[0-9]+$ ]] || { echo "::error title=Выкладка::Нет номера версии в personalka-server.jar"; exit 1; }
+          echo "N=${VERSION#0.1.}" >> "$GITHUB_ENV"
+
+      - name: Доступ по SSH
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          KEY: ${{ secrets.TRENER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.TRENER_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Копирование и переключение версии
+        if: env.SKIP != '1'
+        shell: bash
+        run: |
+          ssh "$USER_AT" "mkdir -p /opt/trener/releases/$N /opt/trener/bin"
+          scp personalka-server.jar "$USER_AT:/opt/trener/releases/$N/personalka-server.jar.part"
+          scp deploy/server.sh "$USER_AT:/opt/trener/bin/server.sh"
+          ssh "$USER_AT" "mv /opt/trener/releases/$N/personalka-server.jar.part /opt/trener/releases/$N/personalka-server.jar && chmod +x /opt/trener/bin/server.sh && TRENER_PORT=$PORT /opt/trener/bin/server.sh switch $N"

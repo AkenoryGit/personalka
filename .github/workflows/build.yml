@@ -2,6 +2,7 @@
 # APK из ветки main — в релизе «Последняя сборка», ссылка постоянная:
 # https://github.com/AkenoryGit/personalka/releases/download/latest-build/personalka.apk
 # Артефакты Actions не используются: их хранилище на аккаунте общее и ограничено 500 МБ.
+# Отсюда же сервер (personalka-server.jar) берёт «Выкладка сервера» — deploy.yml.
 # Итоги (тесты, lint, APK, ошибки) выводятся отметками — их видно через API без полного лога.
 name: Сборка
 
@@ -23,6 +24,25 @@ jobs:
     name: Тесты и APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Тесты сервера (шаг 2.7) идут на настоящем PostgreSQL 16 — той же версии, что на VPS.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: trener_test
+          POSTGRES_PASSWORD: trener_test
+          POSTGRES_DB: trener_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trener_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TRENER_TEST_DB_URL: jdbc:postgresql://127.0.0.1:5432/trener_test
+      TRENER_TEST_DB_USER: trener_test
+      TRENER_TEST_DB_PASSWORD: trener_test
     steps:
       - name: Код
         uses: actions/checkout@v7
@@ -40,7 +60,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew check :androidApp:assembleDebug :tools:import:importJar --continue --console=plain --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew check :androidApp:assembleDebug :tools:import:importJar :server:serverJar --continue --console=plain --stacktrace 2>&1 | tee build-log.txt
 
       - name: Что внутри APK
         if: success()
@@ -89,8 +109,8 @@ jobs:
         run: |
           cp androidApp/build/outputs/apk/debug/androidApp-debug.apk personalka.apk
           gh release delete latest-build --yes --cleanup-tag || true
-          gh release create latest-build personalka.apk tools/import/build/libs/personalka-import.jar \
+          gh release create latest-build personalka.apk tools/import/build/libs/personalka-import.jar server/build/libs/personalka-server.jar \
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Последняя сборка" \
-            --notes "Сборка ${GITHUB_RUN_NUMBER} (версия 0.1.${GITHUB_RUN_NUMBER}) из коммита ${GITHUB_SHA::7}. Ставится поверх прежней, данные сохраняются. personalka-import.jar — утилита импорта таблиц для компьютера: java -jar personalka-import.jar <папка с xlsx>."
+            --notes "Сборка ${GITHUB_RUN_NUMBER} (версия 0.1.${GITHUB_RUN_NUMBER}) из коммита ${GITHUB_SHA::7}. Ставится поверх прежней, данные сохраняются. personalka-import.jar — утилита импорта таблиц для компьютера: java -jar personalka-import.jar <папка с xlsx>. personalka-server.jar — сервер, его берёт «Выкладка сервера»."

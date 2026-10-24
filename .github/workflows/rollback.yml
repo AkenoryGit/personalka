@@ -1,0 +1,38 @@
+# Ручная кнопка «Откат сервера» (ТЗ 7.4): Actions → «Откат сервера» → Run workflow.
+# Включает ближайшую младшую версию, которая не падала, и проверяет /health (deploy/server.sh rollback).
+name: Откат сервера
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: server
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Откат
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: vars.TRENER_SSH_HOST != ''
+    env:
+      USER_AT: ${{ vars.TRENER_SSH_USER }}@${{ vars.TRENER_SSH_HOST }}
+      PORT: ${{ vars.TRENER_PORT || '8090' }}
+    steps:
+      - name: Доступ по SSH
+        shell: bash
+        env:
+          KEY: ${{ secrets.TRENER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.TRENER_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Откат
+        shell: bash
+        run: ssh "$USER_AT" "TRENER_PORT=$PORT /opt/trener/bin/server.sh rollback"
