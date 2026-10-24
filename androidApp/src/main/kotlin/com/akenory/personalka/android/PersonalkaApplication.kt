@@ -15,11 +15,16 @@ import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.prefs.devicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.data.sync.SyncRepository
+import com.akenory.personalka.data.sync.SyncRunner
+import com.akenory.personalka.data.sync.androidSync
 import com.akenory.personalka.ui.reminders.Reminders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -59,6 +64,13 @@ class PersonalkaApplication : Application() {
         )
     }
 
+    /**
+     * Синхронизация (шаг 2.10а): адрес сервера — из базы, токен — тот же, что у [account]. Обмен, пока процесс жив, —
+     * [syncRunner]; при закрытом приложении — [SyncJob].
+     */
+    val sync: SyncRepository by lazy { androidSync(this, database, prefs) { settings.coach.first()?.serverUrl } }
+    val syncRunner: SyncRunner by lazy { SyncRunner(sync) }
+
     /** Напоминания (шаг 2.5): проверка по будильнику ([ReminderReceiver]) и время следующей. */
     val reminders: Reminders by lazy { Reminders(calendar, clients, backup, prefs, System::currentTimeMillis) }
 
@@ -71,6 +83,12 @@ class PersonalkaApplication : Application() {
         // своё «Дневник сразу», выключенная сводка снимает будильник.
         scope.launch {
             reminders.nextCheck().collect { AndroidReminders.schedule(this@PersonalkaApplication, it) }
+        }
+        // Обмен с сервером (7.2, п. 4): сразу при запуске, через 5 секунд после правки, раз в 15 минут; фоновая задача
+        // стоит, пока сервер подключён.
+        syncRunner.start(scope)
+        scope.launch {
+            sync.state.map { it.connected }.distinctUntilChanged().collect { SyncJob.schedule(this@PersonalkaApplication, it) }
         }
     }
 

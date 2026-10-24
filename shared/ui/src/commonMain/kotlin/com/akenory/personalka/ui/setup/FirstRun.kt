@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,7 +59,20 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.data.sync.SyncRepository
+import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.account.AccountRules
+import com.akenory.personalka.domain.account.Feature
+import com.akenory.personalka.domain.format.SyncFormat
+import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.Note
+import com.akenory.personalka.ui.components.OutlineButton
+import com.akenory.personalka.ui.settings.SignInForm
+import com.akenory.personalka.ui.shell.TopBar
+import com.akenory.personalka.ui.shell.systemMillis
+import kotlinx.coroutines.flow.first
 import com.akenory.personalka.domain.format.TypeFormat
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.CoachName
@@ -86,10 +100,16 @@ const val LAST_NAME_TAG = "last-name"
 const val FIRST_NAME_TAG = "first-name"
 const val MIDDLE_NAME_TAG = "middle-name"
 const val NEW_TYPE_ROW_TAG = "new-type"
+const val FIRST_SIGN_IN_TAG = "first-sign-in"
+const val FIRST_LOAD_TAG = "first-load"
+const val FIRST_START_TAG = "first-start"
 internal fun setupTypeTag(name: String) = "setup-type-$name"
 
-/** Экраны первого запуска (ТЗ 5.18); «Новое место» и «Новый тип» открываются поверх «Мест и типов». */
-enum class FirstRunPage { WELCOME, NAME, SETUP, NEW_PLACE, NEW_TYPE }
+/**
+ * Экраны первого запуска (ТЗ 5.18); «Новое место» и «Новый тип» открываются поверх «Мест и типов»; [SIGN_IN] —
+ * «Войти» (второй телефон, шаг 2.10а).
+ */
+enum class FirstRunPage { WELCOME, NAME, SETUP, NEW_PLACE, NEW_TYPE, SIGN_IN }
 
 /** Пункт списка с отметкой: «Лишнее снимите». */
 data class Picked<T>(val item: T, val on: Boolean = true)
@@ -120,7 +140,7 @@ class FirstRunState(
 
     fun back() {
         page = when (page) {
-            FirstRunPage.WELCOME, FirstRunPage.NAME -> FirstRunPage.WELCOME
+            FirstRunPage.WELCOME, FirstRunPage.NAME, FirstRunPage.SIGN_IN -> FirstRunPage.WELCOME
             FirstRunPage.SETUP -> FirstRunPage.NAME
             FirstRunPage.NEW_PLACE, FirstRunPage.NEW_TYPE -> FirstRunPage.SETUP
         }
@@ -183,6 +203,9 @@ class FirstRunState(
  * Первый запуск (ТЗ 5.18): приветствие → ФИО → места и типы → календарь. Меньше минуты; про зарплату
  * и папку копии не спрашивается.
  *
+ * «Войти» (шаг 2.10а) — когда платформа дала [account] и [sync]: вход в аккаунт и данные с сервера
+ * ([SyncRepository.connect] с `takeFromServer`); как только в базе появится тренер, приложение откроется само.
+ *
  * @param onDone вызывается перед записью в базу: приложение откроется на «Календаре».
  */
 @Composable
@@ -190,6 +213,9 @@ fun FirstRun(
     settings: SettingsRepository,
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit,
     onDone: () -> Unit,
+    account: AccountRepository? = null,
+    sync: SyncRepository? = null,
+    clock: () -> Long = ::systemMillis,
 ) {
     val state = rememberSaveable(saver = FirstRunState.Saver) { FirstRunState() }
     val scope = rememberCoroutineScope()
@@ -207,7 +233,13 @@ fun FirstRun(
         // На разложенном Fold — колонка по центру: строки во всю ширину 840 dp читать неудобно.
         Box(Modifier.widthIn(max = 600.dp).fillMaxSize()) {
             when (state.page) {
-                FirstRunPage.WELCOME -> WelcomePage(onStart = { state.page = FirstRunPage.NAME })
+                FirstRunPage.WELCOME -> WelcomePage(
+                    onStart = { state.page = FirstRunPage.NAME },
+                    onSignIn = if (account != null && sync != null) ({ state.page = FirstRunPage.SIGN_IN }) else null,
+                )
+                FirstRunPage.SIGN_IN -> if (account != null && sync != null) {
+                    SignInPage(settings, account, sync, clock, onBack = state::back, onStart = { state.page = FirstRunPage.NAME })
+                }
                 FirstRunPage.NAME -> NamePage(state)
                 FirstRunPage.SETUP -> SetupPage(
                     state = state,
@@ -255,7 +287,7 @@ fun FirstRun(
 }
 
 @Composable
-private fun WelcomePage(onStart: () -> Unit) {
+private fun WelcomePage(onStart: () -> Unit, onSignIn: (() -> Unit)?) {
     val colors = PersonalkaTheme.colors
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Dimens.space8), contentAlignment = Alignment.Center) {
@@ -277,9 +309,91 @@ private fun WelcomePage(onStart: () -> Unit) {
                 )
             }
         }
-        // «Войти» (сервер) и «Восстановить из копии» появятся вместе с сервером (этап 2) и копией (1.15):
-        // выключенное не показывается (10.7).
-        PrimaryButton("Начать на телефоне", onStart, Modifier.fillMaxWidth().padding(Dimens.space4))
+        // «Восстановить из копии» появится отдельно: выключенное не показывается (10.7).
+        PrimaryButton(
+            SyncFormat.START_ON_PHONE,
+            onStart,
+            Modifier.fillMaxWidth().padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space4, bottom = if (onSignIn == null) Dimens.space4 else Dimens.space2),
+        )
+        if (onSignIn != null) {
+            OutlineButton(
+                SyncFormat.FIRST_SIGN_IN,
+                onSignIn,
+                Modifier.fillMaxWidth().padding(start = Dimens.space4, end = Dimens.space4, bottom = Dimens.space4).testTag(FIRST_SIGN_IN_TAG),
+            )
+        }
+    }
+}
+
+/**
+ * «Войти» на первом запуске (ТЗ 5.18, шаг 2.10а): форма входа как в «Аккаунте»; после входа с открытой «Копией
+ * на сервере» — «Загрузить данные». Данные пришли — в базе появился тренер, и приложение открывается само. Копия
+ * не открыта или на сервере пусто — «Начать на телефоне»: сервер при пустом уже подключён, внесённое уйдёт само.
+ */
+@Composable
+private fun SignInPage(
+    settings: SettingsRepository,
+    account: AccountRepository,
+    sync: SyncRepository,
+    clock: () -> Long,
+    onBack: () -> Unit,
+    onStart: () -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    val scope = rememberCoroutineScope()
+    // Сообщений на первом запуске не видно — у формы входа ошибки свои, строкой над кнопкой.
+    val messages = remember { MessageState() }
+    val signedIn by account.account.collectAsState()
+    var loading by remember { mutableStateOf(false) }
+    var empty by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.systemBars))) {
+        TopBar(SyncFormat.FIRST_SIGN_IN, onBack = onBack)
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4),
+            verticalArrangement = Arrangement.spacedBy(Dimens.space3),
+        ) {
+            val current = signedIn
+            if (current == null) {
+                Note(SyncFormat.FIRST_NOTE)
+                SignInForm(account, settings, messages, scope)
+            } else {
+                Text(current.name, style = MaterialTheme.typography.titleMedium, color = colors.text)
+                Text(current.email, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+                val open = Feature.SERVER_COPY in AccountRules.open(current.features, ClubTime.today(clock()))
+                when {
+                    !open || empty -> {
+                        Text(if (empty) SyncFormat.FIRST_EMPTY else SyncFormat.FIRST_CLOSED, style = MaterialTheme.typography.bodyMedium, color = colors.text)
+                        PrimaryButton(SyncFormat.START_ON_PHONE, onStart, Modifier.fillMaxWidth().testTag(FIRST_START_TAG))
+                    }
+                    else -> {
+                        problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.error) }
+                        PrimaryButton(
+                            text = if (loading) SyncFormat.LOADING else SyncFormat.LOAD,
+                            onClick = {
+                                loading = true
+                                problem = null
+                                scope.launch {
+                                    try {
+                                        if (sync.connect(takeFromServer = true)) {
+                                            // Тренер пришёл — приложение уже открывается; не пришёл — на сервере пусто.
+                                            if (settings.coach.first() == null) empty = true
+                                        } else {
+                                            problem = sync.state.value.problem?.let(SyncFormat::problem)
+                                        }
+                                    } finally {
+                                        loading = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag(FIRST_LOAD_TAG),
+                            enabled = !loading,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(Dimens.space6))
+        }
     }
 }
 

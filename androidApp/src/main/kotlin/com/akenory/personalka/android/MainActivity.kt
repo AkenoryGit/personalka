@@ -14,11 +14,15 @@ import com.akenory.personalka.BuildConfig
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.reminders.AppLink
 import com.akenory.personalka.ui.settings.BackupTools
+import com.akenory.personalka.ui.settings.SyncTools
 import kotlinx.coroutines.flow.first
 
 class MainActivity : ComponentActivity() {
     /** Нажатое уведомление (шаг 2.5): приложение открывает нужный экран и сбрасывает ссылку. */
     private var link by mutableStateOf<AppLink?>(null)
+
+    /** Первый показ окна — обмен уже идёт с запуска приложения; дальше каждый возврат — обмен сразу (7.2, п. 4). */
+    private var shown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Экран во весь размер, значки строки состояния — по теме телефона, как и тема приложения.
@@ -28,6 +32,7 @@ class MainActivity : ComponentActivity() {
         // перекладывает экран под новую ширину, открытый раздел и прокрутка остаются на месте.
         val app = application as PersonalkaApplication
         val backup = BackupTools(app.backup, AndroidFiles(this))
+        val sync = SyncTools(app.sync, app.syncRunner::now)
         val voice = if (AndroidVoice.availableOn(this)) AndroidVoice(this) else null
         val notifications = AndroidNotifications(this, app.prefs, app::remindersChanged)
         // Пересоздание окна при смене темы не открывает уведомление второй раз.
@@ -47,6 +52,7 @@ class MainActivity : ComponentActivity() {
                 prefs = app.prefs,
                 backup = backup,
                 account = app.account,
+                sync = sync,
                 voice = voice,
                 reminders = app.reminders,
                 notifications = notifications,
@@ -55,6 +61,12 @@ class MainActivity : ComponentActivity() {
                 backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
             )
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (shown) (application as PersonalkaApplication).syncRunner.now()
+        shown = true
     }
 
     override fun onNewIntent(intent: Intent) {

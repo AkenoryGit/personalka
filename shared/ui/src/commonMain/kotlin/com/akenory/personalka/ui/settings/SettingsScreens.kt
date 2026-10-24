@@ -119,7 +119,8 @@ internal fun typeRowTag(name: String) = "type-$name"
 
 /**
  * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы», «Календарь» (шаг 1.13г) и «Данные»
- * (шаг 1.15, если платформа дала [backup]; в них — «Аккаунт», шаг 2.8а, если есть [account]); остальные разделы
+ * (шаг 1.15, если платформа дала [backup]; в них — «Аккаунт», шаг 2.8а, если есть [account], и «Сервер», шаг 2.10а,
+ * если есть [sync]); остальные разделы
  * появятся в своих шагах (ставки — 3.6), до этого их
  * не видно (10.7).
  *
@@ -142,6 +143,7 @@ fun SettingsScreen(
     reminders: Reminders? = null,
     notifications: NotificationAccess? = null,
     account: AccountRepository? = null,
+    sync: SyncTools? = null,
 ) {
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
@@ -155,7 +157,7 @@ fun SettingsScreen(
         route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces.size, activeTypes.size, shell, onBack)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
-        route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account) { shell.open(SettingsRoute.ACCOUNT) } }
+        route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
         route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close) }
         route == SettingsRoute.PROFILE -> ProfileScreen(settings, scope, messages, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)

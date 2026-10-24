@@ -50,6 +50,7 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDateTime
 
 /**
  * Системные окна платформы для копий: выбор папки и файла, «Поделиться». На Android — Storage Access Framework
@@ -90,7 +91,8 @@ private enum class AfterPassword { NOTHING, SAVE, SHARE }
  * «Настройки → Данные» (ТЗ 5.16, 7.6, шаг 1.15): папка для копий, частота автокопии, шифрование паролем,
  * «Создать копию сейчас», «Поделиться копией», «Восстановить из копии» и выгрузка в календарь (.ics).
  * Сверху — «Аккаунт» (шаг 2.8а), если платформа дала [account]: строка открывает экран входа ([onAccount]).
- * Режим «С сервером» и синхронизация — с шага 2.10 (их пока нет — не показываются, 10.7).
+ * Под ним — «Сервер» (шаг 2.10а, [SyncSection]), если платформа дала [sync]: виден после входа с открытой
+ * «Копией на сервере» или когда сервер уже подключён (10.7).
  */
 @Composable
 internal fun DataSettingsScreen(
@@ -99,6 +101,8 @@ internal fun DataSettingsScreen(
     scope: CoroutineScope,
     onBack: () -> Unit,
     account: AccountRepository? = null,
+    now: LocalDateTime? = null,
+    sync: SyncTools? = null,
     onAccount: () -> Unit = {},
 ) {
     val backup = tools.repository
@@ -110,6 +114,7 @@ internal fun DataSettingsScreen(
     var wrongPassword by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<BackupRead.Ready?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var syncPanel by remember { mutableStateOf<SyncPanel?>(null) }
 
     fun work(block: suspend () -> Unit) {
         if (busy) return
@@ -174,6 +179,10 @@ internal fun DataSettingsScreen(
                             onClick = onAccount,
                             modifier = Modifier.testTag(ACCOUNT_ROW_TAG),
                         )
+                    }
+                    val syncState = sync?.repository?.state?.collectAsState()?.value
+                    if (sync != null && now != null && syncState != null && syncVisible(syncState.connected, signedIn, now)) {
+                        SyncSection(sync.repository, now, onPanel = { syncPanel = it }, onSyncNow = sync.now)
                     }
                 }
                 SectionLabel(BackupFormat.BACKUP)
@@ -285,6 +294,8 @@ internal fun DataSettingsScreen(
                 Spacer(Modifier.height(Dimens.space6))
             }
         }
+
+        if (sync != null) SyncPanels(sync.repository, messages, scope, syncPanel) { syncPanel = it }
 
         passwordFor?.let { after ->
             NewPasswordPanel(

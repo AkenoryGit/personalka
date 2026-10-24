@@ -55,6 +55,7 @@ import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.data.training.TrainingCard
 import com.akenory.personalka.domain.client.ClientName
+import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
@@ -122,10 +123,14 @@ data class HomeTodo(
 
 internal fun CalendarTraining.slot() = HomeSlot(id, start, durationMin, group, cancelled, marked)
 
+/** Синхронизация для «Нужно сделать»: сервер подключён; [late] — изменения ждут отправки больше суток (5.2). */
+data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
+
 /**
  * Пункты «Нужно сделать» в порядке ТЗ 5.2. С шага 1.16 — группы без отметки и копия (в режиме «Только телефон»),
  * с шага 2.1 — «Без дневника» ([noDiary] — `DiaryRepository.missing`), с шага 2.4 — клиенты без записи ([followup]),
- * с шага 2.4б — освободившееся время листа ожидания ([waiting]); деньги добавит этап 3. [backup] `null` — раздела копии нет (тесты). Их число —
+ * с шага 2.4б — освободившееся время листа ожидания ([waiting]), с шага 2.10а — [sync]: сервер подключён — вместо
+ * копии «Изменения не отправлены больше суток»; деньги добавит этап 3. [backup] `null` — раздела копии нет (тесты). Их число —
  * счётчик дел на значке «Главной».
  */
 fun homeTodos(
@@ -135,6 +140,7 @@ fun homeTodos(
     noDiary: List<MissingDiary> = emptyList(),
     followup: Followup = Followup.EMPTY,
     waiting: List<WaitRow> = emptyList(),
+    sync: SyncTodo? = null,
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -169,7 +175,10 @@ fun homeTodos(
         val names = followup.rows.map { ClientName(it.client.lastName, it.client.firstName) }
         add(HomeTodo(TodoKind.NOT_BOOKED, FollowupFormat.todo(names.size), FollowupFormat.todoNote(names), count = names.size))
     }
-    if (backup != null) {
+    if (sync != null) {
+        // «С сервером» (5.2): вместо напоминаний о копии — изменения, не отправленные больше суток.
+        if (sync.late) add(HomeTodo(TodoKind.BACKUP, SyncFormat.LATE, SyncFormat.lateNote(sync.lastSync), count = null))
+    } else if (backup != null) {
         HomeRules.backup(backup.folder != null, backup.last, now)?.let { todo ->
             add(HomeTodo(TodoKind.BACKUP, HomeFormat.backup(todo), HomeFormat.backupNote(todo, backup.last), count = null))
         }

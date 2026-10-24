@@ -13,6 +13,7 @@ import com.akenory.personalka.data.db.entity.SyncOutboxEntity
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.format.AccountFormat
+import com.akenory.personalka.domain.sync.SyncProblem
 import com.akenory.personalka.domain.sync.SyncRules
 import com.akenory.personalka.domain.sync.SyncStamp
 import kotlinx.coroutines.CancellationException
@@ -30,26 +31,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 
-/** Почему обмен с сервером не идёт. */
-enum class SyncProblem {
-    /** Нет связи или сервер не ответил — повтор с нарастающей паузой. */
-    OFFLINE,
-
-    /** Сервер обновляется (503): изменения ждут в очереди, повтор — как без связи. */
-    SERVER_OUTDATED,
-
-    /** Приложение слишком старое (426): обмен стоит до обновления, работа на телефоне не блокируется (7.2, п. 7). */
-    UPDATE_REQUIRED,
-
-    /** «Копия на сервере» не открыта или срок вышел: данные не стираются (1.5). */
-    CLOSED,
-
-    /** Доступ приостановлен администратором (1.5). */
-    SUSPENDED,
-
-    /** Вход устарел или телефон вышел из аккаунта. */
-    SIGNED_OUT,
-}
+/** Что на сервере перед подключением: данных тренера нет, они есть (с другого телефона) или сервер не ответил. */
+enum class ServerData { EMPTY, HAS_DATA, FAILED }
 
 /** Первая выгрузка (7.2, п. 5): отправлено [sent] записей из [total] — для полосы прогресса. */
 data class SyncProgress(val sent: Int, val total: Int)
@@ -91,6 +74,9 @@ class SyncRepository(
 
     /** Сколько записей ждёт отправки. */
     val pending: Flow<Int> = db.syncDao().observePending()
+
+    /** Самая давняя правка, ждущая отправки (миллисекунды UTC). */
+    val oldestPending: Flow<Long?> = db.syncDao().observeOldest()
 
     /** То же числом сейчас. */
     suspend fun pendingNow(): Int = db.syncDao().pending()
@@ -138,6 +124,30 @@ class SyncRepository(
         val ok = exchange(token, push = true)
         if (!ok && _state.value.problem in REFUSED) setConnected(false)
         ok
+    }
+
+    /**
+     * Перед подключением (шаг 2.10а): есть ли на сервере данные этого тренера — тогда обычная выгрузка дала бы
+     * двойные типы и места, и телефону предлагается взять данные с сервера. Данные клуба не в счёт. Сервер не
+     * ответил или отказал — [ServerData.FAILED], причина в [state].
+     */
+    suspend fun checkServer(): ServerData = busy.withLock {
+        val token = tokens.read() ?: return@withLock ServerData.FAILED.also { fail(SyncProblem.SIGNED_OUT) }
+        val page = try {
+            api.pull(token, SyncRules.SCHEMA_VERSION, since = 0, limit = SyncRules.PULL_MAX)
+        } catch (e: AccountException) {
+            failed(e)
+            return@withLock ServerData.FAILED
+        }
+        _state.update { it.copy(problem = null) }
+        val changes = (page["changes"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+        val coach = changes.any { change ->
+            val data = change["data"] as? JsonObject
+            val entity = change.string("entity").orEmpty()
+            !data.isEmptyRow() && !SyncRules.isClub(entity, data?.string("scope"))
+        }
+        // Целая страница одних данных клуба — редкость; считаем, что дальше могут быть данные тренера.
+        if (coach || page.flag("has_more")) ServerData.HAS_DATA else ServerData.EMPTY
     }
 
     /**

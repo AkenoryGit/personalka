@@ -84,12 +84,14 @@ fun androidAccount(
     coachId: suspend () -> String?,
     serverUrl: suspend () -> String?,
 ): AccountRepository {
-    val client = HttpClient(Android) {
-        install(HttpTimeout) {
-            connectTimeoutMillis = 15_000
-            requestTimeoutMillis = 30_000
-        }
-    }
-    val api = AccountApi(client) { serverUrl()?.takeIf { it.isNotBlank() } ?: AccountApi.DEFAULT_URL }
+    val api = AccountApi(serverClient()) { serverUrl()?.takeIf { it.isNotBlank() } ?: AccountApi.DEFAULT_URL }
     return AccountRepository(api, KeystoreTokens(context), prefs, deviceName(), coachId)
+}
+
+/** Клиент Ktor для сервера: движок `ktor-client-android` (HttpURLConnection), таймауты 15/30 с — вход и синхронизация. */
+internal fun serverClient(): HttpClient = HttpClient(Android) {
+    install(HttpTimeout) {
+        connectTimeoutMillis = 15_000
+        requestTimeoutMillis = 30_000
+    }
 }

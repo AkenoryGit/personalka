@@ -15,6 +15,10 @@ interface SyncDao {
     @Query("SELECT COUNT(*) FROM sync_outbox")
     suspend fun pending(): Int
 
+    /** Самая давняя правка в очереди — для пункта «Изменения не отправлены больше суток» (5.2). */
+    @Query("SELECT MIN(updatedAt) FROM sync_outbox")
+    fun observeOldest(): Flow<Long?>
+
     /** Следующая пачка: сначала давние правки. */
     @Query("SELECT * FROM sync_outbox ORDER BY updatedAt, entity, rowId LIMIT :limit")
     suspend fun next(limit: Int): List<SyncOutboxEntity>

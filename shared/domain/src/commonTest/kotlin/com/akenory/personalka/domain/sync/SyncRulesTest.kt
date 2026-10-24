@@ -73,4 +73,26 @@ class SyncRulesTest {
         assertEquals(60_000L, SyncRules.nextPause(failures = 2, pending = 3, refused = false))
         assertEquals(SyncRules.PERIOD_MS, SyncRules.nextPause(failures = 0, pending = 3, refused = true), "Отказ сервера — не стучаться каждые 5 секунд")
     }
+
+    @Test
+    fun unsentForADayIsLate() {
+        val day = SyncRules.LATE_MS
+        val now = 10 * day
+        // Правка ждёт 25 часов, обмена с тех пор не было.
+        assertEquals(true, SyncRules.late(1, now - day - 3_600_000, now - 2 * day, now))
+        // Давняя правка, но обмен был час назад — она легла в очередь после него (например, обмен шёл без неё).
+        assertEquals(false, SyncRules.late(1, now - 2 * day, now - 3_600_000, now))
+        // Свежая правка после давнего обмена.
+        assertEquals(false, SyncRules.late(1, now - 3_600_000, now - 5 * day, now))
+        assertEquals(false, SyncRules.late(0, null, now - 5 * day, now))
+        assertEquals(true, SyncRules.late(3, now - 2 * day, null, now))
+    }
+
+    @Test
+    fun clubRecords() {
+        assertEquals(true, SyncRules.isClub("club_rate_grid", null))
+        assertEquals(true, SyncRules.isClub("schedule_block", "CLUB"))
+        assertEquals(false, SyncRules.isClub("schedule_block", "COACH"))
+        assertEquals(false, SyncRules.isClub("client", null))
+    }
 }

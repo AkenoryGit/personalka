@@ -107,6 +107,20 @@ object SyncRules {
     /** Момент изменения, который запомнит сервер: из будущего больше чем на 5 минут — «сейчас». */
     fun acceptedAt(updatedAt: Long, now: Long): Long = if (updatedAt > now + FUTURE_MS) now else updatedAt
 
+    /** Изменения ждут отправки дольше этого — пункт «Нужно сделать» на «Главной» (5.2). */
+    const val LATE_MS = 24 * 60 * 60 * 1000L
+
+    /** Запись клуба (ТЗ 3.3): вся таблица сетки клуба или запись с `scope = CLUB`; остальное — данные тренера. */
+    fun isClub(entity: String, scope: String?): Boolean = entity in CLUB_ENTITIES || scope == "CLUB"
+
+    /**
+     * Телефон, «Нужно сделать» (5.2): изменения не отправлены больше суток. [oldestPending] — самая давняя правка
+     * в очереди, [lastSync] — последний полный обмен (после него очередь была пуста): правка ждёт не дольше, чем с
+     * позднего из двух моментов.
+     */
+    fun late(pending: Int, oldestPending: Long?, lastSync: Long?, now: Long): Boolean =
+        pending > 0 && oldestPending != null && now - maxOf(oldestPending, lastSync ?: 0) > LATE_MS
+
     /** Удалённая раньше этого момента запись стирается совсем. */
     fun purgeBefore(now: Long): Long = now - TOMBSTONE_DAYS * DAY_MS
 

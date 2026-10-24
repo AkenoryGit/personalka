@@ -195,7 +195,7 @@ private fun SignedIn(
  * состояние не кладутся.
  */
 @Composable
-private fun SignInForm(account: AccountRepository, settings: SettingsRepository, messages: MessageState, scope: CoroutineScope) {
+internal fun SignInForm(account: AccountRepository, settings: SettingsRepository, messages: MessageState, scope: CoroutineScope) {
     val colors = PersonalkaTheme.colors
     var step by rememberSaveable { mutableStateOf(AccountStep.SIGN_IN) }
     var name by rememberSaveable { mutableStateOf("") }

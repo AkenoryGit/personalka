@@ -32,6 +32,10 @@ import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.screens.SectionScreen
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
+import com.akenory.personalka.ui.settings.SyncTools
+import com.akenory.personalka.ui.home.SyncTodo
+import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.sync.SyncRules
 import com.akenory.personalka.ui.setup.FirstRun
 import com.akenory.personalka.ui.shell.AppShell
 import com.akenory.personalka.ui.shell.Section
@@ -59,6 +63,8 @@ import kotlinx.datetime.LocalDate
  * @param prefs настройки этого телефона: масштаб календаря.
  * @param backup резервная копия и системные окна для неё (шаг 1.15); `null` — раздела «Данные» нет (тесты).
  * @param account аккаунт на сервере (шаг 2.8а): строка «Аккаунт» в «Данных»; `null` — строки нет (тесты).
+ * @param sync синхронизация (шаг 2.10а): «Сервер» в «Данных», «Войти» на первом запуске, пункт «Нужно сделать»;
+ *   `null` — их нет (тесты). Сам обмен идёт в приложении платформы.
  * @param voice голосовой ввод в полях дневника (шаг 2.1); `null` — микрофонов нет.
  * @param reminders напоминания (шаг 2.5): «План на день» в настройках; `null` — строки нет (тесты).
  * @param notifications уведомления телефона: строка «Включить» в настройках, когда они выключены.
@@ -78,6 +84,7 @@ fun App(
     prefs: DevicePrefs = remember { MemoryPrefs() },
     backup: BackupTools? = null,
     account: AccountRepository? = null,
+    sync: SyncTools? = null,
     voice: VoiceInput? = null,
     reminders: Reminders? = null,
     notifications: NotificationAccess? = null,
@@ -119,7 +126,16 @@ fun App(
         val waiting by remember(clients, hasCoach, now) {
             if (hasCoach == true) clients.waitlist.observe(now) else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
-        val todos = remember(home, backupState, now, noDiary, followup, waiting) { homeTodos(home, backupState, now, noDiary, followup, waiting) }
+        // «С сервером» (5.2): вместо копии — изменения, не отправленные больше суток.
+        val syncState by remember(sync) { sync?.repository?.state ?: flowOf(null) }.collectAsState(initial = null)
+        val pending by remember(sync) { sync?.repository?.pending ?: flowOf(0) }.collectAsState(initial = 0)
+        val oldest by remember(sync) { sync?.repository?.oldestPending ?: flowOf(null) }.collectAsState(initial = null)
+        val syncTodo = syncState?.takeIf { it.connected }?.let { s ->
+            SyncTodo(SyncRules.late(pending, oldest, s.lastSync, clock()), s.lastSync?.let { ClubTime.now(it) })
+        }
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo)
+        }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()
 
@@ -170,7 +186,7 @@ fun App(
         Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
             when (hasCoach) {
                 null -> Unit
-                false -> FirstRun(settings, backHandler, onDone = { shell.select(Section.CALENDAR) })
+                false -> FirstRun(settings, backHandler, onDone = { shell.select(Section.CALENDAR) }, account, sync?.repository, clock)
                 true -> {
                     backHandler(shell.canGoBack) { shell.back() }
                     backHandler(card != null && shell.section == Section.CALENDAR) { card = null }
@@ -207,6 +223,7 @@ fun App(
                             onCard = { card = it },
                             backup = backup,
                             account = account,
+                            sync = sync,
                             home = home,
                             todos = todos,
                             homeCard = homeCard,

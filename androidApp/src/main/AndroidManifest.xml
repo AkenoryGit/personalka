@@ -61,6 +61,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- Обмен с сервером раз в 15 минут при закрытом приложении (шаг 2.10а). -->
+        <service
+            android:name="com.akenory.personalka.android.SyncJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <!-- «Поделиться копией» и календарём .ics: файл из временной папки по ссылке с правом только на чтение. -->
         <provider
             android:name="androidx.core.content.FileProvider"

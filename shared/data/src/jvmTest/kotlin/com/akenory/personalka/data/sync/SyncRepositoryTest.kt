@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.Samples
 import com.akenory.personalka.data.db.entity.SyncOutboxEntity
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.prefs.MemoryPrefs
+import com.akenory.personalka.domain.sync.SyncProblem
 import com.akenory.personalka.domain.sync.SyncRules
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -325,4 +326,38 @@ class SyncRepositoryTest {
     private companion object {
         const val EMAIL = "trener@example.ru"
     }
+    @Test
+    fun checkServerTellsCoachDataFromClubData(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        // Сетка клуба от администратора видна всем — но это не данные тренера.
+        val boss = server.signedUp("admin@example.ru", "пароль-админа")
+        server.admin = "admin@example.ru"
+        server.sessions += FakeServer.Session(102, boss, "Админ", "t-admin")
+        val admin = Phone("t-admin")
+        admin.db.referenceDao().upsertClubRate(Samples.clubRate())
+        assertTrue(admin.sync.connect())
+        assertEquals(ServerData.EMPTY, b.sync.checkServer(), "Пусто: только сетка клуба")
+
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        assertTrue(a.sync.connect())
+        assertEquals(ServerData.HAS_DATA, b.sync.checkServer(), "Данные с первого телефона")
+        assertFalse(b.sync.state.value.connected, "Проверка не подключает")
+
+        server.offline = true
+        assertEquals(ServerData.FAILED, b.sync.checkServer())
+        assertEquals(SyncProblem.OFFLINE, b.sync.state.value.problem)
+    }
+
+    @Test
+    fun oldestPendingChangeIsKnown(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        assertNull(a.sync.oldestPending.first())
+        val first = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(first)
+        a.clients.upsertClient(Samples.client("Орлова", "Вера").let { it.copy(sync = it.sync.touched(Samples.NOW + 5_000)) })
+        assertEquals(first.sync.updatedAt, a.sync.oldestPending.first())
+        assertTrue(a.sync.connect())
+        assertNull(a.sync.oldestPending.first(), "Всё ушло — ждать нечего")
+    }
+
 }
