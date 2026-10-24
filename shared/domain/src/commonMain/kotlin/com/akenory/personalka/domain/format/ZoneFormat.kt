@@ -19,12 +19,21 @@ object ZoneFormat {
     fun restrictionLabel(place: String, reason: String): String =
         if (reason.isBlank()) place else place + DOT + inPhrase(reason)
 
-    /** Дежурство в окне: «ББ 11:00–15:00 — дежурство». */
-    fun duty(place: String, startMinute: Int, endMinute: Int, typeName: String): String =
-        withReason("$place " + DateFormat.timeRange(startMinute, endMinute), typeName)
+    /** Дежурство в окне: «ББ 11:00–15:00 — дежурство»; за коллегу — «ББ 11:00–15:00 — дежурство за Александра». */
+    fun duty(place: String, startMinute: Int, endMinute: Int, typeName: String, coverFor: String? = null): String =
+        withReason("$place " + DateFormat.timeRange(startMinute, endMinute), typeName) + coverFor.tail(" ")
 
-    /** Подпись на заливке дежурства: «Дежурство · ББ». */
-    fun dutyLabel(typeName: String, place: String): String = typeName + DOT + place
+    /** Подпись на заливке дежурства: «Дежурство · ББ»; за коллегу — «Дежурство · ББ · за Александра». */
+    fun dutyLabel(typeName: String, place: String, coverFor: String? = null): String = typeName + DOT + place + coverFor.tail(DOT)
+
+    /** За кого дежурство: «за Александра»; «за» не отрывается от имени переносом. */
+    fun coverFor(name: String): String = "за" + RuText.NBSP + name
+
+    /** Поле «За кого» в форме дежурства (5.5). */
+    const val COVER_FOR_LABEL = "За кого"
+    const val COVER_FOR_PLACEHOLDER = "Необязательно, например: Александра"
+
+    private fun String?.tail(separator: String): String = if (isNullOrBlank()) "" else separator + coverFor(this)
 
     /**
      * Как повторяется запрет: «Каждый вт и чт», «Каждую ср», «Каждое вс», «Каждый день», «Каждый пн, ср и пт до 31.12.2026»;

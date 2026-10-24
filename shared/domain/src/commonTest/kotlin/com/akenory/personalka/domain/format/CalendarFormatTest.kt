@@ -76,6 +76,7 @@ class CalendarFormatTest {
         assertEquals(s("Группа · ББ · 60_мин · со списанием"), CalendarFormat.listLine("Группа", "ББ", 60, charged = true))
         assertEquals(s("ББ · до_15:00"), CalendarFormat.dutyLine("ББ", 15 * 60))
         assertEquals(s("ДБ · до_24:00"), CalendarFormat.dutyLine("ДБ", 24 * 60))
+        assertEquals(s("ББ · до_15:00 · за_Александра"), CalendarFormat.dutyLine("ББ", 15 * 60, "Александра"))
         // TalkBack на клетке месяца: день и число тренировок; пустой день — только день.
         assertEquals(s("вт_20.10, 10_тренировок"), CalendarFormat.monthDay(LocalDate(2026, 10, 20), 10))
         assertEquals(s("вс_25.10"), CalendarFormat.monthDay(LocalDate(2026, 10, 25), 0))

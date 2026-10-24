@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3)
 
 /**
  * Версия 2 (шаг 1.13в): цвет — у места, у типа — оттенок 1–4. Тренировки ББ синие, ДБ розовые, а ПТ, сплит
@@ -30,6 +30,13 @@ internal object Migration1To2 : Migration(1, 2) {
             connection.exec("UPDATE `training_type` SET `shade` = ? WHERE `id` = ?", ReferenceRules.defaultShade(name, parsed), id)
         }
         connection.exec("ALTER TABLE `training_type` DROP COLUMN `color`")
+    }
+}
+
+/** Версия 3: у дежурства — за кого тренер дежурит (ТЗ 3.5, 5.5). Прежние дежурства — без пометки. */
+internal object Migration2To3 : Migration(2, 3) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `training` ADD COLUMN `coverFor` TEXT")
     }
 }
 

@@ -181,7 +181,7 @@ private fun TrainingRow(training: CalendarTraining, onClick: () -> Unit) {
     )
 }
 
-/** Дежурство (макет «Месяц»): «Дежурство» и «ББ · до 15:00», полоса цвета его места. */
+/** Дежурство (макет «Месяц»): «Дежурство» и «ББ · до 15:00 · за Александра», полоса цвета его места. */
 @Composable
 private fun DutyRow(zone: CalendarZone, onClick: () -> Unit) {
     val colors = PersonalkaTheme.colors
@@ -189,7 +189,7 @@ private fun DutyRow(zone: CalendarZone, onClick: () -> Unit) {
         time = DateFormat.minuteOfDay(zone.start),
         stripe = PlaceColor.of(zone.color).tone(colors.isDark).stripe,
         title = zone.title,
-        line = CalendarFormat.dutyLine(zone.placeShort, zone.end),
+        line = CalendarFormat.dutyLine(zone.placeShort, zone.end, zone.coverFor),
         crossed = false,
         badges = emptyList(),
         tag = calendarRowTag(zone.id),

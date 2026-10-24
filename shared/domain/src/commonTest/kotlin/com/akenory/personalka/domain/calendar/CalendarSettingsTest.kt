@@ -69,5 +69,6 @@ class CalendarSettingsTest {
         assertEquals("Каждую ср с 04.11.2026", CalendarSettingsFormat.period(setOf(DayOfWeek.WEDNESDAY), null, LocalDate(2026, 11, 4), null, today))
         assertEquals(s("пт_23.10.2026"), CalendarSettingsFormat.period(emptySet(), LocalDate(2026, 10, 23), LocalDate(2026, 10, 23), null, today))
         assertEquals("ББ 11:00–15:00", CalendarSettingsFormat.duty("ББ", 660, 900))
+        assertEquals("ББ 11:00–15:00 · за${RuText.NBSP}Александра", CalendarSettingsFormat.duty("ББ", 660, 900, "Александра"))
     }
 }

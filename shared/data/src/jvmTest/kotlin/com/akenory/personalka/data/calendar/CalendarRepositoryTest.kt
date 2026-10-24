@@ -246,6 +246,15 @@ class CalendarRepositoryTest {
         assertEquals("blue", duty.color, "Дежурство — цвета своего места")
         // Место зоны — для фильтра мест в шапке (шаг 1.12).
         assertEquals(placeId("ББ"), duty.placeId)
+        assertNull(duty.coverFor)
+
+        // Дежурство за коллегу — в подписи и в окне.
+        val stored = db.trainingDao().trainingsBetween(at(tuesday, 11), at(tuesday, 12)).single()
+        db.trainingDao().upsertTraining(stored.copy(coverFor = "Александра"))
+        val covered = zones().first()
+        assertEquals("Александра", covered.coverFor)
+        assertEquals("ББ 11:00–15:00 — дежурство за${RuText.NBSP}Александра", covered.text)
+        assertEquals("Дежурство · ББ · за${RuText.NBSP}Александра", covered.label)
 
         assertEquals(ZoneKind.RESTRICTION, hatched.kind)
         assertEquals(restriction.id, hatched.id)

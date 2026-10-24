@@ -231,6 +231,31 @@ class TrainingRepositoryTest {
     }
 
     @Test
+    fun dutyForColleague(): Unit = runBlocking {
+        val duty = forms.form().first().duty!!.id
+        // Дежурство ББ 11:00–15:00 за коллегу: «за» в начале не хранится.
+        val draft = TrainingDraft(at(tuesday, 11), duty, locationId = placeId("ББ"), durationMin = 240, coverFor = " за Александра ")
+        saved(forms.create(draft))
+        val id = all().single().id
+        assertEquals("Александра", all().single().coverFor)
+        assertEquals("Александра", forms.stored(id)!!.draft.coverFor)
+
+        // Поправили имя, потом стёрли — дежурство стало своим.
+        saved(forms.update(id, forms.stored(id)!!.draft.copy(coverFor = "Дмитрия Мальцева")))
+        assertEquals("Дмитрия Мальцева", all().single().coverFor)
+        val moved = saved(forms.update(id, forms.stored(id)!!.draft.copy(start = at(tuesday, 12))))
+        assertEquals("Дмитрия Мальцева", all().single().coverFor, "Перенос пометку не стирает")
+        forms.undo(moved.undo)
+        saved(forms.update(id, forms.stored(id)!!.draft.copy(coverFor = "")))
+        assertNull(all().single().coverFor)
+
+        // У тренировки пометки не бывает, даже если она пришла в черновике.
+        val morozov = client("Морозов", "Даниил")
+        saved(forms.create(pt(at(tuesday, 17, 15), morozov, place = "ББ").copy(coverFor = "Александра")))
+        assertTrue(all().none { it.coverFor != null })
+    }
+
+    @Test
     fun groupTakesMembersOnDate(): Unit = runBlocking {
         val group = groups.create(GroupDraft("Сб 9:00 ББ", typeId("Группа"), placeId("ББ")))
         val belova = client("Белова", "Ева")

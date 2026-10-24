@@ -9,6 +9,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Форма тренировки (ТЗ 5.5, макет «Новая тренировка»): «сейчас» — вт 20.10.2026 15:40. */
@@ -173,6 +174,20 @@ class TrainingFormTest {
         assertEquals(180, later.durationMin)
         assertEquals(LocalTime(15, 0), TrainingFormRules.endTime(later))
         assertEquals(720, TrainingFormRules.withDutyEnd(later, LocalTime(0, 0)).durationMin)
+    }
+
+    @Test
+    fun dutyCoverFor() {
+        val draft = TrainingDraft(start = at("11:00"), typeId = "duty", locationId = "bb", durationMin = 240)
+        assertNull(TrainingFormRules.coverFor(draft), "Своё дежурство — без пометки")
+        assertNull(TrainingFormRules.coverFor(draft.copy(coverFor = "   ")))
+        assertEquals("Александра", TrainingFormRules.coverFor(draft.copy(coverFor = "  Александра ")))
+        // «за» в начале пишут строки календаря — второй раз его не будет.
+        assertEquals("Дмитрия Мальцева", TrainingFormRules.coverFor(draft.copy(coverFor = "За Дмитрия Мальцева")))
+        assertEquals("Зарину", TrainingFormRules.coverFor(draft.copy(coverFor = "Зарину")))
+        assertEquals(TrainingFormRules.COVER_FOR_MAX, TrainingFormRules.coverFor(draft.copy(coverFor = "А".repeat(60)))?.length)
+        // У повторяющегося дежурства пометки нет.
+        assertNull(TrainingFormRules.coverFor(draft.copy(coverFor = "Александра", repeat = Repeat(setOf(DayOfWeek.TUESDAY)))))
     }
 
     @Test

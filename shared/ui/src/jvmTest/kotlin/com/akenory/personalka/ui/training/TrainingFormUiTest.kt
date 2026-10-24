@@ -449,6 +449,30 @@ class TrainingFormUiTest {
     }
 
     @Test
+    fun dutyForColleague() = runComposeUiTest {
+        openCalendar()
+        holdDay(150f, yOf("18:00") + 0.5f)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        mode(TrainingFormat.MODE_DUTY)
+        awaitNode(hasText(TrainingFormat.NEW_DUTY_TITLE))
+        onNodeWithTag(FORM_COVER_FOR_TAG).performScrollTo().performTextInput("Александра")
+        // У повторяющегося дежурства поля нет; «Не повторять» — снова есть.
+        tap(FORM_WEEKLY_TAG)
+        onNodeWithTag(FORM_COVER_FOR_TAG).assertDoesNotExist()
+        onNodeWithText(TrainingFormat.NO_REPEAT).performClick()
+        onNodeWithTag(FORM_COVER_FOR_TAG).performScrollTo().assertIsDisplayed()
+        save()
+        waitUntil(timeoutMillis = 5_000) { trainings().singleOrNull()?.coverFor == "Александра" }
+
+        // Подпись на заливке и окно по нажатию — «за Александра».
+        awaitZones(1)
+        assertEquals("Дежурство · ББ · за${RuText.NBSP}Александра", day().zones.single().label)
+        val zone = day().zones.single()
+        tapDay(300f, zone.y + 30f)
+        awaitNode(hasText("ББ 18:00–22:00 — дежурство за${RuText.NBSP}Александра"))
+    }
+
+    @Test
     fun switchKeepsWhatWasChosen() = runComposeUiTest {
         val gusev = client("Гусев", "Борис")
         pt(at(today.plus(-7, DateTimeUnit.DAY), "10:00"), gusev)

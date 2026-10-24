@@ -231,6 +231,7 @@ class TrainingRepository internal constructor(
                 locationId = t.locationId,
                 durationMin = t.durationMin,
                 plan = t.plan.orEmpty(),
+                coverFor = t.coverFor.orEmpty(),
             ),
             status = t.status,
             marked = t.marked(people),
@@ -277,6 +278,7 @@ class TrainingRepository internal constructor(
                     durationMin = draft.durationMin,
                     groupId = draft.groupId,
                     plan = draft.plan.cleanPlan() ?: if (draft.start > clubNow && !duty) takePending(recorder, draft.groupId, draft.clientIds) else null,
+                    coverFor = TrainingFormRules.coverFor(draft).takeIf { duty },
                     owner = group?.owner ?: Owner.SELF,
                     ownerColleagueId = group?.ownerColleagueId,
                     conductedBy = group?.defaultConductedBy ?: ConductedBy.SELF,
@@ -368,6 +370,7 @@ class TrainingRepository internal constructor(
             val before = t.placement(isDuty(t.typeId))
             val after = Placement(edit.start, edit.durationMin, edit.locationId, isDuty(edit.typeId))
             val plan = draft.plan.cleanPlan()
+            val coverFor = TrainingFormRules.coverFor(draft).takeIf { isDuty(edit.typeId) }
             val series = t.seriesId?.let { schedule.series(it) }?.takeIf { it.sync.deletedAt == null }
             val moved = if (edit.start != t.start) CalendarFormat.moved(edit.start) else TrainingFormat.SAVED
             val group = edit.groupId?.let { clients.group(it) }
@@ -428,7 +431,7 @@ class TrainingRepository internal constructor(
                 series != null || draft.repeat == null -> {
                     // Разовая — или у тренировки серии изменился только план: вопроса нет.
                     if (!single()) return@withWriteTransaction
-                    val entity = t.edited(edit, plan, RestrictionRules.flag(after, restrictions), group, now)
+                    val entity = t.edited(edit, plan, coverFor, RestrictionRules.flag(after, restrictions), group, now)
                     recorder.saveTraining(entity)
                     if (edit.groupId == null || edit.groupId != t.groupId) {
                         recorder.setParticipants(entity, clientsOn(edit.groupId, edit.clientIds, edit.start.date))
@@ -458,7 +461,7 @@ class TrainingRepository internal constructor(
                     }
                     recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty)
                     val seriesId = changes.series.single().id
-                    val entity = t.edited(edit, plan, RestrictionRules.flag(after, restrictions), group, now)
+                    val entity = t.edited(edit, plan, coverFor, RestrictionRules.flag(after, restrictions), group, now)
                         .copy(seriesId = if (own != null) seriesId else null, seriesDetached = false)
                     recorder.saveTraining(entity)
                     if (edit.groupId == null || edit.groupId != t.groupId) {
@@ -739,10 +742,14 @@ private fun TrainingDraft.pattern(repeat: Repeat): SeriesPattern = SeriesPattern
     groupId = groupId,
 )
 
-/** Тренировка после правки из формы: время, тип, место, группа, план и флаг; у новой группы — «числится» и «проводим» из неё. */
+/**
+ * Тренировка после правки из формы: время, тип, место, группа, план, «За кого» у дежурства и флаг; у новой группы —
+ * «числится» и «проводим» из неё.
+ */
 private fun TrainingEntity.edited(
     edit: TrainingEdit,
     plan: String?,
+    coverFor: String?,
     overRestriction: Boolean,
     group: GroupEntity?,
     now: Long,
@@ -755,6 +762,7 @@ private fun TrainingEntity.edited(
         locationId = edit.locationId,
         groupId = edit.groupId,
         plan = plan,
+        coverFor = coverFor,
         overRestriction = overRestriction,
         owner = newGroup?.owner ?: if (edit.groupId == null) Owner.SELF else owner,
         ownerColleagueId = if (newGroup != null) newGroup.ownerColleagueId else if (edit.groupId == null) null else ownerColleagueId,

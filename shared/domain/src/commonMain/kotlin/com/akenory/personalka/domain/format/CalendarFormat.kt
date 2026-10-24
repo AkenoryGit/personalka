@@ -89,8 +89,12 @@ object CalendarFormat {
 
     private const val CHARGED = "со списанием"
 
-    /** Строка дежурства в «Месяце» и «Списке»: «ББ · до 15:00»; через полночь — «до 24:00». */
-    fun dutyLine(place: String, endMinute: Int): String = place + DOT + "до" + NBSP + DateFormat.minuteOfDay(endMinute)
+    /**
+     * Строка дежурства в «Месяце» и «Списке»: «ББ · до 15:00»; через полночь — «до 24:00»; за коллегу —
+     * «ББ · до 15:00 · за Александра».
+     */
+    fun dutyLine(place: String, endMinute: Int, coverFor: String? = null): String =
+        place + DOT + "до" + NBSP + DateFormat.minuteOfDay(endMinute) + (coverFor?.takeIf { it.isNotBlank() }?.let { DOT + ZoneFormat.coverFor(it) } ?: "")
 
     /** Значок тренировки словами — для TalkBack в строках «Месяца» и «Списка». */
     fun badge(badge: CalendarBadge): String = when (badge) {

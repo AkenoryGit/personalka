@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import com.akenory.personalka.data.restrictions.RestrictionRepository
 import com.akenory.personalka.data.restrictions.RestrictionSaveResult
 import com.akenory.personalka.data.training.EditScope
@@ -25,6 +27,7 @@ import com.akenory.personalka.data.training.StoredTraining
 import com.akenory.personalka.data.training.TrainingFormData
 import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
 import com.akenory.personalka.domain.restriction.RestrictionFormRules
@@ -54,9 +57,10 @@ const val FORM_END_TAG = "form-end"
 const val FORM_REASON_TAG = "form-reason"
 const val FORM_ALL_PLACES_TAG = "form-all-places"
 const val FORM_PERIOD_FROM_TAG = "form-period-from"
+const val FORM_COVER_FOR_TAG = "form-cover-for"
 
 /**
- * Дежурство (5.5): место, дата, время «с — до», повтор. Это тренировка типа «Дежурство» — запись, серия, вопрос
+ * Дежурство (5.5): место, дата, время «с — до», повтор и у разового — «За кого», если тренер дежурит за коллегу. Это тренировка типа «Дежурство» — запись, серия, вопрос
  * «Только эту / Эту и следующие» и «Отменить» те же, что у тренировки; с запретами дежурство не сверяется (4.5).
  */
 @Composable
@@ -226,6 +230,19 @@ internal fun DutyFields(
                 untilError = problems[FormField.UNTIL],
                 onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
                 onUntil = { panel = Panels.UNTIL },
+            )
+        }
+
+        // «За кого» — у одного дежурства: подмена коллеги не повторяется каждую неделю.
+        if (seriesRepeat == null && current.repeat == null) {
+            Field(
+                label = ZoneFormat.COVER_FOR_LABEL,
+                value = current.coverFor,
+                onValueChange = { text -> update { it.copy(coverFor = text.take(TrainingFormRules.COVER_FOR_MAX)) } },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space5),
+                tag = FORM_COVER_FOR_TAG,
+                placeholder = ZoneFormat.COVER_FOR_PLACEHOLDER,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
             )
         }
     }

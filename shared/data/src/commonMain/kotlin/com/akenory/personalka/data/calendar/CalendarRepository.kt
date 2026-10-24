@@ -129,6 +129,7 @@ data class TrainingCopy(
  * @param text строка окна: «ДБ 17:00–18:00 — групповая тренировка».
  * @param label подпись на самой зоне: «ДБ · групповая тренировка», «Дежурство · ББ».
  * @param repeat как повторяется запрет — «Каждый вт и чт»; у дежурства пусто.
+ * @param coverFor у дежурства — за кого тренер дежурит: «Александра»; своё дежурство и запрет — `null`.
  * @param editable окно зоны показывает «Изменить»: дежурство и свой запрет; запрет клуба меняет администратор (этап 2).
  */
 data class CalendarZone(
@@ -145,6 +146,7 @@ data class CalendarZone(
     val label: String,
     val repeat: String?,
     val editable: Boolean = true,
+    val coverFor: String? = null,
 ) {
     val span: ZoneSpan get() = ZoneSpan(id, kind, start, end)
 
@@ -169,8 +171,17 @@ data class CalendarZone(
             )
         }
 
-        /** Дежурство с [start] на [minutes] минут; через полночь — до конца дня. */
-        fun duty(id: String, start: LocalDateTime, minutes: Int, typeName: String, placeId: String, placeShort: String, color: String): CalendarZone {
+        /** Дежурство с [start] на [minutes] минут; через полночь — до конца дня. [coverFor] — за кого дежурство. */
+        fun duty(
+            id: String,
+            start: LocalDateTime,
+            minutes: Int,
+            typeName: String,
+            placeId: String,
+            placeShort: String,
+            color: String,
+            coverFor: String? = null,
+        ): CalendarZone {
             val from = ClubTime.minuteOfDay(start)
             val to = minOf(from + minutes, ClubTime.MINUTES_PER_DAY)
             return CalendarZone(
@@ -183,9 +194,10 @@ data class CalendarZone(
                 placeShort = placeShort,
                 color = color,
                 title = typeName,
-                text = ZoneFormat.duty(placeShort, from, to, typeName),
-                label = ZoneFormat.dutyLabel(typeName, placeShort),
+                text = ZoneFormat.duty(placeShort, from, to, typeName, coverFor),
+                label = ZoneFormat.dutyLabel(typeName, placeShort, coverFor),
                 repeat = null,
+                coverFor = coverFor,
             )
         }
     }
@@ -340,7 +352,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                 val type = typeById[t.typeId]?.takeIf { it.kind == TrainingKind.DUTY } ?: return@mapNotNull null
                 if (t.status == TrainingStatus.CANCELLED) return@mapNotNull null
                 val place = placeById[t.locationId]
-                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), place?.color.orEmpty())
+                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), place?.color.orEmpty(), t.coverFor)
             }
             val restrictions = blocks.map { it.toRestriction() }
             val own = blocks.filter { it.scope == Scope.COACH }.map { it.id }.toSet()

@@ -25,6 +25,9 @@ class ZoneFormatTest {
         assertEquals("ББ", ZoneFormat.restrictionLabel("ББ", ""))
         assertEquals("ББ 11:00–15:00 — дежурство", ZoneFormat.duty("ББ", 11 * 60, 15 * 60, "Дежурство"))
         assertEquals("Дежурство · ББ", ZoneFormat.dutyLabel("Дежурство", "ББ"))
+        // За коллегу: «за» не отрывается от имени.
+        assertEquals(s("ББ 11:00–15:00 — дежурство за_Александра"), ZoneFormat.duty("ББ", 11 * 60, 15 * 60, "Дежурство", "Александра"))
+        assertEquals(s("Дежурство · ББ · за_Дмитрия Мальцева"), ZoneFormat.dutyLabel("Дежурство", "ББ", "Дмитрия Мальцева"))
         assertEquals(s("Запрет снят на вт_20.10"), ZoneFormat.skipped(LocalDate(2026, 10, 20)))
     }
 

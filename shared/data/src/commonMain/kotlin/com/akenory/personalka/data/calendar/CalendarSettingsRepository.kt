@@ -191,7 +191,7 @@ class CalendarSettingsRepository internal constructor(
                 val start = ClubTime.minuteOfDay(t.start)
                 ZoneRow(
                     key = t.id,
-                    title = CalendarSettingsFormat.duty(place[t.locationId].orEmpty(), start, minOf(start + t.durationMin, ClubTime.MINUTES_PER_DAY)),
+                    title = CalendarSettingsFormat.duty(place[t.locationId].orEmpty(), start, minOf(start + t.durationMin, ClubTime.MINUTES_PER_DAY), t.coverFor),
                     subtitle = CalendarSettingsFormat.period(emptySet(), t.start.date, t.start.date, null, today),
                     id = t.id,
                 )
