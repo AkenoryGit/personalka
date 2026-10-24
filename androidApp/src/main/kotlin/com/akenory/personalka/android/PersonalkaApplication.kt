@@ -1,6 +1,8 @@
 package com.akenory.personalka.android
 
 import android.app.Application
+import com.akenory.personalka.data.account.AccountRepository
+import com.akenory.personalka.data.account.androidAccount
 import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.backup.UpdateCopies
 import com.akenory.personalka.data.backup.fileBackupFolder
@@ -45,6 +47,16 @@ class PersonalkaApplication : Application() {
     val backup: BackupRepository by lazy {
         val updates = UpdateCopies(fileBackupFolder(), File(filesDir, "update-backups").path)
         BackupRepository(database, prefs, safBackupFolder(this), updates, System::currentTimeMillis)
+    }
+
+    /** Аккаунт на сервере (шаг 2.8а): id тренера и адрес сервера — из базы, токен — в Android Keystore. */
+    val account: AccountRepository by lazy {
+        androidAccount(
+            this,
+            prefs,
+            coachId = { settings.coach.first()?.id },
+            serverUrl = { settings.coach.first()?.serverUrl },
+        )
     }
 
     /** Напоминания (шаг 2.5): проверка по будильнику ([ReminderReceiver]) и время следующей. */

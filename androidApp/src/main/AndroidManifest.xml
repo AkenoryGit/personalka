@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Вход на сервер (шаг 2.8а): аккаунт, дальше — синхронизация и кабинеты. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Уведомления (шаг 2.5, ТЗ 5.19): разрешение Android 13+ и будильник, который переживает перезагрузку телефона.
          Точный будильник не нужен: сводке в 21:03 вместо 21:00 это не мешает. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

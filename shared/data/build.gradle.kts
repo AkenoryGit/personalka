@@ -36,9 +36,19 @@ kotlin {
             implementation(libs.androidx.sqlite.bundled)
             // Файл копии — JSON (ТЗ 7.6): только разбор и сборка дерева, без плагина сериализации.
             implementation(libs.kotlinx.serialization.json)
+            // Вход на сервер (шаг 2.8а, ТЗ 2.1): JSON — тем же деревом, движок даёт платформа.
+            api(libs.ktor.client.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+        }
+        androidMain.dependencies {
+            implementation(libs.ktor.client.android)
+        }
+        // Сервер входа в памяти (шаг 2.8а) — для тестов слоя данных и экранов.
+        jvmTest {
+            kotlin.srcDir("src/fakeServer/kotlin")
+            dependencies { implementation(libs.ktor.client.mock) }
         }
         // Шифр, хеш и zip копии на стандартной библиотеке Java — один файл для телефона и компьютера (шаг 1.15).
         androidMain { kotlin.srcDir("src/javaShared/kotlin") }

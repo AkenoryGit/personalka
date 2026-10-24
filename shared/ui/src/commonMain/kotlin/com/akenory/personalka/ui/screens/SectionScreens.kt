@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.clients.ClientRepository
@@ -80,6 +81,7 @@ import kotlinx.datetime.LocalDateTime
  *   его серии (шаг 1.13б); из «Настройки → Календарь» — свой запрет и дежурство (шаг 1.13г).
  * @param card открытая карточка тренировки в календаре (шаг 1.14); [onCard] — открыть или закрыть её.
  * @param backup резервная копия для «Настройки → Данные» (шаг 1.15); `null` — раздела нет.
+ * @param account аккаунт на сервере для «Настройки → Данные → Аккаунт» (шаг 2.8а); `null` — строки нет.
  * @param home тренировки «Главной» и [todos] — пункты «Нужно сделать» (шаг 1.16); [homeCard] — карточка, открытая
  *   с «Главной», [onHomeCard] — открыть или закрыть её.
  * @param calendarDay день, который «Главная» попросила открыть в «Календаре»; [onCalendarDay] — открыть его
@@ -105,6 +107,7 @@ fun SectionScreen(
     card: String? = null,
     onCard: (String?) -> Unit = {},
     backup: BackupTools? = null,
+    account: AccountRepository? = null,
     home: List<CalendarTraining> = emptyList(),
     todos: List<HomeTodo> = emptyList(),
     homeCard: String? = null,
@@ -193,7 +196,7 @@ fun SectionScreen(
         )
         Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
             when {
-                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications)
+                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }

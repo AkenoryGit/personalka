@@ -25,11 +25,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.backup.BackupRead
 import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.domain.backup.BackupFrequency
 import com.akenory.personalka.domain.backup.BackupRules
+import com.akenory.personalka.domain.format.AccountFormat
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
@@ -68,6 +70,7 @@ interface PlatformFiles {
 class BackupTools(val repository: BackupRepository, val files: PlatformFiles)
 
 internal const val DATA_ROW_TAG = "settings-data"
+internal const val ACCOUNT_ROW_TAG = "settings-account"
 internal const val FOLDER_ROW_TAG = "backup-folder"
 internal const val PASSWORD_ROW_TAG = "backup-password"
 internal const val ENCRYPT_TAG = "backup-encrypt"
@@ -86,10 +89,18 @@ private enum class AfterPassword { NOTHING, SAVE, SHARE }
 /**
  * «Настройки → Данные» (ТЗ 5.16, 7.6, шаг 1.15): папка для копий, частота автокопии, шифрование паролем,
  * «Создать копию сейчас», «Поделиться копией», «Восстановить из копии» и выгрузка в календарь (.ics).
- * Режим и сервер — на этапе 2 (их пока нет — не показываются, 10.7).
+ * Сверху — «Аккаунт» (шаг 2.8а), если платформа дала [account]: строка открывает экран входа ([onAccount]).
+ * Режим «С сервером» и синхронизация — с шага 2.10 (их пока нет — не показываются, 10.7).
  */
 @Composable
-internal fun DataSettingsScreen(tools: BackupTools, messages: MessageState, scope: CoroutineScope, onBack: () -> Unit) {
+internal fun DataSettingsScreen(
+    tools: BackupTools,
+    messages: MessageState,
+    scope: CoroutineScope,
+    onBack: () -> Unit,
+    account: AccountRepository? = null,
+    onAccount: () -> Unit = {},
+) {
     val backup = tools.repository
     val files = tools.files
     val state by backup.state.collectAsState()
@@ -153,6 +164,18 @@ internal fun DataSettingsScreen(tools: BackupTools, messages: MessageState, scop
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             TopBar(BackupFormat.TITLE, onBack = onBack)
             Column(Modifier.padding(horizontal = Dimens.space4)) {
+                if (account != null) {
+                    val signedIn by account.account.collectAsState()
+                    SectionLabel(AccountFormat.TITLE)
+                    ListCard {
+                        NavRow(
+                            title = AccountFormat.TITLE,
+                            subtitle = AccountFormat.summary(signedIn?.name, signedIn?.email),
+                            onClick = onAccount,
+                            modifier = Modifier.testTag(ACCOUNT_ROW_TAG),
+                        )
+                    }
+                }
                 SectionLabel(BackupFormat.BACKUP)
                 Text(BackupFormat.last(state.last), style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
                 Spacer(Modifier.height(Dimens.space3))

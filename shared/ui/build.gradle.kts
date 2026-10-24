@@ -53,10 +53,14 @@ kotlin {
             implementation(libs.kotlin.test)
         }
         // Тесты оболочки и сообщений — только на JVM: Compose там рисуется без Android.
+        // Сервер входа в памяти — из тестов shared/data (шаг 2.8а).
+        jvmTest { kotlin.srcDir("../data/src/fakeServer/kotlin") }
         jvmTest.dependencies {
             implementation(libs.compose.ui.test)
             implementation(composeDesktopNatives)
             implementation(libs.kotlinx.coroutines.swing)
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }

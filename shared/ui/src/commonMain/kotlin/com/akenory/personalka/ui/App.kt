@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.Followup
@@ -57,6 +58,7 @@ import kotlinx.datetime.LocalDate
  * @param calendar тренировки дней для календаря (шаг 1.9), их создание и изменение — `calendar.forms` (шаг 1.13).
  * @param prefs настройки этого телефона: масштаб календаря.
  * @param backup резервная копия и системные окна для неё (шаг 1.15); `null` — раздела «Данные» нет (тесты).
+ * @param account аккаунт на сервере (шаг 2.8а): строка «Аккаунт» в «Данных»; `null` — строки нет (тесты).
  * @param voice голосовой ввод в полях дневника (шаг 2.1); `null` — микрофонов нет.
  * @param reminders напоминания (шаг 2.5): «План на день» в настройках; `null` — строки нет (тесты).
  * @param notifications уведомления телефона: строка «Включить» в настройках, когда они выключены.
@@ -75,6 +77,7 @@ fun App(
     calendar: CalendarRepository,
     prefs: DevicePrefs = remember { MemoryPrefs() },
     backup: BackupTools? = null,
+    account: AccountRepository? = null,
     voice: VoiceInput? = null,
     reminders: Reminders? = null,
     notifications: NotificationAccess? = null,
@@ -203,6 +206,7 @@ fun App(
                             card = card,
                             onCard = { card = it },
                             backup = backup,
+                            account = account,
                             home = home,
                             todos = todos,
                             homeCard = homeCard,

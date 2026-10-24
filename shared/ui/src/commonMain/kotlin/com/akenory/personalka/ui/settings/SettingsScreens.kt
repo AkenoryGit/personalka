@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
@@ -90,6 +91,7 @@ object SettingsRoute {
     const val CALENDAR = "settings/calendar"
     const val REMINDERS = "settings/reminders"
     const val DATA = "settings/data"
+    const val ACCOUNT = "settings/account"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
     private const val PLACE = "place/"
@@ -117,7 +119,8 @@ internal fun typeRowTag(name: String) = "type-$name"
 
 /**
  * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы», «Календарь» (шаг 1.13г) и «Данные»
- * (шаг 1.15, если платформа дала [backup]); остальные разделы появятся в своих шагах (ставки — 3.6), до этого их
+ * (шаг 1.15, если платформа дала [backup]; в них — «Аккаунт», шаг 2.8а, если есть [account]); остальные разделы
+ * появятся в своих шагах (ставки — 3.6), до этого их
  * не видно (10.7).
  *
  * @param onForm открыть форму тренировки, дежурства или своего запрета ([com.akenory.personalka.ui.training.TrainingFormKey])
@@ -138,6 +141,7 @@ fun SettingsScreen(
     backup: BackupTools? = null,
     reminders: Reminders? = null,
     notifications: NotificationAccess? = null,
+    account: AccountRepository? = null,
 ) {
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
@@ -151,7 +155,8 @@ fun SettingsScreen(
         route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces.size, activeTypes.size, shell, onBack)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
-        route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close) }
+        route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account) { shell.open(SettingsRoute.ACCOUNT) } }
+        route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close) }
         route == SettingsRoute.PROFILE -> ProfileScreen(settings, scope, messages, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
         route == SettingsRoute.NEW_PLACE -> PlaceEditor(

@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
                 calendar = app.calendar,
                 prefs = app.prefs,
                 backup = backup,
+                account = app.account,
                 voice = voice,
                 reminders = app.reminders,
                 notifications = notifications,
