@@ -5,6 +5,13 @@ import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.cabinet.CabinetInput
 import com.akenory.personalka.domain.cabinet.CabinetTraining
+import com.akenory.personalka.domain.cabinet.ConsentRules
+import com.akenory.personalka.domain.cabinet.ConsentScreen
+import com.akenory.personalka.domain.cabinet.ConsentSubmit
+import com.akenory.personalka.domain.cabinet.RevokeScreen
+import com.akenory.personalka.domain.client.ClientRules
+import com.akenory.personalka.domain.format.LegalDoc
+import com.akenory.personalka.domain.format.LegalText
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.ResultKind
 import com.akenory.personalka.domain.model.SwimStyle
@@ -38,6 +45,22 @@ data class CabinetAccess(
 
 /** Ссылка для списка в приложении. */
 data class CabinetLink(val clientId: String, val createdAt: OffsetDateTime, val lastOpenedAt: OffsetDateTime?)
+
+/** Действующее согласие клиента (ConsentRecord, 3.7). */
+data class Consent(val acceptedAt: Long, val version: Int, val photo: Boolean, val givenBy: String?)
+
+/** Последнее согласие клиента — для приложения: «Согласие получено», «Нет согласия на фото», «Удалить данные клиента». */
+data class ConsentInfo(val clientId: String, val acceptedAt: Long, val photo: Boolean, val givenBy: String?, val revokedAt: Long?)
+
+/** Кто в кабинете: имя клиента, тренер (как в шапке и полностью — в согласии), контакт, ребёнок ли, часы клуба. */
+data class CabinetSubject(
+    val clientName: String,
+    val coachName: String,
+    val coachFullName: String,
+    val contact: String?,
+    val child: Boolean,
+    val zone: TimeZone,
+)
 
 /** Ответ на введённый код. */
 sealed interface PinCheck {
@@ -163,17 +186,135 @@ class Cabinets(
         c.update("UPDATE cabinet_access SET last_opened_at = ? WHERE id = ?", at(now()), access.id)
     }
 
+    // --- Согласие (6.1, 3.7) ---
+
+    /**
+     * Действующее согласие клиента [access]: последнее неотозванное, если его редакция не требует спросить снова.
+     * Согласие — у клиента, а не у ссылки: новая ссылка без отзыва его не сбрасывает.
+     */
+    fun consent(c: Connection, access: CabinetAccess): Consent? = c.queryOne(
+        """
+        SELECT accepted_at, text_version, items, given_by_name FROM consent_record
+        WHERE coach_id = ? AND client_id = ? AND revoked_at IS NULL ORDER BY accepted_at DESC, id DESC LIMIT 1
+        """.trimIndent(),
+        access.coachId, access.clientId,
+    ) {
+        @Suppress("UNCHECKED_CAST")
+        val items = (it.getArray(3).array as Array<String>).toSet()
+        Consent(it.getObject(1, OffsetDateTime::class.java).toInstant().toEpochMilli(), it.getInt(2), PHOTO in items, it.getString(4))
+    }?.takeIf { ConsentRules.valid(it.version) }
+
+    /** Экран согласия клиента [access]. */
+    fun consentScreen(c: Connection, access: CabinetAccess): ConsentScreen {
+        val who = subject(c, access)
+        return ConsentRules.screen(who.clientName, who.coachName, who.coachFullName, who.contact, who.child)
+    }
+
+    /** Экран «Отозвать согласие?» клиента [access]. */
+    fun revokeScreen(c: Connection, access: CabinetAccess): RevokeScreen {
+        val who = subject(c, access)
+        return ConsentRules.revoke(who.clientName, who.child)
+    }
+
+    /** Записать согласие: время, редакция, пункты, имя родителя, адрес и браузер (3.7). */
+    fun accept(c: Connection, access: CabinetAccess, accepted: ConsentSubmit.Accepted, ip: String?, userAgent: String?) {
+        val items = listOfNotNull(PERSONAL, PHOTO.takeIf { accepted.photo })
+        c.update(
+            """
+            INSERT INTO consent_record (coach_id, client_id, accepted_at, text_version, items, given_by_name, ip, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent(),
+            access.coachId, access.clientId, at(now()), accepted.version, c.createArrayOf("text", items.toTypedArray()),
+            accepted.givenBy, ip?.take(64), userAgent?.take(USER_AGENT_MAX),
+        )
+    }
+
+    /**
+     * Отозвать согласие (6.1): согласие помечается отозванным, ссылка клиента — тоже: дальше она отвечает как
+     * недействительная, а новую тренер выпускает в приложении, и согласие спрашивается снова. Ответ — день отзыва.
+     */
+    fun withdraw(c: Connection, access: CabinetAccess): Pair<CabinetSubject, LocalDate> {
+        val who = subject(c, access)
+        c.update(
+            "UPDATE consent_record SET revoked_at = ? WHERE coach_id = ? AND client_id = ? AND revoked_at IS NULL",
+            at(now()), access.coachId, access.clientId,
+        )
+        revoke(c, access.coachId, access.clientId)
+        return who to ClubTime.today(now(), who.zone)
+    }
+
+    /** Последнее согласие каждого клиента тренера — для приложения (2.13). */
+    fun consents(c: Connection, coachId: String): List<ConsentInfo> = c.query(
+        """
+        SELECT DISTINCT ON (client_id) client_id, accepted_at, items, given_by_name, revoked_at FROM consent_record
+        WHERE coach_id = ? ORDER BY client_id, accepted_at DESC, id DESC
+        """.trimIndent(),
+        coachId,
+    ) {
+        @Suppress("UNCHECKED_CAST")
+        val items = (it.getArray(3).array as Array<String>).toSet()
+        ConsentInfo(
+            it.getString(1), it.getObject(2, OffsetDateTime::class.java).toInstant().toEpochMilli(), PHOTO in items, it.getString(4),
+            it.getObject(5, OffsetDateTime::class.java)?.toInstant()?.toEpochMilli(),
+        )
+    }
+
+    /**
+     * Политика обработки тренера [coachId] (10.3): опубликована для всех, без токена. Нет такого тренера, он
+     * приостановлен или ещё не заполнил профиль — null.
+     */
+    fun policy(c: Connection, accounts: Accounts, coachId: String): LegalDoc? {
+        if (coachId.isBlank() || coachId.length > 64) return null
+        val coach = accounts.byId(c, coachId) ?: return null
+        if (coach.suspended) return null
+        val profile = row(c, coach.id, "coach", "coachId", coach.id) ?: return null
+        val full = fullName(profile) ?: return null
+        return LegalText.policy(full, profile.textOrNull("contactForParents"))
+    }
+
+    private fun subject(c: Connection, access: CabinetAccess): CabinetSubject {
+        val owner = access.coachId
+        val client = row(c, owner, "client", "id", access.clientId)!!
+        val coach = row(c, owner, "coach", "coachId", owner)
+        val zone = zone(coach)
+        val birth = client.textOrNull("birthDate")?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val shortName = coachName(c, owner, coach)
+        return CabinetSubject(
+            clientName = clientName(client),
+            coachName = shortName,
+            coachFullName = coach?.let(::fullName) ?: shortName,
+            contact = coach?.textOrNull("contactForParents"),
+            child = !ClientRules.isAdult(birth, client.flag("isAdult"), ClubTime.today(now(), zone)),
+            zone = zone,
+        )
+    }
+
+    private fun fullName(coach: JsonObject): String? =
+        listOf(coach.text("lastName"), coach.text("firstName"), coach.text("middleName")).map(String::trim).filter(String::isNotEmpty)
+            .joinToString(" ").takeIf { it.isNotEmpty() }
+
+    private fun clientName(client: JsonObject): String =
+        listOf(client.text("lastName"), client.text("firstName")).filter { it.isNotBlank() }.joinToString(" ")
+
+    private fun coachName(c: Connection, owner: String, coach: JsonObject?): String =
+        coach?.let { listOf(it.text("firstName"), it.text("lastName")).filter(String::isNotBlank).joinToString(" ") }
+            ?.takeIf { it.isNotBlank() }
+            ?: accounts(c, owner)
+
+    private fun zone(coach: JsonObject?): TimeZone =
+        coach?.text("timezone")?.let { runCatching { TimeZone.of(it) }.getOrNull() } ?: ClubTime.defaultZone
+
     /**
      * Данные страницы клиента [access]: имя клиента и тренера, настройки, участия клиента и только их тренировки,
-     * результаты клиента — без заметки тренера.
+     * результаты клиента — без заметки тренера; ссылка на фото и дата согласия [consent].
      * Удалённые записи не показываются; тренировка без типа или места — тоже (такого не бывает, но чужое не угадывается).
      */
-    fun input(c: Connection, access: CabinetAccess): CabinetInput {
+    fun input(c: Connection, access: CabinetAccess, consent: Consent? = null): CabinetInput {
         val owner = access.coachId
         val client = row(c, owner, "client", "id", access.clientId)!!
         val coach = row(c, owner, "coach", "coachId", owner)
         val settings = row(c, owner, "coach_settings", "coachId", owner)
-        val zone = coach?.text("timezone")?.let { runCatching { TimeZone.of(it) }.getOrNull() } ?: ClubTime.defaultZone
+        val zone = zone(coach)
         val participations = rows(c, listOf(owner), "participation", "clientId", listOf(access.clientId))
         val trainings = rows(c, listOf(owner), "training", "id", participations.map { it.text("trainingId") })
             .associateBy { it.text("id") }
@@ -216,16 +357,17 @@ class Cabinets(
             it.getObject(1, OffsetDateTime::class.java)?.toInstant()?.toEpochMilli()
         }
         return CabinetInput(
-            clientName = listOf(client.text("lastName"), client.text("firstName")).filter { it.isNotBlank() }.joinToString(" "),
-            coachName = coach?.let { listOf(it.text("firstName"), it.text("lastName")).filter(String::isNotBlank).joinToString(" ") }
-                ?.takeIf { it.isNotBlank() }
-                ?: accounts(c, owner),
+            clientName = clientName(client),
+            coachName = coachName(c, owner, coach),
             syncedAt = synced?.let { ClubTime.now(it, zone) },
             now = ClubTime.now(now(), zone),
             upcomingCount = settings?.long("upcomingInCard")?.toInt() ?: DEFAULT_UPCOMING,
             cancelNoticeMinutes = settings?.long("cancelNoticeMinutes")?.toInt() ?: DEFAULT_NOTICE,
             trainings = list,
             results = results,
+            mediaUrl = client.textOrNull("mediaUrl"),
+            consentDate = consent?.let { ClubTime.today(it.acceptedAt, zone) },
+            photoConsent = consent?.photo ?: false,
         )
     }
 
@@ -258,6 +400,11 @@ class Cabinets(
         const val DAY_MS = 24 * 60 * 60 * 1000L
         const val DEFAULT_UPCOMING = 4
         const val DEFAULT_NOTICE = 60
+        const val USER_AGENT_MAX = 500
+
+        /** Пункты согласия в записи (3.7). */
+        const val PERSONAL = "personal_data"
+        const val PHOTO = "photo_video"
 
         private fun at(millis: Long): OffsetDateTime = OffsetDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneOffset.UTC)
 

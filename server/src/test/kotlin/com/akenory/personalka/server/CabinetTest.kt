@@ -172,10 +172,32 @@ class CabinetTest {
         return link
     }
 
-    private suspend fun ApplicationTestBuilder.setUp(db: Database, pin: String? = null): Pair<String, String> {
+    /** Согласие с экрана перед кабинетом (6.1): ответ — без перехода по 303, чтобы не открыть кабинет заодно. */
+    private suspend fun ApplicationTestBuilder.consent(
+        link: String,
+        name: String? = "Данилова Светлана",
+        agree: Boolean = true,
+        photo: Boolean = false,
+        cookie: String? = null,
+    ): HttpResponse = createClient { followRedirects = false }.submitForm(
+        "/c/$link/consent",
+        parameters {
+            name?.let { append("name", it) }
+            if (agree) append("agree", "1")
+            if (photo) append("photo", "1")
+        },
+    ) {
+        header(HttpHeaders.UserAgent, "Браузер родителя")
+        cookie?.let { header(HttpHeaders.Cookie, it) }
+    }
+
+    /** Тренер с данными и ссылкой для Евы; без кода — согласие уже дано ([consented]). */
+    private suspend fun ApplicationTestBuilder.setUp(db: Database, pin: String? = null, consented: Boolean = pin == null): Pair<String, String> {
         val (token, coachId) = signUp(db)
         client.push(token, data(coachId))
-        return token to client.issue(token, childId(0), pin)
+        val link = client.issue(token, childId(0), pin)
+        if (consented) assertEquals(HttpStatusCode.SeeOther, consent(link).status)
+        return token to link
     }
 
     private suspend fun HttpResponse.html(expected: HttpStatusCode = HttpStatusCode.OK): String {
@@ -389,6 +411,163 @@ class CabinetTest {
         assertEquals("/c/AbCd…", maskCabinet("/c/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde"))
         assertEquals("/c/AbCd…", maskCabinet("/c/AbCdEfGh?x=1").substringBefore('?'))
         assertEquals("/api/v1/sync/pull", maskCabinet("/api/v1/sync/pull"))
+    }
+
+    @Test
+    fun consentComesBeforeTheCabinet() = withServer { db ->
+        val (token, link) = setUp(db, consented = false)
+        val screen = client.get("/c/$link").html()
+        listOf("Данилова Ева", "Тренер: Дмитрий Дудник", "Согласие на обработку персональных данных", "Редакция 1 от 24.10.2026",
+            "Тренер Дудник Дмитрий Викторович", "Ваши фамилия и имя", "Я родитель (законный представитель)", "Разрешаю хранить фото",
+            "Продолжить", "href=\"/policy/").forEach { assertTrue(it in screen, "на экране согласия — «$it»") }
+        // До согласия данных кабинета нет (6.1).
+        listOf("Ближайшие тренировки", "Ныряние за предметами", "История", "/revoke").forEach { assertFalse(it in screen, "до согласия нет «$it»") }
+        assertFalse("<script" in screen)
+        assertFalse("style=" in screen)
+
+        // Без галочки — тот же экран с подсказкой, введённое имя на месте, ничего не записано.
+        val noAgree = consent(link, agree = false).html()
+        assertTrue("Чтобы открыть кабинет, отметьте согласие." in noAgree)
+        assertTrue("value=\"Данилова Светлана\"" in noAgree)
+        assertFalse("Ныряние за предметами" in noAgree)
+        // Без имени у ребёнка — подсказка про имя.
+        assertTrue("Впишите ваши фамилию и имя." in consent(link, name = "  ").html())
+        assertEquals(0, db.tx { c -> c.queryOne("SELECT count(*) FROM consent_record") { it.getInt(1) } })
+        assertTrue("Согласие на обработку персональных данных" in client.get("/c/$link").html(), "без согласия — снова экран согласия")
+
+        val accepted = consent(link)
+        assertEquals(HttpStatusCode.SeeOther, accepted.status)
+        assertEquals("/c/$link", accepted.headers[HttpHeaders.Location])
+        val page = client.get("/c/$link").html()
+        assertTrue("Ныряние за предметами" in page)
+        val footer = page.substringAfter("<footer")
+        listOf("По всем вопросам", "Согласие на обработку данных дано 20.10.2026", "Политика обработки персональных данных", "href=\"/c/$link/revoke\"")
+            .forEach { assertTrue(it in footer, "в подвале — «$it»") }
+        assertFalse("Фото и видео" in page, "ссылки на фото нет — раздела нет")
+
+        // Запись согласия (3.7).
+        val record = db.tx { c ->
+            c.queryOne("SELECT client_id, text_version, array_to_string(items, ','), given_by_name, user_agent, ip IS NOT NULL FROM consent_record") {
+                listOf(it.getString(1), it.getInt(2).toString(), it.getString(3), it.getString(4), it.getString(5), it.getBoolean(6).toString())
+            }
+        }
+        assertEquals(listOf(childId(0), "1", "personal_data", "Данилова Светлана", "Браузер родителя", "true"), record)
+
+        // Приложению видно: согласие получено, без фото, кем.
+        val consents = client.get("/api/v1/cabinets") { header(HttpHeaders.Authorization, "Bearer $token") }.obj()["consents"]!!.jsonArray
+        val given = consents.single().jsonObject
+        assertEquals(childId(0), given["client_id"]!!.jsonPrimitive.content)
+        assertEquals(clock.toString(), given["accepted_at"]!!.jsonPrimitive.content)
+        assertEquals("false", given["photo"]!!.jsonPrimitive.content)
+        assertEquals("Данилова Светлана", given["given_by_name"]!!.jsonPrimitive.content)
+        assertEquals("null", given["revoked_at"].toString())
+
+        // Новая ссылка без отзыва согласие заново не спрашивает: оно у клиента, а не у ссылки.
+        val fresh = client.issue(token, childId(0))
+        assertTrue("Ныряние за предметами" in client.get("/c/$fresh").html())
+        // Повторная отправка формы второй записи не делает.
+        consent(fresh)
+        assertEquals(1, db.tx { c -> c.queryOne("SELECT count(*) FROM consent_record") { it.getInt(1) } })
+    }
+
+    @Test
+    fun photosOnlyWithPhotoConsent() = withServer { db ->
+        val (token, coachId) = signUp(db)
+        client.push(token, data(coachId))
+        val withMedia = listOf(0, 1).map { i ->
+            row("client", childId(i)) {
+                put("lastName", children[i].first); put("firstName", children[i].second); put("cabinetEnabled", 1); put("mediaUrl", "https://disk.yandex.ru/d/kQ7x")
+            }.withTime(clock)
+        }
+        client.push(token, withMedia)
+
+        val noPhoto = client.issue(token, childId(0))
+        consent(noPhoto, photo = false)
+        val page = client.get("/c/$noPhoto").html()
+        assertFalse("Фото и видео" in page, "без галочки про фото нет ссылки на фото")
+        assertFalse("disk.yandex.ru" in page)
+
+        val photo = client.issue(token, childId(1))
+        consent(photo, photo = true)
+        val shown = client.get("/c/$photo").html()
+        assertTrue("Фото и видео" in shown && "Откроется Яндекс Диск" in shown)
+        assertTrue("href=\"https://disk.yandex.ru/d/kQ7x\"" in shown && "rel=\"noopener noreferrer\"" in shown)
+        assertTrue(shown.indexOf("Фото и видео") < shown.indexOf("<footer"), "«Фото и видео» — перед подвалом")
+        val consents = client.get("/api/v1/cabinets") { header(HttpHeaders.Authorization, "Bearer $token") }.obj()["consents"]!!.jsonArray
+        assertEquals(mapOf(childId(0) to "false", childId(1) to "true"), consents.associate { it.jsonObject["client_id"]!!.jsonPrimitive.content to it.jsonObject["photo"]!!.jsonPrimitive.content })
+    }
+
+    @Test
+    fun adultGivesConsentWithoutName() = withServer { db ->
+        val (token, coachId) = signUp(db)
+        client.push(token, data(coachId))
+        client.push(token, listOf(row("client", "adult-1") { put("lastName", "Яковлева"); put("firstName", "Татьяна"); put("birthDate", "1992-04-03"); put("cabinetEnabled", 1) }.withTime(clock)))
+        val link = client.issue(token, "adult-1")
+        val screen = client.get("/c/$link").html()
+        assertTrue("Яковлева Татьяна" in screen && "Даю согласие на обработку моих персональных данных" in screen)
+        assertFalse("Ваши фамилия и имя" in screen || "name=\"name\"" in screen, "у взрослого поля имени нет")
+        assertFalse("ребён" in screen)
+        assertEquals(HttpStatusCode.SeeOther, consent(link, name = null).status)
+        assertEquals(null, db.tx { c -> c.queryOne("SELECT given_by_name FROM consent_record") { it.getString(1) } })
+        assertTrue("Яковлева Татьяна" in client.get("/c/$link").html())
+    }
+
+    @Test
+    fun revokeClosesTheCabinetAndAsksAgain() = withServer { db ->
+        val (token, link) = setUp(db)
+        val ask = client.get("/c/$link/revoke").html()
+        listOf("Отозвать согласие?", "Данилова Ева", "Кабинет закроется по этой ссылке", nb("в течение 30 дней"), "Вернуться в кабинет", "href=\"/c/$link\"")
+            .forEach { assertTrue(it in ask, "на подтверждении — «$it»") }
+        assertTrue("Ныряние за предметами" in client.get("/c/$link").html(), "подтверждение само ничего не отзывает")
+
+        val done = client.post("/c/$link/revoke").html()
+        assertTrue("Согласие отозвано" in done && "Кабинет закрыт. Тренер удалит данные ребёнка до 19.11.2026." in done, done)
+        assertFalse("Данилова" in done)
+
+        // Дальше ссылка отвечает как недействительная.
+        assertTrue("Ссылка больше не действует" in client.get("/c/$link").html(HttpStatusCode.NotFound))
+        client.post("/c/$link/revoke").html(HttpStatusCode.NotFound)
+        val cabinets = client.get("/api/v1/cabinets") { header(HttpHeaders.Authorization, "Bearer $token") }.obj()
+        assertTrue(cabinets["cabinets"]!!.jsonArray.isEmpty(), "ссылка отозвана")
+        assertEquals(clock.toString(), cabinets["consents"]!!.jsonArray.single().jsonObject["revoked_at"]!!.jsonPrimitive.content, "тренеру видно: удалить данные")
+
+        // Новая ссылка — согласие спрашивается снова.
+        val fresh = client.issue(token, childId(0))
+        val again = client.get("/c/$fresh").html()
+        assertTrue("Ваши фамилия и имя" in again)
+        assertFalse("Ныряние за предметами" in again)
+    }
+
+    @Test
+    fun codeComesBeforeConsent() = withServer { db ->
+        val (_, link) = setUp(db, pin = "4721")
+        // Без кода согласие не принимается — ответ ведёт на страницу кода.
+        val blind = consent(link)
+        assertEquals(HttpStatusCode.SeeOther, blind.status)
+        assertEquals(0, db.tx { c -> c.queryOne("SELECT count(*) FROM consent_record") { it.getInt(1) } })
+        assertTrue("Введите код" in client.get("/c/$link/revoke").html(), "без кода отзыва нет — сначала код")
+
+        val noRedirect = createClient { followRedirects = false }
+        val pass = noRedirect.submitForm("/c/$link/pin", parameters { append("code", "4721") }).headers[HttpHeaders.SetCookie]!!.substringBefore(';')
+        assertTrue("Ваши фамилия и имя" in client.get("/c/$link") { header(HttpHeaders.Cookie, pass) }.html(), "после кода — согласие")
+        assertEquals(HttpStatusCode.SeeOther, consent(link, cookie = pass).status)
+        assertTrue("Ныряние за предметами" in client.get("/c/$link") { header(HttpHeaders.Cookie, pass) }.html())
+    }
+
+    @Test
+    fun policyIsPublicWithCoachName() = withServer { db ->
+        val (token, coachId) = signUp(db)
+        client.push(token, data(coachId))
+        client.push(token, listOf(row("coach", coachId) {
+            put("coachId", coachId); put("lastName", "Дудник"); put("firstName", "Дмитрий"); put("middleName", "Викторович")
+            put("contactForParents", "+7 912 000-00-00"); put("timezone", "Asia/Yekaterinburg")
+        }.withTime(clock)))
+        val policy = client.get("/policy/$coachId").html()
+        listOf("Политика обработки персональных данных", "Редакция 1 от 24.10.2026", "тренер Дудник Дмитрий Викторович", "+7 912 000-00-00", "152-ФЗ", "9. Изменения политики")
+            .forEach { assertTrue(it in policy, "в политике — «$it»") }
+        assertFalse("Данилова" in policy, "имён клиентов нет")
+        assertEquals("default-src 'self'", client.get("/policy/$coachId").headers["Content-Security-Policy"])
+        client.get("/policy/нет-такого").html(HttpStatusCode.NotFound)
     }
 
     private fun JsonObject.withTime(at: Long) = JsonObject(this + ("updated_at" to kotlinx.serialization.json.JsonPrimitive(at)))

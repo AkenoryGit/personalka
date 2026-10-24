@@ -139,10 +139,11 @@ class Sync(val now: () -> Long = System::currentTimeMillis) {
         c.update("UPDATE coach SET synced_at = ? WHERE id = ?", java.time.OffsetDateTime.ofInstant(java.time.Instant.ofEpochMilli(now()), java.time.ZoneOffset.UTC), coachId)
     }
 
-    /** «Отключиться от сервера» (7.1): записи тренера, его сессии и ссылки кабинетов стираются; аккаунт и данные клуба остаются. */
+    /** «Отключиться от сервера» (7.1): записи тренера, его сессии, ссылки кабинетов и согласия стираются; аккаунт и данные клуба остаются. */
     fun deleteCoachData(c: Connection, coachId: String): Int {
         val rows = c.update("DELETE FROM sync_row WHERE owner = ?", coachId)
         c.update("DELETE FROM cabinet_access WHERE coach_id = ?", coachId)
+        c.update("DELETE FROM consent_record WHERE coach_id = ?", coachId)
         c.update("DELETE FROM coach_session WHERE coach_id = ?", coachId)
         return rows
     }

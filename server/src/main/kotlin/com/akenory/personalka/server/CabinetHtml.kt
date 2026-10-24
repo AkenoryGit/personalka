@@ -6,7 +6,14 @@ import com.akenory.personalka.domain.cabinet.CabinetMonth
 import com.akenory.personalka.domain.cabinet.CabinetPage
 import com.akenory.personalka.domain.cabinet.CabinetResultLine
 import com.akenory.personalka.domain.cabinet.CabinetResults
+import com.akenory.personalka.domain.cabinet.ConsentRules
+import com.akenory.personalka.domain.cabinet.ConsentScreen
+import com.akenory.personalka.domain.cabinet.RevokeScreen
+import com.akenory.personalka.domain.cabinet.RevokedScreen
 import com.akenory.personalka.domain.format.CabinetFormat
+import com.akenory.personalka.domain.format.LegalBlock
+import com.akenory.personalka.domain.format.LegalDoc
+import com.akenory.personalka.domain.format.LegalText
 import com.akenory.personalka.domain.training.ClientOutcome
 import kotlinx.html.ButtonType
 import kotlinx.html.FlowContent
@@ -17,10 +24,14 @@ import kotlinx.html.SUMMARY
 import kotlinx.html.ThScope
 import kotlinx.html.UL
 import kotlinx.html.a
+import kotlinx.html.article
 import kotlinx.html.body
 import kotlinx.html.button
 import kotlinx.html.details
+import kotlinx.html.dd
 import kotlinx.html.div
+import kotlinx.html.dl
+import kotlinx.html.dt
 import kotlinx.html.footer
 import kotlinx.html.form
 import kotlinx.html.h1
@@ -51,6 +62,9 @@ import kotlinx.html.tr
 import kotlinx.html.ul
 import kotlinx.html.unsafe
 
+/** Адреса подвала кабинета: политика тренера и отзыв согласия. */
+data class CabinetLinks(val policy: String, val revoke: String)
+
 /**
  * HTML кабинета родителя (ТЗ 6.3, макеты 0.7): без JavaScript — сворачивание на `<details>`, код — обычной формой;
  * стили — свой файл `/cabinet.css` (CSP `default-src 'self'` запрещает встроенные). Все слова и числа приходят из
@@ -59,8 +73,8 @@ import kotlinx.html.unsafe
 object CabinetHtml {
     const val CSS_PATH = "/cabinet.css"
 
-    /** Страница кабинета. */
-    fun page(html: HTML, page: CabinetPage) = html.shell(narrow = false) {
+    /** Страница кабинета; [links] — политика тренера и отзыв согласия для подвала. */
+    fun page(html: HTML, page: CabinetPage, links: CabinetLinks) = html.shell(narrow = false) {
         header("hd") {
             h1 { +page.clientName }
             p { +page.coachLine }
@@ -121,8 +135,180 @@ object CabinetHtml {
             }
         }
         page.results?.let { results(it) }
+        page.media?.let { media ->
+            section("sec") {
+                attributes["aria-label"] = CabinetFormat.MEDIA
+                a(href = media.url, classes = "card media") {
+                    attributes["rel"] = "noopener noreferrer"
+                    attributes["target"] = "_blank"
+                    unsafe { +PHOTO_ICON }
+                    span("ct") {
+                        span("b") { +CabinetFormat.MEDIA }
+                        span("mut") { +media.note }
+                    }
+                    unsafe { +EXTERNAL_ICON }
+                }
+            }
+        }
         footer("ft") {
             p { +CabinetFormat.FOOTER }
+            page.consentLine?.let { p("mut num") { +it } }
+            a(href = links.policy) { +CabinetFormat.POLICY_LINK }
+            a(href = links.revoke, classes = "dng") { +CabinetFormat.REVOKE }
+        }
+    }
+
+    /**
+     * Экран согласия (6.1, макет `KbConsent`): документ отдельной карточкой, поле имени у ребёнка, две галочки,
+     * «Продолжить» — всегда активна, без JavaScript. Форма уходит на [action]; [policy] — политика тренера.
+     */
+    fun consent(html: HTML, screen: ConsentScreen, action: String, policy: String) = html.shell(narrow = false, gap = "cs") {
+        header("hd") {
+            h1 { +screen.clientName }
+            p { +screen.coachLine }
+        }
+        p { +screen.intro }
+        legal(screen.doc, card = true) {
+            p {
+                +LegalText.CONSENT_MORE
+                a(href = policy, classes = "inl") { +LegalText.CONSENT_MORE_LINK }
+                +"."
+            }
+        }
+        form(action = action, method = FormMethod.post, classes = "frm cf") {
+            if (screen.askName) {
+                label("lbl") {
+                    htmlFor = "nm"
+                    +CabinetFormat.CONSENT_NAME
+                }
+                input(InputType.text, name = "name", classes = if (screen.nameError != null) "inp err" else "inp") {
+                    id = "nm"
+                    value = screen.form.name
+                    placeholder = CabinetFormat.CONSENT_NAME_HINT
+                    autoComplete = "name"
+                    maxLength = ConsentRules.NAME_MAX.toString()
+                    if (screen.nameError != null) {
+                        attributes["aria-invalid"] = "true"
+                        attributes["aria-describedby"] = "nmmsg"
+                    }
+                }
+                screen.nameError?.let { fieldError("nmmsg", it) }
+            }
+            label(if (screen.agreeError != null) "chk err" else "chk") {
+                input(InputType.checkBox, name = "agree") {
+                    value = "1"
+                    if (screen.form.agree) checked = true
+                    if (screen.agreeError != null) {
+                        attributes["aria-invalid"] = "true"
+                        attributes["aria-describedby"] = "agmsg"
+                    }
+                }
+                span { +screen.agreeText }
+            }
+            screen.agreeError?.let { fieldError("agmsg", it, classes = "msg chm") }
+            label("chk") {
+                input(InputType.checkBox, name = "photo") {
+                    value = "1"
+                    if (screen.form.photo) checked = true
+                }
+                span {
+                    +screen.photoText
+                    span("mut") { +CabinetFormat.CONSENT_OPTIONAL }
+                }
+            }
+            button(type = ButtonType.submit, classes = "btn") { +CabinetFormat.CONSENT_CONTINUE }
+        }
+        a(href = policy, classes = "lnk") { +CabinetFormat.POLICY_LINK }
+    }
+
+    /** «Отозвать согласие?» (макет `KbRevoke`): красная кнопка — форма на [action], «Вернуться в кабинет» — [back]. */
+    fun revoke(html: HTML, screen: RevokeScreen, action: String, back: String) = html.shell(narrow = true) {
+        header("hd rv") {
+            h1 { +CabinetFormat.REVOKE_TITLE }
+            p("mut") { +screen.clientName }
+        }
+        div("card note") {
+            screen.lines.forEach { p { +it } }
+            p("mut") { +screen.hint }
+        }
+        form(action = action, method = FormMethod.post, classes = "btns") {
+            button(type = ButtonType.submit, classes = "btn dng") { +CabinetFormat.REVOKE }
+            a(href = back, classes = "btn sec") { +CabinetFormat.REVOKE_BACK }
+        }
+    }
+
+    /** «Согласие отозвано» (макет `KbRevoked`): имени уже нет — кабинет закрыт. */
+    fun revoked(html: HTML, screen: RevokedScreen) = html.shell(narrow = true) {
+        div("badge") { unsafe { +CHECK_ICON } }
+        h1 { +CabinetFormat.REVOKED_TITLE }
+        p { +screen.text }
+        p("mut") { +screen.hint }
+    }
+
+    /** Политика обработки тренера (10.3) — страница для всех, без данных клиентов. */
+    fun policy(html: HTML, doc: LegalDoc) = html.shell(narrow = false, title = doc.title) {
+        legal(doc, card = false) {}
+    }
+
+    /** Документ: в согласии — карточкой с `<dl>` (раздел — подзаголовок), в политике — разделами с `<h2>`. */
+    private fun FlowContent.legal(doc: LegalDoc, card: Boolean, end: FlowContent.() -> Unit) {
+        if (card) {
+            section("card doc") {
+                h2 { +doc.title }
+                p("mut num") { +doc.edition }
+                dl {
+                    doc.sections.forEach { section ->
+                        dt { +section.title }
+                        dd { section.blocks.forEach { block(it) } }
+                    }
+                }
+                end()
+            }
+        } else {
+            article("doc pol") {
+                h1 { +doc.title }
+                p("mut num") { +doc.edition }
+                doc.sections.forEach { section ->
+                    section("sec") {
+                        h2 { +section.title }
+                        section.blocks.forEach { block(it) }
+                    }
+                }
+                end()
+            }
+        }
+    }
+
+    private fun FlowContent.block(block: LegalBlock) {
+        when (block) {
+            is LegalBlock.Para -> p { +block.text }
+            is LegalBlock.Bullets -> ul("bl") { block.items.forEach { li { +it } } }
+            is LegalBlock.Table -> div("card") {
+                table("lt") {
+                    thead {
+                        tr {
+                            th(scope = ThScope.col) { +block.head.first }
+                            th(scope = ThScope.col) { +block.head.second }
+                        }
+                    }
+                    tbody {
+                        block.rows.forEach { (goal, data) ->
+                            tr {
+                                td { +goal }
+                                td { +data }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun FlowContent.fieldError(id: String, text: String, classes: String = "msg") {
+        p(classes) {
+            this.id = id
+            unsafe { +ALERT_ICON }
+            span { +text }
         }
     }
 
@@ -169,7 +355,7 @@ object CabinetHtml {
         p { +text }
     }
 
-    private fun HTML.shell(narrow: Boolean, content: FlowContent.() -> Unit) {
+    private fun HTML.shell(narrow: Boolean, gap: String? = null, title: String = CabinetFormat.TITLE, content: FlowContent.() -> Unit) {
         lang = "ru"
         head {
             meta(charset = "utf-8")
@@ -177,11 +363,11 @@ object CabinetHtml {
             meta(name = "robots", content = "noindex, nofollow")
             meta(name = "referrer", content = "no-referrer")
             meta(name = "color-scheme", content = "light dark")
-            title { +CabinetFormat.TITLE }
+            title { +title }
             link(rel = "stylesheet", href = CSS_PATH)
         }
         body {
-            main(if (narrow) "pg nar" else "pg") {
+            main(listOfNotNull("pg", "nar".takeIf { narrow }, gap).joinToString(" ")) {
                 div("bar") {
                     unsafe { +LOGO }
                     span { +CabinetFormat.TITLE }
@@ -320,6 +506,12 @@ object CabinetHtml {
         """<svg class="ic" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>"""
     const val LINK_OFF_ICON =
         """<svg class="ic" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/><path d="M4 4l16 16"/></svg>"""
+    private const val CHECK_ICON =
+        """<svg class="ic" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>"""
+    private const val PHOTO_ICON =
+        """<svg class="ic" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>"""
+    private const val EXTERNAL_ICON =
+        """<svg class="ic" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>"""
     const val CLOCK_ICON =
         """<svg class="ic" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>"""
 }

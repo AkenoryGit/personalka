@@ -47,6 +47,11 @@ data class CabinetInput(
     val cancelNoticeMinutes: Int,
     val trainings: List<CabinetTraining>,
     val results: List<ResultItem> = emptyList(),
+    /** Ссылка на фото и видео из карточки клиента (3.5). */
+    val mediaUrl: String? = null,
+    /** Согласие (6.1): когда дано (день по часам клуба) и отмечена ли галочка про фото. */
+    val consentDate: LocalDate? = null,
+    val photoConsent: Boolean = false,
 )
 
 /** Строка тренировки: «вт 20.10 · 13:30», «Персональная · Большой бассейн», метка статуса, поля дневника или причина. */
@@ -84,6 +89,10 @@ data class CabinetPage(
     val earlier: CabinetEarlier?,
     /** Результаты (6.3, п. 6); нет результатов — `null`. */
     val results: CabinetResults? = null,
+    /** «Фото и видео» (6.3, п. 7): нет ссылки или согласия на фото — `null`. */
+    val media: CabinetMedia? = null,
+    /** Подвал: «Согласие на обработку данных дано 05.09.2026». */
+    val consentLine: String? = null,
 )
 
 /**
@@ -139,6 +148,8 @@ object CabinetRules {
             currentMonth = current.takeIf { it.isNotEmpty() }?.let { month(LocalDate(today.year, today.month, 1), it) },
             earlier = past.takeIf { it.isNotEmpty() }?.let { CabinetEarlier(CabinetFormat.trainings(it.size), earlierMonths) },
             results = CabinetResultRules.results(input.results, today, chartKey),
+            media = CabinetMediaRules.media(input.mediaUrl, input.photoConsent),
+            consentLine = input.consentDate?.let(CabinetFormat::consentGiven),
         )
     }
 

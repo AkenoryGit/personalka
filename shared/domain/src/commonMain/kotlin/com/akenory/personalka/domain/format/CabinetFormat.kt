@@ -51,6 +51,59 @@ object CabinetFormat {
     const val ERROR_TITLE = "Не получилось открыть кабинет"
     const val ERROR_TEXT = "Попробуйте обновить страницу через несколько минут."
 
+    // --- Согласие (6.1, макет `KbConsent`) ---
+    const val CONSENT_INTRO_CHILD =
+        "В кабинете — расписание, записи тренера о тренировках и результаты. Чтобы открыть его, тренеру нужно согласие родителя на обработку данных ребёнка."
+    const val CONSENT_INTRO_ADULT =
+        "В кабинете — расписание, записи тренера о тренировках и результаты. Чтобы открыть его, тренеру нужно ваше согласие на обработку ваших данных."
+    const val CONSENT_NAME = "Ваши фамилия и имя"
+    const val CONSENT_NAME_HINT = "Например, Иванова Анна"
+    const val CONSENT_AGREE_CHILD =
+        "Я родитель (законный представитель) ребёнка и даю согласие на обработку его персональных данных на условиях выше."
+    const val CONSENT_AGREE_ADULT = "Даю согласие на обработку моих персональных данных на условиях выше."
+    const val CONSENT_PHOTO_CHILD = "Разрешаю хранить фото и видео ребёнка и показывать их в этом кабинете"
+    const val CONSENT_PHOTO_ADULT = "Разрешаю хранить мои фото и видео и показывать их в этом кабинете"
+    const val CONSENT_OPTIONAL = " — по желанию"
+    const val CONSENT_CONTINUE = "Продолжить"
+    const val CONSENT_AGREE_EMPTY = "Чтобы открыть кабинет, отметьте согласие."
+    const val CONSENT_NAME_EMPTY = "Впишите ваши фамилию и имя."
+    const val POLICY_LINK = LegalText.POLICY_TITLE
+    const val POLICY_MISSING = "Страница не найдена"
+    const val POLICY_MISSING_TEXT = "Проверьте адрес или спросите тренера."
+
+    // --- Фото и видео, подвал, отзыв (6.1, 6.3; макеты `KbCabinet`, `KbRevoke`, `KbRevoked`) ---
+    const val MEDIA = "Фото и видео"
+    const val REVOKE = "Отозвать согласие"
+    const val REVOKE_TITLE = "Отозвать согласие?"
+    const val REVOKE_BACK = "Вернуться в кабинет"
+    const val REVOKE_CLOSES = "Кабинет закроется по этой ссылке — для вас и для всех, с кем вы ею делились."
+    const val REVOKE_HINT = "Если передумаете, напишите тренеру — он пришлёт новую ссылку."
+    const val REVOKED_TITLE = "Согласие отозвано"
+
+    /** «Согласие на обработку данных дано 05.09.2026». */
+    fun consentGiven(date: LocalDate): String = "Согласие на обработку данных дано ${DateFormat.full(date)}"
+
+    /** «Тренер удалит данные ребёнка из приложения и с сервера в течение 30 дней.» */
+    fun revokeDeletes(child: Boolean, days: Int): String =
+        "Тренер удалит ${whose(child)} из приложения и с сервера в течение ${RuText.count(days, "дня", "дней", "дней")}."
+
+    /** «Кабинет закрыт. Тренер удалит данные ребёнка до 19.11.2026.» */
+    fun revokedText(child: Boolean, deleteBy: LocalDate): String = "Кабинет закрыт. Тренер удалит ${whose(child)} до ${DateFormat.full(deleteBy)}."
+
+    private fun whose(child: Boolean) = if (child) "данные ребёнка" else "ваши данные"
+
+    /** «Откроется Яндекс Диск» — куда ведёт ссылка «Фото и видео»; незнакомый сервис — его адрес. */
+    fun mediaNote(host: String): String {
+        val name = when {
+            host == "yadi.sk" || host.startsWith("disk.yandex.") || host.startsWith("disk.360.yandex.") -> "Яндекс Диск"
+            host == "cloud.mail.ru" -> "Облако Mail.ru"
+            host == "drive.google.com" || host == "photos.google.com" || host == "photos.app.goo.gl" -> "Google Диск"
+            host == "vk.com" || host == "vk.ru" -> "ВКонтакте"
+            else -> host
+        }
+        return "Откроется $name"
+    }
+
     /** «Неверный код. Осталось 3 попытки.» */
     fun wrongCode(left: Int): String = "Неверный код. Осталось ${RuText.count(left, "попытка", "попытки", "попыток")}."
 
