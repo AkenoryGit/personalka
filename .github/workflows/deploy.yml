@@ -50,6 +50,10 @@ jobs:
       - name: Установка рядом с Planovo, переключение, откат
         run: |
           set -euxo pipefail
+          # Здесь нарочно ломаются версия и откат — их ошибки не выносятся в итоги, чтобы не путать с выкладкой.
+          # Упадёт сама проверка — шаг всё равно красный, журналы служб покажет следующий шаг.
+          STOP=$(openssl rand -hex 16)
+          echo "::stop-commands::$STOP"
           # Как на VPS: Caddy уже стоит, в Caddyfile — сайт Planovo.
           sudo apt-get install -y -qq --no-install-recommends caddy >/dev/null
           printf '%s\n' 'planovo.test {' '	tls internal' '	respond "planovo"' '}' | sudo tee /etc/caddy/Caddyfile >/dev/null
@@ -98,6 +102,8 @@ jobs:
           # Письмо о падениях без planovo-alert — только запись в журнал, не ошибка.
           sudo systemctl start trener-alert.service
           systemctl is-enabled trener caddy postgresql
+          echo "::$STOP::"
+          echo "::notice title=Проверка установки::установка, повтор, сайт Planovo рядом, автоматический откат упавшей версии — всё как надо"
 
       - name: Журнал при ошибке
         if: failure()
