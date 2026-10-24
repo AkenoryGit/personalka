@@ -2,6 +2,8 @@ package com.akenory.personalka.android
 
 import android.app.Application
 import com.akenory.personalka.data.backup.BackupRepository
+import com.akenory.personalka.data.backup.UpdateCopies
+import com.akenory.personalka.data.backup.fileBackupFolder
 import com.akenory.personalka.data.backup.safBackupFolder
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
@@ -17,13 +19,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Приложение: одна база на всё время жизни процесса. Окно пересоздаётся при смене темы, база — нет.
- * Открывается при первом обращении, сама база создаётся Room в фоне при первом запросе.
+ * Открывается при первом обращении, сама база создаётся Room в фоне при первом запросе. Если база в телефоне
+ * прежней версии, перед переходом Room зовёт копию (ТЗ 10.2): к тому времени база уже собрана, и копия берёт её.
  */
 class PersonalkaApplication : Application() {
-    val database: PersonalkaDatabase by lazy { personalkaDatabase(this) }
+    val database: PersonalkaDatabase by lazy {
+        personalkaDatabase(this) { connection, from -> backup.beforeMigration(connection, from) }
+    }
     val settings: SettingsRepository by lazy { SettingsRepository(database, System::currentTimeMillis) }
     val clients: ClientRepository by lazy { ClientRepository(database, System::currentTimeMillis) }
     val groups: GroupRepository by lazy { GroupRepository(database, System::currentTimeMillis) }
@@ -32,8 +38,14 @@ class PersonalkaApplication : Application() {
     /** Настройки этого телефона: масштаб календаря, папка и ключ копий. */
     val prefs: DevicePrefs by lazy { devicePrefs(this) }
 
-    /** Резервная копия (шаг 1.15): папка — выбранная тренером через системный диалог. */
-    val backup: BackupRepository by lazy { BackupRepository(database, prefs, safBackupFolder(this), System::currentTimeMillis) }
+    /**
+     * Резервная копия (шаг 1.15): папка — выбранная тренером через системный диалог; копии перед обновлением базы
+     * (2.7б) — ещё и в личной папке приложения.
+     */
+    val backup: BackupRepository by lazy {
+        val updates = UpdateCopies(fileBackupFolder(), File(filesDir, "update-backups").path)
+        BackupRepository(database, prefs, safBackupFolder(this), updates, System::currentTimeMillis)
+    }
 
     /** Напоминания (шаг 2.5): проверка по будильнику ([ReminderReceiver]) и время следующей. */
     val reminders: Reminders by lazy { Reminders(calendar, clients, backup, prefs, System::currentTimeMillis) }

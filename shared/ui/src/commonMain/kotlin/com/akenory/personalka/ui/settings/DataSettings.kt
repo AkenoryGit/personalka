@@ -74,6 +74,7 @@ internal const val ENCRYPT_TAG = "backup-encrypt"
 internal const val CREATE_NOW_TAG = "backup-now"
 internal const val SHARE_TAG = "backup-share"
 internal const val RESTORE_TAG = "backup-restore"
+internal const val UPDATE_COPY_TAG = "backup-update-copy"
 internal const val CALENDAR_EXPORT_TAG = "backup-ics"
 internal const val PASSWORD_FIELD_TAG = "backup-password-field"
 internal const val PASSWORD_REPEAT_TAG = "backup-password-repeat"
@@ -224,6 +225,26 @@ internal fun DataSettingsScreen(tools: BackupTools, messages: MessageState, scop
                         },
                         Modifier.fillMaxWidth().testTag(RESTORE_TAG),
                     )
+                }
+                // Копия перед обновлением базы (2.7б) — в папке приложения, системным окном её не выбрать.
+                val updateCopy = state.updateCopy
+                if (updateCopy != null && backup.showUpdateCopy(updateCopy)) {
+                    OutlineButton(
+                        BackupFormat.UPDATE_COPY,
+                        {
+                            work {
+                                val bytes = backup.updateCopyBytes()
+                                if (bytes == null) {
+                                    messages.show(BackupFormat.NOT_BACKUP)
+                                } else {
+                                    restoreBytes = bytes
+                                    opened(backup.read(bytes))
+                                }
+                            }
+                        },
+                        Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(UPDATE_COPY_TAG),
+                    )
+                    Hint(BackupFormat.updateCopyNote(updateCopy))
                 }
 
                 SectionLabel(BackupFormat.CALENDAR)

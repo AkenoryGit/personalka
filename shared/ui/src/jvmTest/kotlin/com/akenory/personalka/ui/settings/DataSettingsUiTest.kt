@@ -20,6 +20,7 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.backup.BackupFolder
 import com.akenory.personalka.data.backup.BackupRepository
+import com.akenory.personalka.data.backup.UpdateCopies
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.RuText
@@ -30,6 +31,8 @@ import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -40,7 +43,7 @@ class DataSettingsUiTest {
     private val settings = TestData.ready()
     private val folder = Folder()
     private val files = Files()
-    private val backup = BackupRepository(TestData.dbOf(settings), MemoryPrefs(), folder, TestData.clock)
+    private val backup = BackupRepository(TestData.dbOf(settings), MemoryPrefs(), folder, clock = TestData.clock)
 
     private fun s(text: String) = text.replace('_', RuText.NBSP)
 
@@ -57,6 +60,8 @@ class DataSettingsUiTest {
         override suspend fun delete(folder: String, name: String) {
             files.remove(name)
         }
+
+        override suspend fun read(folder: String, name: String): ByteArray? = files[name]
     }
 
     /** Системные окна: папка выбирается сразу, файл — [file], «Поделиться» запоминает имя. */
@@ -97,6 +102,7 @@ class DataSettingsUiTest {
         }
         openData()
         onNodeWithText(BackupFormat.NO_COPIES).assertIsDisplayed()
+        onNodeWithTag(UPDATE_COPY_TAG).assertDoesNotExist()
 
         // Шифрование включено, пароля нет: «Создать копию сейчас» сначала просит пароль.
         onNodeWithTag(CREATE_NOW_TAG).performScrollTo().performClick()
@@ -126,6 +132,34 @@ class DataSettingsUiTest {
         onNodeWithTag(CALENDAR_EXPORT_TAG).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         waitUntil(timeoutMillis = 5_000) { files.shared.isNotEmpty() }
         assertTrue(files.shared.single().endsWith(".ics"))
+    }
+
+    /** Копия перед обновлением базы (2.7б) лежит в папке приложения: своя кнопка, дальше — как обычное восстановление. */
+    @Test
+    fun copyBeforeUpdateIsRestoredFromAppFolder() = runComposeUiTest {
+        val updates = Folder()
+        val prefs = MemoryPrefs().apply {
+            putString("backup.updateName", "trener-backup-20261019-0905.zip")
+            putString("backup.updateAt", "2026-10-19T09:05")
+        }
+        val withCopy = BackupRepository(TestData.dbOf(settings), prefs, folder, UpdateCopies(updates, "update-backups"), TestData.clock)
+        val plain = BackupRepository(TestData.dbOf(settings), MemoryPrefs().apply { putBoolean("backup.encrypt", false) }, folder, clock = TestData.clock)
+        updates.files["trener-backup-20261019-0905.zip"] = runBlocking { plain.create()!!.bytes }
+        setContent {
+            Box(Modifier.size(412.dp, 900.dp)) {
+                App(
+                    "0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), TestData.calendarOf(settings),
+                    backup = BackupTools(withCopy, files), clock = TestData.clock,
+                )
+            }
+        }
+        openData()
+        onNodeWithTag(UPDATE_COPY_TAG).performScrollTo().assertIsDisplayed()
+        onNodeWithText(BackupFormat.updateCopyNote(LocalDateTime(2026, 10, 19, 9, 5))).assertIsDisplayed()
+        onNodeWithTag(UPDATE_COPY_TAG).performClick()
+        awaitNode(hasText(BackupFormat.RESTORE_CONFIRM))
+        onNodeWithText(BackupFormat.RESTORE_CONFIRM).performClick()
+        awaitNode(hasText("Данные восстановлены из копии от 20.10.2026"))
     }
 
     @Test

@@ -25,6 +25,12 @@ object BackupRules {
     /** В папке остаются последние 10 копий. */
     const val KEEP = 10
 
+    /** Копий перед обновлением базы в папке приложения остаётся 3 последних (2.7б). */
+    const val KEEP_UPDATES = 3
+
+    /** Кнопка копии перед обновлением видна 30 дней: если обновление что-то испортило, это заметят раньше. */
+    const val UPDATE_COPY_DAYS = 30
+
     /** Напоминание «Нет копии больше 7 дней» (1.5, 5.2). */
     const val REMIND_DAYS = 7
 
@@ -42,10 +48,11 @@ object BackupRules {
     fun isBackupName(name: String): Boolean = NAME.matches(name)
 
     /**
-     * Какие копии в папке удалить, чтобы осталось [KEEP] последних. Чужие файлы не трогаются; время — в имени,
+     * Какие копии в папке удалить, чтобы осталось [keep] последних. Чужие файлы не трогаются; время — в имени,
      * поэтому порядок имён и есть порядок копий.
      */
-    fun toDelete(names: List<String>): List<String> = names.filter { isBackupName(it) }.distinct().sortedDescending().drop(KEEP)
+    fun toDelete(names: List<String>, keep: Int = KEEP): List<String> =
+        names.filter { isBackupName(it) }.distinct().sortedDescending().drop(keep)
 
     /** Пора ли автокопии: последней в папке нет или она старше дня (недели) по календарю клуба. */
     fun autoDue(last: LocalDateTime?, now: LocalDateTime, frequency: BackupFrequency): Boolean =
@@ -54,6 +61,10 @@ object BackupRules {
     /** Напомнить на «Главной» (1.16): копии нет или последней больше 7 дней. */
     fun remind(last: LocalDateTime?, now: LocalDateTime): Boolean =
         last == null || ClubTime.minutesBetween(last, now) >= REMIND_DAYS * ClubTime.MINUTES_PER_DAY.toLong()
+
+    /** Показывать ли в «Данных» копию перед обновлением базы, снятую в [at]: первые [UPDATE_COPY_DAYS] дней. */
+    fun showUpdateCopy(at: LocalDateTime?, now: LocalDateTime): Boolean =
+        at != null && ClubTime.minutesBetween(at, now) < UPDATE_COPY_DAYS * ClubTime.MINUTES_PER_DAY.toLong()
 
     /** Пароль годится: не короче [PASSWORD_MIN] и совпадает с повтором. */
     fun passwordOk(password: String, repeat: String): Boolean = password.length >= PASSWORD_MIN && password == repeat

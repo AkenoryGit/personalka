@@ -89,4 +89,20 @@ class BackupRulesTest {
         assertTrue(lines.all { it.encodeToByteArray().size <= 75 }, "Длинные строки переносятся")
         assertTrue(text.contains("\r\n "), "Перенос — с пробела")
     }
+
+    /** Копии перед обновлением базы (2.7б): в папке приложения — 3 последних, кнопка видна 30 дней. */
+    @Test
+    fun updateCopiesKeepThreeAndShowThirtyDays() {
+        val names = listOf("trener-backup-20261024-1830.zip", "trener-backup-20260101-1000.zip", "trener-backup-20260501-1000.zip", "trener-backup-20260301-1000.zip")
+        assertEquals(listOf("trener-backup-20260101-1000.zip"), BackupRules.toDelete(names, BackupRules.KEEP_UPDATES))
+
+        val at = LocalDateTime(2026, 10, 24, 18, 30)
+        assertFalse(BackupRules.showUpdateCopy(null, at))
+        assertTrue(BackupRules.showUpdateCopy(at, LocalDateTime(2026, 11, 23, 18, 29)))
+        assertFalse(BackupRules.showUpdateCopy(at, LocalDateTime(2026, 11, 23, 18, 30)))
+        assertEquals(
+            "Копию приложение сделало само сб${RuText.NBSP}24.10${RuText.NBSP}18:30, перед обновлением. Нужна, только если после обновления данные стали неверными.",
+            BackupFormat.updateCopyNote(at),
+        )
+    }
 }

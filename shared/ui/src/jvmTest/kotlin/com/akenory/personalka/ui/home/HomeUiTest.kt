@@ -192,7 +192,7 @@ class HomeUiTest {
     @Test
     fun backupItemAppearsAndGoesAwayItself() = runComposeUiTest {
         // Проверка шага: пункт про копию появляется и исчезает сам.
-        val backup = BackupRepository(db, MemoryPrefs(), Folder(), TestData.clock)
+        val backup = BackupRepository(db, MemoryPrefs(), Folder(), clock = TestData.clock)
         openHome(backup = BackupTools(backup, Files()))
         awaitNode(hasText("Выберите папку для копии"))
         onNodeWithText("Пока данные только в этом телефоне").assertIsDisplayed()

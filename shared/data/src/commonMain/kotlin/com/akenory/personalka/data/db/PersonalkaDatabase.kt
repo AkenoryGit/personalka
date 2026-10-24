@@ -89,7 +89,7 @@ abstract class PersonalkaDatabase : RoomDatabase() {
     companion object {
         /**
          * 1 — шаг 1.1; 2 — шаг 1.13в: цвет у места, оттенок у типа ([Migration1To2]); 3 — «За кого» у дежурства
-         * ([Migration2To3]).
+         * ([Migration2To3]). Перед переходом на новую версию — копия ([BeforeMigration], шаг 2.7б).
          */
         const val VERSION = 3
         const val FILE_NAME = "personalka.db"
@@ -103,11 +103,15 @@ expect object PersonalkaDatabaseConstructor : RoomDatabaseConstructor<Personalka
 }
 
 /**
- * Общие настройки базы на всех платформах: переходы со старых версий ([PersonalkaMigrations]), SQLite, собранный
- * вместе с приложением (одна и та же версия на любом телефоне и на компьютере), запросы — в [queryContext].
+ * Общие настройки базы на всех платформах: переходы со старых версий ([PersonalkaMigrations]) — перед ними
+ * копия ([beforeMigration], 2.7б), SQLite, собранный вместе с приложением (одна и та же версия на любом телефоне
+ * и на компьютере), запросы — в [queryContext].
  */
-fun RoomDatabase.Builder<PersonalkaDatabase>.buildPersonalka(queryContext: CoroutineContext): PersonalkaDatabase =
-    addMigrations(*PersonalkaMigrations)
+fun RoomDatabase.Builder<PersonalkaDatabase>.buildPersonalka(
+    queryContext: CoroutineContext,
+    beforeMigration: BeforeMigration? = null,
+): PersonalkaDatabase =
+    addMigrations(*migrationsWithCopy(beforeMigration))
         .setQueryCoroutineContext(queryContext)
         .setDriver(BundledSQLiteDriver())
         .build()

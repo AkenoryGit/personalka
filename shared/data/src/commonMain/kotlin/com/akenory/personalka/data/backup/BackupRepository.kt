@@ -5,11 +5,7 @@ import androidx.room3.executeSQL
 import androidx.room3.immediateTransaction
 import androidx.room3.useReaderConnection
 import androidx.room3.useWriterConnection
-import androidx.sqlite.SQLITE_DATA_BLOB
-import androidx.sqlite.SQLITE_DATA_FLOAT
-import androidx.sqlite.SQLITE_DATA_INTEGER
-import androidx.sqlite.SQLITE_DATA_NULL
-import androidx.sqlite.SQLiteStatement
+import androidx.sqlite.SQLiteConnection
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.domain.ClubTime
@@ -30,14 +26,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import kotlin.io.encoding.Base64
 
 /**
  * Папка для копий, выбранная тренером системным диалогом (на Android — папка Storage Access Framework, в том
@@ -51,7 +39,16 @@ interface BackupFolder {
     suspend fun list(folder: String): List<String>?
 
     suspend fun delete(folder: String, name: String)
+
+    /** Содержимое файла; `null` — его нет или папка недоступна. Нужно только папке приложения ([UpdateCopies]). */
+    suspend fun read(folder: String, name: String): ByteArray? = null
 }
+
+/**
+ * Своя папка приложения на телефоне ([path] у [files]) — для копий перед обновлением базы (ТЗ 10.2): она есть всегда,
+ * даже если тренер папку для копий не выбрал, и доступ к ней не отзовёшь.
+ */
+class UpdateCopies(val files: BackupFolder, val path: String)
 
 /** Что показывает раздел «Данные» (5.16): папка, частота, пароль и последняя копия. */
 data class BackupState(
@@ -62,6 +59,8 @@ data class BackupState(
     val hasPassword: Boolean = false,
     /** Последняя копия любым способом: в папку, «Поделиться» — по часам клуба. */
     val last: LocalDateTime? = null,
+    /** Последняя копия перед обновлением базы — в папке приложения (2.7б). */
+    val updateCopy: LocalDateTime? = null,
 ) {
     /** Копию можно делать сразу: шифрование выключено или пароль уже задан. */
     val ready: Boolean get() = !encrypt || hasPassword
@@ -99,12 +98,14 @@ sealed interface BackupRead {
  * Настройки копии — этого телефона ([DevicePrefs]), а не тренера: на другом телефоне — своя папка. Пароль
  * не хранится: хранится ключ из него, чтобы автокопия шифровалась без вопроса.
  *
+ * @param updates папка приложения для копий перед обновлением базы ([beforeMigration]).
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
 class BackupRepository(
     private val db: PersonalkaDatabase,
     private val prefs: DevicePrefs,
     private val folder: BackupFolder,
+    private val updates: UpdateCopies? = null,
     private val clock: () -> Long,
 ) {
     private val _state = MutableStateFlow(load())
@@ -120,6 +121,7 @@ class BackupRepository(
         encrypt = prefs.boolean(ENCRYPT) ?: true,
         hasPassword = key() != null,
         last = prefs.string(LAST)?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
+        updateCopy = prefs.string(UPDATE_AT)?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
     )
 
     private fun key(): BackupKey? = prefs.string(KEY)?.let { BackupKey.decode(it) }
@@ -186,12 +188,58 @@ class BackupRepository(
     private suspend fun saveToFolder(): Boolean {
         val target = _state.value.folder ?: return false
         val made = create() ?: return false
-        if (!folder.write(target, made.name, made.bytes)) return false
+        return putToFolder(target, made.name, made.bytes, ClubTime.now(clock()))
+    }
+
+    private suspend fun putToFolder(target: String, name: String, bytes: ByteArray, now: LocalDateTime): Boolean {
+        if (!folder.write(target, name, bytes)) return false
         folder.list(target)?.let { names -> BackupRules.toDelete(names).forEach { folder.delete(target, it) } }
-        val now = ClubTime.now(clock())
         prefs.putString(LAST_FOLDER, now.toString())
         remember(now)
         return true
+    }
+
+    // --- Копия перед обновлением базы ---
+
+    /**
+     * Копия перед переходом базы на новую версию (ТЗ 10.2, шаг 2.7б). Room зовёт её из первого перехода: [connection] —
+     * база ещё версии [from], все таблицы берутся как в обычной копии. Копия ложится в папку приложения ([updates],
+     * там остаются [BackupRules.KEEP_UPDATES] последних) и, если папка для копий выбрана и копию можно шифровать
+     * без вопроса, — туда тоже, обычной копией: её видно в «Восстановить из копии».
+     *
+     * Шифруется ключом телефона, если шифрование включено; без пароля в папку приложения ложится открытой — там же,
+     * где сама база. Не легла никуда — ошибка: Room откатывает открытие, и база остаётся прежней версии.
+     *
+     * Без [busy]: автокопия может сама ждать открытия базы, которое и зовёт этот переход.
+     */
+    suspend fun beforeMigration(connection: SQLiteConnection, from: Int) {
+        val now = ClubTime.now(clock())
+        val s = _state.value
+        val bytes = BackupFile.pack(BackupData(now, from, connection.dumpTables()), if (s.encrypt) key() else null)
+        val name = BackupRules.fileName(now)
+        var saved = false
+        updates?.let { u ->
+            if (u.files.write(u.path, name, bytes)) {
+                u.files.list(u.path)?.let { names -> BackupRules.toDelete(names, BackupRules.KEEP_UPDATES).forEach { u.files.delete(u.path, it) } }
+                prefs.putString(UPDATE_NAME, name)
+                prefs.putString(UPDATE_AT, now.toString())
+                _state.update { it.copy(updateCopy = now) }
+                saved = true
+            }
+        }
+        val target = s.folder
+        if (target != null && s.ready && putToFolder(target, name, bytes, now)) saved = true
+        check(saved) { "Копия базы версии $from не сохранилась — переход на новую версию не начат" }
+    }
+
+    /** Показывать ли в «Данных» копию перед обновлением, снятую в [at]: первые 30 дней ([BackupRules.showUpdateCopy]). */
+    fun showUpdateCopy(at: LocalDateTime): Boolean = BackupRules.showUpdateCopy(at, ClubTime.now(clock()))
+
+    /** Файл последней копии перед обновлением — открыть его, как выбранный в «Восстановить из копии». */
+    suspend fun updateCopyBytes(): ByteArray? {
+        val u = updates ?: return null
+        val name = prefs.string(UPDATE_NAME) ?: return null
+        return u.files.read(u.path, name)
     }
 
     private fun remember(time: LocalDateTime) {
@@ -222,10 +270,11 @@ class BackupRepository(
 
     /**
      * Заменить все данные телефона данными копии — одной транзакцией: не вышло — данные прежние, ответ `false`.
+     * Копия старой версии сначала проходит те же переходы, что база ([upgraded]): пересчитанное ими не теряется.
      * Пароль открытой копии становится паролем копий этого телефона: автокопия на новом телефоне сразу шифруется им.
      */
     suspend fun restore(copy: BackupRead.Ready): Boolean {
-        val ok = runCatching { replaceAll(copy.data) }.isSuccess
+        val ok = runCatching { replaceAll(withContext(Dispatchers.Default) { copy.data.upgraded() }) }.isSuccess
         if (ok && copy.key != null) {
             prefs.putString(KEY, copy.key.encode())
             _state.update { it.copy(hasPassword = true) }
@@ -290,7 +339,7 @@ class BackupRepository(
                 names.forEach { executeSQL("DELETE FROM `$it`") }
                 data.tables.forEach { (table, rows) ->
                     val known = columnsOf[table] ?: return@forEach
-                    // Копия старой версии: только столбцы, которые есть сейчас; новые получат значения по умолчанию.
+                    // Только столбцы, которые есть сейчас; остальные получат значения по умолчанию.
                     val used = rows.columns.withIndex().filter { it.value in known }
                     if (used.isEmpty() || rows.rows.isEmpty()) return@forEach
                     val sql = "INSERT INTO `$table` (${used.joinToString { "`${it.value}`" }}) VALUES (${used.joinToString { "?" }})"
@@ -307,31 +356,7 @@ class BackupRepository(
         }
     }
 
-    private fun SQLiteStatement.value(i: Int): JsonElement = when (getColumnType(i)) {
-        SQLITE_DATA_NULL -> JsonNull
-        SQLITE_DATA_INTEGER -> JsonPrimitive(getLong(i))
-        SQLITE_DATA_FLOAT -> JsonPrimitive(getDouble(i))
-        SQLITE_DATA_BLOB -> JsonObject(mapOf(BLOB to JsonPrimitive(b64(getBlob(i)))))
-        else -> JsonPrimitive(getText(i))
-    }
-
-    private fun SQLiteStatement.bind(i: Int, value: JsonElement) {
-        when {
-            value is JsonNull -> bindNull(i)
-            value is JsonObject -> bindBlob(i, Base64.decode(value.getValue(BLOB).jsonPrimitive.content))
-            value is JsonPrimitive && value.isString -> bindText(i, value.content)
-            value is JsonPrimitive && value.longOrNull != null -> bindLong(i, value.longOrNull!!)
-            value is JsonPrimitive && value.doubleOrNull != null -> bindDouble(i, value.doubleOrNull!!)
-            else -> bindText(i, value.jsonPrimitive.content)
-        }
-    }
-
     private companion object {
-        const val TABLES =
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' " +
-                "AND name NOT LIKE 'room\\_%' ESCAPE '\\' AND name <> 'android_metadata' ORDER BY name"
-        const val BLOB = "base64"
-
         const val FOLDER = "backup.folder"
         const val FOLDER_NAME = "backup.folderName"
         const val FREQUENCY = "backup.frequency"
@@ -343,5 +368,9 @@ class BackupRepository(
 
         /** Последняя копия в папку — для автокопии. */
         const val LAST_FOLDER = "backup.lastFolder"
+
+        /** Последняя копия перед обновлением базы: имя файла в папке приложения и время. */
+        const val UPDATE_NAME = "backup.updateName"
+        const val UPDATE_AT = "backup.updateAt"
     }
 }

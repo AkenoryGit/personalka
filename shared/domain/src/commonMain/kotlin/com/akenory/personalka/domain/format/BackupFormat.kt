@@ -31,6 +31,7 @@ object BackupFormat {
     const val CREATE_NOW = "Создать копию сейчас"
     const val SHARE = "Поделиться копией"
     const val RESTORE = "Восстановить из копии"
+    const val UPDATE_COPY = "Вернуть данные до обновления"
     const val CALENDAR = "Выгрузить в календарь (.ics)"
     const val CALENDAR_NOTE = "Тренировки за 3 месяца назад и 3 вперёд — для просмотра в любом календаре."
     const val NO_COPIES = "Копий ещё не было"
@@ -72,6 +73,14 @@ object BackupFormat {
     /** «34 клиента · 512 тренировок». */
     fun previewCounts(clients: Int, trainings: Int): String =
         RuText.count(clients, "клиент", "клиента", "клиентов") + DOT + RuText.count(trainings, "тренировка", "тренировки", "тренировок")
+
+    /**
+     * Под кнопкой копии перед обновлением базы (2.7б): «Копию приложение сделало само сб 24.10 18:30, перед обновлением.
+     * Нужна, только если после обновления данные стали неверными.»
+     */
+    fun updateCopyNote(at: LocalDateTime): String =
+        "Копию приложение сделало само ${DateFormat.short(at.date)}$NBSP${DateFormat.time(at.time)}, перед обновлением. " +
+            "Нужна, только если после обновления данные стали неверными."
 
     /** «Данные восстановлены из копии от 22.10.2026». */
     fun restored(createdAt: LocalDateTime): String = "Данные восстановлены из копии от ${DateFormat.full(createdAt.date)}"

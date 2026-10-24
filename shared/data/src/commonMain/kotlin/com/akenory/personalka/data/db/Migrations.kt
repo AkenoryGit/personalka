@@ -9,6 +9,34 @@ import com.akenory.personalka.domain.reference.ReferenceRules
 internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3)
 
 /**
+ * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
+ * версии [from]). Ошибка внутри — переход не начинается: Room откатывает открытие, и база остаётся прежней версии.
+ */
+fun interface BeforeMigration {
+    suspend fun copy(connection: SQLiteConnection, from: Int)
+}
+
+/**
+ * Переходы, первый из которых сначала зовёт [before]. Room проходит путь от версии файла до нынешней одним открытием,
+ * поэтому копия — одна, той версии, что была в телефоне.
+ */
+internal fun migrationsWithCopy(before: BeforeMigration?): Array<Migration> {
+    if (before == null) return PersonalkaMigrations
+    var copied = false
+    return PersonalkaMigrations.map { inner ->
+        object : Migration(inner.startVersion, inner.endVersion) {
+            override suspend fun migrate(connection: SQLiteConnection) {
+                if (!copied) {
+                    before.copy(connection, startVersion)
+                    copied = true
+                }
+                inner.migrate(connection)
+            }
+        }
+    }.toTypedArray()
+}
+
+/**
  * Версия 2 (шаг 1.13в): цвет — у места, у типа — оттенок 1–4. Тренировки ББ синие, ДБ розовые, а ПТ, сплит
  * и группа в одном бассейне различаются светлым и тёмным оттенком (ТЗ 3.3, 5.3).
  *
