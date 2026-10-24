@@ -18,3 +18,4 @@ Thumbs.db
 docs/mockups/render/node_modules/
 docs/mockups/render/dc-runtime.js
 docs/mockups/render/package*.json
+__pycache__/

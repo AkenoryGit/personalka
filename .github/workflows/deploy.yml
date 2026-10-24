@@ -112,9 +112,45 @@ jobs:
           test "$(sudo -u postgres psql -tAc "SELECT has_database_privilege('stranger', 'trener', 'CONNECT')")" = f
           # Письмо о падениях без planovo-alert — только запись в журнал, не ошибка.
           sudo systemctl start trener-alert.service
-          systemctl is-enabled trener caddy postgresql
+          systemctl is-enabled trener caddy postgresql trener-backup.timer
+          # Ночная копия (2.14): чистка ящика на поддельном IMAP, затем копия с пробой — письма файлами, тестовым
+          # ключом age, частями по 4 КБ; склеенные вложения расшифровываются и читаются pg_restore.
+          python3 -I deploy/test_backup_mail.py
+          test "$(sudo cat /opt/trener/bin/backup.pub)" = "$(cat deploy/backup.pub)"
+          sudo -u postgres psql -d trener -qc "INSERT INTO server_info (key, value) SELECT 'backup-check-' || g, repeat(E'строка\n\t', 500) FROM generate_series(1, 20) g"
+          age-keygen -o backup.key 2>/dev/null
+          age-keygen -y backup.key > backup-check.pub
+          sudo TRENER_BACKUP_KEY="$PWD/backup-check.pub" TRENER_BACKUP_PART=4096 TRENER_BACKUP_OUTBOX=/tmp/outbox \
+            /opt/trener/bin/backup.sh --probe | tee backup.log
+          grep -q '^КОПИЯ: .*проба — прошла' backup.log
+          sudo grep -qP '\tok\t' /var/lib/trener/backup-status
+          sudo ls /var/backups/trener/ | grep -qx 'trener-.*\.dump\.age'
+          test "$(sudo stat -c '%a %U' /var/backups/trener)" = "700 root"
+          sudo -u postgres psql -lqt | cut -d'|' -f1 | grep -qw trener_probe && { echo "временная база осталась" >&2; exit 1; }
+          sudo chmod -R a+r /tmp/outbox
+          python3 -I - /tmp/outbox parts <<'PY'
+          import email, email.policy, os, sys
+          src, dst = sys.argv[1], sys.argv[2]
+          os.makedirs(dst)
+          files = sorted(os.listdir(src))
+          assert len(files) > 1, files
+          for name in files:
+              m = email.message_from_binary_file(open(os.path.join(src, name), "rb"), policy=email.policy.default)
+              assert m["To"] == "box@mail.ru" and "[personalka-backup]" in m["Subject"], (m["To"], m["Subject"])
+              for a in m.iter_attachments():
+                  open(os.path.join(dst, a.get_filename()), "wb").write(a.get_content())
+          PY
+          cat parts/* | age --decrypt --identity backup.key > restored.dump
+          pg_restore --list restored.dump | grep -q 'TABLE DATA public server_info'
+          # Сбой (ключ испорчен) — письмо администратору и «ошибка» в отметке.
+          echo nonsense > bad.pub
+          sudo rm -rf /tmp/outbox
+          if sudo TRENER_BACKUP_KEY="$PWD/bad.pub" TRENER_BACKUP_OUTBOX=/tmp/outbox /opt/trener/bin/backup.sh; then echo "сбой не замечен" >&2; exit 1; fi
+          sudo grep -qP '\tошибка\tшифрование$' /var/lib/trener/backup-status
+          sudo grep -qx 'To: admin@example.ru' /tmp/outbox/001.eml
+          test "$(sudo ls /var/backups/trener | wc -l)" = 1
           echo "::$STOP::"
-          echo "::notice title=Проверка установки::установка, повтор, сайт Planovo рядом, автоматический откат упавшей версии — всё как надо"
+          echo "::notice title=Проверка установки::установка, повтор, сайт Planovo рядом, автоматический откат упавшей версии, ночная копия с пробой и письмо о её сбое — всё как надо"
 
       - name: Журнал при ошибке
         if: failure()
@@ -162,7 +198,7 @@ jobs:
         env:
           HOST: ${{ secrets.PERSONALKA_SERVER }}
           SSH_KEY: ${{ secrets.PERSONALKA_SSH_KEY }}
-          # Ящик для писем с кодами (2.8): пароль приложения Mail.ru; адрес ящика и SMTP — из настроек Planovo на сервере.
+          # Ящик для писем с кодами (2.8) и копий базы (2.14): пароль приложения Mail.ru; адрес ящика и SMTP — из настроек Planovo на сервере.
           MAIL_USER: ${{ secrets.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           ADMIN_EMAIL: ${{ secrets.PERSONALKA_ADMIN_EMAIL }}
@@ -194,7 +230,9 @@ jobs:
             install -d /opt/trener/releases/$N
             install -m 644 /root/personalka-server.jar /opt/trener/releases/$N/personalka-server.jar
             rm -f /root/personalka-server.jar /root/deploy.tar.gz
-            /opt/trener/bin/server.sh switch $N" 2>&1 | tee deploy.log; then
+            /opt/trener/bin/server.sh switch $N
+            # Первая копия базы (2.14) — сразу, с пробой восстановления; дальше — таймер в 03:30.
+            [ -s /var/lib/trener/backup-status ] || /opt/trener/bin/backup.sh --probe || true" 2>&1 | tee deploy.log; then
             rm -f ~/.ssh/deploy
             body=$(tail -25 deploy.log | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')
             echo "::error title=Выкладка не удалась::$body"
@@ -203,6 +241,8 @@ jobs:
           rm -f ~/.ssh/deploy
           # Журнал выкладки из облачной сессии не скачать — главное выносим в итоги сборки.
           grep '^ИТОГ: ' deploy.log | tail -1 | sed 's/^ИТОГ: /::notice title=Сервер настроен::/' || true
+          grep '^КОПИЯ: ' deploy.log | tail -1 | sed 's/^КОПИЯ: /::notice title=Первая копия базы::/' || true
+          grep '^СБОЙ: ' deploy.log | tail -1 | sed 's/^СБОЙ: /::warning title=Первая копия базы::/' || true
           echo "CHECK=1" >> "$GITHUB_ENV"
 
       - name: Снаружи по HTTPS

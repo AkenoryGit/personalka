@@ -21,7 +21,8 @@ step() { echo "== $*"; }
 
 step "Пакеты"
 # Planovo их уже поставил — тогда apt не трогаем. Выкладка Planovo или автообновление могут держать apt — ждём.
-PACKAGES=(postgresql openjdk-21-jre-headless caddy curl openssl)
+# age и python3 — ночные копии базы (backup.sh, ТЗ 7.5).
+PACKAGES=(postgresql openjdk-21-jre-headless caddy curl openssl age python3)
 MISSING=()
 for p in "${PACKAGES[@]}"; do dpkg -s "$p" >/dev/null 2>&1 || MISSING+=("$p"); done
 if [ ${#MISSING[@]} -gt 0 ]; then
@@ -111,11 +112,16 @@ install -m 640 -o root -g trener /etc/trener/trener.env.new /etc/trener/trener.e
 rm -f /etc/trener/trener.env.new
 
 step "Скрипт выкладки и службы"
-install -m 755 "$HERE/server.sh" /opt/trener/bin/server.sh
-install -m 644 "$HERE/trener.service" "$HERE/trener-alert.service" /etc/systemd/system/
+install -m 755 "$HERE/server.sh" "$HERE/backup.sh" /opt/trener/bin/
+# Открытый ключ age — не секрет; закрытого ключа на сервере нет.
+install -m 644 "$HERE/backup_mail.py" "$HERE/backup.pub" /opt/trener/bin/
+install -m 644 "$HERE/trener.service" "$HERE/trener-alert.service" "$HERE/trener-backup.service" "$HERE/trener-backup.timer" \
+  /etc/systemd/system/
 systemctl daemon-reload
 # Первый запуск — из server.sh switch, когда jar уже на месте.
 systemctl enable trener.service >/dev/null 2>&1
+# Ночная копия базы в 03:30 по клубу (backup.sh); первую делает выкладка сразу после установки.
+systemctl enable --now trener-backup.timer >/dev/null 2>&1
 
 step "HTTPS (Caddy)"
 install -d -m 755 /etc/caddy/sites
@@ -148,4 +154,5 @@ SYSTEM=$(. /etc/os-release && echo "$PRETTY_NAME")
 ALERT=$([ -x /usr/local/bin/planovo-alert ] && echo "через ящик Planovo" || echo "НЕТ planovo-alert — только журнал")
 MEM=$(free -m | awk '/^Mem:/ { print $7 }')
 DISK=$(df -BG --output=avail / | tail -1 | tr -d ' G')
-echo "ИТОГ: $SYSTEM; $DOMAIN → 127.0.0.1:$PORT; $("$JAVA" -version 2>&1 | head -1); $(runuser -u postgres -- psql -tAc 'SHOW server_version' | cut -d' ' -f1 | sed 's/^/PostgreSQL /'); письма о падениях — $ALERT; письма с кодами — $MAIL_STATE; администратор — $([ -n "$ADMIN_EMAIL" ] && printf '%s' "$ADMIN_EMAIL" | sed 's/^\(..\)[^@]*/\1***/' || echo 'НЕ задан'); свободно памяти $MEM МБ, диска $DISK ГБ"
+BACKUP=$(cut -f1-2 /var/lib/trener/backup-status 2>/dev/null | tr '\t' ' ' || true)
+echo "ИТОГ: $SYSTEM; $DOMAIN → 127.0.0.1:$PORT; $("$JAVA" -version 2>&1 | head -1); $(runuser -u postgres -- psql -tAc 'SHOW server_version' | cut -d' ' -f1 | sed 's/^/PostgreSQL /'); письма о падениях — $ALERT; письма с кодами — $MAIL_STATE; администратор — $([ -n "$ADMIN_EMAIL" ] && printf '%s' "$ADMIN_EMAIL" | sed 's/^\(..\)[^@]*/\1***/' || echo 'НЕ задан'); копии — ключ $(head -c 12 "$HERE/backup.pub")…, последняя: ${BACKUP:-ещё не было}; свободно памяти $MEM МБ, диска $DISK ГБ"

@@ -1,0 +1,14 @@
+# Ночная копия базы «Персоналки» (ТЗ 7.5): /etc/systemd/system/trener-backup.service, кладёт deploy/setup.sh.
+# Запускает trener-backup.timer; вручную — systemctl start trener-backup (проба восстановления — по воскресеньям).
+# От root: дамп — от postgres, копии — в /var/backups/trener (только root), пароль ящика — в /etc/trener/trener.env.
+[Unit]
+Description=Ночная копия базы «Персоналки»
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/trener/bin/backup.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h

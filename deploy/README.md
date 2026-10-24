@@ -9,6 +9,8 @@
 | [`setup.sh`](setup.sh) | запускается из `/root/personalka-deploy` | Установка и обновление: пакеты (если Planovo их ещё не поставил), пользователь, папки, роль и база, `/etc/trener/trener.env`, службы, блок Caddy. Повторный запуск ничего не ломает |
 | [`server.sh`](server.sh) | `/opt/trener/bin/` | Переключение версии, проверка `/health`, откат |
 | [`trener.service`](trener.service) | `/etc/systemd/system/` | Служба: пользователь `trener`, Java 21 до 384 МБ, перезапуск через 5 с, урезанные права |
+| [`backup.sh`](backup.sh), [`backup_mail.py`](backup_mail.py), [`backup.pub`](backup.pub) | `/opt/trener/bin/` | Ночная копия базы (ТЗ 7.5): дамп, шифрование age, письмо, чистка ящика, проба восстановления — раздел «Копии базы» ниже |
+| [`trener-backup.service`](trener-backup.service), [`trener-backup.timer`](trener-backup.timer) | `/etc/systemd/system/` | Запуск копии каждый день в 03:30 по Тюмени; пропущенный — сразу после включения сервера |
 | [`trener-alert.service`](trener-alert.service) | `/etc/systemd/system/` | Письмо, когда служба упала 5 раз за 10 минут: через `planovo-alert` — ящик Planovo и его `ALERT_EMAIL` |
 
 **Что где на сервере:** версии — `/opt/trener/releases/<N>/personalka-server.jar`, включённая — ссылка `/opt/trener/current`; Java 21 — ссылка `/opt/trener/java`; настройки — `/etc/trener/trener.env` (root, группа `trener`, 640); пароль базы — `/etc/trener/db-password` (только root; создаётся на сервере, нигде больше не хранится); блок Caddy — `/etc/caddy/sites/trener.caddy`.
@@ -43,6 +45,33 @@
 **Письма с кодами** (регистрация и сброс пароля, шаг 2.8) идут через ящик Planovo: `setup.sh` берёт `MAIL_USER`, `MAIL_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `ALERT_EMAIL` из `/etc/planovo/ops.env` (его пишет выкладка Planovo), секреты «Персоналки» главнее. Выкладка передаёт их файлом, который удаляется сразу после установки; в `/etc/trener/trener.env` они попадают как `TRENER_SMTP_*`, `TRENER_MAIL_FROM` («Персоналка <адрес ящика>») и `TRENER_ADMIN_EMAIL`. В итогах выкладки, в строке «Сервер настроен», — какой ящик и кто администратор (адреса скрыты звёздочками).
 
 Ключ сервера запоминается при первом входе (`StrictHostKeyChecking=accept-new`), как у Planovo.
+
+## Копии базы (ТЗ 7.5)
+
+**Каждую ночь в 03:30 по Тюмени** `backup.sh` (служба `trener-backup`, от root):
+
+1. `pg_dump` базы `trener` и проверка, что дамп читается (`pg_restore --list`); число записей по таблицам — из дампа.
+2. **По воскресеньям — проба восстановления:** дамп разворачивается во временную базу `trener_probe`, число записей в каждой таблице сверяется с дампом, база удаляется. Закрытого ключа на сервере нет, поэтому проба берёт дамп до шифрования — те же байты, что потом шифруются (их SHA-256 — в письме).
+3. **Шифрование** `age` открытым ключом [`backup.pub`](backup.pub). Закрытый ключ `personalka-backup.key` — только у Дмитрия, в двух местах.
+4. **Письмо** в ящик Planovo (туда же, куда копии Planovo) с темой «Персоналка: копия базы 25.10.2026 [personalka-backup]». Копия больше 15 МБ уходит несколькими письмами «· часть 1 из 2». На сервере — 7 последних зашифрованных копий в `/var/backups/trener` (только root).
+5. **Чистка ящика по IMAP** (`imap.mail.ru`, тот же пароль приложения): во всех папках удаляются письма с меткой `[personalka-backup]` в теме старше 30 дней — остаются сегодняшняя и 29 прошлых. Письма Planovo и любые другие не трогаются.
+6. **Сбой на любом этапе** — письмо администратору («Персоналка: копия базы не сделана», этап и код), не вышло своим ящиком — через `planovo-alert`. Итог последнего запуска — строкой в `/var/lib/trener/backup-status` (время, `ok` или `ошибка`, подробности); её покажет «Клуб → Сервер», когда появится этот экран (этап 5). Итог виден и в строке «Сервер настроен» каждой выкладки.
+
+Первую копию с пробой выкладка делает сама сразу после установки (если отметки ещё нет) — в итогах сборки «Первая копия базы». Вручную на сервере: `systemctl start trener-backup` (проба — `/opt/trener/bin/backup.sh --probe`), журнал — `journalctl -u trener-backup -n 100`.
+
+**Как восстановить** (нужен закрытый ключ; `age` — [age-encryption.org](https://age-encryption.org), на Windows — `age.exe` из релиза):
+
+```
+# частей несколько — склеить по порядку
+cat trener-20261025-0330.dump.age.01 trener-20261025-0330.dump.age.02 > trener-20261025-0330.dump.age
+age --decrypt --identity personalka-backup.key trener-20261025-0330.dump.age > trener.dump
+pg_restore --list trener.dump          # проверка: дамп читается
+sha256sum trener.dump                  # совпадает с SHA-256 в письме
+# на сервере: служба остановлена, база пустая (createdb -O trener trener)
+sudo -u postgres pg_restore --no-owner --role=trener --dbname=trener < trener.dump
+```
+
+Проверить ключ, не трогая сервер, — первые две строки и `pg_restore --list` на своём компьютере.
 
 ## Если что-то не так
 

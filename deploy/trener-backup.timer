@@ -1,0 +1,11 @@
+# Каждый день в 03:30 по клубу (ТЗ 7.5); пропущенный запуск (сервер был выключен) — сразу после включения.
+[Unit]
+Description=Ночная копия базы «Персоналки» в 03:30 по Тюмени
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Yekaterinburg
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
