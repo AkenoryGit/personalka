@@ -32,6 +32,8 @@ data class TrainingDraft(
     val durationMin: Int = TypePresets.DEFAULT_DURATION,
     val repeat: Repeat? = null,
     val plan: String = "",
+    /** У дежурства — «За кого»: имя коллеги, как написал тренер. */
+    val coverFor: String = "",
 )
 
 /**
@@ -195,6 +197,20 @@ object TrainingFormRules {
         locationId = locationId,
         durationMin = minOf(type?.defaultDurationMin ?: TypePresets.DEFAULT_DURATION, ClubTime.MINUTES_PER_DAY - ClubTime.minuteOfDay(start)),
     )
+
+    /** Сколько знаков в «За кого»: имя с фамилией помещаются с запасом. */
+    const val COVER_FOR_MAX = 40
+
+    /**
+     * «За кого» к записи: без пробелов по краям и без «за» в начале — его добавляют строки календаря («за Александра»).
+     * Пусто — дежурство своё. Пометка — у одного дежурства: у повторяющегося её нет, форма поле не показывает.
+     */
+    fun coverFor(draft: TrainingDraft): String? {
+        if (draft.repeat != null) return null
+        return draft.coverFor.trim().replace(COVER_PREFIX, "").trim().take(COVER_FOR_MAX).ifEmpty { null }
+    }
+
+    private val COVER_PREFIX = Regex("^за\\s+", RegexOption.IGNORE_CASE)
 
     /** Начало дежурства сменили, конец «до» остаётся на месте. */
     fun withDutyStart(draft: TrainingDraft, start: LocalDateTime): TrainingDraft =

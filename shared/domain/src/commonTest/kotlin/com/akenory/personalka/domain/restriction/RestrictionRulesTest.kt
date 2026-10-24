@@ -264,7 +264,7 @@ class RestrictionRulesTest {
     // --- Накладка с дежурством ---
 
     @Test
-    fun trainingOverDutyInAnyPlace() {
+    fun trainingOverDutyInOtherPlace() {
         // Дежурство ББ 11:00–15:00, как на макете календаря; дежурство ДБ 14:00–16:00 отменено.
         val sameDay = listOf(
             PlacedTraining("duty-bb", duty(day(20), 11, duration = 240)),
@@ -272,15 +272,18 @@ class RestrictionRulesTest {
             PlacedTraining("other-pt", pt(day(20), 12, 20, place = "bb")),
         )
         assertEquals(listOf("duty-bb"), RestrictionRules.dutyOverlaps(pt(day(20), 12, 20), sameDay).map { it.id }, "ПТ в ДБ")
-        assertEquals(listOf("duty-bb"), RestrictionRules.dutyOverlaps(pt(day(20), 14, 30, place = "bb"), sameDay).map { it.id })
-        assertEquals(emptyList(), RestrictionRules.dutyOverlaps(pt(day(20), 15, place = "bb"), sameDay), "начинается в конце дежурства")
-        assertEquals(emptyList(), RestrictionRules.dutyOverlaps(pt(day(20), 10, 10, place = "bb"), sameDay), "кончается в начале")
+        assertEquals(listOf("duty-bb"), RestrictionRules.dutyOverlaps(pt(day(20), 14, 30, place = "gym"), sameDay).map { it.id }, "ПТ в зале")
+        assertEquals(emptyList(), RestrictionRules.dutyOverlaps(pt(day(20), 14, 30, place = "bb"), sameDay), "ПТ в том же ББ — не накладка")
+        assertEquals(emptyList(), RestrictionRules.dutyOverlaps(pt(day(20), 15), sameDay), "начинается в конце дежурства")
+        assertEquals(emptyList(), RestrictionRules.dutyOverlaps(pt(day(20), 10, 10), sameDay), "кончается в начале")
         assertEquals(emptyList(), RestrictionRules.dutyOverlaps(duty(day(20), 12, duration = 60), sameDay), "у дежурства накладок нет")
 
+        // Дежурства в ББ и ДБ, тренировка в зале — под ней оба; в ДБ — только дежурство ББ.
         val twoDuties = sameDay + PlacedTraining("duty-db", duty(day(20), 14, 30, place = "db", duration = 60))
         assertEquals(
             listOf("duty-bb", "duty-db"),
-            RestrictionRules.dutyOverlaps(pt(day(20), 14, 30, place = "bb"), twoDuties).map { it.id },
+            RestrictionRules.dutyOverlaps(pt(day(20), 14, 30, place = "gym"), twoDuties).map { it.id },
         )
+        assertEquals(listOf("duty-bb"), RestrictionRules.dutyOverlaps(pt(day(20), 14, 30), twoDuties).map { it.id })
     }
 }

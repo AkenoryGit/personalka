@@ -60,8 +60,9 @@ object CalendarSettingsFormat {
         return ZoneFormat.repeat(weekdays, null) + from + to
     }
 
-    /** Дежурство в списке: «ББ 11:00–15:00». */
-    fun duty(place: String, startMinute: Int, endMinute: Int): String = "$place " + DateFormat.timeRange(startMinute, endMinute)
+    /** Дежурство в списке: «ББ 11:00–15:00»; за коллегу — «ББ 11:00–15:00 · за Александра». */
+    fun duty(place: String, startMinute: Int, endMinute: Int, coverFor: String? = null): String =
+        "$place " + DateFormat.timeRange(startMinute, endMinute) + (coverFor?.takeIf { it.isNotBlank() }?.let { DOT + ZoneFormat.coverFor(it) } ?: "")
 
     /** Сообщение после «Записать отпуск»: «Отпуск 02.11–08.11: удалено 12 тренировок»; без тренировок — «Отпуск 02.11–08.11 записан». */
     fun vacationSaved(from: LocalDate, to: LocalDate, deleted: Int): String {

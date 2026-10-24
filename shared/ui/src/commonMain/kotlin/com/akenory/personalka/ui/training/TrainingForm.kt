@@ -1018,6 +1018,7 @@ internal val DraftSaver: Saver<TrainingDraft?, Any> = Saver(
                 d.repeat?.weekdays?.joinToString(",") { it.name } ?: "-",
                 d.repeat?.until?.toString().orEmpty(),
                 d.plan,
+                d.coverFor,
             )
         }
     },
@@ -1036,6 +1037,7 @@ internal val DraftSaver: Saver<TrainingDraft?, Any> = Saver(
                 durationMin = v[5].toInt(),
                 repeat = if (v[6] == "-") null else Repeat(v[6].split(',').filter { it.isNotEmpty() }.map(DayOfWeek::valueOf).toSet(), v[7].ifEmpty { null }?.let(LocalDate::parse)),
                 plan = v[8],
+                coverFor = v.getOrElse(9) { "" },
             )
         }
     },

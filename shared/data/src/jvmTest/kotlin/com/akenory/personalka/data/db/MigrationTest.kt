@@ -6,11 +6,13 @@ import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Переход базы со старой версии (шаг 1.13в): файл версии 1 — как на телефоне до этой сборки — открывается версией 2
- * без потерь. Таблицы версии 1 строятся по её схеме из `shared/data/schemas`, которую когда-то записал Room.
+ * Переходы базы со старых версий: файл версии 1 (до шага 1.13в) и версии 2 (до «За кого» у дежурства) — как на телефоне
+ * до новой сборки — открываются нынешней версией без потерь. Таблицы старой версии строятся по её схеме
+ * из `shared/data/schemas`, которую когда-то записал Room.
  */
 class MigrationTest {
 
@@ -21,7 +23,7 @@ class MigrationTest {
         val path = file.absolutePath
         try {
             BundledSQLiteDriver().open(path).useConnection { raw ->
-                createVersion1(raw)
+                createVersion(raw, 1)
                 // Места — в порядке тренера: ДБ первым, своё место «Ул» — третьим.
                 raw.exec(place("p1", "ДБ", "Детский бассейн", sort = 0))
                 raw.exec(place("p2", "ББ", "Большой бассейн", sort = 1))
@@ -46,7 +48,7 @@ class MigrationTest {
             }
 
             BundledSQLiteDriver().open(path).useConnection { raw ->
-                assertEquals(2L, raw.long("PRAGMA user_version"))
+                assertEquals(PersonalkaDatabase.VERSION.toLong(), raw.long("PRAGMA user_version"))
                 assertEquals(0L, raw.long("SELECT COUNT(*) FROM pragma_table_info('training_type') WHERE name = 'color'"), "Цвет типа удалён")
             }
         } finally {
@@ -55,26 +57,62 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion2() {
-        assertEquals(2, PersonalkaDatabase.VERSION)
-        assertTrue(schemaFile(1).exists(), "Схема версии 1 хранится: по ней строится переход")
+    fun version2KeepsDutiesWithoutCoverFor(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v2", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 2)
+                raw.exec(
+                    "INSERT INTO training (id, typeId, locationId, start, durationMin, seriesId, seriesDetached, groupId, status, plan, fact, " +
+                        "owner, ownerColleagueId, conductedBy, colleagueId, splitHalf, cancelReason, overRestriction, planCarriedFromId, " +
+                        "planCarriedText, doneAt, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('d1', 't1', 'p1', '2026-10-20T11:00', 240, NULL, 0, NULL, 'PLANNED', NULL, NULL, " +
+                        "'SELF', NULL, 'SELF', NULL, 0, NULL, 0, NULL, NULL, NULL, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val duty = db.trainingDao().training("d1")!!
+                assertEquals(240, duty.durationMin, "Дежурство не тронуто")
+                assertNull(duty.coverFor, "Прежние дежурства — свои")
+                db.trainingDao().upsertTraining(duty.copy(coverFor = "Александра"))
+                assertEquals("Александра", db.trainingDao().training("d1")!!.coverFor)
+            } finally {
+                db.close()
+            }
+
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                assertEquals(3L, raw.long("PRAGMA user_version"))
+            }
+        } finally {
+            listOf("", "-wal", "-shm", "-journal").forEach { File(path + it).delete() }
+        }
     }
 
-    /** Таблицы, индексы и служебная таблица Room версии 1 — из её JSON-схемы. */
-    private fun createVersion1(raw: SQLiteConnection) {
+    @Test
+    fun newDatabaseIsVersion3() {
+        assertEquals(3, PersonalkaDatabase.VERSION)
+        assertTrue(schemaFile(1).exists() && schemaFile(2).exists(), "Схемы версий 1 и 2 хранятся: по ним строятся переходы")
+    }
+
+    /** Таблицы, индексы и служебная таблица Room версии [version] — из её JSON-схемы. */
+    private fun createVersion(raw: SQLiteConnection, version: Int) {
         var table = ""
-        for (line in schemaFile(1).readLines()) {
+        for (line in schemaFile(version).readLines()) {
             val key = line.trim()
             when {
                 key.startsWith("\"tableName\"") -> table = key.substringAfter(": \"").substringBeforeLast("\"")
                 key.startsWith("\"createSql\"") -> raw.exec(unescape(key.substringAfter(": \"").substringBeforeLast("\"")).replace("\${TABLE_NAME}", table))
             }
         }
-        val schema = schemaFile(1).readText()
+        val schema = schemaFile(version).readText()
         Regex("\"(CREATE TABLE IF NOT EXISTS room_master_table[^\"]*|INSERT OR REPLACE INTO room_master_table[^\"]*)\"")
             .findAll(schema.replace("\\\"", "\u0001"))
             .forEach { raw.exec(it.groupValues[1].replace("\u0001", "\"")) }
-        raw.exec("PRAGMA user_version = 1")
+        raw.exec("PRAGMA user_version = $version")
     }
 
     private fun schemaFile(version: Int): File {

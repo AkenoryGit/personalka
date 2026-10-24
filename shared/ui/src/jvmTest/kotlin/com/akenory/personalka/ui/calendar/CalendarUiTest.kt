@@ -693,7 +693,7 @@ class CalendarUiTest {
     fun dutyIsFillWithTrainingsOverIt() = runComposeUiTest {
         training("11:00", 240, type = "Деж")
         training("06:00", 60, type = "Деж")
-        training("14:00", 50, "Никитин Артём", status = TrainingStatus.DONE, fact = "Кроль 8 × 25 м")
+        training("14:00", 50, "Никитин Артём", place = "ДБ", status = TrainingStatus.DONE, fact = "Кроль 8 × 25 м")
         openCalendar()
         awaitBlocks(1)
         awaitZones(2)
