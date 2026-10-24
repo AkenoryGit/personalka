@@ -60,6 +60,7 @@ fun Route.sync(database: Database, auth: Auth, sync: Sync) {
                 val coach = syncCoach(c, token, schemaVersion)
                 if (device.isEmpty() || device.length > ID_MAX) throw Errors.badRequest("Нет идентификатора устройства")
                 val changes = changes(body)
+                sync.synced(c, coach.id)
                 changes to sync.push(c, coach, device, changes)
             }
             call.respondJson(
@@ -88,6 +89,7 @@ fun Route.sync(database: Database, auth: Auth, sync: Sync) {
             val schemaVersion = params["schema_version"]?.toIntOrNull()
             val rows = database.tx { c ->
                 val coach = syncCoach(c, token, schemaVersion)
+                sync.synced(c, coach.id)
                 sync.pull(c, coach.id, since, limit + 1) ?: throw Errors.fullSync()
             }
             val page = rows.take(limit)

@@ -1,5 +1,6 @@
 package com.akenory.personalka.server
 
+import com.akenory.personalka.domain.format.CabinetFormat
 import com.akenory.personalka.domain.format.RuText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -56,6 +57,7 @@ object Errors {
         HttpStatusCode.UpgradeRequired, "update_required", "Обновите приложение: эта версия больше не синхронизируется с сервером",
     )
     fun serverOutdated() = ApiException(HttpStatusCode.ServiceUnavailable, "server_outdated", "Сервер обновляется — данные отправятся позже")
+    fun cabinetsClosed() = ApiException(HttpStatusCode.Forbidden, "feature_closed", "Кабинеты родителей не открыты — напишите администратору")
     fun fullSync() = ApiException(HttpStatusCode.Gone, "full_sync", "Нужна полная синхронизация")
 
     /** «40 секунд», «5 минут». */
@@ -74,7 +76,13 @@ fun Application.apiErrors() {
             call.respondJson(error(e.code, e.message), e.status)
         }
         exception<Throwable> { call, e ->
-            call.application.log.error("Ошибка запроса", e)
+            call.application.log.error("Ошибка запроса ${maskCabinet(call.request.local.uri)}", e)
+            if (call.request.local.uri.startsWith("/c/")) {
+                call.cabinetHtml(HttpStatusCode.InternalServerError) {
+                    CabinetHtml.message(this, CabinetFormat.ERROR_TITLE, CabinetFormat.ERROR_TEXT)
+                }
+                return@exception
+            }
             call.respondJson(error("server_error", "Ошибка сервера — попробуйте позже"), HttpStatusCode.InternalServerError)
         }
     }

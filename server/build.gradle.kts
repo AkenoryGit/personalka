@@ -25,6 +25,8 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.status.pages)
+    // Кабинет родителя (ТЗ 6.3) — HTML на kotlinx.html (ТЗ 2.1).
+    implementation(libs.ktor.server.html.builder)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.bouncycastle)
     implementation(libs.postgresql)

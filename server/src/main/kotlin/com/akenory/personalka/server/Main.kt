@@ -23,14 +23,20 @@ fun Application.trener(
     version: String = serverVersion,
     auth: Auth = Auth(NoMailer, emptySet()),
     sync: Sync = Sync(),
+    cabinets: Cabinets = Cabinets(sync.now),
+    limit: RateLimit = RateLimit(now = sync.now),
 ) {
-    install(CallLogging)
+    install(CallLogging) {
+        // Токен кабинета в журнал не попадает (6.2): ссылка — как пароль.
+        format { call -> "${call.response.status()}: ${call.request.local.method.value} ${maskCabinet(call.request.local.uri)}" }
+    }
     apiErrors()
     monitor.subscribe(ApplicationStopped) { database.close() }
     routing {
         health(version, database)
         auth(database, auth)
         sync(database, auth, sync)
+        cabinets(database, auth, cabinets, limit)
     }
 }
 
