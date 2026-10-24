@@ -51,6 +51,12 @@ object Errors {
         HttpStatusCode.BadRequest, "wrong_code", "Неверный код. Осталось ${RuText.count(left, "попытка", "попытки", "попыток")}",
     )
     fun codeExpired() = ApiException(HttpStatusCode.BadRequest, "code_expired", "Код устарел — запросите новый")
+    fun featureClosed() = ApiException(HttpStatusCode.Forbidden, "feature_closed", "Копия на сервере не открыта — напишите администратору")
+    fun updateRequired() = ApiException(
+        HttpStatusCode.UpgradeRequired, "update_required", "Обновите приложение: эта версия больше не синхронизируется с сервером",
+    )
+    fun serverOutdated() = ApiException(HttpStatusCode.ServiceUnavailable, "server_outdated", "Сервер обновляется — данные отправятся позже")
+    fun fullSync() = ApiException(HttpStatusCode.Gone, "full_sync", "Нужна полная синхронизация")
 
     /** «40 секунд», «5 минут». */
     private fun waitText(seconds: Int): String = if (seconds < 90) {
