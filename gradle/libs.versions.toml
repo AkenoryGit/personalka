@@ -23,6 +23,8 @@ postgresql = "42.7.14"
 hikari = "7.1.0"
 flyway = "13.10.0"
 logback = "1.6.5"
+# Пароли тренеров (шаг 2.8, ТЗ 7.3): Argon2id из Bouncy Castle — на чистой Java, без своих библиотек ОС.
+bouncycastle = "1.85"
 
 android-compileSdk = "37"
 android-targetSdk = "36"
@@ -47,11 +49,13 @@ apache-poi-ooxml = { module = "org.apache.poi:poi-ooxml", version.ref = "poi" }
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
 ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor" }
+ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
+bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 

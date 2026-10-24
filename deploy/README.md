@@ -36,6 +36,11 @@
 | --- | --- |
 | `PERSONALKA_SERVER` | IP-адрес VPS |
 | `PERSONALKA_SSH_KEY` | Закрытый ключ выкладки `personalka_deploy` (ed25519); открытая часть — в `/root/.ssh/authorized_keys` на сервере |
+| `MAIL_PASSWORD` | Пароль приложения Mail.ru для ящика Planovo (SMTP и IMAP) — для писем с кодами (2.8) и копий (2.14). Нет его — берётся пароль Planovo из `/etc/planovo/ops.env` |
+| `MAIL_USER` | Необязательно: свой ящик «Персоналки»; нет — адрес ящика Planovo из `/etc/planovo/ops.env` |
+| `PERSONALKA_ADMIN_EMAIL` | Необязательно: почта администратора; нет — `ALERT_EMAIL` Planovo (почта для писем о сбоях) |
+
+**Письма с кодами** (регистрация и сброс пароля, шаг 2.8) идут через ящик Planovo: `setup.sh` берёт `MAIL_USER`, `MAIL_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `ALERT_EMAIL` из `/etc/planovo/ops.env` (его пишет выкладка Planovo), секреты «Персоналки» главнее. Выкладка передаёт их файлом, который удаляется сразу после установки; в `/etc/trener/trener.env` они попадают как `TRENER_SMTP_*`, `TRENER_MAIL_FROM` («Персоналка <адрес ящика>») и `TRENER_ADMIN_EMAIL`. В итогах выкладки, в строке «Сервер настроен», — какой ящик и кто администратор (адреса скрыты звёздочками).
 
 Ключ сервера запоминается при первом входе (`StrictHostKeyChecking=accept-new`), как у Planovo.
 

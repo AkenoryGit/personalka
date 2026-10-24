@@ -54,4 +54,29 @@ class ServerConfigTest {
     fun passwordIsNotPrintedToLog() {
         assertFalse("секрет" in ServerConfig.fromEnv(full).toString())
     }
+
+    @Test
+    fun mailAndAdminAreOptional() {
+        val config = ServerConfig.fromEnv(
+            full + mapOf(
+                "TRENER_SMTP_HOST" to "smtp.mail.ru",
+                "TRENER_SMTP_USER" to "box@mail.ru",
+                "TRENER_SMTP_PASSWORD" to "пароль-ящика",
+                "TRENER_ADMIN_EMAIL" to " Dmitry@Example.ru, второй@неверный",
+            ),
+        )
+        assertEquals(SmtpSettings("smtp.mail.ru", 465, null, "box@mail.ru", "пароль-ящика", "Персоналка <box@mail.ru>"), config.smtp)
+        assertEquals(setOf("dmitry@example.ru"), config.adminEmails)
+        assertFalse("пароль-ящика" in config.toString())
+        assertNull(ServerConfig.fromEnv(full).smtp)
+    }
+
+    @Test
+    fun mailHostWithoutPasswordIsAnError() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            ServerConfig.fromEnv(full + mapOf("TRENER_SMTP_HOST" to "smtp.mail.ru", "TRENER_SMTP_TLS" to "maybe"))
+        }
+        assertTrue("TRENER_SMTP_TLS — ssl, starttls или none" in error.message!!, error.message)
+        assertTrue("нужны TRENER_SMTP_USER и TRENER_SMTP_PASSWORD" in error.message!!, error.message)
+    }
 }

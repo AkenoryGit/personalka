@@ -14,11 +14,13 @@ import kotlin.system.exitProcess
 val serverVersion: String = Database::class.java.`package`?.implementationVersion ?: "разработка"
 
 /** Всё приложение сервера: подключается и в службе, и в тестах (`testApplication`). */
-fun Application.trener(database: Database, version: String = serverVersion) {
+fun Application.trener(database: Database, version: String = serverVersion, auth: Auth = Auth(NoMailer, emptySet())) {
     install(CallLogging)
+    apiErrors()
     monitor.subscribe(ApplicationStopped) { database.close() }
     routing {
         health(version, database)
+        auth(database, auth)
     }
 }
 
@@ -43,5 +45,6 @@ fun main() {
         exitProcess(1)
     }
     log.info("Схема базы — версия ${database.schemaVersion}")
-    embeddedServer(Netty, port = config.port, host = config.host) { trener(database) }.start(wait = true)
+    val auth = Auth(config.mailer(), config.adminEmails)
+    embeddedServer(Netty, port = config.port, host = config.host) { trener(database, auth = auth) }.start(wait = true)
 }

@@ -53,6 +53,39 @@ SELECT 'CREATE DATABASE trener OWNER trener ENCODING ''UTF8'' TEMPLATE template0
 REVOKE ALL ON DATABASE trener FROM PUBLIC;
 SQL
 
+step "Почта"
+# Письма с кодами (шаг 2.8) — пока через ящик Planovo (решение Дмитрия 24.10.2026): адрес и SMTP — из настроек
+# Planovo на этом же сервере (/etc/planovo/ops.env, только root). Свои секреты «Персоналки» главнее: выкладка кладёт
+# их файлом TRENER_SECRETS (MAIL_USER, MAIL_PASSWORD, ADMIN_EMAIL) и удаляет его после установки.
+read_env() {  # read_env файл ИМЯ — значение строки ИМЯ="…" без исполнения файла
+  [ -r "$1" ] || return 0
+  sed -n "s/^$2=\"\(.*\)\"\$/\1/p; s/^$2=\([^\"]*\)\$/\1/p" "$1" | tail -1
+}
+OPS=${TRENER_PLANOVO_OPS:-/etc/planovo/ops.env}
+SECRETS=${TRENER_SECRETS:-}
+pick() {  # pick ИМЯ — из секретов «Персоналки», иначе из Planovo
+  local v=""
+  [ -n "$SECRETS" ] && v=$(read_env "$SECRETS" "$1")
+  [ -n "$v" ] || v=$(read_env "$OPS" "$1")
+  printf '%s' "$v" | tr -d '[:space:]'
+}
+MAIL_USER=$(pick MAIL_USER)
+MAIL_PASSWORD=$(pick MAIL_PASSWORD)
+SMTP_HOST=$(read_env "$OPS" SMTP_HOST)
+SMTP_PORT=$(read_env "$OPS" SMTP_PORT)
+SMTP_TLS=$(read_env "$OPS" SMTP_TLS)
+# Администратор — почта из секрета ADMIN_EMAIL, иначе адрес писем о сбоях Planovo (это почта Дмитрия).
+ADMIN_EMAIL=$(pick ADMIN_EMAIL)
+[ -n "$ADMIN_EMAIL" ] || ADMIN_EMAIL=$(pick ALERT_EMAIL)
+if [ -n "$MAIL_USER" ] && [ -n "$MAIL_PASSWORD" ]; then
+  SMTP_HOST=${SMTP_HOST:-smtp.mail.ru}
+  MAIL_STATE="ящик $SMTP_HOST ($(printf '%s' "$MAIL_USER" | sed 's/^\(..\)[^@]*/\1***/'))"
+else
+  SMTP_HOST=""
+  MAIL_STATE="НЕ настроены — регистрация и сброс пароля не работают"
+  echo "ВНИМАНИЕ: нет ящика (MAIL_USER и MAIL_PASSWORD в $OPS или в секретах) — письма с кодами не уходят" >&2
+fi
+
 step "Настройки сервера"
 # Строка для EnvironmentFile systemd: значение в кавычках, без кавычек, обратной косой черты и переводов строки внутри.
 env_line() {
@@ -66,6 +99,13 @@ env_line() {
   env_line TRENER_DOMAIN "$DOMAIN"
   env_line TRENER_HOST 127.0.0.1
   env_line TRENER_PORT "$PORT"
+  env_line TRENER_SMTP_HOST "$SMTP_HOST"
+  env_line TRENER_SMTP_PORT "$([ -n "$SMTP_HOST" ] && echo "$SMTP_PORT")"
+  env_line TRENER_SMTP_TLS "$([ -n "$SMTP_HOST" ] && echo "$SMTP_TLS")"
+  env_line TRENER_SMTP_USER "$([ -n "$SMTP_HOST" ] && echo "$MAIL_USER")"
+  env_line TRENER_SMTP_PASSWORD "$([ -n "$SMTP_HOST" ] && echo "$MAIL_PASSWORD")"
+  env_line TRENER_MAIL_FROM "$([ -n "$SMTP_HOST" ] && echo "Персоналка <$MAIL_USER>")"
+  env_line TRENER_ADMIN_EMAIL "$ADMIN_EMAIL"
 } > /etc/trener/trener.env.new
 install -m 640 -o root -g trener /etc/trener/trener.env.new /etc/trener/trener.env
 rm -f /etc/trener/trener.env.new
@@ -108,4 +148,4 @@ SYSTEM=$(. /etc/os-release && echo "$PRETTY_NAME")
 ALERT=$([ -x /usr/local/bin/planovo-alert ] && echo "через ящик Planovo" || echo "НЕТ planovo-alert — только журнал")
 MEM=$(free -m | awk '/^Mem:/ { print $7 }')
 DISK=$(df -BG --output=avail / | tail -1 | tr -d ' G')
-echo "ИТОГ: $SYSTEM; $DOMAIN → 127.0.0.1:$PORT; $("$JAVA" -version 2>&1 | head -1); $(runuser -u postgres -- psql -tAc 'SHOW server_version' | cut -d' ' -f1 | sed 's/^/PostgreSQL /'); письма о падениях — $ALERT; свободно памяти $MEM МБ, диска $DISK ГБ"
+echo "ИТОГ: $SYSTEM; $DOMAIN → 127.0.0.1:$PORT; $("$JAVA" -version 2>&1 | head -1); $(runuser -u postgres -- psql -tAc 'SHOW server_version' | cut -d' ' -f1 | sed 's/^/PostgreSQL /'); письма о падениях — $ALERT; письма с кодами — $MAIL_STATE; администратор — $([ -n "$ADMIN_EMAIL" ] && printf '%s' "$ADMIN_EMAIL" | sed 's/^\(..\)[^@]*/\1***/' || echo 'НЕ задан'); свободно памяти $MEM МБ, диска $DISK ГБ"

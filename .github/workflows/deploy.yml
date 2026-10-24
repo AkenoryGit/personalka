@@ -58,7 +58,18 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends caddy >/dev/null
           printf '%s\n' 'planovo.test {' '	tls internal' '	respond "planovo"' '}' | sudo tee /etc/caddy/Caddyfile >/dev/null
           sudo systemctl reload caddy
-          sudo TRENER_TEST=1 bash deploy/setup.sh
+          # Ящик Planovo на сервере (как его пишет setup.sh Planovo) и свой пароль «Персоналки» — он главнее.
+          sudo install -d -m 755 /etc/planovo
+          printf '%s\n' 'MAIL_USER="box@mail.ru"' 'MAIL_PASSWORD="planovo-pass"' 'SMTP_HOST="smtp.mail.ru"' 'SMTP_PORT=""' 'ALERT_EMAIL="admin@example.ru"' \
+            | sudo tee /etc/planovo/ops.env >/dev/null
+          printf '%s\n' 'MAIL_PASSWORD="personalka-pass"' | sudo tee /root/secrets.env >/dev/null
+          sudo chmod 600 /etc/planovo/ops.env /root/secrets.env
+          sudo TRENER_TEST=1 TRENER_SECRETS=/root/secrets.env bash deploy/setup.sh
+          sudo grep -qx 'TRENER_SMTP_PASSWORD="personalka-pass"' /etc/trener/trener.env
+          sudo grep -qx 'TRENER_SMTP_USER="box@mail.ru"' /etc/trener/trener.env
+          sudo grep -qx 'TRENER_SMTP_HOST="smtp.mail.ru"' /etc/trener/trener.env
+          sudo grep -qx 'TRENER_MAIL_FROM="Персоналка <box@mail.ru>"' /etc/trener/trener.env
+          sudo grep -qx 'TRENER_ADMIN_EMAIL="admin@example.ru"' /etc/trener/trener.env
           sudo install -d /opt/trener/releases/$N
           sudo install -m 644 personalka-server.jar /opt/trener/releases/$N/
           sudo /opt/trener/bin/server.sh switch $N
@@ -151,6 +162,10 @@ jobs:
         env:
           HOST: ${{ secrets.PERSONALKA_SERVER }}
           SSH_KEY: ${{ secrets.PERSONALKA_SSH_KEY }}
+          # Ящик для писем с кодами (2.8): пароль приложения Mail.ru; адрес ящика и SMTP — из настроек Planovo на сервере.
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          ADMIN_EMAIL: ${{ secrets.PERSONALKA_ADMIN_EMAIL }}
         run: |
           if [ -z "$HOST" ] || [ -z "$SSH_KEY" ]; then
             echo "::notice title=Выкладка::сервер ещё не подключён (нет секретов PERSONALKA_SERVER и PERSONALKA_SSH_KEY) — пропускаю"
@@ -163,11 +178,19 @@ jobs:
           chmod 600 ~/.ssh/deploy
           OPTS=(-i ~/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
           tar -czf deploy.tar.gz deploy
-          scp "${OPTS[@]}" personalka-server.jar deploy.tar.gz "root@$HOST:/root/"
+          # Секреты — файлом (не в командной строке): его читает setup.sh, после установки он удаляется.
+          (umask 077; {
+            printf 'MAIL_USER="%s"\n' "$(printf '%s' "$MAIL_USER" | tr -d '[:space:]"\\')"
+            printf 'MAIL_PASSWORD="%s"\n' "$(printf '%s' "$MAIL_PASSWORD" | tr -d '[:space:]"\\')"
+            printf 'ADMIN_EMAIL="%s"\n' "$(printf '%s' "$ADMIN_EMAIL" | tr -d '[:space:]"\\')"
+          } > personalka-secrets.env)
+          scp "${OPTS[@]}" personalka-server.jar deploy.tar.gz personalka-secrets.env "root@$HOST:/root/"
+          rm -f personalka-secrets.env
           if ! ssh "${OPTS[@]}" "root@$HOST" "set -e
+            trap 'rm -f /root/personalka-secrets.env' EXIT
             rm -rf /root/personalka-deploy && mkdir /root/personalka-deploy
             tar -xzf /root/deploy.tar.gz -C /root/personalka-deploy
-            TRENER_DOMAIN=$DOMAIN bash /root/personalka-deploy/deploy/setup.sh
+            TRENER_DOMAIN=$DOMAIN TRENER_SECRETS=/root/personalka-secrets.env bash /root/personalka-deploy/deploy/setup.sh
             install -d /opt/trener/releases/$N
             install -m 644 /root/personalka-server.jar /opt/trener/releases/$N/personalka-server.jar
             rm -f /root/personalka-server.jar /root/deploy.tar.gz
