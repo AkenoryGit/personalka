@@ -1,8 +1,11 @@
 package com.akenory.personalka.server
 
+import com.akenory.personalka.domain.cabinet.CabinetChart
 import com.akenory.personalka.domain.cabinet.CabinetItem
 import com.akenory.personalka.domain.cabinet.CabinetMonth
 import com.akenory.personalka.domain.cabinet.CabinetPage
+import com.akenory.personalka.domain.cabinet.CabinetResultLine
+import com.akenory.personalka.domain.cabinet.CabinetResults
 import com.akenory.personalka.domain.format.CabinetFormat
 import com.akenory.personalka.domain.training.ClientOutcome
 import kotlinx.html.ButtonType
@@ -13,6 +16,7 @@ import kotlinx.html.InputType
 import kotlinx.html.SUMMARY
 import kotlinx.html.ThScope
 import kotlinx.html.UL
+import kotlinx.html.a
 import kotlinx.html.body
 import kotlinx.html.button
 import kotlinx.html.details
@@ -21,6 +25,7 @@ import kotlinx.html.footer
 import kotlinx.html.form
 import kotlinx.html.h1
 import kotlinx.html.h2
+import kotlinx.html.h3
 import kotlinx.html.head
 import kotlinx.html.header
 import kotlinx.html.id
@@ -31,6 +36,7 @@ import kotlinx.html.li
 import kotlinx.html.link
 import kotlinx.html.main
 import kotlinx.html.meta
+import kotlinx.html.nav
 import kotlinx.html.p
 import kotlinx.html.section
 import kotlinx.html.span
@@ -114,6 +120,7 @@ object CabinetHtml {
                 }
             }
         }
+        page.results?.let { results(it) }
         footer("ft") {
             p { +CabinetFormat.FOOTER }
         }
@@ -184,6 +191,73 @@ object CabinetHtml {
         }
     }
 
+    /** «Результаты» (6.3, п. 6; макет `KbCabinet`): рекорды по бассейнам, график с чипами-ссылками, все результаты свёрнутыми. */
+    private fun FlowContent.results(results: CabinetResults) {
+        section("sec") {
+            id = RESULTS_ID
+            h2 { +CabinetFormat.RESULTS }
+            results.records.forEach { pool ->
+                h3 { +pool.title }
+                ul("card lst") { pool.lines.forEach { resultLine(it) } }
+            }
+            results.chart?.let { chart(it) }
+            details("mo") {
+                summary { summaryLine(CabinetFormat.ALL_RESULTS, results.allCount) }
+                ul("lst") { results.all.forEach { resultLine(it) } }
+            }
+        }
+    }
+
+    private fun UL.resultLine(line: CabinetResultLine) {
+        li("rr") {
+            span("ct") {
+                span { +line.event }
+                span("mut num") { +line.line }
+            }
+            span("tm") { +line.time }
+        }
+    }
+
+    private fun FlowContent.chart(chart: CabinetChart) {
+        div("card chart") {
+            h3 { +chart.title }
+            if (chart.chips.size > 1) {
+                nav("chips") {
+                    attributes["aria-label"] = CabinetFormat.CHART_CHIPS
+                    chart.chips.forEach { chip ->
+                        a(href = "?d=${chip.key}#$RESULTS_ID", classes = if (chip.selected) "chip on" else "chip") {
+                            if (chip.selected) attributes["aria-current"] = "true"
+                            +chip.label
+                        }
+                    }
+                }
+            } else {
+                p { +chart.chips.single().label }
+            }
+            div("plot") {
+                attributes["role"] = "img"
+                attributes["aria-label"] = chart.summary
+                unsafe { +ChartSvg.axis(chart) }
+                unsafe { +ChartSvg.plot(chart) }
+            }
+            p("lg") {
+                if (chart.legendCompetition) {
+                    span {
+                        unsafe { +LEGEND_FILLED }
+                        +CabinetFormat.LEGEND_COMPETITION
+                    }
+                }
+                if (chart.legendTraining) {
+                    span {
+                        unsafe { +LEGEND_OPEN }
+                        +CabinetFormat.LEGEND_TRAINING
+                    }
+                }
+            }
+            p("mut") { +chart.hint }
+        }
+    }
+
     private fun FlowContent.month(month: CabinetMonth, open: Boolean) {
         details("mo") {
             if (open) attributes["open"] = "open"
@@ -225,6 +299,13 @@ object CabinetHtml {
         ClientOutcome.CANCELLED_CHARGED -> "chg"
         ClientOutcome.CANCELLED, ClientOutcome.PLANNED -> "cnc"
     }
+
+    const val RESULTS_ID = "res"
+
+    private const val LEGEND_FILLED =
+        """<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle class="pf" cx="7" cy="7" r="6"/></svg>"""
+    private const val LEGEND_OPEN =
+        """<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle class="po" cx="7" cy="7" r="5"/></svg>"""
 
     // Значки — встроенным SVG из макетов (внешних файлов и шрифтов нет, 6.2).
     private const val LOGO =

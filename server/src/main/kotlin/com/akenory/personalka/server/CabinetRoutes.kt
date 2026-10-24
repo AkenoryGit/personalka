@@ -60,13 +60,15 @@ fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: Ra
             if (!call.withinLimit(limit)) return@get
             val token = call.parameters["token"].orEmpty()
             val pass = call.request.cookies[PASS_COOKIE]
+            // Дистанция графика — чипами-ссылками `?d=50-freestyle-25` (6.3): без JavaScript.
+            val chartKey = call.request.queryParameters["d"]?.takeIf { it.length <= 32 }
             val page = database.tx { c ->
                 val access = cabinets.open(c, accounts, token) ?: return@tx null
                 if (access.pinHash != null && !cabinets.passValid(c, access, pass)) {
                     return@tx CabinetView.Code(if (cabinets.blocked(access)) CabinetFormat.CODE_BLOCKED else null, cabinets.blocked(access))
                 }
                 cabinets.opened(c, access)
-                CabinetView.Page(CabinetRules.page(cabinets.input(c, access)))
+                CabinetView.Page(CabinetRules.page(cabinets.input(c, access), chartKey))
             }
             when (page) {
                 null -> call.cabinetHtml(HttpStatusCode.NotFound) { CabinetHtml.message(this, CabinetFormat.INVALID_TITLE, CabinetFormat.INVALID_TEXT) }

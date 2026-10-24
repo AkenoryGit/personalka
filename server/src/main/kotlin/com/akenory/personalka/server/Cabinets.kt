@@ -6,7 +6,12 @@ import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.cabinet.CabinetInput
 import com.akenory.personalka.domain.cabinet.CabinetTraining
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.ResultKind
+import com.akenory.personalka.domain.model.SwimStyle
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.result.ResultItem
+import com.akenory.personalka.domain.result.SwimEvent
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.serialization.json.Json
@@ -159,7 +164,8 @@ class Cabinets(
     }
 
     /**
-     * Данные страницы клиента [access]: имя клиента и тренера, настройки, участия клиента и только их тренировки.
+     * Данные страницы клиента [access]: имя клиента и тренера, настройки, участия клиента и только их тренировки,
+     * результаты клиента — без заметки тренера.
      * Удалённые записи не показываются; тренировка без типа или места — тоже (такого не бывает, но чужое не угадывается).
      */
     fun input(c: Connection, access: CabinetAccess): CabinetInput {
@@ -195,6 +201,17 @@ class Cabinets(
                 notifiedAt = p.textOrNull("notifiedAt")?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
             )
         }
+        val results = rows(c, listOf(owner), "result", "clientId", listOf(access.clientId)).mapNotNull { r ->
+            val style = SwimStyle.entries.firstOrNull { it.name == r.text("style") } ?: return@mapNotNull null
+            ResultItem(
+                id = r.text("id"),
+                date = runCatching { LocalDate.parse(r.text("date")) }.getOrNull() ?: return@mapNotNull null,
+                event = SwimEvent(style, r.long("distanceM")?.toInt() ?: return@mapNotNull null, r.long("poolM")?.toInt() ?: return@mapNotNull null),
+                timeCs = r.long("timeCs")?.toInt()?.takeIf { it > 0 } ?: return@mapNotNull null,
+                kind = enumOr(r.text("kind"), ResultKind.TRAINING),
+                eventName = r.textOrNull("eventName"),
+            )
+        }
         val synced = c.queryOne("SELECT synced_at FROM coach WHERE id = ?", owner) {
             it.getObject(1, OffsetDateTime::class.java)?.toInstant()?.toEpochMilli()
         }
@@ -208,6 +225,7 @@ class Cabinets(
             upcomingCount = settings?.long("upcomingInCard")?.toInt() ?: DEFAULT_UPCOMING,
             cancelNoticeMinutes = settings?.long("cancelNoticeMinutes")?.toInt() ?: DEFAULT_NOTICE,
             trainings = list,
+            results = results,
         )
     }
 

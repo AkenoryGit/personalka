@@ -3,6 +3,7 @@ package com.akenory.personalka.domain.format
 import com.akenory.personalka.domain.format.RuText.NBSP
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.number
 
 /**
  * Строки кабинета родителя (ТЗ 6.1, 6.3; макеты 0.7). Имена не склоняются и пол не используется: имя — только в
@@ -21,6 +22,17 @@ object CabinetFormat {
     const val BEHAVIOR = "Поведение"
     const val STATUS = "Статус"
     const val FOOTER = "По всем вопросам пишите тренеру напрямую."
+
+    // --- Результаты (6.3, п. 6) ---
+    const val RESULTS = "Результаты"
+    const val CHART_TITLE = "Время по дистанции"
+    const val CHART_CHIPS = "Дистанция"
+    const val CHART_HINT = ResultFormat.CHART_HINT + "."
+    const val ALL_RESULTS = ResultFormat.ALL
+    const val LEGEND_COMPETITION = ResultFormat.LEGEND_COMPETITION
+    const val LEGEND_TRAINING = ResultFormat.LEGEND_TRAINING
+
+    private val MONTH_SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
     // --- Код доступа (6.1) ---
     const val CODE_TITLE = "Введите код"
@@ -78,4 +90,18 @@ object CabinetFormat {
             else -> null
         }
     }
+
+    /** «бассейн 25 м». */
+    fun poolLower(poolM: Int): String = ResultFormat.pool(poolM).replaceFirstChar { it.lowercaseChar() }
+
+    /** «Личные рекорды · бассейн 25 м». */
+    fun recordsTitle(poolM: Int): String = ResultFormat.RECORDS + DOT + poolLower(poolM)
+
+    /** «сен» — подпись месяца на графике, когда месяцев много. */
+    fun monthShort(date: LocalDate): String = MONTH_SHORT[date.month.number - 1]
+
+    /** Для чтения с экрана: «50 м вольный стиль: 6 результатов, с 44,10 03.09.2026 до 39,62 10.10.2026, лучшее 39,62». */
+    fun chartSummary(event: String, count: Int, firstTime: String, firstDate: LocalDate, lastTime: String, lastDate: LocalDate, best: String): String =
+        "$event: ${RuText.count(count, "результат", "результата", "результатов")}, " +
+            "с $firstTime ${DateFormat.full(firstDate)} до $lastTime ${DateFormat.full(lastDate)}, лучшее $best"
 }

@@ -205,6 +205,57 @@ class CabinetTest {
             assertFalse(it in page, "в кабинете не должно быть «$it»")
         }
         assertTrue(page.length < 100 * 1024, "страница до 100 КБ")
+        assertFalse("Результаты" in page, "нет результатов — нет раздела")
+    }
+
+    private fun result(id: String, clientId: String, date: String, distance: Int, style: String, cs: Int, kind: String = "TRAINING", pool: Int = 25) =
+        row("result", id) {
+            put("clientId", clientId); put("date", date); put("style", style); put("distanceM", distance); put("poolM", pool)
+            put("timeCs", cs); put("kind", kind); put("note", "Заметка тренера о результате")
+        }
+
+    /** Результаты Евы: 50 м в/с — три в 25-метровом, 25 м на спине — два, один в 50-метровом; и чужой рекорд. */
+    private fun results(): List<JsonObject> = listOf(
+        result("res-1", childId(0), "2026-09-05", 50, "FREESTYLE", 5810),
+        result("res-2", childId(0), "2026-09-26", 50, "FREESTYLE", 5520, kind = "COMPETITION"),
+        result("res-3", childId(0), "2026-10-17", 50, "FREESTYLE", 5390),
+        result("res-4", childId(0), "2026-10-03", 25, "BACKSTROKE", 3120),
+        result("res-5", childId(0), "2026-10-17", 25, "BACKSTROKE", 2990),
+        result("res-6", childId(0), "2026-10-18", 50, "FREESTYLE", 5600, pool = 50),
+        result("res-other", childId(1), "2026-10-17", 50, "FREESTYLE", 4277),
+    )
+
+    @Test
+    fun resultsWithChartChosenByChips() = withServer { db ->
+        val (token, link) = setUp(db)
+        client.push(token, results())
+        val page = client.get("/c/$link").html()
+
+        val order = listOf("История", "Результаты", "Личные рекорды · бассейн 25 м", "Личные рекорды · бассейн 50 м", "Время по дистанции", "Все результаты", "По всем вопросам")
+        val positions = order.map { page.indexOf(nb(it)) }
+        assertTrue(positions.none { it < 0 } && positions == positions.sorted(), "результаты между историей и подвалом: $positions")
+        assertTrue("53,90" in page && "29,90" in page && "56,00" in page, "рекорды")
+        assertFalse("42,77" in page, "чужой результат")
+        assertFalse("Заметка тренера" in page, "заметка к результату не показывается")
+        // Чипы-ссылки: по умолчанию — дистанция, где результатов больше всего.
+        assertTrue("<a href=\"?d=50-freestyle-25#res\" class=\"chip on\" aria-current=\"true\">" in page, page)
+        assertTrue("href=\"?d=25-backstroke-25#res\"" in page)
+        assertFalse("d=50-freestyle-50" in page, "в 50-метровом один результат — графика нет")
+        assertEquals(3, Regex("<circle class=\"p[fo]\" cx=\"[0-9.]+%\"").findAll(page).count(), "три точки")
+        assertEquals(1, Regex("<circle class=\"pf\" cx=\"[0-9.]+%\"").findAll(page).count(), "соревнования — залитая")
+        assertTrue("role=\"img\"" in page && nb("50 м вольный стиль: 3 результата") in page)
+        assertTrue("Чем ниже точка, тем быстрее." in page)
+        assertTrue("<summary><span class=\"mt\">Все результаты</span><span class=\"mut\">6</span>" in page)
+        assertFalse("<script" in page)
+        assertFalse("style=" in page, "встроенные стили запрещены CSP")
+
+        val picked = client.get("/c/$link?d=25-backstroke-25").html()
+        assertTrue("<a href=\"?d=25-backstroke-25#res\" class=\"chip on\"" in picked)
+        assertEquals(2, Regex("<circle class=\"p[fo]\" cx=\"[0-9.]+%\"").findAll(picked).count())
+        // Неизвестная дистанция — по умолчанию, текст из адреса на страницу не попадает.
+        val odd = client.get("/c/$link?d=%3Cb%3Ex").html()
+        assertTrue("<a href=\"?d=50-freestyle-25#res\" class=\"chip on\"" in odd)
+        assertFalse("<b>x" in odd)
     }
 
     @Test

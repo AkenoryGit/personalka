@@ -5,6 +5,7 @@ import com.akenory.personalka.domain.format.CabinetFormat
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.result.ResultItem
 import com.akenory.personalka.domain.training.ClientOutcome
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -35,7 +36,7 @@ data class CabinetTraining(
 
 /**
  * Всё, из чего собирается кабинет: имя клиента и тренера (именительный падеж, без склонений — 6.3), момент последней
- * синхронизации тренера по часам клуба, «сейчас», настройки тренера (3.2) и тренировки клиента.
+ * синхронизации тренера по часам клуба, «сейчас», настройки тренера (3.2), тренировки и результаты клиента.
  */
 data class CabinetInput(
     val clientName: String,
@@ -45,6 +46,7 @@ data class CabinetInput(
     val upcomingCount: Int,
     val cancelNoticeMinutes: Int,
     val trainings: List<CabinetTraining>,
+    val results: List<ResultItem> = emptyList(),
 )
 
 /** Строка тренировки: «вт 20.10 · 13:30», «Персональная · Большой бассейн», метка статуса, поля дневника или причина. */
@@ -80,6 +82,8 @@ data class CabinetPage(
     val rule: String,
     val currentMonth: CabinetMonth?,
     val earlier: CabinetEarlier?,
+    /** Результаты (6.3, п. 6); нет результатов — `null`. */
+    val results: CabinetResults? = null,
 )
 
 /**
@@ -115,7 +119,8 @@ object CabinetRules {
         return if (rows.all { it.total == 0 }) emptyList() else rows
     }
 
-    fun page(input: CabinetInput): CabinetPage {
+    /** Страница целиком; [chartKey] — дистанция графика из адреса (`?d=`), неизвестная — по умолчанию. */
+    fun page(input: CabinetInput, chartKey: String? = null): CabinetPage {
         val today = input.now.date
         val history = history(input.trainings, input.now)
         val (current, past) = history.partition { sameMonth(it.start.date, today) }
@@ -133,6 +138,7 @@ object CabinetRules {
             rule = CabinetFormat.rule(input.cancelNoticeMinutes),
             currentMonth = current.takeIf { it.isNotEmpty() }?.let { month(LocalDate(today.year, today.month, 1), it) },
             earlier = past.takeIf { it.isNotEmpty() }?.let { CabinetEarlier(CabinetFormat.trainings(it.size), earlierMonths) },
+            results = CabinetResultRules.results(input.results, today, chartKey),
         )
     }
 
