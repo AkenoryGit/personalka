@@ -68,33 +68,39 @@ class AccountApi(private val client: HttpClient, private val baseUrl: suspend ()
         return call { client.post(url(path)) { setBody(TextContent(body.toString(), ContentType.Application.Json)) } }
     }
 
-    private suspend fun call(request: suspend () -> HttpResponse): JsonObject {
-        val response = try {
-            request()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw AccountException(AccountException.OFFLINE, AccountFormat.OFFLINE)
-        }
-        val text = try {
-            response.bodyAsText()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw AccountException(AccountException.OFFLINE, AccountFormat.OFFLINE)
-        }
-        val json = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
-        if (response.status.isSuccess()) return json ?: throw AccountException(AccountException.SERVER, AccountFormat.SERVER_ERROR)
-        // Ответ не от «Персоналки» (Caddy, страница ошибки) — без кода: общий текст.
-        val code = json?.string("code")
-        val message = json?.string("message")
-        throw if (code != null && message != null) AccountException(code, message) else AccountException(AccountException.SERVER, AccountFormat.SERVER_ERROR)
-    }
+    private suspend fun call(request: suspend () -> HttpResponse): JsonObject = serverCall(request)
 
     companion object {
         /** Сервер по умолчанию — домен Дмитрия (1.5). */
         const val DEFAULT_URL = "https://trener.planovo-app.ru"
     }
+}
+
+/**
+ * Запрос к серверу «Персоналки»: ответ — JSON-объект; ошибка — [AccountException] с кодом и текстом сервера, без связи —
+ * [AccountException.OFFLINE], чужой ответ — [AccountException.SERVER]. Общий для входа и синхронизации (2.10).
+ */
+internal suspend fun serverCall(request: suspend () -> HttpResponse): JsonObject {
+    val response = try {
+        request()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw AccountException(AccountException.OFFLINE, AccountFormat.OFFLINE)
+    }
+    val text = try {
+        response.bodyAsText()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw AccountException(AccountException.OFFLINE, AccountFormat.OFFLINE)
+    }
+    val json = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+    if (response.status.isSuccess()) return json ?: throw AccountException(AccountException.SERVER, AccountFormat.SERVER_ERROR)
+    // Ответ не от «Персоналки» (Caddy, страница ошибки) — без кода: общий текст.
+    val code = json?.string("code")
+    val message = json?.string("message")
+    throw if (code != null && message != null) AccountException(code, message) else AccountException(AccountException.SERVER, AccountFormat.SERVER_ERROR)
 }
 
 internal fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull

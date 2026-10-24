@@ -44,4 +44,33 @@ class SyncRulesTest {
         val day = 24 * 60 * 60 * 1000L
         assertEquals(10 * day, SyncRules.purgeBefore(100 * day))
     }
+
+    @Test
+    fun phoneAppliesWhatTheServerDecided() {
+        // Записи нет — берётся любая.
+        assertEquals(true, SyncRules.applyIncoming(SyncStamp(1_000, tablet), null, pending = false, device = phone))
+        // Своя правка отправлена: сервер уже решил — берётся новая и та же самая, старая — нет.
+        assertEquals(true, SyncRules.applyIncoming(SyncStamp(2_000, tablet), 1_000, pending = false, device = phone))
+        assertEquals(true, SyncRules.applyIncoming(SyncStamp(1_000, phone), 1_000, pending = false, device = phone))
+        assertEquals(false, SyncRules.applyIncoming(SyncStamp(500, tablet), 1_000, pending = false, device = phone))
+        // Своя правка ещё в очереди: побеждает поздняя, при равном моменте — большее устройство.
+        assertEquals(false, SyncRules.applyIncoming(SyncStamp(1_000, tablet), 2_000, pending = true, device = phone))
+        assertEquals(true, SyncRules.applyIncoming(SyncStamp(3_000, tablet), 2_000, pending = true, device = phone))
+        assertEquals(true, SyncRules.applyIncoming(SyncStamp(2_000, tablet), 2_000, pending = true, device = phone))
+        assertEquals(false, SyncRules.applyIncoming(SyncStamp(2_000, phone), 2_000, pending = true, device = tablet))
+    }
+
+    @Test
+    fun retryPauseGrowsUpTo15Minutes() {
+        assertEquals(listOf(0L, 30_000L, 60_000L, 120_000L, 240_000L, 480_000L, 900_000L, 900_000L), (0..7).map { SyncRules.retryDelay(it) })
+        assertEquals(SyncRules.PERIOD_MS, SyncRules.retryDelay(100))
+    }
+
+    @Test
+    fun nextExchange() {
+        assertEquals(SyncRules.PERIOD_MS, SyncRules.nextPause(failures = 0, pending = 0, refused = false))
+        assertEquals(SyncRules.QUIET_MS, SyncRules.nextPause(failures = 0, pending = 3, refused = false))
+        assertEquals(60_000L, SyncRules.nextPause(failures = 2, pending = 3, refused = false))
+        assertEquals(SyncRules.PERIOD_MS, SyncRules.nextPause(failures = 0, pending = 3, refused = true), "Отказ сервера — не стучаться каждые 5 секунд")
+    }
 }

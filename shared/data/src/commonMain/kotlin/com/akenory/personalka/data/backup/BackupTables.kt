@@ -18,10 +18,14 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlin.io.encoding.Base64
 
-/** Таблицы данных: все, кроме служебных таблиц SQLite и Room. */
+/**
+ * Таблицы данных: все, кроме служебных таблиц SQLite и Room и служебных таблиц синхронизации (`sync_…`, 2.10) — они
+ * только для этого телефона: очередь изменений в копии и на другом телефоне ничего не значит.
+ */
 internal const val TABLES =
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' " +
-        "AND name NOT LIKE 'room\\_%' ESCAPE '\\' AND name <> 'android_metadata' ORDER BY name"
+        "AND name NOT LIKE 'room\\_%' ESCAPE '\\' AND name NOT LIKE 'sync\\_%' ESCAPE '\\' " +
+        "AND name <> 'android_metadata' ORDER BY name"
 
 private const val BLOB = "base64"
 

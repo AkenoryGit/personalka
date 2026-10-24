@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.backup
 
+import androidx.room3.useReaderConnection
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
@@ -7,6 +8,8 @@ import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.data.sync.SyncRepository
+import com.akenory.personalka.domain.sync.SyncRules
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.backup.BackupFrequency
 import com.akenory.personalka.domain.client.ClientDraft
@@ -36,6 +39,7 @@ class BackupRepositoryTest {
     private var millis = ClubTime.toMillis(LocalDateTime(2026, 10, 23, 15, 40))
     private val folder = MemoryFolder()
     private lateinit var backup: BackupRepository
+    private val prefs = MemoryPrefs()
 
     /** Папка в памяти: файлы по именам; [lost] — доступ к папке пропал. */
     private class MemoryFolder : BackupFolder {
@@ -59,7 +63,7 @@ class BackupRepositoryTest {
     fun open() = runBlocking {
         db = inMemoryPersonalkaDatabase()
         other = inMemoryPersonalkaDatabase()
-        backup = BackupRepository(db, MemoryPrefs(), folder) { millis }
+        backup = BackupRepository(db, prefs, folder) { millis }
     }
 
     @AfterTest
@@ -146,8 +150,15 @@ class BackupRepositoryTest {
         // После копии завели ещё клиента — восстановление его убирает.
         ClientRepository(db) { millis++ }.create(ClientDraft("Зуева", "Вера"))
         assertEquals(3, db.clientDao().observeAllClients().first().size)
+        prefs.putString(SyncRepository.SINCE, "42")
         assertTrue(backup.restore(ready))
         assertEquals(2, db.clientDao().observeAllClients().first().size)
+
+        // С сервером (2.10): очередь — вся восстановленная база без удалений, получение — с начала.
+        val queue = db.syncDao().next(10_000)
+        assertEquals(SyncRules.ENTITIES.sumOf { table -> rows(table) }, queue.size)
+        assertTrue(queue.none { it.entity == "client" && db.clientDao().client(it.rowId) == null }, "Стёртое при замене удалением не уходит")
+        assertEquals("0", prefs.string(SyncRepository.SINCE))
 
         assertEquals(BackupRead.NotBackup, backup.read("не копия".encodeToByteArray()))
     }
@@ -196,6 +207,10 @@ class BackupRepositoryTest {
         assertTrue("DTSTART:20261024T040000Z" in text)
         assertTrue("SUMMARY:Группа · Сб 9:00 ББ (2)" in text)
         assertTrue("LOCATION:Большой бассейн" in text)
+    }
+
+    private suspend fun rows(table: String): Int = db.useReaderConnection { c ->
+        c.usePrepared("SELECT COUNT(*) FROM `$table`") { it.step(); it.getLong(0).toInt() }
     }
 
     private suspend fun dump(database: PersonalkaDatabase): String {

@@ -84,7 +84,7 @@ class MigrationTest {
             }
 
             BundledSQLiteDriver().open(path).useConnection { raw ->
-                assertEquals(3L, raw.long("PRAGMA user_version"))
+                assertEquals(PersonalkaDatabase.VERSION.toLong(), raw.long("PRAGMA user_version"))
             }
         } finally {
             listOf("", "-wal", "-shm", "-journal").forEach { File(path + it).delete() }
@@ -92,8 +92,33 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion3() {
-        assertEquals(3, PersonalkaDatabase.VERSION)
-        assertTrue(schemaFile(1).exists() && schemaFile(2).exists(), "Схемы версий 1 и 2 хранятся: по ним строятся переходы")
+    fun version3GetsAnEmptyQueueThatFillsWithEdits(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v3", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 3)
+                raw.exec(place("p1", "ББ", "Большой бассейн", sort = 0).replace("archived, ", "archived, color, ").replace("0, 'c1'", "0, 'blue', 'c1'"))
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                assertEquals(0, db.syncDao().pending(), "Прежние записи в очередь не ложатся: отправлять некуда")
+                val place = db.referenceDao().locations().single()
+                db.referenceDao().upsertLocation(place.copy(name = "Большой", sync = place.sync.touched(2)))
+                assertEquals(1, db.syncDao().pending(), "Правка после перехода — в очереди")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion4() {
+        assertEquals(4, PersonalkaDatabase.VERSION)
+        assertTrue((1..3).all { schemaFile(it).exists() }, "Схемы версий 1–3 хранятся: по ним строятся переходы")
     }
 }

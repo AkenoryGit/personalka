@@ -1,0 +1,328 @@
+package com.akenory.personalka.data.sync
+
+import com.akenory.personalka.data.account.FakeServer
+import com.akenory.personalka.data.account.MemoryTokens
+import com.akenory.personalka.data.db.PersonalkaDatabase
+import com.akenory.personalka.data.db.Samples
+import com.akenory.personalka.data.db.entity.SyncOutboxEntity
+import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
+import com.akenory.personalka.data.prefs.MemoryPrefs
+import com.akenory.personalka.domain.sync.SyncRules
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * Синхронизация телефона (шаг 2.10, ТЗ 7.2): два телефона одного тренера через сервер в памяти ([FakeServer] — те же
+ * ответы, что сервер 2.9), обрывы сети и потерянные ответы. Имена придуманы.
+ */
+class SyncRepositoryTest {
+    private val server = FakeServer()
+    private var now = Samples.NOW
+    private val opened = mutableListOf<PersonalkaDatabase>()
+
+    private inner class Phone(token: String) {
+        val db = inMemoryPersonalkaDatabase().also { opened += it }
+        val prefs = MemoryPrefs()
+        val tokens = MemoryTokens(token)
+        val sync = SyncRepository(db, SyncApi(server.client) { "https://trener.example.ru" }, tokens, prefs) { now }
+        val clients get() = db.clientDao()
+
+        suspend fun live() = db.clientDao().observeAllClients().first()
+
+        suspend fun outbox(): List<SyncOutboxEntity> = db.syncDao().next(10_000)
+    }
+
+    /** Тренер с открытой «Копией на сервере» и два его телефона. */
+    private fun twoPhones(): Pair<Phone, Phone> {
+        val coach = server.signedUp(EMAIL, "пароль-тренера")
+        server.serverCopy += EMAIL
+        server.sessions += FakeServer.Session(100, coach, "Телефон", "t-a")
+        server.sessions += FakeServer.Session(101, coach, "Планшет", "t-b")
+        return Phone("t-a") to Phone("t-b")
+    }
+
+    @AfterTest
+    fun close() = opened.forEach { it.close() }
+
+    @Test
+    fun everyChangeLandsInTheQueueOnceWithItsLastMoment(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        val client = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(client)
+        a.clients.upsertClient(client.copy(firstName = "Ксюша", sync = client.sync.touched(Samples.NOW + 1_000)))
+        assertEquals(listOf(SyncOutboxEntity("client", client.id, Samples.NOW + 1_000)), a.outbox(), "Две правки — одна строка очереди")
+
+        a.clients.eraseClient(client.id)
+        assertEquals(listOf(SyncOutboxEntity("client", client.id, Samples.NOW + 1_001)), a.outbox(), "«Удалить полностью» — тоже в очередь, не раньше самой записи")
+    }
+
+    @Test
+    fun twoPhonesSeeEachOthersChanges(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        val client = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(client)
+        assertTrue(a.sync.connect())
+        assertEquals(0, a.db.syncDao().pending(), "Первая выгрузка ушла вся")
+        assertEquals(1, server.liveRows(EMAIL, "client").size)
+
+        // Второй телефон берёт данные с сервера: своё (созданное до подключения) стирается.
+        b.clients.upsertClient(Samples.client("Пробная", "Запись"))
+        assertTrue(b.sync.connect(takeFromServer = true))
+        assertEquals(listOf("Ксения"), b.live().map { it.firstName })
+        assertEquals(0, b.db.syncDao().pending(), "Пришедшее с сервера назад не отправляется")
+
+        now += 60_000
+        b.clients.upsertClient(client.copy(firstName = "Ксюша", sync = client.sync.touched(now)))
+        assertTrue(b.sync.sync())
+        assertTrue(a.sync.sync())
+        assertEquals("Ксюша", a.clients.client(client.id)!!.firstName)
+        assertEquals(0, a.db.syncDao().pending())
+        assertNotNull(a.sync.state.value.lastSync)
+    }
+
+    @Test
+    fun laterEditWinsWhicheverPhoneSyncsFirst(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        val client = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(client)
+        a.sync.connect()
+        b.sync.connect(takeFromServer = true)
+
+        // Без связи оба правят одну запись: на планшете — позже.
+        a.clients.upsertClient(client.copy(contactName = "Папа", sync = client.sync.touched(Samples.NOW + 10_000)))
+        b.clients.upsertClient(client.copy(contactName = "Бабушка", sync = client.sync.touched(Samples.NOW + 20_000)))
+
+        // Планшет отправляет первым, телефон — вторым: правка телефона старше и сервером не принимается.
+        assertTrue(b.sync.sync())
+        assertTrue(a.sync.sync())
+        assertEquals("Бабушка", a.clients.client(client.id)!!.contactName, "Поздняя правка пришла на телефон")
+        assertEquals(0, a.db.syncDao().pending(), "Старая правка телефона ушла из очереди")
+        assertTrue(b.sync.sync())
+        assertEquals("Бабушка", b.clients.client(client.id)!!.contactName)
+        assertEquals("Бабушка", (server.liveRows(EMAIL, "client").single().data["contactName"] as JsonPrimitive).content)
+    }
+
+    @Test
+    fun editMadeDuringAnExchangeIsNotOverwrittenByAnOlderOne(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        val client = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(client)
+        a.sync.connect()
+        b.sync.connect(takeFromServer = true)
+
+        a.clients.upsertClient(client.copy(contactName = "Папа", sync = client.sync.touched(Samples.NOW + 10_000)))
+        a.sync.sync()
+        // Планшет отправил очередь и пришёл за изменениями — а тренер в эту секунду правит ту же запись.
+        server.beforePull = {
+            server.beforePull = null
+            b.clients.upsertClient(client.copy(contactName = "Бабушка", sync = client.sync.touched(Samples.NOW + 20_000)))
+        }
+        assertTrue(b.sync.sync())
+        assertEquals("Бабушка", b.clients.client(client.id)!!.contactName, "Пришедшая правка старше своей — своя остаётся")
+        assertEquals(1, b.db.syncDao().pending(), "И ждёт отправки")
+        b.sync.sync()
+        a.sync.sync()
+        assertEquals("Бабушка", a.clients.client(client.id)!!.contactName)
+    }
+
+    @Test
+    fun networkDropLosesNothing(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        a.sync.connect()
+        b.sync.connect(takeFromServer = true)
+
+        // Нет связи: правка ждёт в очереди, пауза повтора растёт.
+        server.offline = true
+        val client = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(client)
+        assertFalse(a.sync.sync())
+        assertFalse(a.sync.sync())
+        assertEquals(SyncProblem.OFFLINE, a.sync.state.value.problem)
+        assertEquals(2, a.sync.state.value.failures)
+        assertEquals(60_000L, SyncRules.retryDelay(a.sync.state.value.failures))
+        assertEquals(1, a.db.syncDao().pending())
+
+        // Связь вернулась — правка уходит, ошибки забыты.
+        server.offline = false
+        assertTrue(a.sync.sync())
+        assertEquals(0, a.db.syncDao().pending())
+        assertNull(a.sync.state.value.problem)
+        assertEquals(0, a.sync.state.value.failures)
+
+        // Обрыв посреди обмена: сервер принял, ответ потерян — правка остаётся и уходит ещё раз без дубля.
+        now += 60_000
+        a.clients.upsertClient(client.copy(firstName = "Ксюша", sync = client.sync.touched(now)))
+        server.loseAnswers = true
+        assertFalse(a.sync.sync())
+        val acceptedOnce = server.accepted.size
+        assertEquals(1, a.db.syncDao().pending())
+        server.loseAnswers = false
+        assertTrue(a.sync.sync())
+        assertEquals(acceptedOnce, server.accepted.size, "Повтор той же отправки не записан второй раз")
+        assertEquals(0, a.db.syncDao().pending())
+
+        assertTrue(b.sync.sync())
+        assertEquals("Ксюша", b.clients.client(client.id)!!.firstName)
+    }
+
+    @Test
+    fun clientErasedOnOnePhoneDisappearsEverywhere(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        val client = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(client)
+        a.sync.connect()
+        b.sync.connect(takeFromServer = true)
+        assertNotNull(b.clients.client(client.id))
+
+        a.clients.eraseClient(client.id)
+        assertTrue(a.sync.sync())
+        assertEquals(JsonObject(emptyMap()), server.rows.values.single { it.id == client.id }.data, "На сервере от клиента — пустая запись")
+        assertTrue(b.sync.sync())
+        assertNull(b.clients.client(client.id), "Стёрт и на втором телефоне")
+        assertEquals(0, b.db.syncDao().pending(), "Стирание не отправляется назад")
+
+        // Клиента стёрли посреди обмена, а с сервера пришла его правка: стирание новее, запись не воскресает.
+        val other = Samples.client("Орлова", "Мира")
+        a.clients.upsertClient(other)
+        a.sync.sync()
+        b.sync.sync()
+        now += 60_000
+        a.clients.upsertClient(other.copy(firstName = "Мирослава", sync = other.sync.touched(now)))
+        a.sync.sync()
+        now += 1_000
+        server.beforePull = {
+            server.beforePull = null
+            b.clients.eraseClient(other.id)
+        }
+        assertTrue(b.sync.sync())
+        assertNull(b.clients.client(other.id))
+        assertTrue(b.sync.sync())
+        assertTrue(a.sync.sync())
+        assertNull(a.clients.client(other.id), "Стирание дошло и до первого телефона")
+    }
+
+    @Test
+    fun longOfflinePhoneGetsEverythingAgain(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        val first = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(first)
+        a.sync.connect()
+        b.sync.connect(takeFromServer = true)
+
+        val second = Samples.client("Орлова", "Мира")
+        a.clients.upsertClient(second)
+        a.clients.upsertClient(first.copy(sync = first.sync.deleted(Samples.NOW + 5_000)))
+        a.sync.sync()
+        // Прошло 90 дней: сервер стёр удалённые, планшет не синхронизировался — ему 410 и всё заново.
+        server.purgeDeleted()
+        val planned = Samples.client("Пахомова", "Вера")
+        b.clients.upsertClient(planned)
+        assertTrue(b.sync.sync())
+        assertNotNull(b.clients.client(second.id), "Новое пришло, хотя номер планшета устарел")
+        assertNull(b.sync.state.value.problem)
+        assertTrue(server.liveRows(EMAIL, "client").any { it.id == planned.id }, "Своё планшет сначала отправил")
+    }
+
+    @Test
+    fun firstUploadGoesInBatchesWithProgress(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        repeat(1_200) { a.clients.upsertClient(Samples.client("Клиент$it", "Имя")) }
+        assertTrue(a.sync.connect())
+        assertEquals(1_200, server.liveRows(EMAIL, "client").size)
+        assertNull(a.sync.state.value.progress, "Полоса прогресса убрана после выгрузки")
+
+        assertTrue(b.sync.connect(takeFromServer = true))
+        assertEquals(1_200, b.live().size, "Новое устройство получило все страницы")
+    }
+
+    @Test
+    fun serverRefusalsKeepTheQueue(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        a.sync.connect()
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+
+        // Сервер ещё не обновился до новой версии базы — изменения ждут, повтор как без связи.
+        server.schemaVersion = SyncRules.SCHEMA_VERSION - 1
+        assertFalse(a.sync.sync())
+        assertEquals(SyncProblem.SERVER_OUTDATED, a.sync.state.value.problem)
+        assertEquals(1, a.sync.state.value.failures)
+
+        // Приложение слишком старое — 426, обмен стоит, правка в очереди.
+        server.schemaVersion = SyncRules.SCHEMA_VERSION + 2
+        assertFalse(a.sync.sync())
+        assertEquals(SyncProblem.UPDATE_REQUIRED, a.sync.state.value.problem)
+        assertEquals(1, a.db.syncDao().pending())
+
+        server.schemaVersion = SyncRules.SCHEMA_VERSION
+        assertTrue(a.sync.sync())
+        assertEquals(0, a.db.syncDao().pending())
+
+        // Копию закрыли — данные на телефоне на месте, ответ «закрыто».
+        server.serverCopy -= EMAIL
+        a.clients.upsertClient(Samples.client("Орлова", "Мира"))
+        assertFalse(a.sync.sync())
+        assertEquals(SyncProblem.CLOSED, a.sync.state.value.problem)
+        assertEquals(2, a.live().size)
+    }
+
+    @Test
+    fun closedCopyDoesNotConnect(): Unit = runBlocking {
+        server.signedUp(EMAIL, "пароль-тренера")
+        val coach = server.coaches.getValue(EMAIL)
+        server.sessions += FakeServer.Session(100, coach, "Телефон", "t-a")
+        val a = Phone("t-a")
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        assertFalse(a.sync.connect())
+        assertEquals(SyncProblem.CLOSED, a.sync.state.value.problem)
+        assertFalse(a.sync.state.value.connected)
+        assertFalse(a.sync.connect(takeFromServer = true))
+        assertEquals(1, a.live().size, "Без открытой копии телефон не стирается")
+    }
+
+    @Test
+    fun clubDataFromACoachIsNotKeptButLeavesTheQueue(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        a.db.referenceDao().upsertClubRate(Samples.clubRate())
+        assertTrue(a.sync.connect())
+        assertEquals(0, a.db.syncDao().pending())
+        assertTrue(server.rows.values.none { it.entity == "club_rate_grid" }, "Сетку клуба пишет только администратор")
+    }
+
+    @Test
+    fun disconnectErasesServerDataAndKeepsThePhone(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        a.sync.connect()
+        assertTrue(server.rows.isNotEmpty())
+
+        assertTrue(a.sync.disconnect())
+        assertTrue(server.rows.isEmpty())
+        assertFalse(a.sync.state.value.connected)
+        assertEquals(1, a.live().size)
+        val before = server.requests.size
+        assertFalse(a.sync.sync(), "Отключённый телефон не обменивается")
+        assertEquals(before, server.requests.size)
+    }
+
+    @Test
+    fun deviceIdIsMadeOnce() {
+        val (a, _) = twoPhones()
+        val id = a.sync.device
+        now += 1_000
+        assertEquals(id, a.sync.device)
+        assertEquals(id, a.prefs.string(SyncRepository.DEVICE))
+    }
+
+    private companion object {
+        const val EMAIL = "trener@example.ru"
+    }
+}

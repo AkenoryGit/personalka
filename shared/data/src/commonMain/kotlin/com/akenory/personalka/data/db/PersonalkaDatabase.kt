@@ -5,11 +5,13 @@ import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import androidx.room3.RoomDatabaseConstructor
 import androidx.room3.ColumnTypeConverters
+import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.akenory.personalka.data.db.dao.ClientDao
 import com.akenory.personalka.data.db.dao.CoachDao
 import com.akenory.personalka.data.db.dao.ReferenceDao
 import com.akenory.personalka.data.db.dao.ScheduleDao
+import com.akenory.personalka.data.db.dao.SyncDao
 import com.akenory.personalka.data.db.dao.TrainingDao
 import com.akenory.personalka.data.db.entity.CategoryVersionEntity
 import com.akenory.personalka.data.db.entity.ClientEntity
@@ -28,10 +30,13 @@ import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.SeriesClientEntity
 import com.akenory.personalka.data.db.entity.SeriesEntity
 import com.akenory.personalka.data.db.entity.SptCaseEntity
+import com.akenory.personalka.data.db.entity.SyncOutboxEntity
 import com.akenory.personalka.data.db.entity.TierSchemeVersionEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.db.entity.WaitEntryEntity
+import com.akenory.personalka.data.sync.SyncOutbox
+import com.akenory.personalka.data.sync.pooled
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -71,10 +76,12 @@ import kotlin.coroutines.CoroutineContext
         SptCaseEntity::class,
         WaitEntryEntity::class,
         ClientRelationEntity::class,
+        // 3.8 — только для телефона
+        SyncOutboxEntity::class,
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -85,13 +92,15 @@ abstract class PersonalkaDatabase : RoomDatabase() {
     abstract fun scheduleDao(): ScheduleDao
     abstract fun clientDao(): ClientDao
     abstract fun trainingDao(): TrainingDao
+    abstract fun syncDao(): SyncDao
 
     companion object {
         /**
          * 1 — шаг 1.1; 2 — шаг 1.13в: цвет у места, оттенок у типа ([Migration1To2]); 3 — «За кого» у дежурства
-         * ([Migration2To3]). Перед переходом на новую версию — копия ([BeforeMigration], шаг 2.7б).
+         * ([Migration2To3]); 4 — очередь изменений для синхронизации ([Migration3To4], шаг 2.10). Перед переходом на новую
+         * версию — копия ([BeforeMigration], шаг 2.7б).
          */
-        const val VERSION = 3
+        const val VERSION = 4
         const val FILE_NAME = "personalka.db"
     }
 }
@@ -105,13 +114,18 @@ expect object PersonalkaDatabaseConstructor : RoomDatabaseConstructor<Personalka
 /**
  * Общие настройки базы на всех платформах: переходы со старых версий ([PersonalkaMigrations]) — перед ними
  * копия ([beforeMigration], 2.7б), SQLite, собранный вместе с приложением (одна и та же версия на любом телефоне
- * и на компьютере), запросы — в [queryContext].
+ * и на компьютере), запросы — в [queryContext]; при каждом открытии — триггеры очереди изменений ([SyncOutbox], 2.10).
  */
 fun RoomDatabase.Builder<PersonalkaDatabase>.buildPersonalka(
     queryContext: CoroutineContext,
     beforeMigration: BeforeMigration? = null,
 ): PersonalkaDatabase =
     addMigrations(*migrationsWithCopy(beforeMigration))
+        .addCallback(
+            object : RoomDatabase.Callback() {
+                override suspend fun onOpen(connection: SQLiteConnection) = SyncOutbox.install(connection.pooled())
+            },
+        )
         .setQueryCoroutineContext(queryContext)
         .setDriver(BundledSQLiteDriver())
         .build()

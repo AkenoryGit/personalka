@@ -8,6 +8,8 @@ import androidx.room3.useWriterConnection
 import androidx.sqlite.SQLiteConnection
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.prefs.DevicePrefs
+import com.akenory.personalka.data.sync.SyncOutbox
+import com.akenory.personalka.data.sync.pullFromStart
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.backup.BackupFrequency
 import com.akenory.personalka.domain.backup.BackupRules
@@ -272,9 +274,14 @@ class BackupRepository(
      * Заменить все данные телефона данными копии — одной транзакцией: не вышло — данные прежние, ответ `false`.
      * Копия старой версии сначала проходит те же переходы, что база ([upgraded]): пересчитанное ими не теряется.
      * Пароль открытой копии становится паролем копий этого телефона: автокопия на новом телефоне сразу шифруется им.
+     *
+     * С сервером (2.10) восстановленное сливается с данными сервера: вся база ложится в очередь заново, а получение
+     * начинается с начала. Новее на сервере — останется серверное, новее в копии — уйдёт на сервер; стёртое
+     * при замене серверу удалением не уходит.
      */
     suspend fun restore(copy: BackupRead.Ready): Boolean {
         val ok = runCatching { replaceAll(withContext(Dispatchers.Default) { copy.data.upgraded() }) }.isSuccess
+        if (ok) prefs.pullFromStart()
         if (ok && copy.key != null) {
             prefs.putString(KEY, copy.key.encode())
             _state.update { it.copy(hasPassword = true) }
@@ -352,6 +359,8 @@ class BackupRepository(
                         }
                     }
                 }
+                // Триггеры записали стирание и вставку каждой записи — очередь собирается заново, без удалений.
+                SyncOutbox.requeueAll(this)
             }
         }
     }

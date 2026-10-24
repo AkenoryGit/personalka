@@ -15,7 +15,7 @@ enum class SyncOrder { OLDER, SAME, NEWER }
  */
 object SyncRules {
     /** Версия схемы базы телефона, с которой работает этот код; совпадает с `PersonalkaDatabase.VERSION` (тест). */
-    const val SCHEMA_VERSION = 3
+    const val SCHEMA_VERSION = 4
 
     /** Изменений в одной отправке, не больше. */
     const val PUSH_MAX = 500
@@ -29,6 +29,15 @@ object SyncRules {
 
     /** Удалённые записи хранятся 90 дней, потом стираются совсем. */
     const val TOMBSTONE_DAYS = 90
+
+    /** Телефон: обмен через 5 секунд после последнего изменения (7.2, п. 4) — пачка правок уходит одной отправкой. */
+    const val QUIET_MS = 5_000L
+
+    /** Телефон: обмен в фоне раз в 15 минут; это же — самая длинная пауза повтора после ошибки сети. */
+    const val PERIOD_MS = 15 * 60 * 1000L
+
+    /** Первая пауза повтора после ошибки сети; дальше — вдвое длиннее, но не больше [PERIOD_MS]. */
+    const val RETRY_FIRST_MS = 30_000L
 
     /**
      * Синхронизируемые таблицы — все таблицы базы телефона (тест в `shared/data` сверяет список). Таблица,
@@ -62,6 +71,37 @@ object SyncRules {
         incoming.updatedAt != stored.updatedAt -> if (incoming.updatedAt > stored.updatedAt) SyncOrder.NEWER else SyncOrder.OLDER
         incoming.device != stored.device -> if (incoming.device > stored.device) SyncOrder.NEWER else SyncOrder.OLDER
         else -> SyncOrder.SAME
+    }
+
+    /**
+     * Телефон: применить ли пришедшую с сервера запись [incoming] к своей, изменённой в [localUpdatedAt] (`null` — записи нет).
+     * Своя правка ещё не отправлена ([pending]) — то же правило, что на сервере, со своим устройством [device]. Отправлена —
+     * сервер уже решил, кто новее: применяется всё, что не старше своей (то же самое, пришедшее обратно, — безвредно).
+     */
+    fun applyIncoming(incoming: SyncStamp, localUpdatedAt: Long?, pending: Boolean, device: String): Boolean = when {
+        localUpdatedAt == null -> true
+        pending -> order(incoming, SyncStamp(localUpdatedAt, device)) == SyncOrder.NEWER
+        else -> incoming.updatedAt >= localUpdatedAt
+    }
+
+    /** Пауза перед повтором после [failures] ошибок сети подряд (7.2, п. 4): 30 с, 1, 2, 4, 8 минут, дальше — 15 минут. */
+    fun retryDelay(failures: Int): Long {
+        if (failures <= 0) return 0
+        var delay = RETRY_FIRST_MS
+        repeat(failures - 1) { delay = (delay * 2).coerceAtMost(PERIOD_MS) }
+        return delay
+    }
+
+    /**
+     * Телефон: пауза до следующего обмена. Сервер отказал ([refused]: копия закрыта, приложение старое, вход устарел) —
+     * обычные 15 минут; ошибка связи — [retryDelay]; в очереди осталось изменённое за время обмена — [QUIET_MS];
+     * иначе — 15 минут или до новой правки.
+     */
+    fun nextPause(failures: Int, pending: Int, refused: Boolean): Long = when {
+        refused -> PERIOD_MS
+        failures > 0 -> retryDelay(failures)
+        pending > 0 -> QUIET_MS
+        else -> PERIOD_MS
     }
 
     /** Момент изменения, который запомнит сервер: из будущего больше чем на 5 минут — «сейчас». */

@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -65,6 +65,20 @@ internal object Migration1To2 : Migration(1, 2) {
 internal object Migration2To3 : Migration(2, 3) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `training` ADD COLUMN `coverFor` TEXT")
+    }
+}
+
+/**
+ * Версия 4 (шаг 2.10): очередь изменений для синхронизации (ТЗ 7.2, 3.8). Пустая: в режиме «Только телефон» отправлять
+ * некуда, при подключении сервера в неё сразу ложится вся база. Триггеры, которые её пишут, ставятся при открытии
+ * базы (`SyncOutbox.install`).
+ */
+internal object Migration3To4 : Migration(3, 4) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `sync_outbox` (`entity` TEXT NOT NULL, `rowId` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`entity`, `rowId`))",
+        )
     }
 }
 
