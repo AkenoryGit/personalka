@@ -58,6 +58,7 @@ object Errors {
     )
     fun serverOutdated() = ApiException(HttpStatusCode.ServiceUnavailable, "server_outdated", "Сервер обновляется — данные отправятся позже")
     fun cabinetsClosed() = ApiException(HttpStatusCode.Forbidden, "feature_closed", "Кабинеты родителей не открыты — напишите администратору")
+    fun noCabinetLink() = ApiException(HttpStatusCode.NotFound, "no_link", "Ссылки нет — выпустите новую")
     fun fullSync() = ApiException(HttpStatusCode.Gone, "full_sync", "Нужна полная синхронизация")
 
     /** «40 секунд», «5 минут». */

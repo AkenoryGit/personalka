@@ -46,8 +46,10 @@ import java.util.concurrent.ConcurrentHashMap
  * Для приложения (шаг 2.13), с токеном тренера и открытыми «Кабинетами»:
  * - `PUT /api/v1/cabinets/{client_id}` `{token_hash, pin?}` — новая ссылка (прежняя отзывается); `token_hash` —
  *   SHA-256 токена в base64url (сам токен сервер не видит), `pin` — 4 цифры;
+ * - `PUT /api/v1/cabinets/{client_id}/pin` `{pin?}` — сменить или убрать код действующей ссылки (шаг 2.13), нет её — 404;
  * - `DELETE /api/v1/cabinets/{client_id}` — отозвать ссылку;
- * - `GET /api/v1/cabinets` — действующие ссылки: `client_id`, `created_at`, `last_opened_at`; и последнее согласие
+ * - `GET /api/v1/cabinets` — действующие ссылки: `client_id`, `created_at`, `last_opened_at`, `pin` (есть ли код),
+ *   `token_hash` (телефон узнаёт свою ссылку); и последнее согласие
  *   каждого клиента (`consents`): `client_id`, `accepted_at`, `photo`, `given_by_name`, `revoked_at`.
  */
 fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: RateLimit) {
@@ -230,6 +232,8 @@ fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: Ra
                                 put("client_id", link.clientId)
                                 put("created_at", link.createdAt.toInstant().toEpochMilli())
                                 put("last_opened_at", link.lastOpenedAt?.toInstant()?.toEpochMilli())
+                                put("pin", link.hasPin)
+                                put("token_hash", Base64.getUrlEncoder().withoutPadding().encodeToString(link.tokenHash))
                             }
                         }
                     }
@@ -259,6 +263,18 @@ fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: Ra
                 if (hash == null) throw Errors.badRequest("token_hash — SHA-256 токена в base64url")
                 if (pin != null && !PIN.matches(pin)) throw Errors.badRequest("Код — 4 цифры")
                 cabinets.issue(c, coach.id, clientId, hash, pin)
+            }
+            call.respondJson(buildJsonObject { put("status", "ok") })
+        }
+
+        put("/{client}/pin") {
+            val token = call.bearer()
+            val clientId = clientId(call)
+            val pin = call.receiveObject().text("pin").takeIf { it.isNotEmpty() }
+            database.tx { c ->
+                val coach = cabinetCoach(c, token)
+                if (pin != null && !PIN.matches(pin)) throw Errors.badRequest("Код — 4 цифры")
+                if (!cabinets.changePin(c, coach.id, clientId, pin)) throw Errors.noCabinetLink()
             }
             call.respondJson(buildJsonObject { put("status", "ok") })
         }

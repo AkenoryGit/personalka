@@ -44,7 +44,7 @@ data class CabinetAccess(
 )
 
 /** Ссылка для списка в приложении. */
-data class CabinetLink(val clientId: String, val createdAt: OffsetDateTime, val lastOpenedAt: OffsetDateTime?)
+data class CabinetLink(val clientId: String, val createdAt: OffsetDateTime, val lastOpenedAt: OffsetDateTime?, val hasPin: Boolean, val tokenHash: ByteArray)
 
 /** Действующее согласие клиента (ConsentRecord, 3.7). */
 data class Consent(val acceptedAt: Long, val version: Int, val photo: Boolean, val givenBy: String?)
@@ -99,10 +99,28 @@ class Cabinets(
         at(now()), coachId, clientId,
     ) > 0
 
+    /**
+     * Сменить код действующей ссылки клиента, не меняя её (шаг 2.13): [pin] — 4 цифры или null (без кода). Попытки
+     * и блокировка обнуляются, прежние пропуски по коду больше не действуют — новый код спросится у всех.
+     * Ответ — была ли действующая ссылка.
+     */
+    fun changePin(c: Connection, coachId: String, clientId: String, pin: String?): Boolean {
+        val id = c.queryOne(
+            "SELECT id FROM cabinet_access WHERE coach_id = ? AND client_id = ? AND revoked_at IS NULL FOR UPDATE",
+            coachId, clientId,
+        ) { it.getLong(1) } ?: return false
+        c.update(
+            "UPDATE cabinet_access SET pin_hash = ?, pin_failures = 0, pin_blocked_until = NULL WHERE id = ?",
+            pin?.let(passwords::hash), id,
+        )
+        c.update("DELETE FROM cabinet_pass WHERE access_id = ?", id)
+        return true
+    }
+
     fun links(c: Connection, coachId: String): List<CabinetLink> = c.query(
-        "SELECT client_id, created_at, last_opened_at FROM cabinet_access WHERE coach_id = ? AND revoked_at IS NULL ORDER BY created_at",
+        "SELECT client_id, created_at, last_opened_at, pin_hash IS NOT NULL, token_hash FROM cabinet_access WHERE coach_id = ? AND revoked_at IS NULL ORDER BY created_at",
         coachId,
-    ) { CabinetLink(it.getString(1), it.getObject(2, OffsetDateTime::class.java), it.getObject(3, OffsetDateTime::class.java)) }
+    ) { CabinetLink(it.getString(1), it.getObject(2, OffsetDateTime::class.java), it.getObject(3, OffsetDateTime::class.java), it.getBoolean(4), it.getBytes(5)) }
 
     // --- Страница ---
 

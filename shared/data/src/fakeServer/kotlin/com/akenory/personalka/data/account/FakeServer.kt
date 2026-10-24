@@ -65,6 +65,16 @@ class FakeServer {
     /** Удалённые до этого номера стёрты (чистка 90 дней): выдача с меньшего `since` — 410. */
     var purgedSeq = 0L
 
+    /** Действующая ссылка кабинета клиента — как `cabinet_access` (2.11, 2.13); код здесь не хэшируется. */
+    data class Cabinet(val tokenHash: String, val pin: String?, val lastOpenedAt: Long? = null)
+
+    /** Ссылки кабинетов по id клиента и последние согласия (`consents`, 2.12) — их задаёт тест. */
+    val cabinets = mutableMapOf<String, Cabinet>()
+    val consents = mutableMapOf<String, JsonObject>()
+
+    /** Почты, у которых открыты «Кабинеты» (у администратора открыто всё). */
+    val cabinetAccess = mutableSetOf<String>()
+
     /** Принятые изменения по порядку — проверить, что повтор отправки не пишет дубль. */
     val accepted = mutableListOf<Row>()
 
@@ -165,6 +175,39 @@ class FakeServer {
                     return error(HttpStatusCode.NotFound, "session_not_found", "Это устройство уже вышло")
                 }
                 respondJson(buildJsonObject { put("status", "ok") })
+            }
+            path.startsWith("/cabinets") -> {
+                val session = sessions.firstOrNull { it.token == token } ?: return unauthorized()
+                if (session.coach.email != admin && session.coach.email !in cabinetAccess) {
+                    return error(HttpStatusCode.Forbidden, "feature_closed", "Кабинеты родителей не открыты — напишите администратору")
+                }
+                val parts = path.removePrefix("/cabinets").trim('/').split('/').filter { it.isNotEmpty() }
+                when {
+                    request.method == HttpMethod.Get -> respondJson(buildJsonObject {
+                        putJsonArray("cabinets") {
+                            cabinets.forEach { (client, link) ->
+                                addJsonObject {
+                                    put("client_id", client)
+                                    put("created_at", 0L)
+                                    put("last_opened_at", link.lastOpenedAt)
+                                    put("pin", link.pin != null)
+                                    put("token_hash", link.tokenHash)
+                                }
+                            }
+                        }
+                        putJsonArray("consents") { consents.values.forEach { add(it) } }
+                    })
+                    parts.size == 1 && request.method == HttpMethod.Put -> {
+                        cabinets[parts[0]] = Cabinet(text("token_hash"), text("pin").ifEmpty { null })
+                        respondJson(buildJsonObject { put("status", "ok") })
+                    }
+                    parts.size == 2 && parts[1] == "pin" -> {
+                        val link = cabinets[parts[0]] ?: return error(HttpStatusCode.NotFound, "no_link", "Ссылки нет — выпустите новую")
+                        cabinets[parts[0]] = link.copy(pin = text("pin").ifEmpty { null })
+                        respondJson(buildJsonObject { put("status", "ok") })
+                    }
+                    else -> respond("Not found", HttpStatusCode.NotFound)
+                }
             }
             path.startsWith("/sync/") || path == "/account/data" -> {
                 val session = sessions.firstOrNull { it.token == token } ?: return unauthorized()
@@ -290,8 +333,12 @@ class FakeServer {
         put("role", if (coach.email == admin) "ADMIN" else "COACH")
         put("status", "ACTIVE")
         putJsonArray("features") {
-            if (coach.email != admin && coach.email in serverCopy) addJsonObject {
+            if (coach.email != admin && (coach.email in serverCopy || coach.email in cabinetAccess)) addJsonObject {
                 put("code", "server_copy")
+                put("until", null as String?)
+            }
+            if (coach.email != admin && coach.email in cabinetAccess) addJsonObject {
+                put("code", "cabinets")
                 put("until", null as String?)
             }
             if (coach.email == admin) {

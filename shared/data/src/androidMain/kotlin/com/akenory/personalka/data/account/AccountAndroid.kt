@@ -21,10 +21,26 @@ import javax.crypto.spec.GCMParameterSpec
  * с блокировкой экрана, телефон сменился) — входа нет, тренер входит заново.
  */
 class KeystoreTokens(context: Context) : TokenStore {
-    private val prefs = context.applicationContext.getSharedPreferences("personalka-account", Context.MODE_PRIVATE)
+    private val box = KeystoreBox(context, "personalka-account")
 
-    override fun read(): String? {
-        val stored = prefs.getString(TOKEN, null) ?: return null
+    override fun read(): String? = box.read(TOKEN)
+
+    override fun write(token: String?) = box.write(TOKEN, token)
+
+    private companion object {
+        const val TOKEN = "token"
+    }
+}
+
+/**
+ * Строки под ключом Android Keystore в своём файле настроек [file]: AES-256-GCM, IV — в начале шифра. Ключ один
+ * на приложение. Не расшифровалась — `null`, как будто её нет.
+ */
+class KeystoreBox(context: Context, file: String) {
+    private val prefs = context.applicationContext.getSharedPreferences(file, Context.MODE_PRIVATE)
+
+    fun read(name: String): String? {
+        val stored = prefs.getString(name, null) ?: return null
         return runCatching {
             val bytes = Base64.decode(stored, Base64.NO_WRAP)
             val cipher = Cipher.getInstance(AES)
@@ -33,15 +49,15 @@ class KeystoreTokens(context: Context) : TokenStore {
         }.getOrNull()
     }
 
-    override fun write(token: String?) {
-        if (token == null) {
-            prefs.edit().remove(TOKEN).apply()
+    fun write(name: String, value: String?) {
+        if (value == null) {
+            prefs.edit().remove(name).apply()
             return
         }
         val cipher = Cipher.getInstance(AES)
         cipher.init(Cipher.ENCRYPT_MODE, key())
-        val sealed = cipher.iv + cipher.doFinal(token.toByteArray(Charsets.UTF_8))
-        prefs.edit().putString(TOKEN, Base64.encodeToString(sealed, Base64.NO_WRAP)).apply()
+        val sealed = cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        prefs.edit().putString(name, Base64.encodeToString(sealed, Base64.NO_WRAP)).apply()
     }
 
     private fun key(): SecretKey {
@@ -63,7 +79,6 @@ class KeystoreTokens(context: Context) : TokenStore {
         const val ALIAS = "personalka-session"
         const val AES = "AES/GCM/NoPadding"
         const val IV = 12
-        const val TOKEN = "token"
     }
 }
 

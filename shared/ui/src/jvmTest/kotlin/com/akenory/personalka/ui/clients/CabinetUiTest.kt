@@ -1,0 +1,165 @@
+package com.akenory.personalka.ui.clients
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.account.AccountRepository
+import com.akenory.personalka.data.account.FakeServer
+import com.akenory.personalka.data.account.MemoryTokens
+import com.akenory.personalka.data.cabinet.CabinetApi
+import com.akenory.personalka.data.cabinet.CabinetRepository
+import com.akenory.personalka.data.cabinet.MemorySecrets
+import com.akenory.personalka.data.prefs.MemoryPrefs
+import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.data.sync.SyncApi
+import com.akenory.personalka.data.sync.SyncRepository
+import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.format.CabinetLinkFormat
+import com.akenory.personalka.ui.App
+import com.akenory.personalka.ui.TestData
+import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.screens.MoreItem
+import com.akenory.personalka.ui.screens.moreRowTag
+import com.akenory.personalka.ui.settings.SyncTools
+import com.akenory.personalka.ui.shell.Section
+import com.akenory.personalka.ui.shell.navTag
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+/**
+ * Кабинет в приложении (шаг 2.13, ТЗ 5.9, 5.16): «Кабинеты» в настройках с контактом, кнопка «Кабинет» в карточке,
+ * окно с выпуском ссылки, «Отправить», «Скопировать», «Код доступа» и «Выпустить новую ссылку». Сервер — в памяти.
+ */
+@OptIn(ExperimentalTestApi::class)
+class CabinetUiTest {
+    private val server = FakeServer()
+    private val url = "https://trener.example.ru"
+    private val settings: SettingsRepository = TestData.ready()
+    private val clients = TestData.clientsOf(settings)
+    private val shared = mutableListOf<String>()
+    private val copied = mutableListOf<String>()
+
+    private fun ComposeUiTest.show(cabinetsOpen: Boolean = true) {
+        server.signedUp(EMAIL, PASSWORD)
+        server.serverCopy += EMAIL
+        if (cabinetsOpen) server.cabinetAccess += EMAIL
+        val tokens = MemoryTokens()
+        val prefs = MemoryPrefs().apply { putBoolean(SyncRepository.CONNECTED, true) }
+        val account = AccountRepository(server.api(url), tokens, prefs, "Samsung SM-F976B") { settings.coach.first()?.id }
+        runBlocking { account.login(EMAIL, PASSWORD) }
+        val db = TestData.dbOf(settings)
+        val sync = SyncRepository(db, SyncApi(server.client) { url }, tokens, prefs, TestData.clock)
+        val cabinets = CabinetRepository(db, CabinetApi(server.client) { url }, tokens, MemorySecrets(), TestData.clock)
+        setContent {
+            Box(Modifier.size(412.dp, 900.dp)) {
+                App(
+                    "0.1.0", settings, clients, TestData.groupsOf(settings), TestData.calendarOf(settings),
+                    account = account,
+                    sync = SyncTools(sync) {},
+                    cabinets = CabinetTools(cabinets, { shared += it }, { copied += it }),
+                    clock = TestData.clock,
+                )
+            }
+        }
+    }
+
+    private fun ComposeUiTest.openSettings() {
+        awaitNode(hasTestTag(navTag(Section.MORE)))
+        onNodeWithTag(navTag(Section.MORE)).performClick()
+        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
+    }
+
+    private fun ComposeUiTest.openCard(name: String) {
+        onNodeWithTag(navTag(Section.CLIENTS)).performClick()
+        awaitNode(hasTestTag(clientRowTag(name)))
+        onNodeWithTag(clientRowTag(name)).performClick()
+    }
+
+    @Test
+    fun enableInSettingsThenIssueSendAndChangeCode() = runComposeUiTest {
+        val id = runBlocking { clients.create(ClientDraft("Орлова", "Ксения")) }
+        show()
+
+        // «Настройки → Кабинеты»: без контакта не включаются.
+        openSettings()
+        awaitNode(hasTestTag("settings-cabinets"))
+        onNodeWithTag("settings-cabinets").performClick()
+        awaitNode(hasTestTag("cabinets-switch"))
+        onNodeWithTag("cabinets-switch").performClick()
+        onNodeWithText(CabinetLinkFormat.CONTACT_NEEDED).assertExists()
+        onNodeWithText("Сохранить").assertIsNotEnabled()
+        onNodeWithTag("cabinets-contact").performTextInput("+7 912 000-00-00")
+        onNodeWithText("Сохранить").performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { settings.cabinetsEnabled.first() } }
+        assertEquals("+7 912 000-00-00", runBlocking { settings.coach.first()!!.contactForParents })
+
+        // Карточка: «Кабинет» → открыть → ссылка с кодом выпущена.
+        openCard("Орлова Ксения")
+        awaitNode(hasTestTag(CARD_CABINET_TAG))
+        onNodeWithTag(CARD_CABINET_TAG).performClick()
+        onNodeWithText("Кабинет · Орлова К.").assertExists()
+        onNodeWithTag(CABINET_OPEN_TAG).performClick()
+        awaitNode(hasTestTag(CABINET_LINK_TAG))
+        val pin = server.cabinets[id]!!.pin!!
+        onNodeWithTag(CABINET_LINK_TAG).assertTextContains("$url/c/", substring = true)
+        onNodeWithTag(CABINET_CONSENT_TAG).assertTextContains("Согласия пока нет", substring = true)
+        onNodeWithText(CabinetLinkFormat.codeOn(pin)).assertExists()
+        onNodeWithText(CabinetLinkFormat.NEVER_OPENED).assertExists()
+        assertTrue(runBlocking { TestData.dbOf(settings).clientDao().client(id)!!.cabinetEnabled })
+
+        onNodeWithTag(CABINET_SEND_TAG).performClick()
+        val text = shared.single()
+        assertTrue(text.startsWith("Здравствуйте! Здесь расписание и итоги тренировок: $url/c/"), text)
+        assertTrue(text.endsWith("Код для входа: $pin"), text)
+        onNodeWithTag(CABINET_COPY_TAG).performClick()
+        assertEquals(text, copied.single())
+
+        // Код выключен — ссылка та же, без кода.
+        val token = server.cabinets[id]!!.tokenHash
+        onNodeWithTag(CABINET_CODE_TAG).performClick()
+        awaitNode(hasText(CabinetLinkFormat.CODE_OFF))
+        assertEquals(null, server.cabinets[id]!!.pin)
+        assertEquals(token, server.cabinets[id]!!.tokenHash)
+
+        // Новая ссылка: на сервере — другая, старая не откроется.
+        onNodeWithTag(CABINET_NEW_TAG).performClick()
+        waitUntil(timeoutMillis = 5_000) { server.cabinets[id]!!.tokenHash != token }
+        awaitNode(hasText(CabinetLinkFormat.NEW_LINK_DONE))
+        onNodeWithTag(CABINET_SEND_TAG).performClick()
+        assertFalse(shared.last() == text)
+        assertFalse("Код для входа" in shared.last())
+    }
+
+    @Test
+    fun noCabinetsFeatureNoSectionNoButton() = runComposeUiTest {
+        runBlocking { clients.create(ClientDraft("Орлова", "Ксения")) }
+        show(cabinetsOpen = false)
+        openSettings()
+        awaitNode(hasTestTag("settings-profile"))
+        assertTrue(onAllNodes(hasTestTag("settings-cabinets")).fetchSemanticsNodes().isEmpty())
+        openCard("Орлова Ксения")
+        awaitNode(hasTestTag(CARD_ADD_TRAINING_TAG))
+        assertTrue(onAllNodes(hasTestTag(CARD_CABINET_TAG)).fetchSemanticsNodes().isEmpty())
+    }
+
+    private companion object {
+        const val EMAIL = "coach@example.ru"
+        const val PASSWORD = "пароль-тренера"
+    }
+}

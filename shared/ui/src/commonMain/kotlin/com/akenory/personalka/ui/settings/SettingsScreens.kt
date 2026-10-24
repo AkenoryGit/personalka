@@ -52,6 +52,7 @@ import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.settings.draft
 import com.akenory.personalka.domain.format.BackupFormat
+import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.format.TypeFormat
@@ -92,6 +93,7 @@ object SettingsRoute {
     const val REMINDERS = "settings/reminders"
     const val DATA = "settings/data"
     const val ACCOUNT = "settings/account"
+    const val CABINETS = "settings/cabinets"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
     private const val PLACE = "place/"
@@ -120,7 +122,7 @@ internal fun typeRowTag(name: String) = "type-$name"
 /**
  * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы», «Календарь» (шаг 1.13г) и «Данные»
  * (шаг 1.15, если платформа дала [backup]; в них — «Аккаунт», шаг 2.8а, если есть [account], и «Сервер», шаг 2.10а,
- * если есть [sync]); остальные разделы
+ * если есть [sync]) и «Кабинеты» (шаг 2.13, если [cabinets] — сервер подключён и «Кабинеты» открыты); остальные разделы
  * появятся в своих шагах (ставки — 3.6), до этого их
  * не видно (10.7).
  *
@@ -144,6 +146,7 @@ fun SettingsScreen(
     notifications: NotificationAccess? = null,
     account: AccountRepository? = null,
     sync: SyncTools? = null,
+    cabinets: Boolean = false,
 ) {
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
@@ -154,7 +157,8 @@ fun SettingsScreen(
     val close: () -> Unit = { shell.back() }
 
     when {
-        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces.size, activeTypes.size, shell, onBack)
+        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces.size, activeTypes.size, shell, onBack, cabinets)
+        route == SettingsRoute.CABINETS -> if (cabinets) CabinetSettingsScreen(settings, messages, scope, close)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
         route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
@@ -246,8 +250,10 @@ private fun SettingsHome(
     types: Int,
     shell: ShellState,
     onBack: (() -> Unit)?,
+    cabinets: Boolean,
 ) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
+    val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
     val prefs by remember(calendar) { calendar.settings.prefs }.collectAsState(initial = null)
     val diary by remember(calendar) { calendar.reminders.prefs }.collectAsState(initial = null)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -280,6 +286,15 @@ private fun SettingsHome(
                 onClick = { shell.open(SettingsRoute.REMINDERS) },
                 modifier = Modifier.testTag(REMINDERS_ROW_TAG),
             )
+            if (cabinets) {
+                RowDivider()
+                NavRow(
+                    title = CabinetLinkFormat.SETTINGS_TITLE,
+                    subtitle = if (cabinetsOn) CabinetLinkFormat.ON else CabinetLinkFormat.OFF,
+                    onClick = { shell.open(SettingsRoute.CABINETS) },
+                    modifier = Modifier.testTag(CABINETS_ROW_TAG),
+                )
+            }
             if (backup != null) {
                 val data by backup.repository.state.collectAsState()
                 RowDivider()

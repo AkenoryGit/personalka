@@ -62,6 +62,7 @@ import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
+import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
@@ -128,8 +129,9 @@ private enum class HistoryFilter(val title: String) { ALL("Все"), DONE("Пр�
  * (когда они есть), «Инфо» и «Расписание». Пока нет ни тренировок, ни серий, ни результатов, нет ни счётчиков,
  * ни вкладок — сразу «Инфо» (10.7: пустое не показывается).
  *
- * Меню «…»: «Изменить», «Объединить с…», «В архив», «Удалить полностью» — с двойным подтверждением и вводом
- * фамилии. «Кабинет» и «В лист ожидания…» появятся в своих шагах (2.13, 2.4).
+ * Меню «…»: «Изменить», «В лист ожидания…», «Объединить с…», «В архив», «Удалить полностью» — с двойным
+ * подтверждением и вводом фамилии. Третья кнопка «Кабинет» (2.13) — только с [cabinet]: режим «С сервером»,
+ * открытые и включённые кабинеты.
  *
  * @param onForm открыть форму тренировки ([TrainingFormKey]): «+ Тренировка», «+ Серия», «Изменить с даты…».
  */
@@ -147,6 +149,7 @@ fun ClientCard(
     onBack: (() -> Unit)?,
     followup: Followup = Followup.EMPTY,
     waiting: List<WaitRow> = emptyList(),
+    cabinet: CabinetTools? = null,
 ) {
     val today = now.date
     val waits = waiting.firstOrNull { it.client.id == clientId }
@@ -165,6 +168,8 @@ fun ClientCard(
     var pickingDay by rememberSaveable(clientId) { mutableStateOf(false) }
     // Форма результата: NEW_RESULT — новый, иначе id изменяемого.
     var resultForm by rememberSaveable(clientId) { mutableStateOf<String?>(null) }
+    // Окно «Кабинет» (2.13).
+    var cabinetOpen by rememberSaveable(clientId) { mutableStateOf(false) }
 
     if (row == null) {
         // Клиента только что удалили или объединили — карточка вот-вот закроется.
@@ -230,24 +235,34 @@ fun ClientCard(
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 CardHeader(row, today, noBooking = clientId in followup.noBooking, waits = waits != null)
                 if (stats != null && !stats.isEmpty) StatsRow(stats)
-                if (active) {
-                    // Клиента в архиве не записывают: сначала «Вернуть из архива».
+                if (active || cabinet != null) {
                     Row(
                         Modifier.fillMaxWidth().padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space3),
                         horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
                     ) {
-                        SecondaryButton(
-                            ClientFormat.ADD_TRAINING,
-                            { onForm(TrainingFormKey.new(clientId = clientId)) },
-                            modifier = Modifier.weight(1f).testTag(CARD_ADD_TRAINING_TAG),
-                            icon = PIcons.Add,
-                        )
-                        SecondaryButton(
-                            ResultFormat.ADD,
-                            { resultForm = NEW_RESULT },
-                            modifier = Modifier.weight(1f).testTag(CARD_ADD_RESULT_TAG),
-                            icon = PIcons.Add,
-                        )
+                        // Клиента в архиве не записывают: сначала «Вернуть из архива». Кабинет закрыть можно и у него.
+                        if (active) {
+                            SecondaryButton(
+                                ClientFormat.ADD_TRAINING,
+                                { onForm(TrainingFormKey.new(clientId = clientId)) },
+                                modifier = Modifier.weight(1f).testTag(CARD_ADD_TRAINING_TAG),
+                                icon = PIcons.Add,
+                            )
+                            SecondaryButton(
+                                ResultFormat.ADD,
+                                { resultForm = NEW_RESULT },
+                                modifier = Modifier.weight(1f).testTag(CARD_ADD_RESULT_TAG),
+                                icon = PIcons.Add,
+                            )
+                        }
+                        if (cabinet != null) {
+                            OutlineButton(
+                                CabinetLinkFormat.BUTTON,
+                                { cabinetOpen = true },
+                                modifier = Modifier.weight(1f).testTag(CARD_CABINET_TAG),
+                                icon = PIcons.Link,
+                            )
+                        }
                     }
                 }
                 val loadedResults = results
@@ -275,6 +290,10 @@ fun ClientCard(
                 }
                 Spacer(Modifier.height(Dimens.space6))
             }
+        }
+
+        if (cabinetOpen && cabinet != null) {
+            CabinetPanel(client, cabinet, today, messages, scope, onClose = { cabinetOpen = false })
         }
 
         resultForm?.let { key ->

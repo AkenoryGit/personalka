@@ -8,6 +8,7 @@ import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.domain.Ids
+import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.CoachName
@@ -15,6 +16,7 @@ import com.akenory.personalka.domain.reference.PlaceDraft
 import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.reference.TypeDraft
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * Первый запуск (ТЗ 5.18) и настройки «Профиль», «Места и типы» (5.16): тренер, его места и типы в базе.
@@ -80,6 +82,29 @@ class SettingsRepository(private val db: PersonalkaDatabase, private val clock: 
                 middleName = clean.middleName,
             ),
         )
+    }
+
+    /** Общий выключатель кабинетов (3.2, только «С сервером»). */
+    val cabinetsEnabled: Flow<Boolean> = coaches.observeSettings().map { it?.cabinetsEnabled == true }
+
+    /**
+     * Раздел «Кабинеты» (5.16, шаг 2.13): контакт для родителей и общий выключатель. Без контакта кабинеты
+     * не включаются (3.2): пустой контакт выключает их. На сервер настройки уходят синхронизацией.
+     */
+    suspend fun saveCabinets(enabled: Boolean, contact: String) {
+        val coach = coaches.currentCoach() ?: return
+        val settings = coaches.settings(coach.id) ?: return
+        val clean = CabinetLinkRules.contact(contact)
+        val now = clock()
+        db.withWriteTransaction {
+            if (clean != coach.contactForParents) {
+                coaches.upsertCoach(coach.copy(sync = coach.sync.touched(now), contactForParents = clean))
+            }
+            val on = enabled && clean != null
+            if (on != settings.cabinetsEnabled) {
+                coaches.upsertSettings(settings.copy(sync = settings.sync.touched(now), cabinetsEnabled = on))
+            }
+        }
     }
 
     /** Новое место — последним в списке. Возвращает id. */

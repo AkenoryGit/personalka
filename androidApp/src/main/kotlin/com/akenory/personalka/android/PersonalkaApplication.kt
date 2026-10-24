@@ -7,6 +7,8 @@ import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.backup.UpdateCopies
 import com.akenory.personalka.data.backup.fileBackupFolder
 import com.akenory.personalka.data.backup.safBackupFolder
+import com.akenory.personalka.data.cabinet.CabinetRepository
+import com.akenory.personalka.data.cabinet.androidCabinets
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
@@ -70,6 +72,9 @@ class PersonalkaApplication : Application() {
      */
     val sync: SyncRepository by lazy { androidSync(this, database, prefs) { settings.coach.first()?.serverUrl } }
     val syncRunner: SyncRunner by lazy { SyncRunner(sync) }
+
+    /** Ссылки кабинетов (шаг 2.13): тот же сервер и токен, что у [account]; токены ссылок — в Android Keystore. */
+    val cabinets: CabinetRepository by lazy { androidCabinets(this, database) { settings.coach.first()?.serverUrl } }
 
     /** Напоминания (шаг 2.5): проверка по будильнику ([ReminderReceiver]) и время следующей. */
     val reminders: Reminders by lazy { Reminders(calendar, clients, backup, prefs, System::currentTimeMillis) }

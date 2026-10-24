@@ -407,6 +407,45 @@ class CabinetTest {
     }
 
     @Test
+    fun newLinkClosesTheOldOne() = withServer { db ->
+        val (token, old) = setUp(db)
+        client.get("/c/$old").html()
+        val fresh = client.issue(token, childId(0))
+        assertTrue("Ссылка больше не действует" in client.get("/c/$old").html(HttpStatusCode.NotFound))
+        assertTrue("Данилова Ева" in client.get("/c/$fresh").html(), "согласие у клиента — новая ссылка его не спрашивает")
+    }
+
+    @Test
+    fun codeChangesWithoutNewLink() = withServer { db ->
+        val (token, link) = setUp(db, pin = "4721", consented = false)
+        val browser = createClient { followRedirects = false }
+        suspend fun pin(code: String?, client: String = childId(0)) = this.client.put("/api/v1/cabinets/$client/pin") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { code?.let { put("pin", it) } }.toString())
+        }
+        suspend fun links() = client.get("/api/v1/cabinets") { header(HttpHeaders.Authorization, "Bearer $token") }.obj()["cabinets"]!!.jsonArray
+        assertEquals("true", links().single().jsonObject["pin"].toString())
+        val hash = Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(link.toByteArray()))
+        assertEquals(hash, links().single().jsonObject["token_hash"]!!.jsonPrimitive.content, "телефон узнаёт свою ссылку")
+        val pass = browser.submitForm("/c/$link/pin", parameters { append("code", "4721") }).headers[HttpHeaders.SetCookie]!!.substringBefore(';')
+
+        // Новый код: ссылка та же, прежний пропуск и прежний код больше не подходят.
+        assertEquals(HttpStatusCode.OK, pin("1358").status)
+        assertTrue("Введите код" in browser.get("/c/$link") { header(HttpHeaders.Cookie, pass) }.html())
+        assertTrue(nb("Осталось 4 попытки") in browser.submitForm("/c/$link/pin", parameters { append("code", "4721") }).html())
+        assertEquals(HttpStatusCode.SeeOther, browser.submitForm("/c/$link/pin", parameters { append("code", "1358") }).status)
+
+        // Без кода — сразу дальше (здесь — согласие).
+        assertEquals(HttpStatusCode.OK, pin(null).status)
+        assertEquals("false", links().single().jsonObject["pin"].toString())
+        assertFalse("Введите код" in browser.get("/c/$link").html())
+
+        assertEquals(HttpStatusCode.BadRequest, pin("12").status)
+        assertEquals(HttpStatusCode.NotFound, pin("1234", childId(5)).status)
+    }
+
+    @Test
     fun tokenIsMaskedInLogs() {
         assertEquals("/c/AbCd…", maskCabinet("/c/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde"))
         assertEquals("/c/AbCd…", maskCabinet("/c/AbCdEfGh?x=1").substringBefore('?'))

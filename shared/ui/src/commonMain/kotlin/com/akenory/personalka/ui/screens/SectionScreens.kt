@@ -20,6 +20,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +44,7 @@ import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.ui.calendar.CalendarScreen
+import com.akenory.personalka.ui.clients.CabinetTools
 import com.akenory.personalka.ui.clients.ClientFilter
 import com.akenory.personalka.ui.clients.ClientListState
 import com.akenory.personalka.ui.clients.ClientRoute
@@ -91,6 +95,8 @@ import kotlinx.datetime.LocalDateTime
  * @param onDiary открыть дневник тренировки (шаг 2.1) — экран поверх приложения.
  * @param followup «Без записи» (шаг 2.4) для «Клиентов»; [clientList] — поиск и фильтр их списка: пункт «Главной»
  *   открывает «Без записи»; [voice] — голосовой ввод в заметке листа ожидания.
+ * @param cabinets ссылки кабинетов (шаг 2.13) — когда сервер подключён и «Кабинеты» открыты у аккаунта; `null` —
+ *   ни раздела «Кабинеты» в настройках, ни кнопки «Кабинет» в карточке.
  */
 @Composable
 fun SectionScreen(
@@ -124,7 +130,10 @@ fun SectionScreen(
     notifications: NotificationAccess? = null,
     voice: VoiceInput? = null,
     waiting: List<WaitRow> = emptyList(),
+    cabinets: CabinetTools? = null,
 ) {
+    // «Кабинет» в карточке — только при включённых кабинетах (5.9); раздел «Кабинеты» в настройках — чтобы их включить.
+    val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
     val openClient: (String) -> Unit = { id ->
         shell.select(Section.CLIENTS)
         shell.open(ClientRoute.card(id))
@@ -190,7 +199,7 @@ fun SectionScreen(
             onWent = { onCalendarDay(null) },
             onDiary = onDiary,
         )
-        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting)
+        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting, cabinets?.takeIf { cabinetsOn })
         Section.SALARY -> Placeholder(
             title = "Зарплата",
             icon = PIcons.Payments,
@@ -199,7 +208,7 @@ fun SectionScreen(
         )
         Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
             when {
-                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync)
+                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }

@@ -21,6 +21,7 @@ import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.ui.clients.CabinetTools
 import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.MessageState
@@ -35,6 +36,8 @@ import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SyncTools
 import com.akenory.personalka.ui.home.SyncTodo
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.account.AccountRules
+import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.sync.SyncRules
 import com.akenory.personalka.ui.setup.FirstRun
 import com.akenory.personalka.ui.shell.AppShell
@@ -65,6 +68,8 @@ import kotlinx.datetime.LocalDate
  * @param account аккаунт на сервере (шаг 2.8а): строка «Аккаунт» в «Данных»; `null` — строки нет (тесты).
  * @param sync синхронизация (шаг 2.10а): «Сервер» в «Данных», «Войти» на первом запуске, пункт «Нужно сделать»;
  *   `null` — их нет (тесты). Сам обмен идёт в приложении платформы.
+ * @param cabinets ссылки кабинетов (шаг 2.13): «Кабинет» в карточке клиента и «Кабинеты» в настройках, когда сервер
+ *   подключён и «Кабинеты» открыты у аккаунта; `null` — их нет (тесты).
  * @param voice голосовой ввод в полях дневника (шаг 2.1); `null` — микрофонов нет.
  * @param reminders напоминания (шаг 2.5): «План на день» в настройках; `null` — строки нет (тесты).
  * @param notifications уведомления телефона: строка «Включить» в настройках, когда они выключены.
@@ -85,6 +90,7 @@ fun App(
     backup: BackupTools? = null,
     account: AccountRepository? = null,
     sync: SyncTools? = null,
+    cabinets: CabinetTools? = null,
     voice: VoiceInput? = null,
     reminders: Reminders? = null,
     notifications: NotificationAccess? = null,
@@ -130,6 +136,10 @@ fun App(
         val syncState by remember(sync) { sync?.repository?.state ?: flowOf(null) }.collectAsState(initial = null)
         val pending by remember(sync) { sync?.repository?.pending ?: flowOf(0) }.collectAsState(initial = 0)
         val oldest by remember(sync) { sync?.repository?.oldestPending ?: flowOf(null) }.collectAsState(initial = null)
+        // Кабинеты (5.9, 5.16): только «С сервером» и с открытыми «Кабинетами» у аккаунта (10.7: закрытое не видно).
+        val signedIn by remember(account) { account?.account ?: flowOf(null) }.collectAsState(initial = null)
+        val cabinetsOpen = syncState?.connected == true &&
+            signedIn?.let { Feature.CABINETS in AccountRules.open(it.features, now.date) } == true
         val syncTodo = syncState?.takeIf { it.connected }?.let { s ->
             SyncTodo(SyncRules.late(pending, oldest, s.lastSync, clock()), s.lastSync?.let { ClubTime.now(it) })
         }
@@ -224,6 +234,7 @@ fun App(
                             backup = backup,
                             account = account,
                             sync = sync,
+                            cabinets = cabinets?.takeIf { cabinetsOpen },
                             home = home,
                             todos = todos,
                             homeCard = homeCard,
