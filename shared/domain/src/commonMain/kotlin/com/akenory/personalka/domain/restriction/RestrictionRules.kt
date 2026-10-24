@@ -19,7 +19,8 @@ import kotlinx.datetime.LocalTime
  * - **Дежурство с запретами не сверяется:** оно не занимает дорожку, `over_restriction` у него всегда `false`.
  * - **Изменились запреты — флаг пересчитывается без окон**, только у тренировок, которые ещё не начались.
  * - **Накладка с дежурством разрешена:** правило лишь находит дежурства под тренировкой для значка
- *   и строки «Накладка с дежурством 15:00–19:00».
+ *   и строки «Накладка с дежурством 15:00–19:00» — только в другом месте: тренировка ББ во время дежурства ББ
+ *   накладкой не считается.
  */
 object RestrictionRules {
     // --- Даты и время запрета ---
@@ -142,15 +143,17 @@ object RestrictionRules {
 
     /**
      * Дежурства под тренировкой — для нейтрального значка и строки «Накладка с дежурством 15:00–19:00»
-     * в карточке (5.4). Место не важно: тренер дежурит, где бы ни стояла тренировка. Отменённые дежурства
-     * не считаются; у самого дежурства накладок с дежурствами не бывает. По началу.
+     * в карточке (5.4). Только дежурства в другом месте (решение 24.10.2026): в ДБ во время дежурства в ББ тренеру
+     * нужно отойти, а тренировка в том же ББ проходит рядом с дежурством. Отменённые дежурства не считаются;
+     * у самого дежурства накладок с дежурствами не бывает. По началу.
      */
     fun dutyOverlaps(training: Placement, sameDay: List<PlacedTraining>): List<PlacedTraining> {
         if (training.isDuty) return emptyList()
         val from = training.start
         val to = training.end
         return sameDay
-            .filter { it.placement.isDuty && !it.cancelled && it.placement.start < to && from < it.placement.end }
+            .filter { it.placement.isDuty && !it.cancelled && it.placement.locationId != training.locationId }
+            .filter { it.placement.start < to && from < it.placement.end }
             .sortedWith(compareBy<PlacedTraining>({ it.placement.start }, { it.placement.end }, { it.id }))
     }
 

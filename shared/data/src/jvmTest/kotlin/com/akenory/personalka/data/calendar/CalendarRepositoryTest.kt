@@ -209,7 +209,7 @@ class CalendarRepositoryTest {
             "ПТ", "ББ", at(tuesday, 10), clientIds = listOf(zaitseva), status = TrainingStatus.CANCELLED,
             statuses = listOf(ParticipationStatus.CANCELLED_CHARGED),
         )
-        // Дежурство ББ 11:00–15:00; тренировка в ДБ поверх него — тоже накладка: тренер дежурит, где бы ни стояла.
+        // Дежурство ББ 11:00–15:00; тренировка в ДБ поверх него — накладка: тренеру надо отойти.
         training("Деж", "ББ", at(tuesday, 11), minutes = 240)
         training("ПТ", "ДБ", at(tuesday, 12), clientIds = listOf(morozov))
         training("ПТ", "ДБ", at(tuesday, 17), clientIds = listOf(morozov), overRestriction = true)

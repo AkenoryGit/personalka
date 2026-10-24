@@ -345,11 +345,12 @@ class TrainingCardsTest {
     fun cardShowsSeriesAndWarnings(): Unit = runBlocking {
         val orlov = client("Орлов", "Максим")
         val id = training(at(tuesday, 17, 0), orlov, repeat = Repeat(setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY), null))
-        // Дежурство 16:30–18:30 под тренировкой.
-        assertIs<SaveResult.Saved>(calendar.forms.create(TrainingDraft(at(tuesday, 16, 30), typeId("Деж"), emptyList(), null, placeId("ББ"), 120)))
+        // Дежурство ДБ 16:30–18:30 под тренировкой ББ; дежурство в том же ББ накладкой не считается.
+        assertIs<SaveResult.Saved>(calendar.forms.create(TrainingDraft(at(tuesday, 16, 30), typeId("Деж"), emptyList(), null, placeId("ДБ"), 120)))
+        assertIs<SaveResult.Saved>(calendar.forms.create(TrainingDraft(at(tuesday, 16, 0), typeId("Деж"), emptyList(), null, placeId("ББ"), 180)))
         val c = card(id)
         assertEquals(s("Орлов_М."), c.title)
         assertEquals(setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY), c.seriesWeekdays)
-        assertEquals(listOf("Поверх дежурства · ББ 16:30–18:30"), c.warnings)
+        assertEquals(listOf("Поверх дежурства · ДБ 16:30–18:30"), c.warnings)
     }
 }
