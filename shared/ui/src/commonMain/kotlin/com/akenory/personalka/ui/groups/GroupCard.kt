@@ -50,9 +50,11 @@ import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.groups.GroupRow
 import com.akenory.personalka.data.groups.GroupTrainingRow
+import com.akenory.personalka.data.groups.sharing
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.ClientFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.format.RuText
@@ -86,6 +88,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
 const val GROUP_MENU_TAG = "group-menu"
+const val GROUP_SHARING_TAG = "group-sharing"
 const val MEMBER_ADD_TAG = "member-add"
 const val MEMBER_SEARCH_TAG = "member-search"
 const val MEMBER_DATE_TAG = "member-date"
@@ -110,7 +113,8 @@ private fun ClientRow?.nameOrGone(): String = this?.let { "${it.client.lastName}
 /**
  * Карточка группы (5.10): тип, место и расписание; состав сейчас и с будущей даты — нажатие правит даты места,
  * «+ В состав» добавляет ребёнка с даты; ушедшие — отдельно; ближайшие и прошедшие тренировки с числом пришедших
- * и детьми «на раз», средняя посещаемость. «Числится на» и «Проводим» — с совместным ведением (этап 3).
+ * и детьми «на раз», средняя посещаемость. «Числится на» и «Кто обычно ведёт» — с совместным ведением ([colleagues] —
+ * имена коллег, `null` — выключено; шаг 3.7г).
  */
 @Composable
 fun GroupCard(
@@ -123,6 +127,7 @@ fun GroupCard(
     scope: CoroutineScope,
     now: LocalDateTime,
     onBack: (() -> Unit)?,
+    colleagues: Map<String, String>? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val today = now.date
@@ -182,6 +187,16 @@ fun GroupCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.textMuted,
                 )
+                if (colleagues != null) {
+                    val sharing = row.group.sharing()
+                    Text(
+                        CoCoachingFormat.ownerLine(sharing, colleagues) + " · " +
+                            CoCoachingFormat.conductedLine(sharing, colleagues, prefix = CoCoachingFormat.DEFAULT_CONDUCTED + ": "),
+                        Modifier.testTag(GROUP_SHARING_TAG),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted,
+                    )
+                }
 
                 if (done.isNotEmpty()) {
                     Row(

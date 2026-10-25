@@ -233,6 +233,8 @@ fun TrainingCardHost(
     // Вопрос СПТ на первой оплаченной ПТ (4.9, п. 4–5, шаг 3.7а) и его окно с датой покупки.
     val sptAsk by remember(id) { id?.let { cards.spt.ask(it) } ?: flowOf(null) }.collectAsState(initial = null)
     var sptAnswering by rememberSaveable(key) { mutableStateOf(false) }
+    // «Кто ведёт» групповой тренировки с совместным ведением (шаг 3.7г).
+    var editingSharing by rememberSaveable(key) { mutableStateOf(false) }
     val guestChoices by remember(id, addingGuest) {
         if (id != null && addingGuest) cards.guestChoices(id) else flowOf(emptyList())
     }.collectAsState(emptyList())
@@ -301,6 +303,7 @@ fun TrainingCardHost(
                     wide = wide,
                     sptAsk = sptAsk,
                     onSpt = { sptAnswering = true },
+                    onSharing = { editingSharing = true },
                     onClose = onClose,
                     onAction = { action ->
                         when (action) {
@@ -484,6 +487,17 @@ fun TrainingCardHost(
                 )
             }
         }
+        val sharing = shown?.sharing
+        if (shown != null && editingSharing && sharing != null) {
+            SharingPanel(
+                sharing = sharing,
+                onSave = { picked ->
+                    editingSharing = false
+                    guarded { scope.launch { done(cards.setSharing(shown.id, picked)) } }
+                },
+                onDismiss = { editingSharing = false },
+            )
+        }
         val ask = sptAsk
         if (shown != null && sptAnswering && ask != null) {
             SptPurchasePanel(
@@ -570,6 +584,7 @@ private fun ColumnScope.CardBody(
     wide: Boolean,
     sptAsk: SptAsk?,
     onSpt: () -> Unit,
+    onSharing: () -> Unit,
     onClose: () -> Unit,
     onAction: (CardAction) -> Unit,
     onMenu: (CardMenu) -> Unit,
@@ -625,6 +640,7 @@ private fun ColumnScope.CardBody(
         )
         card.warnings.forEach { WarningLine(it) }
         sptAsk?.let { SptAskRow(it, onSpt) }
+        card.sharing?.let { SharingRow(it, onSharing) }
 
         // Отменённая целиком или отменённый единственный клиент: причина и когда предупредили.
         val cancelled = card.clients.singleOrNull()?.state?.takeIf { it.isCancelled && !isGroup }

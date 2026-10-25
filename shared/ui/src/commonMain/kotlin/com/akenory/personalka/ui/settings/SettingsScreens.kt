@@ -54,6 +54,7 @@ import com.akenory.personalka.data.settings.draft
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.CabinetLinkFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.RateFormat
 import com.akenory.personalka.domain.format.ReminderFormat
@@ -102,25 +103,31 @@ object SettingsRoute {
     const val TIERS = "settings/tiers"
     const val CATEGORY = "settings/category"
     const val SCHEME = "settings/scheme"
+    const val COLLEAGUES = "settings/colleagues"
+    const val NEW_COLLEAGUE = "colleague/new"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
     private const val PLACE = "place/"
     private const val TYPE = "type/"
     private const val RATE = "rate/"
+    private const val COLLEAGUE = "colleague/"
 
     fun place(id: String) = PLACE + id
     fun type(id: String) = TYPE + id
     fun rate(typeId: String) = RATE + typeId
+    fun colleague(id: String) = COLLEAGUE + id
 
     fun isSettings(route: String): Boolean =
-        route == HOME || route.startsWith("settings/") || route.startsWith(PLACE) || route.startsWith(TYPE) || route.startsWith(RATE)
+        route == HOME || route.startsWith("settings/") || route.startsWith(PLACE) || route.startsWith(TYPE) || route.startsWith(RATE) ||
+            route.startsWith(COLLEAGUE)
 
     /** Форма с «✕» во весь экран: на сложенном Fold нижняя панель прячется (макеты «Новый тип»). */
-    fun isForm(route: String?): Boolean = route != null && (route.startsWith(PLACE) || route.startsWith(TYPE))
+    fun isForm(route: String?): Boolean = route != null && (route.startsWith(PLACE) || route.startsWith(TYPE) || route.startsWith(COLLEAGUE))
 
     internal fun placeId(route: String): String? = route.removePrefix(PLACE).takeIf { route.startsWith(PLACE) && it != "new" }
     internal fun typeId(route: String): String? = route.removePrefix(TYPE).takeIf { route.startsWith(TYPE) && it != "new" }
     internal fun rateTypeId(route: String): String? = route.removePrefix(RATE).takeIf { route.startsWith(RATE) }
+    internal fun colleagueId(route: String): String? = route.removePrefix(COLLEAGUE).takeIf { route.startsWith(COLLEAGUE) && it != "new" }
 }
 
 internal const val PROFILE_ROW_TAG = "settings-profile"
@@ -134,7 +141,7 @@ internal fun typeRowTag(name: String) = "type-$name"
  * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы», «Календарь» (шаг 1.13г) и «Данные»
  * (шаг 1.15, если платформа дала [backup]; в них — «Аккаунт», шаг 2.8а, если есть [account], и «Сервер», шаг 2.10а,
  * если есть [sync]), «Кабинеты» (шаг 2.13, если [cabinets] — сервер подключён и «Кабинеты» открыты) и «Ставки и ступени»
- * (шаг 3.6); остальные разделы появятся в своих шагах, до этого их не видно (10.7).
+ * (шаг 3.6), «Коллеги» (шаг 3.7г, с совместным ведением групп); остальные разделы появятся в своих шагах, до этого их не видно (10.7).
  *
  * @param onForm открыть форму тренировки, дежурства или своего запрета ([com.akenory.personalka.ui.training.TrainingFormKey])
  *   из списков раздела «Календарь».
@@ -174,6 +181,9 @@ fun SettingsScreen(
             val type = loadedTypes.firstOrNull { it.id == SettingsRoute.rateTypeId(route) } ?: return
             RateEditor(settings.rates, type, activePlaces, loadedTypes, now.date, messages, scope, close)
         }
+        route == SettingsRoute.COLLEAGUES -> ColleaguesScreen(settings, now.date, shell, close)
+        route == SettingsRoute.NEW_COLLEAGUE -> ColleagueEditor(settings, null, now.date, messages, scope, close)
+        SettingsRoute.colleagueId(route) != null -> ColleagueEditor(settings, SettingsRoute.colleagueId(route), now.date, messages, scope, close)
         route == SettingsRoute.CABINETS -> if (cabinets) CabinetSettingsScreen(settings, messages, scope, close)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
@@ -277,6 +287,8 @@ private fun SettingsHome(
     val diary by remember(calendar) { calendar.reminders.prefs }.collectAsState(initial = null)
     val rates by remember(settings) { settings.rates.rates }.collectAsState(initial = null)
     val tiers by remember(settings) { settings.rates.tiers }.collectAsState(initial = null)
+    val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
+    val colleagues by remember(settings, now.date) { settings.colleagues.rows(now.date) }.collectAsState(initial = null)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         TopBar("Настройки", onBack = onBack)
         ListCard(Modifier.padding(horizontal = Dimens.space4)) {
@@ -300,6 +312,16 @@ private fun SettingsHome(
                 onClick = { shell.open(SettingsRoute.RATES) },
                 modifier = Modifier.testTag(RATES_ROW_TAG),
             )
+            // «Коллеги» — только с совместным ведением групп (5.16, шаг 3.7г).
+            if (coCoaching) {
+                RowDivider()
+                NavRow(
+                    title = CoCoachingFormat.COLLEAGUES,
+                    subtitle = colleagues?.let { list -> CoCoachingFormat.count(list.count { !it.colleague.archived }) },
+                    onClick = { shell.open(SettingsRoute.COLLEAGUES) },
+                    modifier = Modifier.testTag(COLLEAGUES_ROW_TAG),
+                )
+            }
             RowDivider()
             NavRow(
                 title = CalendarSettingsFormat.TITLE,

@@ -89,6 +89,9 @@ object TrainingCardFormat {
     const val FACT = "Факт"
     const val BEHAVIOR = "Поведение"
 
+    /** Сообщение после правки «Числится на» и «Проводим» в карточке (шаг 3.7г). */
+    const val SHARING_SAVED = "Кто ведёт — сохранено"
+
     /** Поведение у сплита — у каждого: «Поведение · Ковалёв Т.». */
     fun behaviorOf(name: String): String = BEHAVIOR + DOT + name
     const val REASON = "Причина"

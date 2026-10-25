@@ -13,6 +13,8 @@ import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.groups.member
+import com.akenory.personalka.data.groups.sharing
+import com.akenory.personalka.data.groups.with
 import com.akenory.personalka.data.groups.toSeriesTraining
 import com.akenory.personalka.data.money.SptRepository
 import com.akenory.personalka.data.money.reconcileSpt
@@ -31,6 +33,8 @@ import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.money.CoCoachingRules
+import com.akenory.personalka.domain.money.Sharing
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
@@ -94,6 +98,7 @@ data class GuestChoice(val id: String, val name: ClientName, val birthDate: Loca
  * @param noDiary проведена, а дневник не заполнен — строка с оранжевой точкой.
  * @param keepsDiary дневник включён (3.2) и у типа есть его поля (3.3) — кнопка «Дневник» (5.4).
  * @param carriedTo у отменённой — куда перенесён её план (4.3): «План перенесён на вт 27.10».
+ * @param sharing у группы с совместным ведением (3.2) — «Числится на» и «Проводим» (шаг 3.7г); иначе `null`.
  */
 data class TrainingCard(
     val id: String,
@@ -112,6 +117,7 @@ data class TrainingCard(
     val settings: StatusSettings,
     val keepsDiary: Boolean = false,
     val carriedTo: LocalDate? = null,
+    val sharing: CardSharing? = null,
 ) {
     /** Итог для метки статуса: у одного клиента — его итог («Отмена со списанием»), иначе — тренировки. */
     val outcome: ClientOutcome
@@ -123,6 +129,12 @@ data class TrainingCard(
 
     fun client(id: String): CardClient? = clients.firstOrNull { it.id == id }
 }
+
+/**
+ * «Числится на» и «Проводим» групповой тренировки (5.4, шаг 3.7г): [names] — имена всех коллег для строк,
+ * [choices] — кого можно выбрать: действующие и уже выбранный, даже если он в архиве.
+ */
+data class CardSharing(val sharing: Sharing, val names: Map<String, String>, val choices: List<Pair<String, String>>)
 
 /**
  * Что вышло из действия карточки: [message] — для сообщения с «Отменить» (5.20). `null` у действия — ничего не сделано.
@@ -264,6 +276,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 keepsDiary = (settingsRow?.diaryEnabled ?: true) && type != null &&
                     DiaryRules.fields(kind, type.diaryPlan, type.diaryFact, type.diaryBehavior).any,
                 carriedTo = if (t.status == TrainingStatus.CANCELLED) trainings.trainingsCarriedFrom(t.id).firstOrNull()?.start?.date else null,
+                sharing = if (kind == TrainingKind.GROUP && t.status != TrainingStatus.CANCELLED && settingsRow?.coCoachingEnabled == true) cardSharing(t.sharing()) else null,
             )
         }
     }
@@ -499,6 +512,34 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
         val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null && it.status == TrainingStatus.PLANNED && it.start > now } ?: return null
         if (reference.trainingType(t.typeId)?.kind == TrainingKind.DUTY) return null
         return db.waitingLine(listOf(t.freedSlot()), now) { it.id == id }
+    }
+
+    /**
+     * «Числится на» и «Проводим» групповой тренировки (5.4, шаг 3.7г): пишется в тренировку и идёт в расчёт (4.8).
+     * То же, что было, — `null`. Статусы и участия не меняются.
+     */
+    suspend fun setSharing(id: String, sharing: Sharing): CardResult? {
+        val now = clock()
+        var result: CardResult? = null
+        db.withWriteTransaction {
+            val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            val next = CoCoachingRules.normalize(sharing)
+            if (next == CoCoachingRules.normalize(t.sharing())) return@withWriteTransaction
+            val recorder = Recorder(db, now)
+            recorder.saveTraining(t.with(next).copy(sync = t.sync.touched(now)))
+            result = CardResult(TrainingCardFormat.SHARING_SAVED, recorder.undo())
+        }
+        return result
+    }
+
+    private suspend fun cardSharing(sharing: Sharing): CardSharing {
+        val colleagues = db.moneyDao().colleagues().sortedBy { ClientRules.key(it.name) }
+        val picked = setOfNotNull(sharing.ownerColleagueId, sharing.colleagueId)
+        return CardSharing(
+            sharing = sharing,
+            names = colleagues.associate { it.id to it.name },
+            choices = colleagues.filter { !it.archived || it.id in picked }.map { it.id to it.name },
+        )
     }
 
     /** «Отменить» в сообщении: всё как было до действия. */

@@ -1,6 +1,7 @@
 package com.akenory.personalka.domain.group
 
 import com.akenory.personalka.domain.client.ClientRules
+import com.akenory.personalka.domain.money.Sharing
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -9,10 +10,16 @@ import kotlinx.datetime.plus
 // ТЗ 3.5, 4.4, 5.10. Постоянная группа для форм и правил — без служебных полей базы.
 
 /**
- * Группа в форме (5.10): название («Сб 9:00 ББ»), тип вида «группа» и место. «Числится на» и «Проводим» —
- * с совместным ведением (3.2, выключено по умолчанию): пока оно выключено, группа числится на тренере и он ведёт сам.
+ * Группа в форме (5.10): название («Сб 9:00 ББ»), тип вида «группа» и место. [sharing] — «На ком числится» и «Кто
+ * обычно ведёт», с совместным ведением (3.2, выключено по умолчанию, шаг 3.7г): пока оно выключено, группа числится
+ * на тренере и он ведёт сам.
  */
-data class GroupDraft(val name: String = "", val typeId: String? = null, val locationId: String? = null)
+data class GroupDraft(
+    val name: String = "",
+    val typeId: String? = null,
+    val locationId: String? = null,
+    val sharing: Sharing = Sharing.SELF,
+)
 
 enum class GroupField { NAME, TYPE, PLACE }
 

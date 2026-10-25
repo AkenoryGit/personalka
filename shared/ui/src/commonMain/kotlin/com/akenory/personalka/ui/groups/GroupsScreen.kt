@@ -38,14 +38,20 @@ import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.groups.GroupRow
+import com.akenory.personalka.data.groups.sharing
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.client.ClientRules
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.group.GroupField
 import com.akenory.personalka.domain.group.GroupRules
+import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.money.CoCoachingRules
+import com.akenory.personalka.domain.money.Sharing
 import com.akenory.personalka.ui.clients.FormLabel
 import com.akenory.personalka.ui.clients.PersonRow
 import com.akenory.personalka.ui.components.BottomAction
@@ -134,6 +140,13 @@ fun GroupsScreen(
     val people by remember(clients, now) { clients.rows(now) }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
+    val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
+    val colleagues by remember(settings, today) { settings.colleagues.rows(today) }.collectAsState(initial = emptyList())
+    val names = colleagues.associate { it.colleague.id to it.colleague.name }
+    // Выбор коллеги: действующие и уже выбранный у группы, даже если он в архиве.
+    val choices: (Sharing) -> List<Pair<String, String>> = { s ->
+        colleagues.filter { !it.colleague.archived || it.colleague.id == s.colleague }.map { it.colleague.id to it.colleague.name }
+    }
     val loaded = rows ?: return
     val kids = people ?: return
     val allTypes = types ?: return
@@ -142,13 +155,14 @@ fun GroupsScreen(
 
     when (val screen = GroupRoute.parse(route)) {
         null -> Unit
-        GroupScreen.List -> GroupList(loaded, today, onOpen = { shell.open(GroupRoute.card(it)) }, onNew = { shell.open(GroupRoute.NEW) }, onBack = onBack)
+        GroupScreen.List -> GroupList(loaded, today, names.takeIf { coCoaching }, onOpen = { shell.open(GroupRoute.card(it)) }, onNew = { shell.open(GroupRoute.NEW) }, onBack = onBack)
         GroupScreen.New -> GroupEditor(
             title = "Новая группа",
             initial = null,
             others = loaded,
             types = allTypes.filter { !it.archived && it.kind == TrainingKind.GROUP },
             places = allPlaces.filter { !it.archived },
+            choices = choices.takeIf { coCoaching },
             onSave = { draft ->
                 scope.launch {
                     val id = groups.create(draft)
@@ -161,11 +175,12 @@ fun GroupsScreen(
             val row = loaded.firstOrNull { it.group.id == screen.groupId } ?: return
             GroupEditor(
                 title = "Изменить",
-                initial = GroupDraft(row.group.name, row.group.typeId, row.group.locationId),
+                initial = GroupDraft(row.group.name, row.group.typeId, row.group.locationId, row.group.sharing()),
                 others = loaded.filter { it.group.id != row.group.id },
                 // Архивный тип или место у группы остаются выбранными: история их помнит.
                 types = allTypes.filter { (!it.archived && it.kind == TrainingKind.GROUP) || it.id == row.group.typeId },
                 places = allPlaces.filter { !it.archived || it.id == row.group.locationId },
+                choices = choices.takeIf { coCoaching },
                 onSave = { draft ->
                     scope.launch { groups.update(row.group.id, draft) }
                     close()
@@ -173,7 +188,7 @@ fun GroupsScreen(
                 onClose = close,
             )
         }
-        is GroupScreen.Card -> GroupCard(screen.groupId, loaded, kids, groups, shell, messages, scope, now, onBack)
+        is GroupScreen.Card -> GroupCard(screen.groupId, loaded, kids, groups, shell, messages, scope, now, onBack, names.takeIf { coCoaching })
         is GroupScreen.AddMember -> AddMemberForm(screen.groupId, loaded, kids, groups, clients, scope, today, close)
         is GroupScreen.Member -> MemberForm(screen.groupId, screen.memberId, loaded, kids, groups, messages, scope, today, close)
     }
@@ -181,10 +196,11 @@ fun GroupsScreen(
 
 /**
  * Список групп (5.10): название, дни и время, место, сколько детей сейчас. Группы, из которых все ушли
- * и у которых нет расписания, — внизу, в «Закончились». «Числится на» — с совместным ведением (этап 3).
+ * и у которых нет расписания, — внизу, в «Закончились». С совместным ведением ([colleagues] — имена коллег) у группы
+ * коллеги — «числится: Лена» (шаг 3.7г).
  */
 @Composable
-private fun GroupList(rows: List<GroupRow>, today: LocalDate, onOpen: (String) -> Unit, onNew: () -> Unit, onBack: (() -> Unit)?) {
+private fun GroupList(rows: List<GroupRow>, today: LocalDate, colleagues: Map<String, String>?, onOpen: (String) -> Unit, onNew: () -> Unit, onBack: (() -> Unit)?) {
     val colors = PersonalkaTheme.colors
     Column(Modifier.fillMaxSize()) {
         TopBar("Группы", onBack = onBack)
@@ -228,7 +244,10 @@ private fun GroupList(rows: List<GroupRow>, today: LocalDate, onOpen: (String) -
                         if (index > 0) RowDivider()
                         PersonRow(
                             title = row.group.name,
-                            subtitle = GroupFormat.subtitle(row.schedule, row.place?.shortName, row.membersOn(today).size),
+                            subtitle = listOfNotNull(
+                                GroupFormat.subtitle(row.schedule, row.place?.shortName, row.membersOn(today).size),
+                                colleagues?.let { CoCoachingFormat.listNote(row.group.sharing(), it) },
+                            ).joinToString(" · "),
                             onClick = { onOpen(row.group.id) },
                             modifier = Modifier.testTag(groupRowTag(row.group.name)),
                         )
@@ -248,7 +267,8 @@ internal fun FormLabelSpaced(text: String) {
 
 /**
  * Группа (5.10): название, тип вида «группа» и место. По умолчанию — первый такой тип и первое место.
- * Нет ни одного типа-группы — подсказка, где его завести.
+ * Нет ни одного типа-группы — подсказка, где его завести. [choices] — коллеги для выбора; `null` — совместное ведение
+ * выключено, «На ком числится» и «Кто обычно ведёт» не видны и не меняются (шаг 3.7г).
  */
 @Composable
 private fun GroupEditor(
@@ -257,6 +277,7 @@ private fun GroupEditor(
     others: List<GroupRow>,
     types: List<TrainingTypeEntity>,
     places: List<LocationEntity>,
+    choices: ((Sharing) -> List<Pair<String, String>>)?,
     onSave: (GroupDraft) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -264,7 +285,14 @@ private fun GroupEditor(
     var typeId by rememberSaveable { mutableStateOf(initial?.typeId ?: types.firstOrNull()?.id) }
     var placeId by rememberSaveable { mutableStateOf(initial?.locationId ?: places.firstOrNull()?.id) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
-    val draft = GroupDraft(name, typeId, placeId)
+    val start = initial?.sharing ?: Sharing.SELF
+    var owner by rememberSaveable { mutableStateOf(start.owner.name) }
+    var ownerColleague by rememberSaveable { mutableStateOf(start.ownerColleagueId) }
+    var conducted by rememberSaveable { mutableStateOf(start.conductedBy.name) }
+    var colleague by rememberSaveable { mutableStateOf(start.colleagueId) }
+    val sharing = Sharing(Owner.valueOf(owner), ownerColleague, ConductedBy.valueOf(conducted), colleague)
+    val draft = GroupDraft(name, typeId, placeId, sharing)
+    val sharingProblem = if (choices != null) CoCoachingRules.problem(sharing) else null
     val problems = GroupRules.problems(draft, others.map { it.group.name })
     val shown = if (showErrors) problems else emptyMap()
 
@@ -302,13 +330,22 @@ private fun GroupEditor(
                 }
                 shown[GroupField.PLACE]?.let { ErrorLine(it) }
             }
+            if (choices != null) {
+                SharingFields(sharing, choices(sharing), CoCoachingFormat.DEFAULT_CONDUCTED, sharingProblem.takeIf { showErrors }) { s ->
+                    owner = s.owner.name
+                    ownerColleague = s.ownerColleagueId
+                    conducted = s.conductedBy.name
+                    colleague = s.colleagueId
+                }
+                if (initial != null) Note(CoCoachingFormat.GROUP_NOTE)
+            }
             Text(
                 "Расписание группы — серия в календаре; состав с датами — в карточке группы.",
                 style = MaterialTheme.typography.bodySmall,
                 color = PersonalkaTheme.colors.textMuted,
             )
         }
-        BottomAction("Сохранить", onClick = { if (problems.isEmpty()) onSave(draft) else showErrors = true })
+        BottomAction("Сохранить", onClick = { if (problems.isEmpty() && sharingProblem == null) onSave(draft) else showErrors = true })
     }
 }
 

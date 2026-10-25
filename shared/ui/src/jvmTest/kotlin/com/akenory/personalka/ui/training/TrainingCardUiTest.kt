@@ -25,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -35,6 +36,9 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.group.GroupDraft
+import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.model.PaySchemeKind
+import com.akenory.personalka.ui.groups.sharingConductedTag
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.training.CardAction
@@ -258,6 +262,34 @@ class TrainingCardUiTest {
         cardButton(CardAction.ALL_CAME).performClick()
         awaitNode(inCard("Проведено"))
         assertEquals(List(3) { ParticipationStatus.ATTENDED }, kids.map { statusOf(id, it) })
+    }
+
+    @Test
+    fun groupWithColleagueInCard() = runComposeUiTest {
+        // Шаг 3.7г: с совместным ведением в карточке группы — «Числится на» и «Проводим», правка пишется в тренировку.
+        val group = runBlocking { groups.create(GroupDraft("Вт 15:30 ББ", typeId("Группа"), placeId("ББ"))) }
+        val lena = runBlocking {
+            calendar.forms.create(TrainingDraft(at("15:30"), typeId("Группа"), emptyList(), group, placeId("ББ"), 60))
+            settings.salary.saveCoCoaching(true)
+            settings.colleagues.add("Лена", PaySchemeKind.NONE, today)
+        }
+        val id = runBlocking { db.trainingDao().trainingsOfGroup(group).single().id }
+        openCalendar()
+        tapBlock("Вт 15:30 ББ (0)")
+
+        awaitNode(inCard("Числится на: я"))
+        onNodeWithText("Проводим: один").assertIsDisplayed()
+        onNodeWithTag(CARD_SHARING_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(SHARING_PANEL_TAG))
+        onNodeWithTag(sharingConductedTag(ConductedBy.COLLEAGUE)).performClick()
+        // Коллега один — выбран сам.
+        onNodeWithText("Лена").assertIsSelected()
+        onNodeWithText("Сохранить").performClick()
+
+        awaitNode(inCard(s("Проводим: коллега (замена) · Лена")))
+        val t = runBlocking { db.trainingDao().training(id)!! }
+        assertEquals(ConductedBy.COLLEAGUE, t.conductedBy)
+        assertEquals(lena, t.colleagueId)
     }
 
     @Test

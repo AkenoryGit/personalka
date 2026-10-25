@@ -9,9 +9,13 @@ import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ScheduleLine
 import com.akenory.personalka.domain.group.GroupDraft
+import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.money.CoCoachingRules
+import com.akenory.personalka.domain.money.Sharing
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.datetime.LocalDate
@@ -79,7 +83,10 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
 
     // --- Группа ---
 
-    /** Новая группа (5.10). Числится на тренере и ведёт он сам, пока совместное ведение выключено. Возвращает id. */
+    /**
+     * Новая группа (5.10). Числится на тренере и ведёт он сам, пока совместное ведение выключено; с ним — как
+     * в форме ([GroupDraft.sharing], шаг 3.7г). Возвращает id.
+     */
     suspend fun create(draft: GroupDraft): String {
         val coach = coaches.currentCoach() ?: error("Группы появляются после первого запуска")
         val now = clock()
@@ -89,22 +96,36 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
             name = draft.name.trim(),
             typeId = requireNotNull(draft.typeId) { "Тип группы не выбран" },
             locationId = requireNotNull(draft.locationId) { "Место группы не выбрано" },
-        )
+        ).with(draft.sharing)
         clients.upsertGroup(group)
         return group.id
     }
 
-    /** Название, тип и место. Прошлые тренировки хранят свои тип и место. */
+    /**
+     * Название, тип, место и кто ведёт. Прошлые тренировки хранят свои тип и место. Новые «На ком числится» и «Кто
+     * обычно ведёт» переходят на будущие неотмеченные тренировки группы, которые ещё по прежним значениям
+     * ([CoCoachingRules.follows], шаг 3.7г); изменённые в карточке отдельно остаются.
+     */
     suspend fun update(id: String, draft: GroupDraft) {
-        val group = clients.group(id) ?: return
-        clients.upsertGroup(
-            group.copy(
-                sync = group.sync.touched(clock()),
-                name = draft.name.trim(),
-                typeId = draft.typeId ?: group.typeId,
-                locationId = draft.locationId ?: group.locationId,
-            ),
-        )
+        val now = clock()
+        db.withWriteTransaction {
+            val group = clients.group(id) ?: return@withWriteTransaction
+            val old = group.sharing()
+            val next = CoCoachingRules.normalize(draft.sharing)
+            clients.upsertGroup(
+                group.copy(
+                    sync = group.sync.touched(now),
+                    name = draft.name.trim(),
+                    typeId = draft.typeId ?: group.typeId,
+                    locationId = draft.locationId ?: group.locationId,
+                ).with(next),
+            )
+            if (next == CoCoachingRules.normalize(old)) return@withWriteTransaction
+            val clubNow = ClubTime.now(now)
+            trainings.trainingsOfGroup(id)
+                .filter { it.status == TrainingStatus.PLANNED && it.start >= clubNow && CoCoachingRules.follows(it.sharing(), old) }
+                .forEach { trainings.upsertTraining(it.with(next).copy(sync = it.sync.touched(now))) }
+        }
     }
 
     /** Можно ли удалить группу: у неё нет ни тренировок, ни серий — история её не помнит. */
@@ -196,4 +217,18 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
         val row = trainings.participationRow(trainingId, clientId) ?: return
         if (row.sync.deletedAt == null) trainings.upsertParticipation(row.copy(sync = row.sync.deleted(clock())))
     }
+}
+
+/** На ком числится группа и кто обычно её ведёт (3.5). */
+fun GroupEntity.sharing(): Sharing = Sharing(owner, ownerColleagueId, defaultConductedBy, defaultColleagueId)
+
+/** На ком числится тренировка и кто её провёл (3.5). */
+fun TrainingEntity.sharing(): Sharing = Sharing(owner, ownerColleagueId, conductedBy, colleagueId)
+
+private fun GroupEntity.with(s: Sharing): GroupEntity = CoCoachingRules.normalize(s).let {
+    copy(owner = it.owner, ownerColleagueId = it.ownerColleagueId, defaultConductedBy = it.conductedBy, defaultColleagueId = it.colleagueId)
+}
+
+internal fun TrainingEntity.with(s: Sharing): TrainingEntity = CoCoachingRules.normalize(s).let {
+    copy(owner = it.owner, ownerColleagueId = it.ownerColleagueId, conductedBy = it.conductedBy, colleagueId = it.colleagueId)
 }
