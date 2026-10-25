@@ -125,6 +125,21 @@ class SalaryYearTest {
         assertEquals("27${THIN}600${NBSP}₽", com.akenory.personalka.domain.format.MoneyFormat.rub(y.rows.last().earned))
     }
 
+    @Test
+    fun sideBarAndDescription() {
+        // Октябрь идёт: заработано 126 000 из плана 210 000 — 60 %, прогноз 315 000 — полоска до конца.
+        val oct = YearMonthRow(YearMonth(2026, 10), MonthPeriod.CURRENT, rub(126_000), rub(315_000), rub(210_000), 0, 0, 0, 0, 0)
+        assertEquals(0.6f, oct.planShareDone)
+        assertEquals(1f, oct.planShareForecast)
+        assertEquals("Октябрь: 126${THIN}000${NBSP}₽, 60${NBSP}% плана, идёт", SalaryFormat.yearSideDescription(oct))
+        // Без плана — пустая полоска и «без плана»; перевыполнение — полная полоска.
+        val jan = YearMonthRow(YearMonth(2026, 1), MonthPeriod.PAST, rub(104_250), null, null, 0, 0, 0, 0, 0)
+        assertEquals(0f, jan.planShareDone)
+        assertEquals(0f, jan.planShareForecast)
+        assertEquals("Январь: 104${THIN}250${NBSP}₽, без плана", SalaryFormat.yearSideDescription(jan))
+        assertEquals(1f, pastRow(true).copy(earned = rub(20)).planShareDone)
+    }
+
     private fun pastRow(met: Boolean) =
         YearMonthRow(YearMonth(2025, 1), MonthPeriod.PAST, if (met) rub(10) else 0, null, rub(10), 0, 0, 0, 0, 0)
 

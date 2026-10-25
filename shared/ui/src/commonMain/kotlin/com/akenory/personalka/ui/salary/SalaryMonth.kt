@@ -31,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,6 +87,7 @@ import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.Segmented
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
@@ -103,6 +105,7 @@ import kotlin.math.roundToInt
 internal const val SALARY_EARNED_TAG = "salary-earned"
 internal const val SALARY_PLAN_TAG = "salary-plan"
 internal const val SALARY_PLAN_FIELD_TAG = "salary-plan-field"
+internal const val SALARY_TITLE_TAG = "salary-title"
 internal const val SALARY_PREV_TAG = "salary-prev"
 internal const val SALARY_NEXT_TAG = "salary-next"
 internal const val SALARY_ADD_ADJUST_TAG = "salary-add-adjust"
@@ -161,23 +164,35 @@ internal fun SalaryMonthScreen(
     val payoutScroll = rememberScrollState()
     val colleagueScroll = rememberScrollState()
     val yearScroll = rememberScrollState()
+    // Левая колонка разложенного Fold (3.8а) — своя прокрутка, объявлена над веткой wide.
+    val sideScroll = rememberScrollState()
+    val wide = LocalWide.current
     val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
-    val tabs = SalaryTab.entries.filter { it != SalaryTab.COLLEAGUES || coCoaching }
+    // На разложенном «Год» — левая колонка, вкладки нет; выбранная вкладка помнится и вернётся при сложении.
+    val tabs = SalaryTab.entries.filter { (it != SalaryTab.COLLEAGUES || coCoaching) && (it != SalaryTab.YEAR || !wide) }
     val shown = if (tab in tabs) tab else SalaryTab.MONTH
     val clipboard = LocalClipboardManager.current
     val repo = settings.months
     val data by remember(repo, month, today) { repo.month(month, today) }.collectAsState(initial = null)
-    val yearData by remember(repo, month.year, today, shown == SalaryTab.YEAR) {
-        if (shown == SalaryTab.YEAR) repo.year(month.year, today) else flowOf(null)
+    val needYear = shown == SalaryTab.YEAR || wide
+    val yearData by remember(repo, month.year, today, needYear) {
+        if (needYear) repo.year(month.year, today) else flowOf(null)
     }.collectAsState(initial = null)
     val colors = PersonalkaTheme.colors
 
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val sideWidth = (maxWidth * 0.45f).coerceIn(280.dp, 360.dp)
+        // Правая часть всегда первой и на одном месте дерева: при сложении меняется только отступ слева (как в AppShell).
+        Column(Modifier.fillMaxSize().padding(start = if (wide) sideWidth else 0.dp)) {
             // На «Годе» стрелки листают годы: тот же месяц прошлого или следующего года.
             val step = if (shown == SalaryTab.YEAR) 12 else 1
             MonthBar(
-                title = if (shown == SalaryTab.YEAR) month.year.toString() else SalaryFormat.month(month),
+                // На разложенном год — слева, справа только месяц.
+                title = when {
+                    shown == SalaryTab.YEAR -> month.year.toString()
+                    wide -> SalaryFormat.monthName(month)
+                    else -> SalaryFormat.month(month)
+                },
                 year = shown == SalaryTab.YEAR,
                 onPrev = { monthText = month.firstDay.minus(step, DateTimeUnit.MONTH).yearMonth.toString() },
                 onNext = { monthText = month.firstDay.plus(step, DateTimeUnit.MONTH).yearMonth.toString() },
@@ -255,7 +270,22 @@ internal fun SalaryMonthScreen(
                 }
             }
         }
-        val loaded = data?.takeIf { it.view.month == month } ?: return@Box
+        if (wide) {
+            Row(Modifier.width(sideWidth).fillMaxHeight()) {
+                YearSide(
+                    yearNumber = month.year,
+                    year = yearData,
+                    selected = month,
+                    scroll = sideScroll,
+                    onPrev = { monthText = month.firstDay.minus(12, DateTimeUnit.MONTH).yearMonth.toString() },
+                    onNext = { monthText = month.firstDay.plus(12, DateTimeUnit.MONTH).yearMonth.toString() },
+                    onMonth = { monthText = it.toString() },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+                VerticalDivider(thickness = 1.dp, color = colors.divider)
+            }
+        }
+        val loaded = data?.takeIf { it.view.month == month } ?: return@BoxWithConstraints
         if (planOpen) {
             PlanPanel(loaded.view, onDismiss = { planOpen = false }) { amount ->
                 planOpen = false
@@ -332,7 +362,7 @@ private fun MonthBar(title: String, year: Boolean, onPrev: () -> Unit, onNext: (
     ) {
         Text(
             title,
-            modifier = Modifier.weight(1f).semantics { heading() },
+            modifier = Modifier.weight(1f).semantics { heading() }.testTag(SALARY_TITLE_TAG),
             style = MaterialTheme.typography.headlineSmall,
             color = colors.text,
             maxLines = 1,
@@ -645,7 +675,7 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit) {
 
 /** Полоса из двух частей: проведено — графит, прогноз — серый; конец полосы — план (макет PayMonth). */
 @Composable
-private fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp) {
+internal fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp) {
     val colors = PersonalkaTheme.colors
     Box(Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(height / 2)).background(colors.surfaceAlt)) {
         if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(colors.outline))

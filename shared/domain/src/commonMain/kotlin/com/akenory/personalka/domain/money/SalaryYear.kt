@@ -28,6 +28,16 @@ data class YearMonthRow(
     /** Выполнение плана, проценты вниз до целого. */
     val percent: Int? get() = SalaryPlan.percent(earned, plan)
 
+    /**
+     * Полоска выполнения плана слева на разложенном Fold (шаг 3.8а): доля плана, которую дают заработано
+     * ([planShareDone]) и прогноз ([planShareForecast], только у текущего), от 0 до 1; без плана — 0.
+     */
+    val planShareDone: Float get() = share(earned)
+    val planShareForecast: Float get() = forecast?.let { share(maxOf(it, earned)) } ?: 0f
+
+    private fun share(amount: Long): Float =
+        if (plan == null || plan <= 0) 0f else (amount.coerceAtLeast(0).toDouble() / plan).coerceAtMost(1.0).toFloat()
+
     /** План выполнен — только у закончившегося месяца с планом. */
     val planMet: Boolean get() = period == MonthPeriod.PAST && plan != null && earned >= plan
 }

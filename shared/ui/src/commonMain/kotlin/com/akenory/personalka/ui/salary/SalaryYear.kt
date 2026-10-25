@@ -1,6 +1,7 @@
 package com.akenory.personalka.ui.salary
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,19 +13,25 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +43,7 @@ import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.money.MonthPeriod
 import com.akenory.personalka.domain.money.SalaryYear
 import com.akenory.personalka.domain.money.YearMonthRow
+import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
@@ -44,6 +52,10 @@ import kotlinx.datetime.YearMonth
 internal const val SALARY_YEAR_EARNED_TAG = "salary-year-earned"
 internal const val SALARY_YEAR_CHART_TAG = "salary-year-chart"
 internal fun salaryYearRowTag(month: YearMonth) = "salary-year-row-$month"
+internal const val SALARY_SIDE_TAG = "salary-side"
+internal const val SALARY_SIDE_PREV_TAG = "salary-side-prev"
+internal const val SALARY_SIDE_NEXT_TAG = "salary-side-next"
+internal fun salarySideRowTag(month: YearMonth) = "salary-side-row-$month"
 
 /**
  * «Год» (ТЗ 5.12, шаг 3.8б, макет PayYear): заработано за год, на руки, налог и ПТ; столбцы заработка по месяцам
@@ -197,5 +209,111 @@ private fun YearRow(row: YearMonthRow, onClick: () -> Unit) {
             }
         }
         Muted(SalaryFormat.yearRow(row))
+    }
+}
+
+/**
+ * Левая колонка «Зарплаты» на разложенном Fold (ТЗ 5.12, шаг 3.8а, макет PayUnfolded): год со стрелками,
+ * «Заработано за год» и месяцы от свежего к раннему с полосками выполнения плана. Выбранный месяц [selected]
+ * подсвечен, нажатие — [onMonth]. [year] ещё не прочитан — только шапка.
+ */
+@Composable
+internal fun YearSide(
+    yearNumber: Int,
+    year: SalaryYear?,
+    selected: YearMonth,
+    scroll: ScrollState,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onMonth: (YearMonth) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = PersonalkaTheme.colors
+    Column(modifier.background(colors.bg).testTag(SALARY_SIDE_TAG)) {
+        Row(
+            Modifier.fillMaxWidth().height(Dimens.topBar).padding(start = Dimens.space4, end = Dimens.space1),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                yearNumber.toString(),
+                modifier = Modifier.weight(1f).semantics { heading() },
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.text,
+            )
+            IconButton(onClick = onPrev, modifier = Modifier.testTag(SALARY_SIDE_PREV_TAG)) {
+                Icon(PIcons.ChevronRight, contentDescription = "Прошлый год", tint = colors.text, modifier = Modifier.rotate(180f))
+            }
+            IconButton(onClick = onNext, modifier = Modifier.testTag(SALARY_SIDE_NEXT_TAG)) {
+                Icon(PIcons.ChevronRight, contentDescription = "Следующий год", tint = colors.text)
+            }
+        }
+        if (year == null || year.year != yearNumber) return@Column
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scroll)
+                .padding(horizontal = Dimens.space2)
+                .padding(bottom = Dimens.space4),
+        ) {
+            Column(Modifier.padding(horizontal = Dimens.space2, vertical = Dimens.space2)) {
+                if (year.rows.isEmpty()) {
+                    Muted(SalaryFormat.YEAR_EMPTY)
+                    return@Column
+                }
+                Muted(SalaryFormat.yearTitle(year.year))
+                Text(
+                    MoneyFormat.rub(year.earned),
+                    style = MaterialTheme.typography.titleLarge.tabular(),
+                    color = colors.text,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                SalaryFormat.yearPlan(year)?.let { Muted(it) }
+            }
+            year.rows.asReversed().forEach { row ->
+                SideRow(row, row.month == selected) { onMonth(row.month) }
+            }
+        }
+    }
+}
+
+/** Месяц слева: название и процент плана над полоской, справа заработано; выбранный — на карточке. */
+@Composable
+private fun SideRow(row: YearMonthRow, selected: Boolean, onClick: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(if (selected) colors.surface else Color.Transparent)
+            .selectable(selected = selected, onClick = onClick)
+            .heightIn(min = Dimens.touch)
+            .padding(horizontal = Dimens.space3, vertical = Dimens.space3)
+            .semantics(mergeDescendants = true) { contentDescription = SalaryFormat.yearSideDescription(row) }
+            .testTag(salarySideRowTag(row.month)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    SalaryFormat.monthName(row.month),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.text,
+                    fontWeight = if (selected) FontWeight.SemiBold else null,
+                    maxLines = 1,
+                )
+                Muted(row.percent?.let { "$it${RuText.NBSP}%" } ?: SalaryFormat.YEAR_NO_PLAN)
+            }
+            TwoPartBar(row.planShareDone, row.planShareForecast, 4.dp)
+        }
+        Text(
+            MoneyFormat.rub(row.earned),
+            modifier = Modifier.padding(start = Dimens.space3),
+            style = MaterialTheme.typography.titleSmall.tabular(),
+            color = colors.text,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }

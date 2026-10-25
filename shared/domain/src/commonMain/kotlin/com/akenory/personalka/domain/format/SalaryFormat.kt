@@ -372,6 +372,7 @@ object SalaryFormat {
     const val YEAR_PLAN = "план"
     const val MONTH_GOING = "идёт"
     const val YEAR_EMPTY = "В этом году заработка ещё нет. Месяцы появятся здесь, как только будут проведённые тренировки."
+    const val YEAR_NO_PLAN = "без плана"
 
     /** «Заработано за 2026». */
     fun yearTitle(year: Int): String = "Заработано за $year"
@@ -384,6 +385,13 @@ object SalaryFormat {
         }
         if (y.current != null && y.rows.any { it.month == y.current }) add("${DateFormat.month(y.current.firstDay)} $MONTH_GOING")
     }.takeIf { it.isNotEmpty() }?.joinToString(DOT)
+
+    /** Месяц на разложенном Fold слева (шаг 3.8а), для TalkBack: «Октябрь: 126 645 ₽, 60 % плана». */
+    fun yearSideDescription(row: YearMonthRow): String = buildList {
+        add(MoneyFormat.rub(row.earned))
+        add(row.percent?.let { ofPlan(it) } ?: YEAR_NO_PLAN)
+        if (row.period == MonthPeriod.CURRENT) add(MONTH_GOING)
+    }.joinToString(", ", prefix = "${monthName(row.month)}: ")
 
     /** Подпись столбца: «янв», «май». */
     fun monthShort(month: YearMonth): String = DateFormat.month(month.firstDay).take(3)

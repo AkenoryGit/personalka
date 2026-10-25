@@ -2,24 +2,30 @@ package com.akenory.personalka.ui.salary
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ParticipationEntity
@@ -85,10 +91,10 @@ class SalaryMonthUiTest {
         }
     }
 
-    private fun ComposeUiTest.start() {
+    private fun ComposeUiTest.start(width: () -> Dp = { 412.dp }) {
         prepare()
         setContent {
-            Box(Modifier.size(412.dp, 900.dp)) {
+            Box(Modifier.size(width(), 900.dp)) {
                 App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), TestData.calendarOf(settings), clock = TestData.clock)
             }
         }
@@ -256,5 +262,53 @@ class SalaryMonthUiTest {
         onNodeWithTag(salaryYearRowTag(october)).performScrollTo().performClick()
         awaitNode(hasTestTag(SALARY_EARNED_TAG))
         onNodeWithText(SalaryFormat.month(october)).assertExists()
+    }
+
+    @Test
+    fun unfoldedMonthsOnTheLeft() = runComposeUiTest {
+        // Сентябрь: одна проведённая ПТ — 920 ₽.
+        runBlocking {
+            val coach = db.coachDao().currentCoach()!!.id
+            val now = TestData.clock()
+            db.trainingDao().upsertTraining(TrainingEntity("sep", SyncFields.new(coach, now), typeId("ПТ"), placeId("ББ"), LocalDateTime(2026, 9, 10, 9, 0), 50, status = TrainingStatus.DONE))
+            db.trainingDao().upsertParticipation(ParticipationEntity("psep", SyncFields.new(coach, now), "sep", "client", ParticipationStatus.ATTENDED))
+        }
+        val september = YearMonth(2026, 9)
+        var width by mutableStateOf(760.dp)
+        start { width }
+        // Слева — год и месяцы, справа — октябрь без вкладки «Год».
+        awaitNode(hasTestTag(salarySideRowTag(september)))
+        onNodeWithTag(SALARY_SIDE_TAG).assertExists()
+        onNodeWithTag(salarySideRowTag(october)).assertIsSelected()
+        onNodeWithTag(salaryTabTag(SalaryTab.YEAR)).assertDoesNotExist()
+        onNodeWithTag(SALARY_TITLE_TAG).assertTextEquals(SalaryFormat.monthName(october))
+        onNodeWithTag(SALARY_EARNED_TAG).assertTextContains(MoneyFormat.rub(rub(1840)))
+
+        // Выбор сентября слева меняет правую часть; вкладка «Выплаты» остаётся.
+        onNodeWithTag(salaryTabTag(SalaryTab.PAYOUTS)).performClick()
+        awaitNode(hasTestTag(SALARY_ON_HAND_TAG))
+        onNodeWithTag(salarySideRowTag(september)).performClick()
+        waitUntil(timeoutMillis = 5_000) { runCatching { onNodeWithTag(SALARY_TITLE_TAG).assertTextEquals(SalaryFormat.monthName(september)) }.isSuccess }
+        onNodeWithTag(salarySideRowTag(september)).assertIsSelected()
+        onNodeWithTag(SALARY_ON_HAND_TAG).assertExists()
+        onNodeWithTag(salaryTabTag(SalaryTab.MONTH)).performClick()
+        awaitNode(hasTestTag(SALARY_EARNED_TAG))
+        onNodeWithTag(SALARY_EARNED_TAG).assertTextContains(MoneyFormat.rub(rub(920)))
+
+        // Сложение не сбрасывает выбранный месяц; разложение — тоже.
+        width = 412.dp
+        waitForIdle()
+        onNodeWithTag(SALARY_SIDE_TAG).assertDoesNotExist()
+        onNodeWithTag(SALARY_TITLE_TAG).assertTextEquals(SalaryFormat.month(september))
+        onNodeWithTag(SALARY_EARNED_TAG).assertTextContains(MoneyFormat.rub(rub(920)))
+        width = 760.dp
+        waitForIdle()
+        onNodeWithTag(salarySideRowTag(september)).assertIsSelected()
+
+        // Стрелки слева листают годы: 2025 пуст.
+        onNodeWithTag(SALARY_SIDE_PREV_TAG).performClick()
+        awaitNode(hasText(SalaryFormat.YEAR_EMPTY))
+        onNodeWithText("2025").assertExists()
+        onNodeWithTag(SALARY_TITLE_TAG).assertTextEquals(SalaryFormat.monthName(september))
     }
 }
