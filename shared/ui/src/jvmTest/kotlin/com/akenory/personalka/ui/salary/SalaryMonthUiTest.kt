@@ -26,10 +26,13 @@ import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.SalaryFormat
+import com.akenory.personalka.domain.format.SettlementFormat
 import com.akenory.personalka.domain.model.CoachCategory
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.money.GroupCase
 import com.akenory.personalka.domain.money.RateAmounts
 import com.akenory.personalka.domain.money.SalarySetupDraft
 import com.akenory.personalka.domain.money.TierDraft
@@ -40,6 +43,7 @@ import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
@@ -175,5 +179,61 @@ class SalaryMonthUiTest {
         onNodeWithTag(PERIOD_TO_TAG).assertTextContains("20.10.2026")
         onNodeWithText(SalaryFormat.CLOSE).performScrollTo().performClick()
         awaitNode(hasTestTag(SALARY_DAY_TAG))
+    }
+
+    /** «Коллеги» (3.8): вкладка только с совместным ведением; замена у Лены — итог, тренировки, «Рассчитались». */
+    @Test
+    fun colleaguesTab() = runComposeUiTest {
+        prepare()
+        val lena = runBlocking {
+            val group = typeId("Группа")
+            val bb = placeId("ББ")
+            settings.rates.saveRates(group, LocalDate(2026, 1, 1), mapOf(bb to RateAmounts(rub(270))))
+            val lena = settings.colleagues.add("Лена", PaySchemeKind.HALF_OFFICIAL, TestData.now.date)
+            val coach = db.coachDao().currentCoach()!!.id
+            val now = TestData.clock()
+            // Группа Лены 14.10, провёл я, 8 детей: Лена отдаёт 2 160 × (1 − 0,065) = 2 019,60 ₽.
+            db.trainingDao().upsertTraining(
+                TrainingEntity(
+                    "g1", SyncFields.new(coach, now), group, bb, LocalDateTime(2026, 10, 14, 18, 0), 60,
+                    status = TrainingStatus.DONE, owner = Owner.COLLEAGUE, ownerColleagueId = lena,
+                ),
+            )
+            repeat(8) { db.trainingDao().upsertParticipation(ParticipationEntity("pg$it", SyncFields.new(coach, now), "g1", "c$it", ParticipationStatus.ATTENDED)) }
+            lena
+        }
+        var shared: String? = null
+        setContent {
+            Box(Modifier.size(412.dp, 900.dp)) {
+                App(
+                    "0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), TestData.calendarOf(settings),
+                    shareText = { shared = it }, clock = TestData.clock,
+                )
+            }
+        }
+        awaitNode(hasTestTag(navTag(Section.SALARY)))
+        onNodeWithTag(navTag(Section.SALARY)).performClick()
+        awaitNode(hasTestTag(SALARY_EARNED_TAG))
+        onNodeWithTag(salaryTabTag(SalaryTab.COLLEAGUES)).assertDoesNotExist()
+
+        runBlocking { settings.salary.saveCoCoaching(true) }
+        awaitNode(hasTestTag(salaryTabTag(SalaryTab.COLLEAGUES)))
+        onNodeWithTag(salaryTabTag(SalaryTab.COLLEAGUES)).performClick()
+        awaitNode(hasTestTag(colleagueTag(lena)))
+        onNodeWithText(SettlementFormat.total("Лена", 201_960)).assertExists()
+        onNodeWithText(SettlementFormat.caseTitle(GroupCase.THEIRS_BY_ME)).performClick()
+        awaitNode(hasText("(1 − 0,065) от каждой"))
+
+        onNodeWithTag(shareTag(lena)).performScrollTo().performClick()
+        assertTrue(shared!!.endsWith("Итого: ты отдаёшь мне 2\u202f019,60\u00a0₽"), shared)
+
+        onNodeWithTag(settledTag(lena)).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.moneyDao().settlement(october, lena) }?.amount == 201_960L }
+        awaitNode(hasText(SettlementFormat.UNSETTLE))
+
+        // Выключено — вкладки нет, записанное остаётся.
+        runBlocking { settings.salary.saveCoCoaching(false) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(salaryTabTag(SalaryTab.COLLEAGUES))).fetchSemanticsNodes().isEmpty() }
+        awaitNode(hasTestTag(SALARY_EARNED_TAG))
     }
 }

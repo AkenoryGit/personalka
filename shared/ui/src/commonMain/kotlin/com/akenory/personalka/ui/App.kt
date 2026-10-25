@@ -70,6 +70,7 @@ import kotlinx.datetime.LocalDate
  *   `null` — их нет (тесты). Сам обмен идёт в приложении платформы.
  * @param cabinets ссылки кабинетов (шаг 2.13): «Кабинет» в карточке клиента и «Кабинеты» в настройках, когда сервер
  *   подключён и «Кабинеты» открыты у аккаунта; `null` — их нет (тесты).
+ * @param shareText системное «Поделиться» текстом (шаг 3.8): «Поделиться расчётом» с коллегой; `null` — текст копируется.
  * @param voice голосовой ввод в полях дневника (шаг 2.1); `null` — микрофонов нет.
  * @param reminders напоминания (шаг 2.5): «План на день» в настройках; `null` — строки нет (тесты).
  * @param notifications уведомления телефона: строка «Включить» в настройках, когда они выключены.
@@ -91,6 +92,7 @@ fun App(
     account: AccountRepository? = null,
     sync: SyncTools? = null,
     cabinets: CabinetTools? = null,
+    shareText: ((String) -> Unit)? = null,
     voice: VoiceInput? = null,
     reminders: Reminders? = null,
     notifications: NotificationAccess? = null,
@@ -245,6 +247,7 @@ fun App(
                             account = account,
                             sync = sync,
                             cabinets = cabinets?.takeIf { cabinetsOpen },
+                            shareText = shareText,
                             home = home,
                             todos = todos,
                             homeCard = homeCard,

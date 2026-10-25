@@ -48,11 +48,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,6 +67,7 @@ import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.RateFormat
 import com.akenory.personalka.domain.format.SalaryFormat
+import com.akenory.personalka.domain.format.SettlementFormat
 import com.akenory.personalka.domain.money.BreakdownLine
 import com.akenory.personalka.domain.money.BreakdownSection
 import com.akenory.personalka.domain.money.MonthPeriod
@@ -113,16 +116,21 @@ internal const val SALARY_CLOSE_TAG = "salary-close"
 internal const val SALARY_CLOSED_TAG = "salary-closed"
 internal fun salaryTabTag(tab: SalaryTab) = "salary-tab-${tab.name}"
 
-/** Вкладки «Зарплаты»: «Коллеги» и «Год» — шаг 3.8. */
-enum class SalaryTab(val title: String) { MONTH(SalaryFormat.TAB_MONTH), PAYOUTS(SalaryFormat.TAB_PAYOUTS) }
+/** Вкладки «Зарплаты»: «Коллеги» — только с «Совместным ведением групп» (3.8); «Год» — шаг 3.8б. */
+enum class SalaryTab(val title: String) {
+    MONTH(SalaryFormat.TAB_MONTH),
+    PAYOUTS(SalaryFormat.TAB_PAYOUTS),
+    COLLEAGUES(SettlementFormat.TAB),
+}
 
 /** Новая доплата в окне «+ Доплата» — вместо id записи. */
 private const val NEW_ADJUSTMENT = "new"
 
 /**
- * «Зарплата» (ТЗ 5.12): сверху месяц со стрелками и «Ставки и ступени», вкладки «Месяц» и «Выплаты».
+ * «Зарплата» (ТЗ 5.12): сверху месяц со стрелками и «Ставки и ступени», вкладки «Месяц», «Выплаты» и «Коллеги».
  * «Месяц» — заработано, план и прогноз, ступень, разбивка, доплаты; «Выплаты» — начислено, налог, когда что придёт
- * и на руки. Месяц, вкладка и прокрутка переживают сложение Fold.
+ * и на руки; «Коллеги» — взаиморасчёт. Месяц, вкладка и прокрутка переживают сложение Fold. [shareText] —
+ * системное «Поделиться» текстом; нет его — текст расчёта копируется.
  */
 @Composable
 internal fun SalaryMonthScreen(
@@ -131,6 +139,7 @@ internal fun SalaryMonthScreen(
     messages: MessageState,
     scope: CoroutineScope,
     onRates: () -> Unit,
+    shareText: ((String) -> Unit)? = null,
 ) {
     var monthText by rememberSaveable { mutableStateOf(today.yearMonth.toString()) }
     val month = YearMonth.parse(monthText)
@@ -143,8 +152,15 @@ internal fun SalaryMonthScreen(
     var periodFrom by rememberSaveable { mutableStateOf<String?>(null) }
     var periodTo by rememberSaveable { mutableStateOf<String?>(null) }
     var periodPick by rememberSaveable { mutableStateOf<PeriodEnd?>(null) }
+    // Раскрытые случаи «Коллег» — свои у месяца.
+    var expanded by rememberSaveable(monthText) { mutableStateOf(listOf<String>()) }
     val monthScroll = rememberScrollState()
     val payoutScroll = rememberScrollState()
+    val colleagueScroll = rememberScrollState()
+    val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
+    val tabs = SalaryTab.entries.filter { it != SalaryTab.COLLEAGUES || coCoaching }
+    val shown = if (tab in tabs) tab else SalaryTab.MONTH
+    val clipboard = LocalClipboardManager.current
     val repo = settings.months
     val data by remember(repo, month, today) { repo.month(month, today) }.collectAsState(initial = null)
     val colors = PersonalkaTheme.colors
@@ -157,13 +173,17 @@ internal fun SalaryMonthScreen(
                 onNext = { monthText = month.firstDay.plus(1, DateTimeUnit.MONTH).yearMonth.toString() },
                 onRates = onRates,
             )
-            SalaryTabs(tab) { tab = it }
+            SalaryTabs(tabs, shown) { tab = it }
             val loaded = data?.takeIf { it.view.month == month }
             if (loaded == null) {
                 Spacer(Modifier.weight(1f))
                 return@Column
             }
-            val scroll = if (tab == SalaryTab.MONTH) monthScroll else payoutScroll
+            val scroll = when (shown) {
+                SalaryTab.MONTH -> monthScroll
+                SalaryTab.PAYOUTS -> payoutScroll
+                SalaryTab.COLLEAGUES -> colleagueScroll
+            }
             Column(
                 Modifier
                     .weight(1f)
@@ -174,7 +194,7 @@ internal fun SalaryMonthScreen(
                     .padding(bottom = 56.dp),
                 verticalArrangement = Arrangement.spacedBy(Dimens.space3),
             ) {
-                when (tab) {
+                when (shown) {
                     SalaryTab.MONTH -> MonthTab(
                         loaded,
                         day = dayText?.let { LocalDate.parse(it) },
@@ -194,6 +214,28 @@ internal fun SalaryMonthScreen(
                         },
                     )
                     SalaryTab.PAYOUTS -> PayoutsTab(loaded, today, onAdvance = { advanceOpen = true })
+                    SalaryTab.COLLEAGUES -> ColleaguesTab(
+                        loaded,
+                        expanded = expanded.toSet(),
+                        onExpand = { key -> expanded = if (key in expanded) expanded - key else expanded + key },
+                        onSettle = { row, settled ->
+                            scope.launch {
+                                repo.settle(month, row.colleagueId, if (settled) row.total else null)
+                                val text = if (settled) SettlementFormat.SETTLED_MESSAGE else SettlementFormat.UNSETTLED_MESSAGE
+                                // «Отменить» возвращает прежнюю отметку, в том числе устаревшую сумму.
+                                messages.showUndo(text) { scope.launch { repo.settle(month, row.colleagueId, row.settled) } }
+                            }
+                        },
+                        onShare = { row ->
+                            val text = SettlementFormat.shareText(month, row) { placeName(loaded, it) }
+                            if (shareText != null) {
+                                shareText(text)
+                            } else {
+                                clipboard.setText(AnnotatedString(text))
+                                messages.show(SettlementFormat.COPIED)
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -292,11 +334,11 @@ private fun MonthBar(title: String, onPrev: () -> Unit, onNext: () -> Unit, onRa
 }
 
 @Composable
-private fun SalaryTabs(selected: SalaryTab, onSelect: (SalaryTab) -> Unit) {
+private fun SalaryTabs(tabs: List<SalaryTab>, selected: SalaryTab, onSelect: (SalaryTab) -> Unit) {
     val colors = PersonalkaTheme.colors
     Column {
         Row(Modifier.fillMaxWidth()) {
-            SalaryTab.entries.forEach { tab ->
+            tabs.forEach { tab ->
                 val isSelected = tab == selected
                 Column(
                     Modifier
@@ -728,7 +770,7 @@ private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () ->
                 SalaryFormat.settlement(data.colleagues[id] ?: SalaryFormat.COLLEAGUE, amount),
                 MoneyFormat.signedRub(amount),
                 lead = SalaryFormat.NO_DATE,
-                note = SalaryFormat.SETTLEMENT_NOTE,
+                note = SettlementFormat.payoutNote(view.colleagues.any { it.colleagueId == id && it.isSettled }),
             )
         }
         HorizontalDivider(thickness = 2.dp, color = colors.text)

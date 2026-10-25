@@ -98,6 +98,7 @@ import kotlinx.datetime.LocalDateTime
  *   открывает «Без записи»; [voice] — голосовой ввод в заметке листа ожидания.
  * @param cabinets ссылки кабинетов (шаг 2.13) — когда сервер подключён и «Кабинеты» открыты у аккаунта; `null` —
  *   ни раздела «Кабинеты» в настройках, ни кнопки «Кабинет» в карточке.
+ * @param shareText системное «Поделиться» текстом: «Поделиться расчётом» с коллегой (шаг 3.8).
  */
 @Composable
 fun SectionScreen(
@@ -132,6 +133,7 @@ fun SectionScreen(
     voice: VoiceInput? = null,
     waiting: List<WaitRow> = emptyList(),
     cabinets: CabinetTools? = null,
+    shareText: ((String) -> Unit)? = null,
 ) {
     // «Кабинет» в карточке — только при включённых кабинетах (5.9); раздел «Кабинеты» в настройках — чтобы их включить.
     val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
@@ -206,7 +208,7 @@ fun SectionScreen(
             onDiary = onDiary,
         )
         Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting, cabinets?.takeIf { cabinetsOn })
-        Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope) {
+        Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope, shareText) {
             shell.select(Section.MORE)
             shell.reset(SettingsRoute.HOME)
             shell.open(SettingsRoute.RATES)

@@ -27,6 +27,10 @@ object SettlementFormat {
     const val EMPTY = "В этом месяце взаиморасчётов нет. Они появятся, когда группу проведёте вместе с коллегой " +
         "или с заменой."
 
+    /** Под взаиморасчётом в «Выплатах»: «взаиморасчёт, не через клуб · рассчитались». */
+    fun payoutNote(settled: Boolean): String =
+        if (settled) "${SalaryFormat.SETTLEMENT_NOTE}${DOT}рассчитались" else SalaryFormat.SETTLEMENT_NOTE
+
     /** Заголовок случая: «Моя группа · провели вместе», «Группа коллеги · провели вы». */
     fun caseTitle(case: GroupCase): String = when (case) {
         GroupCase.MINE_ALONE -> "Моя группа"

@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
                 account = app.account,
                 sync = sync,
                 cabinets = cabinets,
+                shareText = ::share,
                 voice = voice,
                 reminders = app.reminders,
                 notifications = notifications,
