@@ -2,7 +2,6 @@ package com.akenory.personalka.domain.money
 
 import com.akenory.personalka.domain.model.TrainingStatus
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.yearMonth
 
 /**
  * График накопления по дням (ТЗ 5.12, шаг 3.7б). Точки — на конец дня, индекс — число месяца, точка 0 — начало
@@ -38,38 +37,38 @@ object SalaryChartRules {
      * их днями: разница «прогноз − заработано» делится между днями пропорционально их запланированным деньгам
      * (так и переход ступени по прогнозу, и ожидаемые дети групп ложатся туда, где тренировки). Запланированные
      * на сегодня и раньше (не отмеченные) идут в завтрашний день; запланированных нет — разница ровно по дням.
+     * [days] — та же раскладка по дням, что у «Заработка за день» (3.7в), поэтому точка дня и сумма дня сходятся.
      */
-    fun build(input: MonthInput, pay: MonthPay, period: MonthPeriod, today: LocalDate, plan: Long?): SalaryChart {
+    fun build(
+        input: MonthInput,
+        pay: MonthPay,
+        period: MonthPeriod,
+        today: LocalDate,
+        plan: Long?,
+        days: List<DayItem> = SalaryDaysRules.items(input, pay, SalaryDaysRules.lastDay(input.month, today)),
+    ): SalaryChart {
         val month = input.month
-        val days = month.lastDay.day
+        val monthDays = month.lastDay.day
         val factDay = when (period) {
-            MonthPeriod.PAST -> days
+            MonthPeriod.PAST -> monthDays
             MonthPeriod.CURRENT -> today.day
             MonthPeriod.FUTURE -> 0
         }
         val ofMonth = PayRules.inMonth(input.trainings, month)
-        val daily = LongArray(days + 1)
-        fun put(day: Int, amount: Long) {
-            if (factDay > 0) daily[day.coerceIn(1, factDay)] += amount
-        }
-        ofMonth.zip(pay.trainings).forEach { (t, p) -> put(t.start.date.day, p.earned) }
-        input.spt.filter { it.purchaseDate?.yearMonth == month }.forEach { put(it.purchaseDate!!.day, SptRules.bonus(it, input.rates)) }
-        input.adjustments.forEach { a ->
-            val d = a.date
-            put(if (d != null && d.yearMonth == month) d.day else if (d != null && d.yearMonth < month) 1 else factDay, a.amount)
-        }
+        val daily = LongArray(monthDays + 1)
+        if (factDay > 0) days.forEach { daily[it.date.day.coerceIn(1, factDay)] += it.amount }
         val earned = ArrayList<Long>(factDay + 1)
         var sum = 0L
         for (d in 0..factDay) {
             sum += daily[d]
             earned += sum
         }
-        val forecast = if (period == MonthPeriod.PAST || factDay == days) {
+        val forecast = if (period == MonthPeriod.PAST || factDay == monthDays) {
             emptyList()
         } else {
-            forecastLine(ofMonth, pay, factDay, days, earned.last())
+            forecastLine(ofMonth, pay, factDay, monthDays, earned.last())
         }
-        return SalaryChart(days, factDay, earned, forecast, plan, step(maxOf(earned.last(), forecast.maxOrNull() ?: 0, plan ?: 0)))
+        return SalaryChart(monthDays, factDay, earned, forecast, plan, step(maxOf(earned.last(), forecast.maxOrNull() ?: 0, plan ?: 0)))
     }
 
     private fun forecastLine(ofMonth: List<PayTraining>, pay: MonthPay, factDay: Int, days: Int, anchor: Long): List<Long> {

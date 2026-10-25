@@ -7,11 +7,13 @@ import com.akenory.personalka.domain.money.BreakdownSection
 import com.akenory.personalka.domain.money.GroupCase
 import com.akenory.personalka.domain.money.MonthPeriod
 import com.akenory.personalka.domain.money.PayoutKind
+import com.akenory.personalka.domain.money.PeriodPart
 import com.akenory.personalka.domain.money.Shortfall
 import com.akenory.personalka.domain.money.SplitMark
 import com.akenory.personalka.domain.money.TierBeyond
 import com.akenory.personalka.domain.money.TierProgress
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.YearMonth
 
 /** Строки экрана «Зарплата» (ТЗ 5.12) и плана с прогнозом (4.12): экран и главная берут их отсюда. */
@@ -290,7 +292,6 @@ object SalaryFormat {
     // --- График по дням и «Месяц сверен» (шаг 3.7б) ---
 
     const val CHART = "По дням"
-    const val CHART_RIGHT = "с начала месяца"
     const val CHART_EARNED = "заработано"
     const val CHART_FORECAST = "прогноз"
     const val CHART_PACE = "темп плана"
@@ -322,6 +323,43 @@ object SalaryFormat {
     fun closedMessage(month: YearMonth): String = "${DateFormat.month(month.firstDay).replaceFirstChar { it.uppercaseChar() }} сверен"
 
     const val REOPENED = "Сверка снята"
+
+    // --- Заработок за день и за период (шаг 3.7в) ---
+
+    const val PERIOD = "Период"
+    const val PERIOD_TITLE = "Заработок за период"
+    const val PERIOD_FROM = "С"
+    const val PERIOD_TO = "По"
+    const val PERIOD_EARNED = "Заработано за период"
+    const val PERIOD_NOTE = "Проведённые тренировки, каждая — по ступени своего месяца"
+    const val PERIOD_REVERSED = "Дата «С» позже, чем «По»"
+    const val PERIOD_TOO_LONG = "Период — не больше года"
+    const val PERIOD_EMPTY = "За эти дни ничего не заработано"
+    const val PERIOD_MONTHS = "По месяцам"
+    const val CLOSE = "Закрыть"
+    const val DAY_HINT = "Нажмите на день графика — покажу, что заработано в этот день"
+    const val DAY_EMPTY = "В этот день ничего не заработано"
+    const val DAY_SPT = "Доплата за СПТ — блок куплен"
+
+    /** Над списком дня: «вт 22.10 — 3 680 ₽». */
+    fun dayTitle(date: LocalDate, total: Long): String = "${DateFormat.short(date)} — ${MoneyFormat.rub(total)}"
+
+    /** Тренировка дня: «10:00 ПТ · ББ». */
+    fun dayTraining(time: LocalTime, type: String, place: String): String =
+        "${DateFormat.time(time)} " + listOf(type, place).filter { it.isNotBlank() }.joinToString(DOT)
+
+    /** Часть периода: «Октябрь» целиком, «Октябрь, 1–25» — часть месяца. */
+    fun periodPart(part: PeriodPart): String {
+        val name = DateFormat.month(part.month.firstDay).replaceFirstChar { it.uppercaseChar() }
+        if (part.whole) return name
+        return if (part.from == part.to) "$name, ${part.from.day}" else "$name, ${part.from.day}${RuText.DASH}${part.to.day}"
+    }
+
+    /** Под заголовком окна периода: «01.10.2026 – 25.10.2026 · 25 дней». */
+    fun periodRange(from: LocalDate, to: LocalDate): String {
+        val days = to.toEpochDays() - from.toEpochDays() + 1
+        return "${DateFormat.full(from)} ${RuText.DASH} ${DateFormat.full(to)}$DOT${RuText.count(days, "день", "дня", "дней")}"
+    }
 
     /** «13 %», «50 %», «6,5 %» — из десятитысячных. */
     private fun percentBp(bp: Int): String {

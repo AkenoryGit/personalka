@@ -76,7 +76,7 @@ data class TierProgress(
  * (4.12), [planOwn] — план задан именно в этом месяце. [today] и [todayAhead] — заработано сегодня и ожидается ещё
  * сегодня (только у текущего месяца). [payout] — выплаты по проведённым, [forecastPayout] — если всё пройдёт по
  * расписанию. [advanceActual] — введённый аванс. [chart] — график накопления по дням, [closed] — «Месяц сверен»
- * (правки его тренировок спрашивают подтверждение, 4.1).
+ * (правки его тренировок спрашивают подтверждение, 4.1). [days] — заработанное по дням (3.7в): нажатие на день графика.
  */
 data class SalaryMonth(
     val month: YearMonth,
@@ -95,6 +95,7 @@ data class SalaryMonth(
     val advanceActual: Long?,
     val chart: SalaryChart,
     val closed: Boolean = false,
+    val days: List<DayItem> = emptyList(),
 ) {
     /** «Месяц сверен» — у прошедшего и текущего: сверять будущий не с чем. */
     val canClose: Boolean get() = period != MonthPeriod.FUTURE
@@ -164,6 +165,7 @@ object SalaryMonthRules {
         } else {
             null
         }
+        val days = SalaryDaysRules.items(input, pay, SalaryDaysRules.lastDay(month, today))
         val todayIds = ofToday?.map { it.id }?.toSet()
         val plannedToday = ofToday?.filter { it.status == TrainingStatus.PLANNED }?.map { it.id }?.toSet()
         return SalaryMonth(
@@ -181,8 +183,9 @@ object SalaryMonthRules {
             tiers = tierProgress(input, pay, period, ptTypeId, ptPlaceId, on),
             breakdown = breakdown(input, pay),
             advanceActual = advanceActual,
-            chart = SalaryChartRules.build(input, pay, period, today, plan),
+            chart = SalaryChartRules.build(input, pay, period, today, plan, days),
             closed = closed,
+            days = days,
         )
     }
 
@@ -229,9 +232,9 @@ object SalaryMonthRules {
     /**
      * Разбивка месяца (4.10) по проведённым и отменённым со списанием: строки «тип · место» с числом и ставкой,
      * группы по случаям 4.8 (только непустые), дежурства с часами, за коллег — по одному. Сумма строк, доплат СПТ
-     * и доплат месяца — «Заработано».
+     * и доплат месяца — «Заработано». С [only] — только тренировки и доплаты СПТ из этих дней (период, 3.7в).
      */
-    fun breakdown(input: MonthInput, pay: MonthPay): List<BreakdownLine> {
+    fun breakdown(input: MonthInput, pay: MonthPay, only: List<DayItem>? = null): List<BreakdownLine> {
         val types = input.types.associateBy { it.id }
         val typeOrder = input.types.withIndex().associate { it.value.id to it.index }
         val scheme = Versions.activeIn(input.schemes, input.month) { it.validFrom }
@@ -239,7 +242,9 @@ object SalaryMonthRules {
         val byId = PayRules.inMonth(input.trainings, input.month).associateBy { it.id }
         val lines = LinkedHashMap<Any, BreakdownLine>()
         val single = mutableListOf<BreakdownLine>()
+        val onlyTrainings = only?.mapNotNull { it.trainingId }?.toSet()
         pay.trainings.forEach { p ->
+            if (onlyTrainings != null && p.trainingId !in onlyTrainings) return@forEach
             val t = byId[p.trainingId] ?: return@forEach
             val type = types[t.typeId]
             when (type?.kind) {
@@ -283,17 +288,23 @@ object SalaryMonthRules {
                 }
             }
         }
-        val closed = input.spt.filter { it.purchaseDate?.yearMonth == input.month && SptRules.bonus(it, input.rates) > 0 }
-        if (pay.sptBonus != 0L) single += BreakdownLine(BreakdownSection.SPT, amount = pay.sptBonus, sptClosed = closed.size)
+        val onlySpt = only?.mapNotNull { it.sptId }?.toSet()
+        val closed = input.spt.filter {
+            it.purchaseDate?.yearMonth == input.month && SptRules.bonus(it, input.rates) > 0 && (onlySpt == null || it.id in onlySpt)
+        }
+        val sptBonus = if (onlySpt == null) pay.sptBonus else closed.sumOf { SptRules.bonus(it, input.rates) }
+        if (sptBonus != 0L) single += BreakdownLine(BreakdownSection.SPT, amount = sptBonus, sptClosed = closed.size)
         val all = lines.values + single
-        return all.sortedWith(
-            compareBy<BreakdownLine> { it.section.ordinal }
-                .thenBy { it.sptClosed }
-                .thenBy { it.groupCase?.ordinal ?: 0 }
-                .thenBy { typeOrder[it.typeId] ?: Int.MAX_VALUE }
-                .thenBy { it.date },
-        )
+        return all.sortedWith(breakdownOrder(typeOrder))
     }
+
+    /** Порядок строк разбивки: разделы, доплаты СПТ после стартовых, случаи групп, типы в порядке тренера, даты. */
+    fun breakdownOrder(typeOrder: Map<String, Int>): Comparator<BreakdownLine> =
+        compareBy<BreakdownLine> { it.section.ordinal }
+            .thenBy { it.sptClosed }
+            .thenBy { it.groupCase?.ordinal ?: 0 }
+            .thenBy { typeOrder[it.typeId] ?: Int.MAX_VALUE }
+            .thenBy { it.date }
 
     /** Случай 4.8 группы; группа коллеги, проведённая коллегой, — `null`. */
     fun groupCase(t: PayTraining): GroupCase? = when (t.owner) {

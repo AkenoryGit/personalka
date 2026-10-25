@@ -12,6 +12,7 @@ import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.money.RateAmounts
+import com.akenory.personalka.domain.money.SalaryDaysRules
 import com.akenory.personalka.domain.money.SalarySetupDraft
 import com.akenory.personalka.domain.money.TierDraft
 import com.akenory.personalka.domain.reference.CoachName
@@ -150,5 +151,22 @@ class SalaryRepositoryTest {
         assertEquals(rub(4 * 920), view.chart.earned[19])
         assertEquals(view.pay.earned, view.chart.earned[20])
         assertEquals(view.pay.forecast, view.chart.forecast.last())
+    }
+
+    @Test
+    fun dayAndPeriod(): Unit = runBlocking {
+        setUp()
+        val data = months.month(october, today).first()
+        // День 15.10 — три ПТ, у каждой тренировка месяца для строки «09:00 ПТ · ББ».
+        val day = SalaryDaysRules.day(data.view.days, LocalDate(2026, 10, 15))
+        assertEquals(3, day.size)
+        assertTrue(day.all { data.trainings[it.trainingId]?.start?.hour == 9 })
+        // Период через два месяца: сентябрь пуст, октябрь с 1-го по 15-е — три ПТ.
+        val period = months.period(LocalDate(2026, 9, 16), LocalDate(2026, 10, 15), today).first()
+        assertEquals(2, period.view.parts.size)
+        assertEquals(listOf(0L, rub(3 * 920)), period.view.parts.map { it.earned })
+        assertEquals(rub(3 * 920), period.view.total)
+        // Весь октябрь — ровно «Заработано».
+        assertEquals(data.view.pay.earned, months.period(LocalDate(2026, 10, 1), LocalDate(2026, 10, 31), today).first().view.total)
     }
 }

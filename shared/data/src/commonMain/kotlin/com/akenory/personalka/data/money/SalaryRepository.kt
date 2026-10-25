@@ -22,7 +22,9 @@ import com.akenory.personalka.domain.money.PayScheme
 import com.akenory.personalka.domain.money.PayTraining
 import com.akenory.personalka.domain.money.PayType
 import com.akenory.personalka.domain.money.SalaryMonth
+import com.akenory.personalka.domain.money.SalaryDaysRules
 import com.akenory.personalka.domain.money.SalaryMonthRules
+import com.akenory.personalka.domain.money.SalaryPeriod
 import com.akenory.personalka.domain.money.SptCase
 import com.akenory.personalka.domain.money.TierScheme
 import kotlinx.coroutines.Dispatchers
@@ -36,10 +38,12 @@ import kotlinx.datetime.YearMonth
 import kotlinx.datetime.atTime
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlinx.datetime.yearMonth
 
 /**
  * Месяц экрана «Зарплата» (5.12) и всё, что к нему нужно: [view] — расчёт, [adjustments] — доплаты и удержания
- * в порядке внесения, имена типов, мест и коллег — по id.
+ * в порядке внесения, имена типов, мест и коллег — по id. [input] — вход расчёта (для периода, 3.7в);
+ * [trainings] — тренировки месяца по id, [whom] — за кого тренировка: клиенты или название группы (день графика).
  */
 data class SalaryMonthData(
     val view: SalaryMonth,
@@ -47,7 +51,13 @@ data class SalaryMonthData(
     val types: Map<String, TrainingTypeEntity>,
     val places: Map<String, LocationEntity>,
     val colleagues: Map<String, String>,
+    val input: MonthInput? = null,
+    val trainings: Map<String, TrainingEntity> = emptyMap(),
+    val whom: Map<String, String> = emptyMap(),
 )
+
+/** «Период» (5.12, 3.7в): расчёт [view] и месяцы, которые он задевает, — для имён, доплат и тренировок. */
+data class SalaryPeriodData(val view: SalaryPeriod, val months: List<SalaryMonthData>)
 
 /**
  * Деньги месяца из базы (ТЗ 5.12, 4.6–4.12): тренировки с участием, ставки, ступени, схемы, СПТ, доплаты и план
@@ -60,6 +70,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
     private val reference = db.referenceDao()
     private val money = db.moneyDao()
     private val coaches = db.coachDao()
+    private val clients = db.clientDao()
 
     private data class Sources(
         val trainings: List<TrainingEntity>,
@@ -67,6 +78,13 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         val types: List<TrainingTypeEntity>,
         val rates: List<PayRate>,
         val tiers: List<TierScheme>,
+    )
+
+    private data class Names(
+        val places: List<LocationEntity>,
+        val colleagues: Map<String, String>,
+        val clients: Map<String, String>,
+        val groups: Map<String, String>,
     )
 
     private data class Money(
@@ -107,8 +125,32 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
                 spt, adjustments, records,
             )
         }
-        return combine(sources, moneySources, reference.observeLocations(), money.observeColleagues()) { s, m, places, colleagues ->
-            build(month, today, s, m, places, colleagues.associate { it.id to it.name })
+        val names = combine(
+            reference.observeLocations(),
+            money.observeColleagues(),
+            clients.observeAllClients(),
+            clients.observeGroups(),
+        ) { places, colleagues, people, groups ->
+            Names(
+                places,
+                colleagues.associate { it.id to it.name },
+                people.associate { it.id to "${it.lastName} ${it.firstName}".trim() },
+                groups.associate { it.id to it.name },
+            )
+        }
+        return combine(sources, moneySources, names) { s, m, n -> build(month, today, s, m, n) }.flowOn(Dispatchers.Default)
+    }
+
+    /**
+     * Заработок с [from] по [to] (3.7в): месяцы периода считаются так же, как в «Заработано», каждый по своей
+     * ступени, а период складывается из их частей. Пересчитывается сам при правках.
+     */
+    fun period(from: LocalDate, to: LocalDate, today: LocalDate): Flow<SalaryPeriodData> {
+        val months = generateSequence(from.yearMonth) { it.firstDay.plus(1, DateTimeUnit.MONTH).yearMonth }.takeWhile { it <= to.yearMonth }.toList()
+        return combine(months.map { month(it, today) }) { all ->
+            val list = all.toList()
+            val view = SalaryDaysRules.period(list.mapNotNull { d -> d.input?.let { it to d.view.pay } }, from, to, today)
+            SalaryPeriodData(view, list)
         }.flowOn(Dispatchers.Default)
     }
 
@@ -117,9 +159,9 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         today: LocalDate,
         s: Sources,
         m: Money,
-        places: List<LocationEntity>,
-        colleagues: Map<String, String>,
+        n: Names,
     ): SalaryMonthData {
+        val places = n.places
         val byTraining = s.participations.groupBy { it.trainingId }
         val trainings = s.trainings.map { it.pay(byTraining[it.id].orEmpty()) }
         val ptTypeId = RatesRepository.ptTypeId(s.types)
@@ -143,13 +185,21 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         val records = m.records.groupBy { it.month }.mapValues { (_, list) -> list.maxWith(compareBy({ it.sync.updatedAt }, { it.id })) }
         val plans = records.mapNotNull { (k, v) -> v.planAmount?.let { k to it } }.toMap()
         val activePlaces = places.filter { !it.archived }.map { it.id }
-        val ofMonth = PayRules.inMonth(trainings, month)
         val view = SalaryMonthRules.build(
             input, m.schemes, plans, records[month]?.advanceActual, today, ptTypeId,
-            SalaryMonthRules.ptPlace(ofMonth, ptTypeId, activePlaces),
+            SalaryMonthRules.ptPlace(PayRules.inMonth(trainings, month), ptTypeId, activePlaces),
             closed = records[month]?.closed == true,
         )
-        return SalaryMonthData(view, m.adjustments, s.types.associateBy { it.id }, places.associateBy { it.id }, colleagues)
+        val ofMonth = s.trainings.filter { it.start.date.yearMonth == month }
+        val shown = view.days.mapNotNull { it.trainingId }.toSet()
+        val whom = ofMonth.filter { it.id in shown }.associate { t ->
+            val group = t.groupId?.let { n.groups[it] }
+            t.id to (group ?: byTraining[t.id].orEmpty().mapNotNull { n.clients[it.clientId] }.joinToString(", "))
+        }
+        return SalaryMonthData(
+            view, m.adjustments, s.types.associateBy { it.id }, places.associateBy { it.id }, n.colleagues,
+            input = input, trainings = ofMonth.associateBy { it.id }, whom = whom,
+        )
     }
 
     /** План месяца [month] (4.12); `null` — стереть, тогда месяц возьмёт план прошлого. */

@@ -3,6 +3,7 @@ package com.akenory.personalka.ui.salary
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -92,6 +94,7 @@ import kotlinx.datetime.YearMonth
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.yearMonth
+import kotlin.math.roundToInt
 
 internal const val SALARY_EARNED_TAG = "salary-earned"
 internal const val SALARY_PLAN_TAG = "salary-plan"
@@ -135,6 +138,11 @@ internal fun SalaryMonthScreen(
     var planOpen by rememberSaveable { mutableStateOf(false) }
     var adjusting by rememberSaveable { mutableStateOf<String?>(null) }
     var advanceOpen by rememberSaveable { mutableStateOf(false) }
+    // День графика (3.7в) — свой у каждого месяца; переживает сложение Fold.
+    var dayText by rememberSaveable(monthText) { mutableStateOf<String?>(null) }
+    var periodFrom by rememberSaveable { mutableStateOf<String?>(null) }
+    var periodTo by rememberSaveable { mutableStateOf<String?>(null) }
+    var periodPick by rememberSaveable { mutableStateOf<PeriodEnd?>(null) }
     val monthScroll = rememberScrollState()
     val payoutScroll = rememberScrollState()
     val repo = settings.months
@@ -169,6 +177,13 @@ internal fun SalaryMonthScreen(
                 when (tab) {
                     SalaryTab.MONTH -> MonthTab(
                         loaded,
+                        day = dayText?.let { LocalDate.parse(it) },
+                        onDay = { dayText = it.toString() },
+                        onPeriod = {
+                            val (from, to) = defaultPeriod(month.firstDay, month.lastDay, today)
+                            periodFrom = from.toString()
+                            periodTo = to.toString()
+                        },
                         onPlan = { planOpen = true },
                         onAdjust = { adjusting = it },
                         onClosed = { closed ->
@@ -214,6 +229,27 @@ internal fun SalaryMonthScreen(
                         repo.deleteAdjustment(id)
                         messages.showUndo(SalaryFormat.adjustmentDeleted(deduction)) { scope.launch { repo.deleteAdjustment(id, restore = true) } }
                     }
+                },
+            )
+        }
+        val from = periodFrom
+        val to = periodTo
+        if (from != null && to != null) {
+            PeriodPanel(
+                repo = repo,
+                from = LocalDate.parse(from),
+                to = LocalDate.parse(to),
+                today = today,
+                picking = periodPick,
+                onPick = { periodPick = it },
+                onChange = { f, t ->
+                    periodFrom = f.toString()
+                    periodTo = t.toString()
+                },
+                onDismiss = {
+                    periodFrom = null
+                    periodTo = null
+                    periodPick = null
                 },
             )
         }
@@ -283,7 +319,7 @@ private fun SalaryTabs(selected: SalaryTab, onSelect: (SalaryTab) -> Unit) {
 
 /** Карточка на surface со скруглением 12 и отступами 16. */
 @Composable
-private fun SalaryCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun SalaryCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier
             .fillMaxWidth()
@@ -296,7 +332,7 @@ private fun SalaryCard(modifier: Modifier = Modifier, content: @Composable Colum
 }
 
 @Composable
-private fun CardHeader(title: String, right: String? = null) {
+internal fun CardHeader(title: String, right: String? = null) {
     val colors = PersonalkaTheme.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = colors.text)
@@ -305,13 +341,13 @@ private fun CardHeader(title: String, right: String? = null) {
 }
 
 @Composable
-private fun Muted(text: String, modifier: Modifier = Modifier) {
+internal fun Muted(text: String, modifier: Modifier = Modifier) {
     Text(text, modifier, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
 }
 
 /** Строка суммы: подпись и пояснение слева, сумма справа; [bold] — итог. */
 @Composable
-private fun MoneyRow(
+internal fun MoneyRow(
     title: String,
     amount: String,
     modifier: Modifier = Modifier,
@@ -356,11 +392,19 @@ private fun MoneyRow(
 // --- Месяц ---
 
 @Composable
-private fun MonthTab(data: SalaryMonthData, onPlan: () -> Unit, onAdjust: (String) -> Unit, onClosed: (Boolean) -> Unit) {
+private fun MonthTab(
+    data: SalaryMonthData,
+    day: LocalDate?,
+    onDay: (LocalDate) -> Unit,
+    onPeriod: () -> Unit,
+    onPlan: () -> Unit,
+    onAdjust: (String) -> Unit,
+    onClosed: (Boolean) -> Unit,
+) {
     val view = data.view
     EarnedCard(view, onPlan)
     view.tiers?.let { TierCard(it, view.period, data) }
-    ChartCard(view)
+    ChartCard(data, day, onDay, onPeriod)
     BreakdownCard(data, onAdjust)
     if (view.canClose) CloseMonth(view, onClosed)
 }
@@ -368,23 +412,42 @@ private fun MonthTab(data: SalaryMonthData, onPlan: () -> Unit, onAdjust: (Strin
 /**
  * «По дням» (5.12, макет PayMonth): заработано сплошной линией до сегодняшней точки, прогноз пунктиром до конца
  * месяца, темп плана — тонкая прямая к плану; вертикальный пунктир — сегодня. Подписи сетки — слева над линиями.
+ * Нажатие на день (до сегодня) — под графиком что заработано в этот день; «Период» — заработок за любые даты (3.7в).
  */
 @Composable
-private fun ChartCard(view: SalaryMonth) {
+private fun ChartCard(data: SalaryMonthData, day: LocalDate?, onDay: (LocalDate) -> Unit, onPeriod: () -> Unit) {
+    val view = data.view
     val chart = view.chart
+    val selected = day?.takeIf { it.yearMonth == view.month && it.day in 1..chart.factDay }
     val colors = PersonalkaTheme.colors
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.bodySmall.tabular().copy(color = colors.textMuted)
     val factDate = if (chart.factDay > 0) LocalDate(view.month.year, view.month.month, chart.factDay) else null
     val summary = SalaryFormat.chartDescription(chart.earned.last(), factDate, chart.forecast.lastOrNull(), chart.plan)
     SalaryCard {
-        CardHeader(SalaryFormat.CHART, SalaryFormat.CHART_RIGHT)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                SalaryFormat.CHART,
+                modifier = Modifier.weight(1f).semantics { heading() },
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.text,
+            )
+            SecondaryButton(SalaryFormat.PERIOD, onPeriod, Modifier.testTag(SALARY_PERIOD_TAG), icon = PIcons.CalendarMonth)
+        }
         Canvas(
             Modifier
                 .fillMaxWidth()
                 .height(180.dp)
                 .padding(top = Dimens.space2)
                 .semantics { contentDescription = summary }
+                .pointerInput(view.month, chart.factDay, onDay) {
+                    detectTapGestures { pos ->
+                        val left = 44.dp.toPx()
+                        val right = size.width - 4.dp.toPx()
+                        val d = ((pos.x - left) / (right - left) * chart.days).roundToInt()
+                        if (chart.factDay > 0) onDay(LocalDate(view.month.year, view.month.month, d.coerceIn(1, chart.factDay)))
+                    }
+                }
                 .testTag(SALARY_CHART_TAG),
         ) {
             val gutter = 44.dp.toPx()
@@ -427,12 +490,18 @@ private fun ChartCard(view: SalaryMonth) {
                 drawLine(colors.outline, Offset(x, top), Offset(x, bottom), strokeWidth = thin, pathEffect = dash)
                 drawCircle(colors.primary, 4.dp.toPx(), Offset(x, py(chart.earned.last())))
             }
+            selected?.let { d ->
+                val x = px(d.day)
+                drawLine(colors.text, Offset(x, top), Offset(x, bottom), strokeWidth = thin)
+                drawCircle(colors.text, 4.dp.toPx(), Offset(x, py(chart.earned[d.day])))
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
             if (view.period != MonthPeriod.FUTURE) LineLegend(colors.primary, SalaryFormat.CHART_EARNED)
             if (chart.forecast.size > 1) LineLegend(colors.text, SalaryFormat.CHART_FORECAST, dashed = true)
             if (chart.plan != null) LineLegend(colors.outline, SalaryFormat.CHART_PACE)
         }
+        if (selected != null) DayDetails(data, selected) else if (chart.factDay > 0) Muted(SalaryFormat.DAY_HINT)
     }
 }
 
@@ -601,12 +670,12 @@ private fun BreakdownCard(data: SalaryMonthData, onAdjust: (String) -> Unit) {
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Text(text, Modifier.padding(top = Dimens.space3), style = MaterialTheme.typography.labelMedium, color = PersonalkaTheme.colors.textMuted)
 }
 
 @Composable
-private fun BreakdownRow(line: BreakdownLine, data: SalaryMonthData) {
+internal fun BreakdownRow(line: BreakdownLine, data: SalaryMonthData) {
     val type = data.types[line.typeId]
     val place = data.places[line.locationId]
     val title = SalaryFormat.lineTitle(line, type?.name.orEmpty(), place?.shortName?.ifBlank { place.name } ?: "")

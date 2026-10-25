@@ -3,6 +3,7 @@ package com.akenory.personalka.ui.salary
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -12,10 +13,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.db.SyncFields
@@ -148,5 +151,29 @@ class SalaryMonthUiTest {
         waitUntil(timeoutMillis = 5_000) { runBlocking { db.moneyDao().monthRecord(october) }?.closed == false }
         awaitNode(hasText(SalaryFormat.closeNote(october)))
         assertEquals(false, runBlocking { db.moneyDao().monthRecord(october) }?.closed)
+    }
+
+    @Test
+    fun dayAndPeriod() = runComposeUiTest {
+        start()
+        onNodeWithText(SalaryFormat.DAY_HINT).performScrollTo().assertExists()
+        // Нажатие на 15-е: одна ПТ 920 ₽.
+        onNodeWithTag(SALARY_CHART_TAG).performScrollTo().performTouchInput {
+            val left = 44.dp.toPx()
+            val right = width - 4.dp.toPx()
+            click(Offset(left + 15f / 31f * (right - left), height / 2f))
+        }
+        awaitNode(hasTestTag(SALARY_DAY_TAG))
+        onNodeWithTag(SALARY_DAY_TAG).assertTextContains(SalaryFormat.dayTitle(LocalDate(2026, 10, 15), rub(920)))
+        onNodeWithText("09:00 ПТ · ББ").assertExists()
+
+        // «Период» по умолчанию — с 1-го по сегодня: обе ПТ.
+        onNodeWithTag(SALARY_PERIOD_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(PERIOD_TOTAL_TAG))
+        onNodeWithTag(PERIOD_TOTAL_TAG).assertTextContains(MoneyFormat.rub(rub(1840)))
+        onNodeWithTag(PERIOD_FROM_TAG).assertTextContains("01.10.2026")
+        onNodeWithTag(PERIOD_TO_TAG).assertTextContains("20.10.2026")
+        onNodeWithText(SalaryFormat.CLOSE).performScrollTo().performClick()
+        awaitNode(hasTestTag(SALARY_DAY_TAG))
     }
 }
