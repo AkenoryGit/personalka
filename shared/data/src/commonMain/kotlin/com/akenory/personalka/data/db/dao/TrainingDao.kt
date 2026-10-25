@@ -257,6 +257,10 @@ interface TrainingDao {
     @Upsert
     suspend fun upsertSptCase(item: SptCaseEntity)
 
+    /** Все дела СПТ: доплаты за закрытие идут в месяц покупки (4.9). */
+    @Query("SELECT * FROM spt_case WHERE deletedAt IS NULL ORDER BY sptDate")
+    fun observeSptCases(): Flow<List<SptCaseEntity>>
+
     @Query("SELECT * FROM spt_case WHERE clientId = :clientId AND deletedAt IS NULL ORDER BY sptDate")
     suspend fun sptCasesOf(clientId: String): List<SptCaseEntity>
 

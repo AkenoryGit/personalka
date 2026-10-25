@@ -34,6 +34,9 @@ interface MoneyDao {
     @Query("SELECT * FROM colleague_scheme_version WHERE deletedAt IS NULL ORDER BY validFrom")
     suspend fun colleagueSchemes(): List<ColleagueSchemeVersionEntity>
 
+    @Query("SELECT * FROM colleague_scheme_version WHERE deletedAt IS NULL ORDER BY validFrom")
+    fun observeColleagueSchemes(): Flow<List<ColleagueSchemeVersionEntity>>
+
     @Upsert
     suspend fun upsertMonthRecord(item: MonthRecordEntity)
 
@@ -47,6 +50,12 @@ interface MoneyDao {
     /** Все месяцы по порядку (год по месяцам, 5.12). */
     @Query("SELECT * FROM month_record WHERE deletedAt IS NULL ORDER BY month, updatedAt")
     suspend fun monthRecords(): List<MonthRecordEntity>
+
+    @Query("SELECT * FROM month_record WHERE deletedAt IS NULL ORDER BY month, updatedAt")
+    fun observeMonthRecords(): Flow<List<MonthRecordEntity>>
+
+    @Query("SELECT * FROM month_adjustment WHERE id = :id")
+    suspend fun adjustment(id: String): MonthAdjustmentEntity?
 
     @Upsert
     suspend fun upsertAdjustment(item: MonthAdjustmentEntity)

@@ -49,7 +49,6 @@ import com.akenory.personalka.domain.money.SalarySetupRules
 import com.akenory.personalka.domain.money.TierDraft
 import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.CheckRow
-import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
@@ -86,8 +85,8 @@ internal fun openFeatures(account: AccountRepository?, today: LocalDate): Set<Fe
 }
 
 /**
- * Раздел «Зарплата»: при первом открытии — мастер «Настроить зарплату» (ТЗ 5.18), после него — пока только
- * «Зарплата настроена» и «Ставки и ступени»: месяц и выплаты — шаг 3.7.
+ * Раздел «Зарплата»: при первом открытии — мастер «Настроить зарплату» (ТЗ 5.18), после него — месяц и выплаты
+ * (5.12).
  */
 @Composable
 fun SalaryScreen(
@@ -108,19 +107,7 @@ fun SalaryScreen(
         SalarySetupWizard(settings, loadedPlaces.filter { !it.archived }, loadedTypes.filter { !it.archived }, openFeatures(account, today), today, messages, scope)
         return
     }
-    Column(Modifier.fillMaxSize()) {
-        TopBar(SalarySetupFormat.SALARY)
-        Box(Modifier.weight(1f).fillMaxWidth().padding(bottom = 56.dp), contentAlignment = Alignment.Center) {
-            EmptyState(
-                icon = PIcons.Payments,
-                title = SalarySetupFormat.READY_HEADING,
-                text = SalarySetupFormat.READY_NOTE,
-                modifier = Modifier.testTag(SALARY_RATES_TAG),
-                actionLabel = RateFormat.TITLE,
-                onAction = onRates,
-            )
-        }
-    }
+    SalaryMonthScreen(settings, today, messages, scope, onRates)
 }
 
 /**

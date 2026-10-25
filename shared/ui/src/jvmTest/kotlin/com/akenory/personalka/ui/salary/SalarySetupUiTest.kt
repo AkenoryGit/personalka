@@ -88,7 +88,7 @@ class SalarySetupUiTest {
         onNodeWithTag(setupAsPtTag("Кинезио")).performScrollTo().performClick()
         onNodeWithText(SalarySetupFormat.DONE).performClick()
 
-        awaitNode(hasText(SalarySetupFormat.READY_HEADING))
+        awaitNode(hasTestTag(SALARY_EARNED_TAG))
         val jan = LocalDate(2026, 1, 1)
         val category = runBlocking { settings.salary.categories.first() }.single()
         assertEquals(CoachCategory.MASTER, category.category)

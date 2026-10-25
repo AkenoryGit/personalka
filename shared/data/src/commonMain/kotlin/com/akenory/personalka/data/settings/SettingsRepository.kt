@@ -8,6 +8,7 @@ import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.money.RatesRepository
+import com.akenory.personalka.data.money.SalaryRepository
 import com.akenory.personalka.data.money.SalarySetupRepository
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.cabinet.CabinetLinkRules
@@ -34,6 +35,9 @@ class SettingsRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Категория, схема выплат и мастер «Настроить зарплату» (5.16, 5.18, шаг 3.6б). */
     val salary: SalarySetupRepository = SalarySetupRepository(db, rates, clock)
+
+    /** Месяц и выплаты экрана «Зарплата» (5.12, шаг 3.7). */
+    val months: SalaryRepository = SalaryRepository(db, clock)
 
     /** Тренер телефона; `null` — первый запуск ещё не пройден. */
     val coach: Flow<CoachEntity?> = coaches.observeCurrentCoach()

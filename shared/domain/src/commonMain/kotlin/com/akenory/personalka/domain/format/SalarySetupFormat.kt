@@ -25,8 +25,6 @@ object SalarySetupFormat {
     const val SETUP = "Настроить зарплату"
     const val SETUP_HEADING = "Зарплата ещё не настроена"
     const val SETUP_NOTE = "Четыре шага: категория, схема выплат, ставки и ступени — около минуты."
-    const val READY_HEADING = "Зарплата настроена"
-    const val READY_NOTE = "Месяц, выплаты, коллеги и год появятся здесь со следующими шагами."
     const val ADVANCE = "Ожидаемый аванс, ₽"
     const val ADVANCE_NOTE = "Приходит 25-го. Фактическую сумму приложение спросит в этот день."
     const val SAVED = "Зарплата настроена"

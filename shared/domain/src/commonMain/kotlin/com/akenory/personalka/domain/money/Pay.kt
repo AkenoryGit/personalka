@@ -77,6 +77,7 @@ data class OwnerSchemes(
  * Тренировка для расчёта: [start] — локальное время клуба, [clients] — статусы участия её клиентов.
  * [owner] / [ownerColleagueId] — на ком числится группа, [conductedBy] / [colleagueId] — кто провёл (ТЗ 3.4, 4.8);
  * учитываются только у групп. [groupId] — группа тренировки: по ней прогноз берёт ожидаемое число детей (4.12).
+ * [coverFor] — за кого дежурство (3.5): в разбивке месяца такие дежурства идут отдельными строками (4.10).
  */
 data class PayTraining(
     val id: String,
@@ -92,6 +93,7 @@ data class PayTraining(
     val conductedBy: ConductedBy = ConductedBy.SELF,
     val colleagueId: String? = null,
     val groupId: String? = null,
+    val coverFor: String? = null,
 )
 
 /** Доплата ([amount] больше нуля) или удержание месяца (ТЗ 3.6); [inClubAccrual] — входит в начисление клуба. */
@@ -123,7 +125,9 @@ data class TrainingPay(
  * взаиморасчёта по каждому коллеге: больше нуля — коллега должен мне. [groupChildren] — оплаченные дети в группах,
  * которые я вёл (один или вместе), [dutyMinutes] — проведённые дежурства. [sptBonus] — доплаты за СПТ, закрытые
  * покупкой в этом месяце (4.9): входят в заработано, начислено и прогноз. [adjustments] — доплаты и удержания месяца
- * (4.10): все — в заработано и прогноз, с `in_club_accrual` — ещё и в начислено.
+ * (4.10): все — в заработано и прогноз, с `in_club_accrual` — ещё и в начислено. [forecastTrainings],
+ * [forecastAccrued] и [forecastSettlements] — то же по прогнозной ступени, будто все запланированные состоялись:
+ * из них «Если всё пройдёт по расписанию — ≈ …» на руки (5.12).
  */
 data class MonthPay(
     val month: YearMonth,
@@ -140,9 +144,15 @@ data class MonthPay(
     val dutyMinutes: Int = 0,
     val sptBonus: Long = 0,
     val adjustments: Long = 0,
+    val forecastTrainings: List<TrainingPay> = trainings,
+    val forecastAccrued: Long = accrued,
+    val forecastSettlements: Map<String, Long> = settlements,
 ) {
     /** Взаиморасчёт S (4.10): мне должны минус я должен, по всем коллегам. */
     val settlement: Long get() = settlements.values.sum()
+
+    /** Взаиморасчёт по прогнозу. */
+    val forecastSettlement: Long get() = forecastSettlements.values.sum()
 
     /** Тренировки без ставки — пункты «Нужно сделать». */
     val missingRate: List<String> get() = trainings.filter { it.rateMissing }.map { it.trainingId }
@@ -332,13 +342,11 @@ object PayRules {
         val adjusted = adjustments.sumOf { it.amount }
         val adjustedInClub = adjustments.filter { it.inClubAccrual }.sumOf { it.amount }
         val kindOf = { t: PayTraining -> byId[t.typeId]?.kind }
-        val forecast = sptBonus + adjusted + ofMonth.sumOf {
+        val forecastPays = ofMonth.map {
             val expected = if (it.status == TrainingStatus.PLANNED && kindOf(it) == TrainingKind.GROUP) expectedChildren(it, trainings) else null
-            pay(it, byId, rates, forecastTier, forecast = true, owners = owners, expected = expected).earned
+            pay(it, byId, rates, forecastTier, forecast = true, owners = owners, expected = expected)
         }
-        val settlements = pays.filter { it.colleagueId != null }
-            .groupBy { it.colleagueId!! }
-            .mapValues { (_, list) -> list.sumOf { it.settlement } }
+        val forecast = sptBonus + adjusted + forecastPays.sumOf { it.earned }
         val groupChildren = ofMonth.zip(pays)
             .filter { (t, _) -> kindOf(t) == TrainingKind.GROUP && t.conductedBy != ConductedBy.COLLEAGUE }
             .sumOf { (_, pay) -> pay.paidClients }
@@ -348,13 +356,21 @@ object PayRules {
         return MonthPay(
             month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned } + sptBonus + adjusted, forecast, pays,
             accrued = pays.sumOf { it.accrued } + sptBonus + adjustedInClub,
-            settlements = settlements,
+            settlements = settlementsOf(pays),
             groupChildren = groupChildren,
             dutyMinutes = dutyMinutes,
             sptBonus = sptBonus,
             adjustments = adjusted,
+            forecastTrainings = forecastPays,
+            forecastAccrued = forecastPays.sumOf { it.accrued } + sptBonus + adjustedInClub,
+            forecastSettlements = settlementsOf(forecastPays),
         )
     }
+
+    /** Взаиморасчёт по каждому коллеге: всё, что он должен мне, минус всё, что я должен ему. */
+    private fun settlementsOf(pays: List<TrainingPay>): Map<String, Long> = pays.filter { it.colleagueId != null }
+        .groupBy { it.colleagueId!! }
+        .mapValues { (_, list) -> list.sumOf { it.settlement } }
 
     private fun rateOf(typeId: String, training: PayTraining, rates: List<PayRate>): PayRate? =
         Versions.rateFor(rates, typeId, training.locationId, training.start.date, { it.typeId }, { it.locationId }, { it.validFrom })

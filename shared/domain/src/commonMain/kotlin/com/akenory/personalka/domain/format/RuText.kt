@@ -64,4 +64,28 @@ object RuText {
         Sex.FEMALE -> female
         null -> unknown
     }
+
+    /**
+     * Имя в дательном падеже — «Вы отдаёте Лене» (4.8): склоняется первое слово, остальное как есть. Лена → Лене,
+     * Мария → Марии, Илья → Илье, Иван → Ивану, Андрей → Андрею, Игорь → Игорю; на о, е, и, у, ю, ы, э — не
+     * склоняется. Женские имена на «ь» (Любовь) склоняются неверно, как мужские, — редкий случай.
+     */
+    fun dative(name: String): String {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return trimmed
+        val end = trimmed.indexOf(' ').let { if (it < 0) trimmed.length else it }
+        val word = trimmed.substring(0, end)
+        val lower = word.lowercase()
+        val last = lower.last()
+        val declined = when {
+            word.length < 2 -> word
+            lower.endsWith("ия") -> word.dropLast(1) + "и"
+            last == 'а' || last == 'я' -> word.dropLast(1) + "е"
+            last == 'й' || last == 'ь' -> word.dropLast(1) + "ю"
+            last in "оеиуюыэё" -> word
+            last in "бвгджзклмнпрстфхцчшщ" -> word + "у"
+            else -> word
+        }
+        return declined + trimmed.substring(end)
+    }
 }

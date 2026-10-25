@@ -177,11 +177,7 @@ object SalaryPlan {
         val base = input.pay()
         if (base.forecast >= plan) return null
         val missing = plan - base.forecast
-        fun withExtra(k: Int): MonthPay = input.copy(
-            trainings = input.trainings + List(k) {
-                PayTraining("$EXTRA_ID$it", ptTypeId, locationId, on.atTime(LocalTime(0, 0)), EXTRA_MINUTES, TrainingStatus.PLANNED, listOf(ParticipationStatus.EXPECTED))
-            },
-        ).pay()
+        fun withExtra(k: Int): MonthPay = withExtra(input, k, ptTypeId, locationId, on).pay()
         // Добавочная ПТ прогноз не уменьшает: ступень только растёт, оплата каждой — не меньше нуля. Поэтому — бинарный поиск.
         if (withExtra(MAX_EXTRA).forecast < plan) return Shortfall(missing, null)
         var low = 0
@@ -196,6 +192,13 @@ object SalaryPlan {
         val from = scheme?.let { if (reached.forecastTier >= 3) it.t3From else it.t2From }
         return Shortfall(missing, high, reached.forecastTier, from)
     }
+
+    /** Месяц [input] с [k] добавочными запланированными ПТ типа [ptTypeId] в месте [locationId] в день [on]. */
+    fun withExtra(input: MonthInput, k: Int, ptTypeId: String, locationId: String, on: LocalDate): MonthInput = input.copy(
+        trainings = input.trainings + List(k) {
+            PayTraining("$EXTRA_ID$it", ptTypeId, locationId, on.atTime(LocalTime(0, 0)), EXTRA_MINUTES, TrainingStatus.PLANNED, listOf(ParticipationStatus.EXPECTED))
+        },
+    )
 
     /** Больше добавочных ПТ в месяц не ищется: столько не провести. */
     const val MAX_EXTRA = 500

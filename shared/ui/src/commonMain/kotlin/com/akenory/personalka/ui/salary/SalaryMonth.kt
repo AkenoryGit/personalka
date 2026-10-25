@@ -1,0 +1,645 @@
+package com.akenory.personalka.ui.salary
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.money.SalaryMonthData
+import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.domain.format.MoneyFormat
+import com.akenory.personalka.domain.format.RateFormat
+import com.akenory.personalka.domain.format.SalaryFormat
+import com.akenory.personalka.domain.money.BreakdownLine
+import com.akenory.personalka.domain.money.BreakdownSection
+import com.akenory.personalka.domain.money.MonthPeriod
+import com.akenory.personalka.domain.money.PayoutKind
+import com.akenory.personalka.domain.money.Payouts
+import com.akenory.personalka.domain.money.RateRules
+import com.akenory.personalka.domain.money.SalaryMonth
+import com.akenory.personalka.domain.money.TierProgress
+import com.akenory.personalka.ui.components.CheckRow
+import com.akenory.personalka.ui.components.Field
+import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.Note
+import com.akenory.personalka.ui.components.Panel
+import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.components.SecondaryButton
+import com.akenory.personalka.ui.components.Segmented
+import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.theme.Dimens
+import com.akenory.personalka.ui.theme.PersonalkaTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
+import kotlinx.datetime.yearMonth
+
+internal const val SALARY_EARNED_TAG = "salary-earned"
+internal const val SALARY_PLAN_TAG = "salary-plan"
+internal const val SALARY_PLAN_FIELD_TAG = "salary-plan-field"
+internal const val SALARY_PREV_TAG = "salary-prev"
+internal const val SALARY_NEXT_TAG = "salary-next"
+internal const val SALARY_ADD_ADJUST_TAG = "salary-add-adjust"
+internal const val ADJUST_AMOUNT_TAG = "adjust-amount"
+internal const val ADJUST_FOR_TAG = "adjust-for"
+internal const val SALARY_ON_HAND_TAG = "salary-on-hand"
+internal const val SALARY_ADVANCE_TAG = "salary-advance"
+internal const val ADVANCE_FIELD_TAG = "advance-field"
+internal const val SALARY_TOTAL_TAG = "salary-total"
+internal fun salaryTabTag(tab: SalaryTab) = "salary-tab-${tab.name}"
+
+/** Вкладки «Зарплаты»: «Коллеги» и «Год» — шаг 3.8. */
+enum class SalaryTab(val title: String) { MONTH(SalaryFormat.TAB_MONTH), PAYOUTS(SalaryFormat.TAB_PAYOUTS) }
+
+/** Новая доплата в окне «+ Доплата» — вместо id записи. */
+private const val NEW_ADJUSTMENT = "new"
+
+/**
+ * «Зарплата» (ТЗ 5.12): сверху месяц со стрелками и «Ставки и ступени», вкладки «Месяц» и «Выплаты».
+ * «Месяц» — заработано, план и прогноз, ступень, разбивка, доплаты; «Выплаты» — начислено, налог, когда что придёт
+ * и на руки. Месяц, вкладка и прокрутка переживают сложение Fold.
+ */
+@Composable
+internal fun SalaryMonthScreen(
+    settings: SettingsRepository,
+    today: LocalDate,
+    messages: MessageState,
+    scope: CoroutineScope,
+    onRates: () -> Unit,
+) {
+    var monthText by rememberSaveable { mutableStateOf(today.yearMonth.toString()) }
+    val month = YearMonth.parse(monthText)
+    var tab by rememberSaveable { mutableStateOf(SalaryTab.MONTH) }
+    var planOpen by rememberSaveable { mutableStateOf(false) }
+    var adjusting by rememberSaveable { mutableStateOf<String?>(null) }
+    var advanceOpen by rememberSaveable { mutableStateOf(false) }
+    val monthScroll = rememberScrollState()
+    val payoutScroll = rememberScrollState()
+    val repo = settings.months
+    val data by remember(repo, month, today) { repo.month(month, today) }.collectAsState(initial = null)
+    val colors = PersonalkaTheme.colors
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            MonthBar(
+                title = SalaryFormat.month(month),
+                onPrev = { monthText = month.firstDay.minus(1, DateTimeUnit.MONTH).yearMonth.toString() },
+                onNext = { monthText = month.firstDay.plus(1, DateTimeUnit.MONTH).yearMonth.toString() },
+                onRates = onRates,
+            )
+            SalaryTabs(tab) { tab = it }
+            val loaded = data?.takeIf { it.view.month == month }
+            if (loaded == null) {
+                Spacer(Modifier.weight(1f))
+                return@Column
+            }
+            val scroll = if (tab == SalaryTab.MONTH) monthScroll else payoutScroll
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(colors.bg)
+                    .verticalScroll(scroll)
+                    .padding(Dimens.space4)
+                    .padding(bottom = 56.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimens.space3),
+            ) {
+                when (tab) {
+                    SalaryTab.MONTH -> MonthTab(loaded, onPlan = { planOpen = true }, onAdjust = { adjusting = it })
+                    SalaryTab.PAYOUTS -> PayoutsTab(loaded, today, onAdvance = { advanceOpen = true })
+                }
+            }
+        }
+        val loaded = data?.takeIf { it.view.month == month } ?: return@Box
+        if (planOpen) {
+            PlanPanel(loaded.view, onDismiss = { planOpen = false }) { amount ->
+                planOpen = false
+                scope.launch {
+                    repo.savePlan(month, amount)
+                    messages.show(SalaryFormat.PLAN_SAVED)
+                }
+            }
+        }
+        adjusting?.let { id ->
+            AdjustmentPanel(
+                data = loaded,
+                id = id.takeIf { it != NEW_ADJUSTMENT },
+                onDismiss = { adjusting = null },
+                onSave = { amount, comment, inClub ->
+                    adjusting = null
+                    scope.launch {
+                        if (id == NEW_ADJUSTMENT) {
+                            repo.addAdjustment(month, amount, comment, inClub)
+                            messages.show(SalaryFormat.adjustmentSaved(amount < 0))
+                        } else {
+                            repo.updateAdjustment(id, amount, comment, inClub)
+                        }
+                    }
+                },
+                onDelete = { deduction ->
+                    adjusting = null
+                    scope.launch {
+                        repo.deleteAdjustment(id)
+                        messages.showUndo(SalaryFormat.adjustmentDeleted(deduction)) { scope.launch { repo.deleteAdjustment(id, restore = true) } }
+                    }
+                },
+            )
+        }
+        if (advanceOpen) {
+            AdvancePanel(loaded.view, onDismiss = { advanceOpen = false }) { amount ->
+                advanceOpen = false
+                scope.launch {
+                    repo.saveAdvance(month, amount)
+                    messages.show(SalaryFormat.ADVANCE_SAVED)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthBar(title: String, onPrev: () -> Unit, onNext: () -> Unit, onRates: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        Modifier.fillMaxWidth().height(Dimens.topBar).padding(start = Dimens.space4, end = Dimens.space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            modifier = Modifier.weight(1f).semantics { heading() },
+            style = MaterialTheme.typography.headlineSmall,
+            color = colors.text,
+            maxLines = 1,
+        )
+        IconButton(onClick = onPrev, modifier = Modifier.testTag(SALARY_PREV_TAG)) {
+            Icon(PIcons.ChevronRight, contentDescription = "Прошлый месяц", tint = colors.text, modifier = Modifier.rotate(180f))
+        }
+        IconButton(onClick = onNext, modifier = Modifier.testTag(SALARY_NEXT_TAG)) {
+            Icon(PIcons.ChevronRight, contentDescription = "Следующий месяц", tint = colors.text)
+        }
+        IconButton(onClick = onRates, modifier = Modifier.testTag(SALARY_RATES_TAG)) {
+            Icon(PIcons.Tune, contentDescription = RateFormat.TITLE, tint = colors.text)
+        }
+    }
+}
+
+@Composable
+private fun SalaryTabs(selected: SalaryTab, onSelect: (SalaryTab) -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Column {
+        Row(Modifier.fillMaxWidth()) {
+            SalaryTab.entries.forEach { tab ->
+                val isSelected = tab == selected
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .height(Dimens.touch)
+                        .selectable(selected = isSelected, role = Role.Tab) { onSelect(tab) }
+                        .testTag(salaryTabTag(tab)),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    Text(tab.title, style = MaterialTheme.typography.labelLarge, color = if (isSelected) colors.text else colors.textMuted)
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.width(64.dp).height(3.dp).background(if (isSelected) colors.primary else Color.Transparent))
+                }
+            }
+        }
+        HorizontalDivider(thickness = 1.dp, color = colors.divider)
+    }
+}
+
+/** Карточка на surface со скруглением 12 и отступами 16. */
+@Composable
+private fun SalaryCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(PersonalkaTheme.colors.surface)
+            .padding(Dimens.space4),
+        verticalArrangement = Arrangement.spacedBy(Dimens.space2),
+        content = content,
+    )
+}
+
+@Composable
+private fun CardHeader(title: String, right: String? = null) {
+    val colors = PersonalkaTheme.colors
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, modifier = Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = colors.text)
+        if (right != null) Text(right, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+    }
+}
+
+@Composable
+private fun Muted(text: String, modifier: Modifier = Modifier) {
+    Text(text, modifier, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+}
+
+/** Строка суммы: подпись и пояснение слева, сумма справа; [bold] — итог. */
+@Composable
+private fun MoneyRow(
+    title: String,
+    amount: String,
+    modifier: Modifier = Modifier,
+    note: String? = null,
+    lead: String? = null,
+    bold: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    extra: (@Composable () -> Unit)? = null,
+) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier.semantics(mergeDescendants = true) {})
+            .heightIn(min = Dimens.touch)
+            .padding(vertical = Dimens.space2),
+        verticalAlignment = Alignment.Top,
+    ) {
+        if (lead != null) {
+            Text(lead, Modifier.width(64.dp), style = MaterialTheme.typography.labelMedium, color = colors.text)
+        }
+        Column(Modifier.weight(1f).padding(end = Dimens.space3)) {
+            Text(
+                title,
+                style = if (bold) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+                color = colors.text,
+                fontWeight = if (bold) FontWeight.SemiBold else null,
+            )
+            if (note != null) Muted(note)
+            extra?.invoke()
+        }
+        Text(
+            amount,
+            style = if (bold) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+            color = colors.text,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+// --- Месяц ---
+
+@Composable
+private fun MonthTab(data: SalaryMonthData, onPlan: () -> Unit, onAdjust: (String) -> Unit) {
+    val view = data.view
+    EarnedCard(view, onPlan)
+    view.tiers?.let { TierCard(it, view.period, data) }
+    BreakdownCard(data, onAdjust)
+}
+
+@Composable
+private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    SalaryCard {
+        Muted(SalaryFormat.EARNED)
+        Text(
+            MoneyFormat.rub(view.pay.earned),
+            modifier = Modifier.testTag(SALARY_EARNED_TAG),
+            style = MaterialTheme.typography.displaySmall,
+            color = colors.text,
+        )
+        SalaryFormat.today(view.today, view.todayAhead)?.let { Muted(it) }
+        Spacer(Modifier.height(Dimens.space2))
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = Dimens.touch).clickable(onClick = onPlan).testTag(SALARY_PLAN_TAG),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val plan = view.plan
+            Text(
+                if (plan == null) SalaryFormat.NO_PLAN else "${SalaryFormat.PLAN}  ${MoneyFormat.rub(plan)}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.text,
+            )
+            Icon(PIcons.Edit, contentDescription = SalaryFormat.PLAN_TITLE, tint = colors.textMuted, modifier = Modifier.padding(start = Dimens.space2).size(18.dp))
+            Spacer(Modifier.weight(1f))
+            view.percent?.let { Muted(SalaryFormat.done(it)) }
+        }
+        val plan = view.plan
+        if (plan != null && plan > 0) {
+            val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
+            val forecast = if (view.hasForecast) (view.pay.forecast.toFloat() / plan).coerceIn(done, 1f) else done
+            TwoPartBar(done, forecast)
+        }
+        if (view.hasForecast) {
+            Row(Modifier.fillMaxWidth()) {
+                Muted(SalaryFormat.forecast(view.pay.forecast), Modifier.weight(1f))
+                view.forecastPercent?.let { Muted(SalaryFormat.ofPlan(it)) }
+            }
+        }
+        if (view.plan != null && !view.planOwn) Muted(SalaryFormat.PLAN_CARRIED)
+        view.shortfall?.let { Note(SalaryFormat.shortfall(it)) }
+    }
+}
+
+/** Полоса из двух частей: проведено — графит, прогноз — серый; конец полосы — план (макет PayMonth). */
+@Composable
+private fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp) {
+    val colors = PersonalkaTheme.colors
+    Box(Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(height / 2)).background(colors.surfaceAlt)) {
+        if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(colors.outline))
+        if (done > 0f) Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(colors.primary))
+    }
+}
+
+@Composable
+private fun TierCard(t: TierProgress, period: MonthPeriod, data: SalaryMonthData) {
+    val colors = PersonalkaTheme.colors
+    SalaryCard {
+        CardHeader(SalaryFormat.TIER, SalaryFormat.tierHeader(t, period))
+        val max = maxOf(t.t3From + 9, t.forecastCount, t.count).toFloat()
+        val shownForecast = if (period == MonthPeriod.PAST) t.count else t.forecastCount
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Dimens.space2)) {
+            val width = maxWidth
+            Column {
+                TwoPartBar(t.count / max, shownForecast / max, 12.dp)
+                Box(Modifier.fillMaxWidth().height(20.dp)) {
+                    listOf(t.t2From, t.t3From).forEach { from ->
+                        Muted("$from", Modifier.offset(x = width * (from / max) - 12.dp).width(24.dp))
+                    }
+                }
+            }
+            listOf(t.t2From, t.t3From).forEach { from ->
+                Box(Modifier.offset(x = width * (from / max) - 1.dp).width(2.dp).height(12.dp).background(colors.text))
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
+            Legend(colors.primary, SalaryFormat.tierDone(t.count))
+            if (period != MonthPeriod.PAST && t.forecastCount > t.count) Legend(colors.outline, SalaryFormat.tierPlanned(t.forecastCount - t.count))
+        }
+        if (period != MonthPeriod.PAST) {
+            val next = SalaryFormat.toNext(t)
+            if (next == null) Text(SalaryFormat.TIER_TOP, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            else Text(next, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            t.beyond?.let { Text(SalaryFormat.beyond(t.forecastCount, it), style = MaterialTheme.typography.bodyLarge, color = colors.text) }
+        }
+        val names = data.types.values.filter { it.id in t.ptTypeIds }.map { it.name }
+        SalaryFormat.counted(names)?.let { Muted(it) }
+    }
+}
+
+@Composable
+private fun Legend(color: Color, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        Muted(text, Modifier.padding(start = Dimens.space1))
+    }
+}
+
+@Composable
+private fun BreakdownCard(data: SalaryMonthData, onAdjust: (String) -> Unit) {
+    val view = data.view
+    val colors = PersonalkaTheme.colors
+    SalaryCard {
+        CardHeader(SalaryFormat.BREAKDOWN, SalaryFormat.byTier(view.pay.tier))
+        view.breakdown.groupBy { it.section }.forEach { (section, lines) ->
+            SectionTitle(SalaryFormat.section(section, view.pay.ptCount))
+            lines.forEachIndexed { i, line ->
+                if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
+                BreakdownRow(line, data)
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = Dimens.space3), verticalAlignment = Alignment.CenterVertically) {
+            Text(SalaryFormat.ADJUSTMENTS, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
+            SecondaryButton(SalaryFormat.ADD_ADJUSTMENT, { onAdjust(NEW_ADJUSTMENT) }, Modifier.testTag(SALARY_ADD_ADJUST_TAG), icon = PIcons.Add)
+        }
+        data.adjustments.forEach { a ->
+            MoneyRow(
+                a.comment,
+                MoneyFormat.signedRub(a.amount),
+                note = SalaryFormat.adjustmentNote(a.inClubAccrual),
+                onClick = { onAdjust(a.id) },
+            )
+        }
+        HorizontalDivider(thickness = 2.dp, color = colors.text)
+        MoneyRow(SalaryFormat.EARNED, MoneyFormat.rub(view.pay.earned), Modifier.testTag(SALARY_TOTAL_TAG), bold = true)
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, Modifier.padding(top = Dimens.space3), style = MaterialTheme.typography.labelMedium, color = PersonalkaTheme.colors.textMuted)
+}
+
+@Composable
+private fun BreakdownRow(line: BreakdownLine, data: SalaryMonthData) {
+    val type = data.types[line.typeId]
+    val place = data.places[line.locationId]
+    val title = SalaryFormat.lineTitle(line, type?.name.orEmpty(), place?.shortName?.ifBlank { place.name } ?: "")
+    val note = SalaryFormat.lineNote(line, line.colleagueId?.let { data.colleagues[it] })
+    MoneyRow(title, MoneyFormat.rub(line.amount), note = note)
+}
+
+// --- Выплаты ---
+
+@Composable
+private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () -> Unit) {
+    val view = data.view
+    val payout = view.payout
+    val colors = PersonalkaTheme.colors
+    SalaryCard {
+        Muted(SalaryFormat.ACCRUED)
+        Text(MoneyFormat.rub(payout.accrued), style = MaterialTheme.typography.headlineSmall, color = colors.text)
+        Muted(SalaryFormat.accruedNote(view.period, today, payout.kind))
+        val scheme = view.scheme
+        if (payout.official != 0L && scheme != null) {
+            HorizontalDivider(thickness = 1.dp, color = colors.divider)
+            MoneyRow(SalaryFormat.official(scheme.officialShareBp), MoneyFormat.rub(payout.official), note = SalaryFormat.officialNote(scheme.officialShareBp))
+            HorizontalDivider(thickness = 1.dp, color = colors.divider)
+            MoneyRow(SalaryFormat.ndfl(scheme.ndflBp), MoneyFormat.rub(-payout.ndfl), note = SalaryFormat.NDFL_NOTE)
+        }
+        SectionTitle(SalaryFormat.WHEN)
+        payout.payouts.forEachIndexed { i, p ->
+            if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
+            when (p.kind) {
+                PayoutKind.ADVANCE -> MoneyRow(
+                    SalaryFormat.payout(p.kind),
+                    MoneyFormat.rub(p.amount),
+                    Modifier.testTag(SALARY_ADVANCE_TAG),
+                    lead = SalaryFormat.payoutDate(p.date),
+                    onClick = onAdvance,
+                    extra = { AdvanceChip(view.advanceActual != null) },
+                )
+                PayoutKind.CARD_REST -> MoneyRow(
+                    SalaryFormat.payout(p.kind),
+                    MoneyFormat.rub(p.amount),
+                    lead = SalaryFormat.payoutDate(p.date),
+                    note = if (payout.advanceExceedsCard) SalaryFormat.ADVANCE_EXCEEDS else SalaryFormat.cardRestNote(payout.card),
+                )
+                else -> MoneyRow(SalaryFormat.payout(p.kind), MoneyFormat.rub(p.amount), lead = SalaryFormat.payoutDate(p.date))
+            }
+        }
+        view.pay.settlements.filterValues { it != 0L }.forEach { (id, amount) ->
+            HorizontalDivider(thickness = 1.dp, color = colors.divider)
+            MoneyRow(
+                SalaryFormat.settlement(data.colleagues[id] ?: SalaryFormat.COLLEAGUE, amount),
+                MoneyFormat.signedRub(amount),
+                lead = SalaryFormat.NO_DATE,
+                note = SalaryFormat.SETTLEMENT_NOTE,
+            )
+        }
+        HorizontalDivider(thickness = 2.dp, color = colors.text)
+        MoneyRow(SalaryFormat.ON_HAND, MoneyFormat.rub(view.totals.onHand), Modifier.testTag(SALARY_ON_HAND_TAG), bold = true)
+        if (view.hasForecast && view.forecastOnHand != view.totals.onHand) Muted(SalaryFormat.ifScheduled(view.forecastOnHand))
+    }
+}
+
+@Composable
+private fun AdvanceChip(received: Boolean) {
+    val colors = PersonalkaTheme.colors
+    Text(
+        if (received) SalaryFormat.ADVANCE_RECEIVED else SalaryFormat.ADVANCE_EXPECTED,
+        modifier = Modifier
+            .padding(top = Dimens.space1)
+            .clip(RoundedCornerShape(8.dp))
+            .background(colors.surfaceAlt)
+            .padding(horizontal = Dimens.space2, vertical = 2.dp),
+        style = MaterialTheme.typography.labelMedium,
+        color = colors.text,
+    )
+}
+
+// --- Окна ---
+
+@Composable
+private fun PlanPanel(view: SalaryMonth, onDismiss: () -> Unit, onSave: (Long) -> Unit) {
+    var text by rememberSaveable { mutableStateOf(RateRules.moneyText(view.plan)) }
+    var tried by rememberSaveable { mutableStateOf(false) }
+    val amount = RateRules.money(text)
+    val error = if (!tried) null else RateRules.moneyProblem(text) ?: if (amount == null || amount == 0L) SalaryFormat.AMOUNT_EMPTY else null
+    Panel(SalaryFormat.PLAN_TITLE, onDismiss) {
+        Field(
+            SalaryFormat.PLAN_FIELD,
+            text,
+            { text = it },
+            error = error,
+            hint = SalaryFormat.PLAN_NOTE,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            tag = SALARY_PLAN_FIELD_TAG,
+        )
+        PanelActions(SalaryFormat.SAVE, {
+            tried = true
+            if (amount != null && amount > 0) onSave(amount)
+        }, SalaryFormat.CANCEL, onDismiss)
+    }
+}
+
+@Composable
+private fun AdjustmentPanel(
+    data: SalaryMonthData,
+    id: String?,
+    onDismiss: () -> Unit,
+    onSave: (amount: Long, comment: String, inClub: Boolean) -> Unit,
+    onDelete: (deduction: Boolean) -> Unit,
+) {
+    val old = id?.let { i -> data.adjustments.firstOrNull { it.id == i } }
+    var deduction by rememberSaveable { mutableStateOf((old?.amount ?: 0) < 0) }
+    var text by rememberSaveable { mutableStateOf(RateRules.moneyText(old?.amount?.let { if (it < 0) -it else it })) }
+    var comment by rememberSaveable { mutableStateOf(old?.comment.orEmpty()) }
+    var inClub by rememberSaveable { mutableStateOf(old?.inClubAccrual ?: true) }
+    var tried by rememberSaveable { mutableStateOf(false) }
+    val abs = RateRules.money(text)?.takeIf { it > 0 }
+    val signed = abs?.let { if (deduction) -it else it }
+    val amountError = if (!tried) null else RateRules.moneyProblem(text) ?: if (abs == null) SalaryFormat.AMOUNT_EMPTY else null
+    val commentError = if (tried && comment.isBlank()) SalaryFormat.ADJUST_FOR_EMPTY else null
+    val willBe = signed?.let { data.view.pay.earned - (old?.amount ?: 0) + it }
+    Panel(SalaryFormat.ADJUST_TITLE, onDismiss) {
+        Segmented(listOf(false, true), deduction, { if (it) SalaryFormat.DEDUCTION else SalaryFormat.BONUS }, { deduction = it })
+        Field(
+            SalaryFormat.ADJUST_AMOUNT,
+            text,
+            { text = it },
+            error = amountError,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            tag = ADJUST_AMOUNT_TAG,
+        )
+        Field(SalaryFormat.ADJUST_FOR, comment, { comment = it }, error = commentError, tag = ADJUST_FOR_TAG)
+        CheckRow(SalaryFormat.IN_CLUB, inClub, { inClub = it }, subtitle = SalaryFormat.IN_CLUB_NOTE)
+        willBe?.let { Muted(SalaryFormat.earnedWillBe(it)) }
+        val save = {
+            tried = true
+            if (signed != null && comment.isNotBlank()) onSave(signed, comment, inClub)
+        }
+        if (old == null) {
+            PanelActions(SalaryFormat.addAdjustment(deduction), save, SalaryFormat.CANCEL, onDismiss)
+        } else {
+            PanelActions(SalaryFormat.SAVE, save, SalaryFormat.DELETE, onSecondary = { onDelete(old.amount < 0) })
+        }
+    }
+}
+
+@Composable
+private fun AdvancePanel(view: SalaryMonth, onDismiss: () -> Unit, onSave: (Long) -> Unit) {
+    val expected = view.scheme?.advanceDefault
+    var text by rememberSaveable { mutableStateOf(RateRules.moneyText(view.advanceActual ?: expected)) }
+    var tried by rememberSaveable { mutableStateOf(false) }
+    val amount = RateRules.money(text)
+    val error = if (!tried) null else RateRules.moneyProblem(text) ?: if (amount == null) SalaryFormat.AMOUNT_EMPTY else null
+    val date = Payouts.advanceDate(view.month, view.scheme) ?: return
+    Panel(SalaryFormat.advanceTitle(date), onDismiss) {
+        Field(
+            SalaryFormat.ADVANCE_FIELD,
+            text,
+            { text = it },
+            error = error,
+            hint = expected?.let { SalaryFormat.advanceExpected(it) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            tag = ADVANCE_FIELD_TAG,
+        )
+        PanelActions(SalaryFormat.SAVE, {
+            tried = true
+            if (amount != null) onSave(amount)
+        }, SalaryFormat.CANCEL, onDismiss)
+    }
+}
