@@ -60,6 +60,7 @@ import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.settings.BackupTools
+import com.akenory.personalka.ui.salary.SalaryScreen
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
 import com.akenory.personalka.ui.shell.LocalWide
@@ -200,12 +201,11 @@ fun SectionScreen(
             onDiary = onDiary,
         )
         Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting, cabinets?.takeIf { cabinetsOn })
-        Section.SALARY -> Placeholder(
-            title = "Зарплата",
-            icon = PIcons.Payments,
-            heading = "Здесь будут заработок и выплаты",
-            text = "Месяц, выплаты, коллеги и год — этап 3.",
-        )
+        Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope) {
+            shell.select(Section.MORE)
+            shell.reset(SettingsRoute.HOME)
+            shell.open(SettingsRoute.RATES)
+        }
         Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
             when {
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)

@@ -39,9 +39,10 @@ class RatesRepository(private val db: PersonalkaDatabase, private val clock: () 
 
     /**
      * «Сохранить» в форме ставок типа [typeId]: [entered] — введённое по местам (`null` — поля пустые), [from] —
-     * «Действуют с». Возвращает число записанных изменений: 0 — всё совпало с тем, что уже действует.
+     * «Действуют с». [services] — услуга сетки клуба по месту, если сумма взята из сетки без правки (мастер 5.18).
+     * Возвращает число записанных изменений: 0 — всё совпало с тем, что уже действует.
      */
-    suspend fun saveRates(typeId: String, from: LocalDate, entered: Map<String?, RateAmounts?>): Int {
+    suspend fun saveRates(typeId: String, from: LocalDate, entered: Map<String?, RateAmounts?>, services: Map<String?, String> = emptyMap()): Int {
         val coach = coaches.currentCoach() ?: return 0
         val now = clock()
         val versions = reference.rateVersions(typeId)
@@ -61,6 +62,7 @@ class RatesRepository(private val db: PersonalkaDatabase, private val clock: () 
                             amountT2 = change.amounts.t2,
                             amountT3 = change.amounts.t3,
                             sptCloseBonus = change.amounts.sptBonus,
+                            clubService = services[change.placeId],
                         ),
                     )
                     is RateChange.Replace -> byId[change.id]?.let { old ->
@@ -72,7 +74,7 @@ class RatesRepository(private val db: PersonalkaDatabase, private val clock: () 
                                 amountT3 = change.amounts.t3,
                                 sptCloseBonus = change.amounts.sptBonus,
                                 // Суммы правил сам тренер: связь с сеткой клуба больше не верна.
-                                clubService = null,
+                                clubService = services[old.locationId],
                             ),
                         )
                     }

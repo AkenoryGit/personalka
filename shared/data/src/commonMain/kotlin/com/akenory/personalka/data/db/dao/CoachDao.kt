@@ -49,10 +49,17 @@ interface CoachDao {
     @Query("SELECT * FROM category_version WHERE deletedAt IS NULL ORDER BY validFrom")
     suspend fun categoryVersions(): List<CategoryVersionEntity>
 
+    /** То же наблюдением: мастер «Настроить зарплату» и «Профиль» (5.18, 5.16). */
+    @Query("SELECT * FROM category_version WHERE deletedAt IS NULL ORDER BY validFrom")
+    fun observeCategoryVersions(): Flow<List<CategoryVersionEntity>>
+
     @Upsert
     suspend fun upsertPaySchemeVersion(item: PaySchemeVersionEntity)
 
     /** Версии схемы выплат по дате начала. */
     @Query("SELECT * FROM pay_scheme_version WHERE deletedAt IS NULL ORDER BY validFrom")
     suspend fun paySchemeVersions(): List<PaySchemeVersionEntity>
+
+    @Query("SELECT * FROM pay_scheme_version WHERE deletedAt IS NULL ORDER BY validFrom")
+    fun observePaySchemeVersions(): Flow<List<PaySchemeVersionEntity>>
 }

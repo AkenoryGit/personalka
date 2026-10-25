@@ -71,6 +71,7 @@ import com.akenory.personalka.ui.components.ShadeDot
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
+import com.akenory.personalka.ui.salary.openFeatures
 import com.akenory.personalka.ui.setup.PlaceEditor
 import com.akenory.personalka.ui.setup.TypeEditor
 import com.akenory.personalka.ui.shell.ShellState
@@ -83,6 +84,7 @@ import com.akenory.personalka.ui.theme.dutyFill
 import com.akenory.personalka.ui.theme.shade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
 /** Экраны настроек в стопке раздела «Ещё». */
@@ -97,6 +99,8 @@ object SettingsRoute {
     const val CABINETS = "settings/cabinets"
     const val RATES = "settings/rates"
     const val TIERS = "settings/tiers"
+    const val CATEGORY = "settings/category"
+    const val SCHEME = "settings/scheme"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
     private const val PLACE = "place/"
@@ -174,7 +178,9 @@ fun SettingsScreen(
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
         route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
         route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close) }
-        route == SettingsRoute.PROFILE -> ProfileScreen(settings, scope, messages, close)
+        route == SettingsRoute.PROFILE -> ProfileScreen(settings, now.date, shell, scope, messages, close)
+        route == SettingsRoute.CATEGORY -> CategoryEditor(settings, now.date, messages, scope, close)
+        route == SettingsRoute.SCHEME -> SchemeEditor(settings, openFeatures(account, now.date), now.date, messages, scope, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
         route == SettingsRoute.NEW_PLACE -> PlaceEditor(
             title = "Новое место",
@@ -330,9 +336,12 @@ private fun SettingsHome(
     }
 }
 
-/** «Профиль»: ФИО тренера (5.16). Категория, схема выплат и аванс — с «Зарплатой» (этап 3). */
+/**
+ * «Профиль» (5.16): ФИО тренера с «Сохранить»; ниже — категория и схема выплат с датой, ожидаемый аванс
+ * (в схеме) и «Совместное ведение групп» (шаг 3.6б).
+ */
 @Composable
-private fun ProfileScreen(settings: SettingsRepository, scope: CoroutineScope, messages: MessageState, onBack: () -> Unit) {
+private fun ProfileScreen(settings: SettingsRepository, today: LocalDate, shell: ShellState, scope: CoroutineScope, messages: MessageState, onBack: () -> Unit) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
     val loaded = coach ?: return
     var last by rememberSaveable(loaded.id) { mutableStateOf(loaded.lastName) }
@@ -355,6 +364,8 @@ private fun ProfileScreen(settings: SettingsRepository, scope: CoroutineScope, m
                 style = MaterialTheme.typography.bodySmall,
                 color = PersonalkaTheme.colors.textMuted,
             )
+            Column { ProfileSalaryRows(settings, today, shell, scope) }
+            Spacer(Modifier.height(Dimens.space2))
         }
         BottomAction(
             text = "Сохранить",
