@@ -68,6 +68,10 @@ interface MoneyDao {
     @Query("SELECT * FROM month_adjustment WHERE month = :month AND deletedAt IS NULL ORDER BY createdAt, id")
     fun observeAdjustments(month: YearMonth): Flow<List<MonthAdjustmentEntity>>
 
+    /** Доплаты и удержания месяцев с [from] по [to] в порядке внесения — для вкладки «Год» (3.8б). */
+    @Query("SELECT * FROM month_adjustment WHERE month >= :from AND month <= :to AND deletedAt IS NULL ORDER BY createdAt, id")
+    fun observeAdjustmentsBetween(from: YearMonth, to: YearMonth): Flow<List<MonthAdjustmentEntity>>
+
     @Upsert
     suspend fun upsertSettlement(item: ColleagueSettlementEntity)
 
@@ -81,6 +85,10 @@ interface MoneyDao {
     /** Отметки «Рассчитались» месяца по возрастанию изменения: у коллеги с двумя записями решает последняя. */
     @Query("SELECT * FROM colleague_settlement WHERE month = :month AND deletedAt IS NULL ORDER BY updatedAt, id")
     fun observeSettlements(month: YearMonth): Flow<List<ColleagueSettlementEntity>>
+
+    /** Отметки «Рассчитались» месяцев с [from] по [to] по возрастанию изменения. */
+    @Query("SELECT * FROM colleague_settlement WHERE month >= :from AND month <= :to AND deletedAt IS NULL ORDER BY updatedAt, id")
+    fun observeSettlementsBetween(from: YearMonth, to: YearMonth): Flow<List<ColleagueSettlementEntity>>
 
     @Upsert
     suspend fun upsertArchivedMonth(item: ArchivedMonthEntity)

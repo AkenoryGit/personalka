@@ -90,6 +90,7 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -121,15 +122,17 @@ enum class SalaryTab(val title: String) {
     MONTH(SalaryFormat.TAB_MONTH),
     PAYOUTS(SalaryFormat.TAB_PAYOUTS),
     COLLEAGUES(SettlementFormat.TAB),
+    YEAR(SalaryFormat.TAB_YEAR),
 }
 
 /** Новая доплата в окне «+ Доплата» — вместо id записи. */
 private const val NEW_ADJUSTMENT = "new"
 
 /**
- * «Зарплата» (ТЗ 5.12): сверху месяц со стрелками и «Ставки и ступени», вкладки «Месяц», «Выплаты» и «Коллеги».
+ * «Зарплата» (ТЗ 5.12): сверху месяц со стрелками и «Ставки и ступени», вкладки «Месяц», «Выплаты», «Коллеги» и «Год».
  * «Месяц» — заработано, план и прогноз, ступень, разбивка, доплаты; «Выплаты» — начислено, налог, когда что придёт
- * и на руки; «Коллеги» — взаиморасчёт. Месяц, вкладка и прокрутка переживают сложение Fold. [shareText] —
+ * и на руки; «Коллеги» — взаиморасчёт; «Год» — итоги месяцев (сверху тогда год, стрелки листают годы). Месяц,
+ * вкладка и прокрутка переживают сложение Fold. [shareText] —
  * системное «Поделиться» текстом; нет его — текст расчёта копируется.
  */
 @Composable
@@ -157,25 +160,33 @@ internal fun SalaryMonthScreen(
     val monthScroll = rememberScrollState()
     val payoutScroll = rememberScrollState()
     val colleagueScroll = rememberScrollState()
+    val yearScroll = rememberScrollState()
     val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
     val tabs = SalaryTab.entries.filter { it != SalaryTab.COLLEAGUES || coCoaching }
     val shown = if (tab in tabs) tab else SalaryTab.MONTH
     val clipboard = LocalClipboardManager.current
     val repo = settings.months
     val data by remember(repo, month, today) { repo.month(month, today) }.collectAsState(initial = null)
+    val yearData by remember(repo, month.year, today, shown == SalaryTab.YEAR) {
+        if (shown == SalaryTab.YEAR) repo.year(month.year, today) else flowOf(null)
+    }.collectAsState(initial = null)
     val colors = PersonalkaTheme.colors
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
+            // На «Годе» стрелки листают годы: тот же месяц прошлого или следующего года.
+            val step = if (shown == SalaryTab.YEAR) 12 else 1
             MonthBar(
-                title = SalaryFormat.month(month),
-                onPrev = { monthText = month.firstDay.minus(1, DateTimeUnit.MONTH).yearMonth.toString() },
-                onNext = { monthText = month.firstDay.plus(1, DateTimeUnit.MONTH).yearMonth.toString() },
+                title = if (shown == SalaryTab.YEAR) month.year.toString() else SalaryFormat.month(month),
+                year = shown == SalaryTab.YEAR,
+                onPrev = { monthText = month.firstDay.minus(step, DateTimeUnit.MONTH).yearMonth.toString() },
+                onNext = { monthText = month.firstDay.plus(step, DateTimeUnit.MONTH).yearMonth.toString() },
                 onRates = onRates,
             )
             SalaryTabs(tabs, shown) { tab = it }
             val loaded = data?.takeIf { it.view.month == month }
-            if (loaded == null) {
+            val year = yearData?.takeIf { it.year == month.year }
+            if (loaded == null || (shown == SalaryTab.YEAR && year == null)) {
                 Spacer(Modifier.weight(1f))
                 return@Column
             }
@@ -183,6 +194,7 @@ internal fun SalaryMonthScreen(
                 SalaryTab.MONTH -> monthScroll
                 SalaryTab.PAYOUTS -> payoutScroll
                 SalaryTab.COLLEAGUES -> colleagueScroll
+                SalaryTab.YEAR -> yearScroll
             }
             Column(
                 Modifier
@@ -236,6 +248,10 @@ internal fun SalaryMonthScreen(
                             }
                         },
                     )
+                    SalaryTab.YEAR -> YearTab(year!!) { picked ->
+                        monthText = picked.toString()
+                        tab = SalaryTab.MONTH
+                    }
                 }
             }
         }
@@ -308,7 +324,7 @@ internal fun SalaryMonthScreen(
 }
 
 @Composable
-private fun MonthBar(title: String, onPrev: () -> Unit, onNext: () -> Unit, onRates: () -> Unit) {
+private fun MonthBar(title: String, year: Boolean, onPrev: () -> Unit, onNext: () -> Unit, onRates: () -> Unit) {
     val colors = PersonalkaTheme.colors
     Row(
         Modifier.fillMaxWidth().height(Dimens.topBar).padding(start = Dimens.space4, end = Dimens.space1),
@@ -322,10 +338,10 @@ private fun MonthBar(title: String, onPrev: () -> Unit, onNext: () -> Unit, onRa
             maxLines = 1,
         )
         IconButton(onClick = onPrev, modifier = Modifier.testTag(SALARY_PREV_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = "Прошлый месяц", tint = colors.text, modifier = Modifier.rotate(180f))
+            Icon(PIcons.ChevronRight, contentDescription = if (year) "Прошлый год" else "Прошлый месяц", tint = colors.text, modifier = Modifier.rotate(180f))
         }
         IconButton(onClick = onNext, modifier = Modifier.testTag(SALARY_NEXT_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = "Следующий месяц", tint = colors.text)
+            Icon(PIcons.ChevronRight, contentDescription = if (year) "Следующий год" else "Следующий месяц", tint = colors.text)
         }
         IconButton(onClick = onRates, modifier = Modifier.testTag(SALARY_RATES_TAG)) {
             Icon(PIcons.Tune, contentDescription = RateFormat.TITLE, tint = colors.text)

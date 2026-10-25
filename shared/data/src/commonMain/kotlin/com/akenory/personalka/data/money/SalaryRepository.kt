@@ -28,12 +28,15 @@ import com.akenory.personalka.domain.money.SalaryMonth
 import com.akenory.personalka.domain.money.SalaryDaysRules
 import com.akenory.personalka.domain.money.SalaryMonthRules
 import com.akenory.personalka.domain.money.SalaryPeriod
+import com.akenory.personalka.domain.money.SalaryYear
+import com.akenory.personalka.domain.money.SalaryYearRules
 import com.akenory.personalka.domain.money.SptCase
 import com.akenory.personalka.domain.money.TierScheme
 import com.akenory.personalka.domain.money.Versions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
@@ -108,9 +111,24 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
      * берутся и за два месяца до него: прогноз ждёт в группе столько детей, сколько было на 4 последних (4.12),
      * а доплата СПТ месяца покупки берёт тип и место самой СПТ (4.9) — окно СПТ месяц.
      */
-    fun month(month: YearMonth, today: LocalDate): Flow<SalaryMonthData> {
-        val from = month.firstDay.minus(HISTORY_MONTHS, DateTimeUnit.MONTH).atTime(LocalTime(0, 0))
-        val to = month.lastDay.plus(1, DateTimeUnit.DAY).atTime(LocalTime(0, 0))
+    fun month(month: YearMonth, today: LocalDate): Flow<SalaryMonthData> = months(listOf(month), today).map { it.single() }
+
+    /**
+     * Вкладка «Год» (5.12, 3.8б): месяцы года [year] до текущего, каждый — тем же расчётом, что вкладка «Месяц»
+     * (те же два месяца истории), поэтому октябрь в «Годе» и в «Месяце» совпадает до копейки.
+     */
+    fun year(year: Int, today: LocalDate): Flow<SalaryYear> {
+        val list = SalaryYearRules.months(year, today)
+        if (list.isEmpty()) return flowOf(SalaryYearRules.build(year, emptyList(), today))
+        return months(list, today).map { all -> SalaryYearRules.build(year, all.map { it.view }, today) }.flowOn(Dispatchers.Default)
+    }
+
+    /** Месяцы [list] (по возрастанию) одним чтением базы: тренировки — с двух месяцев до первого по конец последнего. */
+    private fun months(list: List<YearMonth>, today: LocalDate): Flow<List<SalaryMonthData>> {
+        val first = list.first()
+        val last = list.last()
+        val from = first.firstDay.minus(HISTORY_MONTHS, DateTimeUnit.MONTH).atTime(LocalTime(0, 0))
+        val to = last.lastDay.plus(1, DateTimeUnit.DAY).atTime(LocalTime(0, 0))
         val sources = combine(
             trainingDao.observeTrainingsBetween(from, to),
             trainingDao.observeParticipationsBetween(from, to),
@@ -124,7 +142,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
             coaches.observePaySchemeVersions(),
             money.observeColleagueSchemes(),
             trainingDao.observeSptCases(),
-            money.observeAdjustments(month),
+            if (first == last) money.observeAdjustments(first) else money.observeAdjustmentsBetween(first, last),
             money.observeMonthRecords(),
         ) { schemes, colleagueSchemes, spt, adjustments, records ->
             Money(
@@ -134,7 +152,8 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
             )
         }
         // Отметки «Рассчитались» (3.8): у коллеги с двумя записями (два телефона) — последняя изменённая.
-        val settled = money.observeSettlements(month).map { list -> list.associate { it.colleagueId to it.amount } }
+        val settled = (if (first == last) money.observeSettlements(first) else money.observeSettlementsBetween(first, last))
+            .map { all -> all.groupBy { it.month }.mapValues { (_, marks) -> marks.associate { it.colleagueId to it.amount } } }
         val names = combine(
             reference.observeLocations(),
             money.observeColleagues(),
@@ -148,7 +167,16 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
                 groups.associate { it.id to it.name },
             )
         }
-        return combine(sources, moneySources, names, settled) { s, m, n, marks -> build(month, today, s, m, n, marks) }.flowOn(Dispatchers.Default)
+        return combine(sources, moneySources, names, settled) { s, m, n, marks ->
+            val byTraining = s.participations.groupBy { it.trainingId }
+            list.map { month ->
+                // У каждого месяца — своё окно, как при чтении одного месяца: прогноз групп берёт 4 последние (4.12).
+                val start = month.firstDay.minus(HISTORY_MONTHS, DateTimeUnit.MONTH)
+                val own = if (first == last) s else s.copy(trainings = s.trainings.filter { it.start.date >= start && it.start.date <= month.lastDay })
+                val ownMoney = if (first == last) m else m.copy(adjustments = m.adjustments.filter { it.month == month })
+                build(month, today, own, ownMoney, n, marks[month].orEmpty(), byTraining)
+            }
+        }.flowOn(Dispatchers.Default)
     }
 
     /**
@@ -171,9 +199,9 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         m: Money,
         n: Names,
         settled: Map<String, Long>,
+        byTraining: Map<String, List<ParticipationEntity>>,
     ): SalaryMonthData {
         val places = n.places
-        val byTraining = s.participations.groupBy { it.trainingId }
         val trainings = s.trainings.map { it.pay(byTraining[it.id].orEmpty()) }
         val ptTypeId = RatesRepository.ptTypeId(s.types)
         val types = s.types.map { it.payType(ptTypeId) }

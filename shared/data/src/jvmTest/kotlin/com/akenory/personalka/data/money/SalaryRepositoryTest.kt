@@ -205,4 +205,35 @@ class SalaryRepositoryTest {
         months.settle(october, lena, null)
         assertNull(months.month(october, today).first().view.colleagues.single().settled, "Отметка снята")
     }
+
+    @Test
+    fun yearFromDatabase(): Unit = runBlocking {
+        setUp()
+        val september = YearMonth(2026, 9)
+        val coach = db.coachDao().currentCoach()!!.id
+        repeat(2) {
+            val id = "s$it"
+            db.trainingDao().upsertTraining(
+                TrainingEntity(id, SyncFields.new(coach, now), typeId("ПТ"), placeId("ББ"), LocalDateTime(2026, 9, 10, 9, 0), 50, status = TrainingStatus.DONE),
+            )
+            db.trainingDao().upsertParticipation(ParticipationEntity("p$id", SyncFields.new(coach, now), id, "client", ParticipationStatus.ATTENDED))
+        }
+        months.addAdjustment(september, rub(300), "Судейство", inClubAccrual = true)
+        months.addAdjustment(october, rub(1200), "Соревнования", inClubAccrual = true)
+        months.savePlan(september, rub(1_000))
+        val year = months.year(2026, today).first()
+        // Январь–август пустые — год начинается с сентября.
+        assertEquals(listOf(september, october), year.rows.map { it.month })
+        val sep = year.rows.first()
+        assertEquals(rub(2 * 920 + 300), sep.earned)
+        assertEquals(true, sep.planMet)
+        val oct = months.month(october, today).first().view
+        assertEquals(oct.pay.earned, year.rows.last().earned)
+        assertEquals(rub(3680 + 1200), year.rows.last().earned)
+        assertEquals(oct.totals.onHand, year.rows.last().onHand)
+        assertEquals(rub(2 * 920 + 300 + 3680 + 1200), year.earned)
+        assertEquals(6, year.ptCount)
+        assertEquals(1, year.planMonths)
+        assertTrue(months.year(2027, today).first().rows.isEmpty())
+    }
 }

@@ -236,4 +236,25 @@ class SalaryMonthUiTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(salaryTabTag(SalaryTab.COLLEAGUES))).fetchSemanticsNodes().isEmpty() }
         awaitNode(hasTestTag(SALARY_EARNED_TAG))
     }
+
+    @Test
+    fun yearAndBackToMonth() = runComposeUiTest {
+        start()
+        onNodeWithTag(salaryTabTag(SalaryTab.YEAR)).performClick()
+        awaitNode(hasTestTag(SALARY_YEAR_EARNED_TAG))
+        // Год — с октября (до него пусто), итог равен октябрю во вкладке «Месяц».
+        onNodeWithText("2026").assertExists()
+        onNodeWithTag(SALARY_YEAR_EARNED_TAG).assertTextContains(MoneyFormat.rub(rub(1840)))
+        onNodeWithText("октябрь ${SalaryFormat.MONTH_GOING}").assertExists()
+        onNodeWithTag(SALARY_YEAR_CHART_TAG).assertExists()
+        onNodeWithTag(salaryYearRowTag(YearMonth(2026, 9))).assertDoesNotExist()
+        // Прошлый год пуст.
+        onNodeWithTag(SALARY_PREV_TAG).performClick()
+        awaitNode(hasText(SalaryFormat.YEAR_EMPTY))
+        onNodeWithTag(SALARY_NEXT_TAG).performClick()
+        awaitNode(hasTestTag(salaryYearRowTag(october)))
+        onNodeWithTag(salaryYearRowTag(october)).performScrollTo().performClick()
+        awaitNode(hasTestTag(SALARY_EARNED_TAG))
+        onNodeWithText(SalaryFormat.month(october)).assertExists()
+    }
 }

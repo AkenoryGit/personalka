@@ -8,10 +8,12 @@ import com.akenory.personalka.domain.money.GroupCase
 import com.akenory.personalka.domain.money.MonthPeriod
 import com.akenory.personalka.domain.money.PayoutKind
 import com.akenory.personalka.domain.money.PeriodPart
+import com.akenory.personalka.domain.money.SalaryYear
 import com.akenory.personalka.domain.money.Shortfall
 import com.akenory.personalka.domain.money.SplitMark
 import com.akenory.personalka.domain.money.TierBeyond
 import com.akenory.personalka.domain.money.TierProgress
+import com.akenory.personalka.domain.money.YearMonthRow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.YearMonth
@@ -360,6 +362,56 @@ object SalaryFormat {
         val days = to.toEpochDays() - from.toEpochDays() + 1
         return "${DateFormat.full(from)} ${RuText.DASH} ${DateFormat.full(to)}$DOT${RuText.count(days, "день", "дня", "дней")}"
     }
+
+    // --- Год (шаг 3.8б) ---
+
+    const val TAB_YEAR = "Год"
+    const val YEAR_ON_HAND = "на руки"
+    const val YEAR_TAX = "налог"
+    const val YEAR_PT = "ПТ"
+    const val YEAR_PLAN = "план"
+    const val MONTH_GOING = "идёт"
+    const val YEAR_EMPTY = "В этом году заработка ещё нет. Месяцы появятся здесь, как только будут проведённые тренировки."
+
+    /** «Заработано за 2026». */
+    fun yearTitle(year: Int): String = "Заработано за $year"
+
+    /** «план выполнен в 5 из 8 месяцев · октябрь идёт»; без плана — только «октябрь идёт». */
+    fun yearPlan(y: SalaryYear): String? = buildList {
+        if (y.planMonths > 0) {
+            val months = if (y.planMonths % 10 == 1 && y.planMonths % 100 != 11) "месяца" else "месяцев"
+            add("план выполнен в ${y.planMetMonths} из ${y.planMonths} $months")
+        }
+        if (y.current != null && y.rows.any { it.month == y.current }) add("${DateFormat.month(y.current.firstDay)} $MONTH_GOING")
+    }.takeIf { it.isNotEmpty() }?.joinToString(DOT)
+
+    /** Подпись столбца: «янв», «май». */
+    fun monthShort(month: YearMonth): String = DateFormat.month(month.firstDay).take(3)
+
+    /** Название месяца в списке: «Октябрь». */
+    fun monthName(month: YearMonth): String = DateFormat.month(month.firstDay).replaceFirstChar { it.uppercaseChar() }
+
+    /** Под месяцем года: «ПТ 94 · детей 125 · дежурств 24 ч · налог 8 170,50 ₽ · на руки 118 413,08 ₽»; нули не пишутся. */
+    fun yearRow(row: YearMonthRow): String = buildList {
+        if (row.ptCount > 0) add("ПТ ${RuText.digits(row.ptCount.toLong())}")
+        if (row.groupChildren > 0) add("детей ${RuText.digits(row.groupChildren.toLong())}")
+        if (row.dutyMinutes > 0) add("дежурств ${hours(row.dutyMinutes)}")
+        if (row.ndfl != 0L) add("налог ${MoneyFormat.rub(row.ndfl)}")
+        add("на руки ${MoneyFormat.rub(row.onHand)}")
+    }.joinToString(DOT)
+
+    /** Итог года одной строкой для TalkBack и подписи: «ПТ 1 111 · детей 640 · дежурств 120 ч». */
+    fun yearCounts(y: SalaryYear): String? = buildList {
+        if (y.groupChildren > 0) add("детей в группах ${RuText.digits(y.groupChildren.toLong())}")
+        if (y.dutyMinutes > 0) add("дежурств ${hours(y.dutyMinutes)}")
+    }.takeIf { it.isNotEmpty() }?.joinToString(DOT)
+
+    /** Для TalkBack: «Октябрь: заработано 126 645 ₽, прогноз ≈ 203 490 ₽, план 210 000 ₽». */
+    fun yearBarDescription(row: YearMonthRow): String = buildList {
+        add("заработано ${MoneyFormat.rub(row.earned)}")
+        row.forecast?.let { add("прогноз ${MoneyFormat.approxRub(it)}") }
+        row.plan?.let { add("план ${MoneyFormat.rub(it)}") }
+    }.joinToString(", ", prefix = "${monthName(row.month)}: ")
 
     /** «13 %», «50 %», «6,5 %» — из десятитысячных. */
     private fun percentBp(bp: Int): String {
