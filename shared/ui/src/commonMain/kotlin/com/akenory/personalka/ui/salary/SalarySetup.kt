@@ -57,6 +57,8 @@ import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.SwitchRow
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.TopBar
+import com.akenory.personalka.ui.training.DatePickerPanel
+import com.akenory.personalka.ui.training.PickBox
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.training.ErrorText
@@ -64,8 +66,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import kotlinx.datetime.yearMonth
 
 internal const val SETUP_ADVANCE_TAG = "salary-setup-advance"
+internal const val SETUP_SCHEME_FROM_TAG = "salary-setup-scheme-from"
 internal const val SALARY_RATES_TAG = "salary-rates"
 internal const val SETUP_T2_TAG = "salary-setup-t2"
 internal const val SETUP_T3_TAG = "salary-setup-t3"
@@ -77,7 +82,7 @@ internal fun setupAsPtTag(name: String) = "setup-as-pt-$name"
 /** Ступени 1–3 одной ставки в полях мастера. */
 private const val TIERS = 3
 
-/** Возможности аккаунта, открытые сегодня: «Половина официально» видна только с ней (1.5, 4.11). */
+/** Возможности аккаунта, открытые сегодня: «Официально с налогом 6,5 %» видна только с ней (1.5, 4.11). */
 @Composable
 internal fun openFeatures(account: AccountRepository?, today: LocalDate): Set<Feature> {
     val signedIn by remember(account) { account?.account ?: flowOf(null) }.collectAsState(initial = null)
@@ -111,7 +116,8 @@ fun SalaryScreen(
 }
 
 /**
- * Мастер «Настроить зарплату» (ТЗ 5.18): категория → схема выплат → ставки из сетки клуба с проверкой → ступени.
+ * Мастер «Настроить зарплату» (ТЗ 5.18): категория → схема выплат (только с открытой «налог 6,5 %») → ставки из
+ * сетки клуба с проверкой → ступени.
  * До «Готово» в базу ничего не пишется; выбранное переживает сложение Fold и выгрузку из памяти.
  */
 @Composable
@@ -133,6 +139,8 @@ private fun SalarySetupWizard(
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var scheme by rememberSaveable { mutableStateOf<String?>(null) }
     var advance by rememberSaveable { mutableStateOf("") }
+    var schemeFrom by rememberSaveable { mutableStateOf(YearMonth(today.year, 1).toString()) }
+    var pickingMonth by rememberSaveable { mutableStateOf(false) }
     // Поля ставок заполняются по категории; смена категории заполняет их заново.
     var fieldsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var fields by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -145,8 +153,12 @@ private fun SalarySetupWizard(
     var asPt by rememberSaveable { mutableStateOf(initialTiers.ptTypeIds.toList()) }
 
     val schemes = SalarySetupRules.schemes(open)
+    // Шаг схемы — только с открытой «налог 6,5 %»: шаги — по номерам 1–4, без выбора схемы второго нет.
+    val pages = listOfNotNull(1, 2.takeIf { SalarySetupRules.schemeStep(open) }, 3, 4)
+    val page = if (step in pages) step else pages.first { it > step }
     val picked = category?.let { CoachCategory.valueOf(it) }
-    val pickedScheme = scheme?.let { PaySchemeKind.valueOf(it) }?.takeIf { it in schemes }
+    val pickedScheme = scheme?.let { PaySchemeKind.valueOf(it) }?.takeIf { it in schemes } ?: PaySchemeKind.NONE
+    val fromMonth = YearMonth.parse(schemeFrom)
     val ptId = RatesRepository.ptTypeId(types)
     // Типы, которые знает сетка клуба: ПТ, сплит, грудничковое.
     val gridTypes = types.mapNotNull { t -> ClubRateGrid.service(t.id, t.name, t.kind == TrainingKind.SPLIT, ptId)?.let { t to it } }
@@ -191,152 +203,162 @@ private fun SalarySetupWizard(
         services[type.id] = fromGrid
     }
 
-    Column(Modifier.fillMaxSize()) {
-        TopBar(SalarySetupFormat.SETUP, onBack = if (step > 1) ({ step -= 1 }) else null)
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
-            when (step) {
-                1 -> {
-                    StepTitle(1, SalarySetupFormat.CATEGORY_TITLE, SalarySetupFormat.CATEGORY_TEXT)
-                    ListCard {
-                        SalarySetupRules.CATEGORIES.forEachIndexed { i, c ->
-                            if (i > 0) RowDivider()
-                            CheckRow(
-                                title = SalarySetupFormat.category(c),
-                                checked = picked == c,
-                                onToggle = { category = c.name },
-                                modifier = Modifier.padding(horizontal = Dimens.space4).testTag(categoryTag(c)),
-                            )
+    fun number(p: Int) = pages.indexOf(p) + 1
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            TopBar(SalarySetupFormat.SETUP, onBack = if (page > 1) ({ step = pages.last { it < page } }) else null)
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
+                when (page) {
+                    1 -> {
+                        StepTitle(number(1), pages.size, SalarySetupFormat.CATEGORY_TITLE, SalarySetupFormat.CATEGORY_TEXT)
+                        ListCard {
+                            SalarySetupRules.CATEGORIES.forEachIndexed { i, c ->
+                                if (i > 0) RowDivider()
+                                CheckRow(
+                                    title = SalarySetupFormat.category(c),
+                                    checked = picked == c,
+                                    onToggle = { category = c.name },
+                                    modifier = Modifier.padding(horizontal = Dimens.space4).testTag(categoryTag(c)),
+                                )
+                            }
                         }
                     }
-                }
-                2 -> {
-                    StepTitle(2, SalarySetupFormat.SCHEME_TITLE, SalarySetupFormat.SCHEME_TEXT)
-                    ListCard {
-                        schemes.forEachIndexed { i, k ->
-                            if (i > 0) RowDivider()
-                            CheckRow(
-                                title = SalarySetupFormat.scheme(k),
-                                subtitle = SalarySetupFormat.schemeNote(k),
-                                checked = pickedScheme == k,
-                                onToggle = { scheme = k.name },
-                                modifier = Modifier.padding(horizontal = Dimens.space4).testTag(schemeTag(k)),
+                    2 -> {
+                        StepTitle(number(2), pages.size, SalarySetupFormat.SCHEME_TITLE, SalarySetupFormat.SCHEME_TEXT)
+                        ListCard {
+                            schemes.forEachIndexed { i, k ->
+                                if (i > 0) RowDivider()
+                                CheckRow(
+                                    title = SalarySetupFormat.scheme(k),
+                                    subtitle = SalarySetupFormat.schemeNote(k),
+                                    checked = pickedScheme == k,
+                                    onToggle = { scheme = k.name },
+                                    modifier = Modifier.padding(horizontal = Dimens.space4).testTag(schemeTag(k)),
+                                )
+                            }
+                        }
+                        if (SalarySetupRules.hasAdvance(pickedScheme)) {
+                            Spacer(Modifier.height(Dimens.space4))
+                            Field(
+                                SalarySetupFormat.ADVANCE,
+                                advance,
+                                { advance = it },
+                                error = advanceProblem,
+                                hint = SalarySetupFormat.ADVANCE_NOTE,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                                tag = SETUP_ADVANCE_TAG,
+                                placeholder = "Необязательно",
                             )
                         }
+                        if (pickedScheme != PaySchemeKind.NONE) {
+                            SectionLabel(SalarySetupFormat.FROM_MONTH)
+                            PickBox(RateFormat.month(fromMonth.firstDay), PIcons.CalendarMonth, { pickingMonth = true }, Modifier.fillMaxWidth().testTag(SETUP_SCHEME_FROM_TAG))
+                            Hint(SalarySetupFormat.SCHEME_FROM_NOTE)
+                        }
                     }
-                    if (pickedScheme != null && SalarySetupRules.hasAdvance(pickedScheme)) {
-                        Spacer(Modifier.height(Dimens.space4))
-                        Field(
-                            SalarySetupFormat.ADVANCE,
-                            advance,
-                            { advance = it },
-                            error = advanceProblem,
-                            hint = SalarySetupFormat.ADVANCE_NOTE,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-                            tag = SETUP_ADVANCE_TAG,
-                            placeholder = "Необязательно",
-                        )
-                    }
-                }
-                3 -> {
-                    val anyGrid = gridTypes.indices.any { ti -> places.indices.any { pi -> gridAt(ti, pi) != null } }
-                    StepTitle(3, SalarySetupFormat.RATES_TITLE, if (anyGrid) SalarySetupFormat.GRID_TEXT else SalarySetupFormat.NO_GRID_TEXT)
-                    gridTypes.forEachIndexed { ti, (type, _) ->
-                        places.forEachIndexed { pi, place ->
-                            SectionLabel("${type.name} · ${place.shortName}")
-                            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                                listOf(RateFormat.TIER_1, RateFormat.TIER_2, RateFormat.TIER_3).forEachIndexed { tier, label ->
-                                    val i = index(ti, pi, tier)
-                                    Field(
-                                        label,
-                                        text(i),
-                                        { value -> if (i < fields.size) fields = fields.toMutableList().also { it[i] = value } },
-                                        Modifier.weight(1f),
-                                        error = if (i in rateProblems) "" else null,
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
-                                        tag = setupRateTag(type.shortName, place.shortName, tier),
-                                    )
+                    3 -> {
+                        val anyGrid = gridTypes.indices.any { ti -> places.indices.any { pi -> gridAt(ti, pi) != null } }
+                        StepTitle(number(3), pages.size, SalarySetupFormat.RATES_TITLE, if (anyGrid) SalarySetupFormat.GRID_TEXT else SalarySetupFormat.NO_GRID_TEXT)
+                        gridTypes.forEachIndexed { ti, (type, _) ->
+                            places.forEachIndexed { pi, place ->
+                                SectionLabel("${type.name} · ${place.shortName}")
+                                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                                    listOf(RateFormat.TIER_1, RateFormat.TIER_2, RateFormat.TIER_3).forEachIndexed { tier, label ->
+                                        val i = index(ti, pi, tier)
+                                        Field(
+                                            label,
+                                            text(i),
+                                            { value -> if (i < fields.size) fields = fields.toMutableList().also { it[i] = value } },
+                                            Modifier.weight(1f),
+                                            error = if (i in rateProblems) "" else null,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                                            tag = setupRateTag(type.shortName, place.shortName, tier),
+                                        )
+                                    }
+                                }
+                                if (index(ti, pi, 0) in rateProblems && RateRules.money(text(index(ti, pi, 0))) == null && RateRules.moneyProblem(text(index(ti, pi, 0))) == null) {
+                                    ErrorText("Впишите ступень 1")
+                                } else if ((0 until TIERS).any { index(ti, pi, it) in rateProblems }) {
+                                    ErrorText("Сумма — числом: 920 или 13 546,50")
                                 }
                             }
-                            if (index(ti, pi, 0) in rateProblems && RateRules.money(text(index(ti, pi, 0))) == null && RateRules.moneyProblem(text(index(ti, pi, 0))) == null) {
-                                ErrorText("Впишите ступень 1")
-                            } else if ((0 until TIERS).any { index(ti, pi, it) in rateProblems }) {
-                                ErrorText("Сумма — числом: 920 или 13 546,50")
+                        }
+                        Hint(SalarySetupFormat.OTHER_RATES)
+                    }
+                    else -> {
+                        StepTitle(number(4), pages.size, SalarySetupFormat.TIERS_TITLE, SalarySetupFormat.TIERS_TEXT)
+                        SwitchRow(RateFormat.TIERS_ON, tiersOn, { tiersOn = it }, subtitle = if (tiersOn) null else RateFormat.TIERS_ON_NOTE)
+                        if (tiersOn) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                                val number = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
+                                Field(RateFormat.T2_FROM, t2, { t2 = it }, Modifier.weight(1f), error = if (t2From == null) "" else null, keyboardOptions = number, tag = SETUP_T2_TAG)
+                                Field(RateFormat.T3_FROM, t3, { t3 = it }, Modifier.weight(1f), error = if (tierProblem != null && t2From != null) "" else null, keyboardOptions = number, tag = SETUP_T3_TAG)
+                            }
+                            tierProblem?.let { ErrorText(it) }
+                        }
+                        SectionLabel(RateFormat.AS_PT)
+                        ListCard {
+                            types.filter { it.kind != TrainingKind.DUTY }.forEachIndexed { i, type ->
+                                if (i > 0) RowDivider()
+                                CheckRow(
+                                    title = type.name,
+                                    checked = type.id in asPt,
+                                    onToggle = { on -> asPt = if (on) asPt + type.id else asPt - type.id },
+                                    modifier = Modifier.padding(horizontal = Dimens.space4).testTag(setupAsPtTag(type.name)),
+                                )
                             }
                         }
+                        Hint(RateFormat.AS_PT_NOTE)
                     }
-                    Hint(SalarySetupFormat.OTHER_RATES)
                 }
-                else -> {
-                    StepTitle(4, SalarySetupFormat.TIERS_TITLE, SalarySetupFormat.TIERS_TEXT)
-                    SwitchRow(RateFormat.TIERS_ON, tiersOn, { tiersOn = it }, subtitle = if (tiersOn) null else RateFormat.TIERS_ON_NOTE)
-                    if (tiersOn) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                            val number = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
-                            Field(RateFormat.T2_FROM, t2, { t2 = it }, Modifier.weight(1f), error = if (t2From == null) "" else null, keyboardOptions = number, tag = SETUP_T2_TAG)
-                            Field(RateFormat.T3_FROM, t3, { t3 = it }, Modifier.weight(1f), error = if (tierProblem != null && t2From != null) "" else null, keyboardOptions = number, tag = SETUP_T3_TAG)
-                        }
-                        tierProblem?.let { ErrorText(it) }
-                    }
-                    SectionLabel(RateFormat.AS_PT)
-                    ListCard {
-                        types.filter { it.kind != TrainingKind.DUTY }.forEachIndexed { i, type ->
-                            if (i > 0) RowDivider()
-                            CheckRow(
-                                title = type.name,
-                                checked = type.id in asPt,
-                                onToggle = { on -> asPt = if (on) asPt + type.id else asPt - type.id },
-                                modifier = Modifier.padding(horizontal = Dimens.space4).testTag(setupAsPtTag(type.name)),
-                            )
-                        }
-                    }
-                    Hint(RateFormat.AS_PT_NOTE)
-                }
+                Spacer(Modifier.height(Dimens.space6))
             }
-            Spacer(Modifier.height(Dimens.space6))
-        }
-        val enabled = when (step) {
-            1 -> picked != null
-            2 -> pickedScheme != null && (!SalarySetupRules.hasAdvance(pickedScheme) || advanceProblem == null)
-            3 -> rateProblems.isEmpty()
-            else -> tierProblem == null
-        }
-        BottomAction(
-            text = if (step < SalarySetupFormat.STEPS) SalarySetupFormat.NEXT else SalarySetupFormat.DONE,
-            enabled = enabled,
-            onClick = {
-                when {
-                    step == 1 -> {
-                        val c = picked ?: return@BottomAction
-                        if (fieldsFor != c.name) {
-                            fields = fill(c)
-                            fieldsFor = c.name
+            val enabled = when (page) {
+                1 -> picked != null
+                2 -> !SalarySetupRules.hasAdvance(pickedScheme) || advanceProblem == null
+                3 -> rateProblems.isEmpty()
+                else -> tierProblem == null
+            }
+            BottomAction(
+                text = if (page < pages.last()) SalarySetupFormat.NEXT else SalarySetupFormat.DONE,
+                enabled = enabled,
+                onClick = {
+                    when {
+                        page == 1 -> {
+                            val c = picked ?: return@BottomAction
+                            if (fieldsFor != c.name) {
+                                fields = fill(c)
+                                fieldsFor = c.name
+                            }
+                            step = pages[1]
                         }
-                        step = 2
+                        page < pages.last() -> step = pages.first { it > page }
+                        else -> {
+                            val draft = SalarySetupDraft(
+                                category = picked ?: return@BottomAction,
+                                scheme = pickedScheme,
+                                advance = advanceValue,
+                                schemeFrom = fromMonth,
+                                rates = entered,
+                                services = services,
+                                tiers = TierDraft(tiersOn, t2From ?: initialTiers.t2From, t3From ?: initialTiers.t3From, asPt.toSet()),
+                            )
+                            scope.launch { settings.salary.finish(draft, today) }
+                            messages.show(SalarySetupFormat.SAVED)
+                        }
                     }
-                    step < SalarySetupFormat.STEPS -> step += 1
-                    else -> {
-                        val draft = SalarySetupDraft(
-                            category = picked ?: return@BottomAction,
-                            scheme = pickedScheme ?: return@BottomAction,
-                            advance = advanceValue,
-                            rates = entered,
-                            services = services,
-                            tiers = TierDraft(tiersOn, t2From ?: initialTiers.t2From, t3From ?: initialTiers.t3From, asPt.toSet()),
-                        )
-                        scope.launch { settings.salary.finish(draft, today) }
-                        messages.show(SalarySetupFormat.SAVED)
-                    }
-                }
-            },
-        )
+                },
+            )
+        }
+        if (pickingMonth) DatePickerPanel(fromMonth.firstDay, { pickingMonth = false; schemeFrom = it.yearMonth.toString() }, { pickingMonth = false })
     }
 }
 
 @Composable
-private fun StepTitle(step: Int, title: String, text: String) {
+private fun StepTitle(step: Int, of: Int, title: String, text: String) {
     val colors = PersonalkaTheme.colors
     Spacer(Modifier.height(Dimens.space2))
-    Text(SalarySetupFormat.step(step), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+    Text(SalarySetupFormat.step(step, of), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
     Spacer(Modifier.height(Dimens.space2))
     Text(title, modifier = Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall, color = colors.text)
     Spacer(Modifier.height(Dimens.space2))

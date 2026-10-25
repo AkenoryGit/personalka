@@ -58,6 +58,7 @@ class SalaryMonthUiTest {
                 category = CoachCategory.MASTER,
                 scheme = PaySchemeKind.FULL_OFFICIAL,
                 advance = rub(10_000),
+                schemeFrom = YearMonth(2026, 1),
                 rates = mapOf(pt to mapOf(bb to RateAmounts(rub(920), rub(960), rub(1000)))),
                 services = emptyMap(),
                 tiers = TierDraft(true, 101, 151, setOf(pt)),

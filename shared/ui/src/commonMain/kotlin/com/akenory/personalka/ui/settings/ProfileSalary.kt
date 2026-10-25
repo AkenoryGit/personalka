@@ -62,10 +62,11 @@ internal fun profileSchemeTag(k: PaySchemeKind) = "profile-scheme-${k.name}"
 
 /**
  * Зарплатная часть «Профиля» (ТЗ 5.16): категория и схема выплат на сегодня строками (нажатие — форма с датой),
- * выключатель «Совместное ведение групп» — пишется сразу.
+ * выключатель «Совместное ведение групп» — пишется сразу. Схема — только когда есть из чего выбирать или действует
+ * не «Вся сумма» (4.11).
  */
 @Composable
-internal fun ProfileSalaryRows(settings: SettingsRepository, today: LocalDate, shell: ShellState, scope: CoroutineScope) {
+internal fun ProfileSalaryRows(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, scope: CoroutineScope) {
     val categories by remember(settings) { settings.salary.categories }.collectAsState(initial = emptyList())
     val schemes by remember(settings) { settings.salary.schemes }.collectAsState(initial = emptyList())
     val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
@@ -79,13 +80,15 @@ internal fun ProfileSalaryRows(settings: SettingsRepository, today: LocalDate, s
             onClick = { shell.open(SettingsRoute.CATEGORY) },
             modifier = Modifier.testTag(CATEGORY_ROW_TAG),
         )
-        RowDivider()
-        NavRow(
-            title = SalarySetupFormat.SCHEME,
-            subtitle = scheme?.let { SalarySetupFormat.schemeRow(it.kind, it.advanceDefault, it.validFrom) } ?: SalarySetupFormat.NOT_SET,
-            onClick = { shell.open(SettingsRoute.SCHEME) },
-            modifier = Modifier.testTag(SCHEME_ROW_TAG),
-        )
+        if (SalarySetupRules.schemeRow(open, scheme?.kind)) {
+            RowDivider()
+            NavRow(
+                title = SalarySetupFormat.SCHEME,
+                subtitle = scheme?.let { SalarySetupFormat.schemeRow(it.kind, it.advanceDefault, it.validFrom) } ?: SalarySetupFormat.NOT_SET,
+                onClick = { shell.open(SettingsRoute.SCHEME) },
+                modifier = Modifier.testTag(SCHEME_ROW_TAG),
+            )
+        }
         RowDivider()
         SwitchRow(
             SalarySetupFormat.CO_COACHING,
@@ -146,8 +149,9 @@ internal fun CategoryEditor(settings: SettingsRepository, today: LocalDate, mess
 }
 
 /**
- * Схема выплат с месяца (ТЗ 4.11): «Половина официально» — только если открыта у аккаунта; ожидаемый аванс — у схемы
- * с официальной частью. Версия того же месяца правится.
+ * Схема выплат с месяца (ТЗ 4.11): «Вся сумма, без аванса» у всех, «Официально с налогом 6,5 %» — только если
+ * открыта у аккаунта; ожидаемый аванс — у схемы с официальной частью. Месяц — переход на новую схему; версия того же
+ * месяца правится.
  */
 @Composable
 internal fun SchemeEditor(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, messages: MessageState, scope: CoroutineScope, onBack: () -> Unit) {

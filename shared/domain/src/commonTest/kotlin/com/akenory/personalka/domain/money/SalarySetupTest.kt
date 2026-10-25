@@ -21,13 +21,41 @@ class SalarySetupTest {
 
     @Test
     fun halfOfficialOnlyWhenOpen() {
-        assertEquals(
-            listOf(PaySchemeKind.FULL_OFFICIAL, PaySchemeKind.IP, PaySchemeKind.NONE),
-            SalarySetupRules.schemes(emptySet()),
-        )
-        assertEquals(PaySchemeKind.HALF_OFFICIAL, SalarySetupRules.schemes(setOf(Feature.HALF_OFFICIAL)).first())
-        // «Кабинеты» «Половину официально» не открывают.
+        // У всех — только «Вся сумма, без аванса»: шага схемы в мастере нет, строки в «Профиле» тоже.
+        assertEquals(listOf(PaySchemeKind.NONE), SalarySetupRules.schemes(emptySet()))
+        assertFalse(SalarySetupRules.schemeStep(emptySet()))
+        assertFalse(SalarySetupRules.schemeRow(emptySet(), PaySchemeKind.NONE))
+        assertFalse(SalarySetupRules.schemeRow(emptySet(), null))
+        // Открыта «налог 6,5 %» — выбор из двух.
+        val open = setOf(Feature.HALF_OFFICIAL)
+        assertEquals(listOf(PaySchemeKind.NONE, PaySchemeKind.HALF_OFFICIAL), SalarySetupRules.schemes(open))
+        assertTrue(SalarySetupRules.schemeStep(open))
+        assertTrue(SalarySetupRules.schemeRow(open, PaySchemeKind.NONE))
+        // Срок кончился или стоит старая схема — строка видна, чтобы сменить её на «Вся сумма».
+        assertTrue(SalarySetupRules.schemeRow(emptySet(), PaySchemeKind.HALF_OFFICIAL))
+        assertTrue(SalarySetupRules.schemeRow(emptySet(), PaySchemeKind.IP))
+        assertFalse(SalarySetupRules.selectable(PaySchemeKind.FULL_OFFICIAL, open))
+        assertFalse(SalarySetupRules.selectable(PaySchemeKind.IP, open))
+        // «Кабинеты» «налог 6,5 %» не открывают.
         assertFalse(SalarySetupRules.selectable(PaySchemeKind.HALF_OFFICIAL, setOf(Feature.CABINETS)))
+    }
+
+    @Test
+    fun wizardSchemeFromMonth() {
+        val jan = d(1, 1)
+        // Переход с марта (схема Дмитрия, ТЗ 3.2): январь–февраль — вся сумма, с марта — налог 6,5 % с авансом.
+        val march = SalarySetupRules.wizardSchemes(jan, PaySchemeKind.HALF_OFFICIAL, 1_354_650, YearMonth(2026, 3))
+        assertEquals(listOf(YearMonth(2026, 1), YearMonth(2026, 3)), march.map { it.first })
+        assertEquals(PaySchemeKind.NONE, march[0].second.kind)
+        assertEquals(jan, march[0].second.validFrom)
+        assertEquals(d(3, 1), march[1].second.validFrom)
+        assertEquals(1_354_650, march[1].second.advanceDefault)
+        // С января — одна версия.
+        assertEquals(listOf(YearMonth(2026, 1)), SalarySetupRules.wizardSchemes(jan, PaySchemeKind.HALF_OFFICIAL, null, YearMonth(2026, 1)).map { it.first })
+        // «Вся сумма» — всегда одна версия с января, месяц не важен.
+        val none = SalarySetupRules.wizardSchemes(jan, PaySchemeKind.NONE, null, YearMonth(2026, 5)).single()
+        assertEquals(YearMonth(2026, 1), none.first)
+        assertEquals(jan, none.second.validFrom)
     }
 
     @Test
@@ -98,6 +126,8 @@ class SalarySetupTest {
             SalarySetupFormat.schemeRow(PaySchemeKind.FULL_OFFICIAL, 1_354_650, d(10, 1)),
         )
         assertEquals(s("ИП · с_01.01.2026"), SalarySetupFormat.schemeRow(PaySchemeKind.IP, null, d(1, 1)))
-        assertEquals("Шаг 2 из 4", SalarySetupFormat.step(2))
+        assertEquals("Шаг 2 из 4", SalarySetupFormat.step(2, 4))
+        assertEquals(s("Официально с налогом 6,5_%"), SalarySetupFormat.scheme(PaySchemeKind.HALF_OFFICIAL))
+        assertEquals("Вся сумма, без аванса", SalarySetupFormat.scheme(PaySchemeKind.NONE))
     }
 }

@@ -90,6 +90,8 @@ data class SalarySetupDraft(
     val scheme: PaySchemeKind,
     /** Ожидаемый аванс, копейки; только у схемы с официальной частью. */
     val advance: Long?,
+    /** С какого месяца действует [scheme]; до него — «Вся сумма, без аванса» (4.11). */
+    val schemeFrom: YearMonth,
     /** Ставки по типу и месту (тип → место → суммы); пустые поля не пишутся. */
     val rates: Map<String, Map<String, RateAmounts>>,
     /** Услуга сетки по типу и месту, если сумма взята из сетки без правки (`club_service`, 3.3). */
@@ -108,16 +110,37 @@ object SalarySetupRules {
     fun needed(categories: List<CategoryVersion>): Boolean = categories.isEmpty()
 
     /**
-     * Схемы в выборе: «Половина официально» — только если возможность открыта у аккаунта на сегодня (1.5, 4.11);
-     * у тренера без аккаунта её нет.
+     * Схемы в выборе (решение Дмитрия 25.10.2026, 4.11): у всех — «Вся сумма, без аванса» (`NONE`); «Официально
+     * с налогом 6,5 %» (`HALF_OFFICIAL`) — только если возможность открыта у аккаунта на сегодня (1.5). «Полностью
+     * официально» и «ИП» новой версией не выбираются: прежние версии с ними считаются как раньше.
      */
     fun schemes(open: Set<Feature>): List<PaySchemeKind> =
-        listOfNotNull(
-            PaySchemeKind.HALF_OFFICIAL.takeIf { Feature.HALF_OFFICIAL in open },
-            PaySchemeKind.FULL_OFFICIAL,
-            PaySchemeKind.IP,
-            PaySchemeKind.NONE,
-        )
+        listOfNotNull(PaySchemeKind.NONE, PaySchemeKind.HALF_OFFICIAL.takeIf { Feature.HALF_OFFICIAL in open })
+
+    /** Шаг «Схема выплат» в мастере — только когда есть из чего выбирать (10.7); иначе схема — `NONE`. */
+    fun schemeStep(open: Set<Feature>): Boolean = schemes(open).size > 1
+
+    /**
+     * Строка схемы в «Профиле»: видна, когда есть из чего выбирать или действует не `NONE` (старая схема или
+     * «налог 6,5 %» с кончившимся сроком — её можно сменить на «Вся сумма»).
+     */
+    fun schemeRow(open: Set<Feature>, current: PaySchemeKind?): Boolean =
+        schemeStep(open) || (current != null && current != PaySchemeKind.NONE)
+
+    /**
+     * Версии схемы, которые пишет «Готово» мастера: схема [kind] с месяца [from]; если он позже месяца [start],
+     * с [start] до него — «Вся сумма, без аванса»: так задаётся переход на новую систему оплаты. «Вся сумма» —
+     * всегда с [start].
+     */
+    fun wizardSchemes(start: LocalDate, kind: PaySchemeKind, advance: Long?, from: YearMonth): List<Pair<YearMonth, PayScheme>> {
+        val first = YearMonth(start.year, start.month)
+        val none = first to scheme(start, PaySchemeKind.NONE, null)
+        return when {
+            kind == PaySchemeKind.NONE -> listOf(none)
+            from > first -> listOf(none, from to scheme(from.firstDay, kind, advance))
+            else -> listOf(from to scheme(from.firstDay, kind, advance))
+        }
+    }
 
     /** У схемы есть официальная часть — значит, аванс 25-го и поле «Ожидаемый аванс». */
     fun hasAdvance(kind: PaySchemeKind): Boolean = Versions.officialShareBp(kind) > 0
@@ -166,7 +189,7 @@ object SalarySetupRules {
     fun schemeFrom(month: YearMonth): LocalDate = month.firstDay
 
     /**
-     * Схему [kind] можно выбрать в «Профиле»: из списка [schemes]. Действующая «Половина официально» с кончившимся
+     * Схему [kind] можно выбрать в «Профиле»: из списка [schemes]. Действующая «налог 6,5 %» с кончившимся
      * сроком остаётся в прошлых месяцах (4.11), но новой версией её не выбрать.
      */
     fun selectable(kind: PaySchemeKind, open: Set<Feature>): Boolean = kind in schemes(open)

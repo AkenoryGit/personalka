@@ -129,7 +129,7 @@ class AccountUiTest {
 
         onNodeWithTag(ACCOUNT_PASSWORD_TAG).performTextReplacement("длинный-пароль")
         onNodeWithTag(ACCOUNT_SUBMIT_TAG).performClick()
-        awaitNode(hasText("Открыто: Половина официально, Кабинеты родителей, Копия на сервере"))
+        awaitNode(hasText("Открыто: Официально с налогом 6,5${RuText.NBSP}%, Кабинеты родителей, Копия на сервере"))
         val other = server.sessions.first { it.token == "t-other" }
         awaitNode(hasText("Второй телефон · был ${s("чт_22.10")}"))
 

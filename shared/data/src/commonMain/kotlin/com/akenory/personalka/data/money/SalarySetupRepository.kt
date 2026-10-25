@@ -39,7 +39,7 @@ class SalarySetupRepository(private val db: PersonalkaDatabase, private val rate
 
     /**
      * «Готово» в мастере (5.18): ставки (по правилам формы ставок — внесённое раньше не дублируется), ступени,
-     * схема и категория с 1 января ([SalarySetupRules.start]). Категория пишется последней: пока её нет, мастер
+     * схема (с выбранного месяца, до него — «Вся сумма») и категория с 1 января ([SalarySetupRules.start]). Категория пишется последней: пока её нет, мастер
      * открывается снова, и прерванная запись повторяется без двойных версий.
      */
     suspend fun finish(draft: SalarySetupDraft, today: LocalDate) {
@@ -53,7 +53,7 @@ class SalarySetupRepository(private val db: PersonalkaDatabase, private val rate
         val month = SalarySetupRules.tierMonth(tiers.isNotEmpty(), today)
         val current = tiers.map { it.scheme() }.let { RateRules.tierDraft(it, month, draft.tiers.ptTypeIds) }
         if (tiers.isEmpty() || current != draft.tiers) rates.saveTiers(month, draft.tiers)
-        saveScheme(YearMonth(start.year, start.month), SalarySetupRules.scheme(start, draft.scheme, draft.advance))
+        SalarySetupRules.wizardSchemes(start, draft.scheme, draft.advance, draft.schemeFrom).forEach { (month, scheme) -> saveScheme(month, scheme) }
         saveCategory(start, draft.category)
     }
 

@@ -39,7 +39,7 @@ class AccountFormatTest {
     fun openFeatures() {
         assertNull(AccountFormat.open(emptyMap(), emptySet()))
         assertEquals(
-            "Открыто: Половина официально, Кабинеты родителей, Копия на сервере",
+            "Открыто: Официально с налогом 6,5${NBSP}%, Кабинеты родителей, Копия на сервере",
             AccountFormat.open(Feature.entries.associateWith { null }, emptySet()),
         )
         val until = LocalDate(2026, 10, 30)
@@ -48,7 +48,7 @@ class AccountFormatTest {
             AccountFormat.open(mapOf(Feature.SERVER_COPY to until), setOf(Feature.SERVER_COPY)),
         )
         assertEquals(
-            "Открыто: Половина официально — до${NBSP}31.12.2026",
+            "Открыто: Официально с налогом 6,5${NBSP}% — до${NBSP}31.12.2026",
             AccountFormat.open(mapOf(Feature.HALF_OFFICIAL to LocalDate(2026, 12, 31)), emptySet()),
         )
     }

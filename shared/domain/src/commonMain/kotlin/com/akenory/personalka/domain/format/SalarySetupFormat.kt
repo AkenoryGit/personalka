@@ -9,7 +9,6 @@ import kotlinx.datetime.LocalDate
 object SalarySetupFormat {
     private const val DOT = " · "
 
-    const val STEPS = 4
     const val CATEGORY_TITLE = "Ваша категория"
     const val CATEGORY_TEXT = "От категории зависят ставки клуба."
     const val SCHEME_TITLE = "Как платит клуб"
@@ -24,7 +23,6 @@ object SalarySetupFormat {
     const val DONE = "Готово"
     const val SETUP = "Настроить зарплату"
     const val SETUP_HEADING = "Зарплата ещё не настроена"
-    const val SETUP_NOTE = "Четыре шага: категория, схема выплат, ставки и ступени — около минуты."
     const val ADVANCE = "Ожидаемый аванс, ₽"
     const val ADVANCE_NOTE = "Приходит 25-го. Фактическую сумму приложение спросит в этот день."
     const val SAVED = "Зарплата настроена"
@@ -40,6 +38,7 @@ object SalarySetupFormat {
     const val FROM_MONTH = "С какого месяца"
     const val CATEGORY_NOTE = "Ставки по новой категории впишите в «Ставках и ступенях» с той же даты."
     const val SCHEME_NOTE = "Схема меняется с 1-го числа: прошлые месяцы считаются по прежней."
+    const val SCHEME_FROM_NOTE = "С этого месяца выплаты считаются по новой схеме, до него — вся сумма без аванса."
 
     fun category(c: CoachCategory): String = when (c) {
         CoachCategory.TRAINER -> "Персональный тренер"
@@ -48,22 +47,22 @@ object SalarySetupFormat {
     }
 
     fun scheme(k: PaySchemeKind): String = when (k) {
-        PaySchemeKind.HALF_OFFICIAL -> "Половина официально"
+        PaySchemeKind.HALF_OFFICIAL -> "Официально с налогом 6,5${NBSP}%"
         PaySchemeKind.FULL_OFFICIAL -> "Полностью официально"
         PaySchemeKind.IP -> "ИП"
-        PaySchemeKind.NONE -> "Без официальной части"
+        PaySchemeKind.NONE -> "Вся сумма, без аванса"
     }
 
     /** Пояснение под схемой в выборе. */
     fun schemeNote(k: PaySchemeKind): String = when (k) {
-        PaySchemeKind.HALF_OFFICIAL -> "Половина — на карту с НДФЛ 13${NBSP}%, половина — наличными"
+        PaySchemeKind.HALF_OFFICIAL -> "Половина — на карту с НДФЛ 13${NBSP}% (6,5${NBSP}% всей суммы), половина — наличными, аванс 25-го"
         PaySchemeKind.FULL_OFFICIAL -> "Всё на карту с НДФЛ 13${NBSP}%, аванс 25-го"
         PaySchemeKind.IP -> "Вся сумма без удержаний, 10-го"
-        PaySchemeKind.NONE -> "Вся сумма одной выплатой 10-го"
+        PaySchemeKind.NONE -> "100${NBSP}% по ставкам одной выплатой 10-го"
     }
 
-    /** «Шаг 2 из 4». */
-    fun step(n: Int): String = "Шаг $n из $STEPS"
+    /** «Шаг 2 из 4»: без выбора схемы шагов три. */
+    fun step(n: Int, of: Int): String = "Шаг $n из $of"
 
     /** Строка «Профиля»: «Мастер тренер · с 01.01.2026». */
     fun since(value: String, from: LocalDate): String = "$value$DOT${RateFormat.since(from)}"

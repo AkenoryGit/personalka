@@ -55,8 +55,10 @@ class SalarySetupRepositoryTest {
         // ДБ тренер поправил — связи с сеткой у неё нет.
         val draft = SalarySetupDraft(
             category = CoachCategory.MASTER,
-            scheme = PaySchemeKind.FULL_OFFICIAL,
+            scheme = PaySchemeKind.HALF_OFFICIAL,
             advance = 1_354_650,
+            // Переход на «налог 6,5 %» с марта: январь–февраль — вся сумма.
+            schemeFrom = YearMonth(2026, 3),
             rates = mapOf(pt to mapOf(bb to RateAmounts(rub(920), rub(960), rub(1000)), dbPlace to RateAmounts(rub(850)))),
             services = mapOf(pt to mapOf(bb to "Персональная")),
             tiers = TierDraft(true, 101, 151, asPt),
@@ -67,9 +69,12 @@ class SalarySetupRepositoryTest {
         val jan = LocalDate(2026, 1, 1)
         assertEquals(listOf(jan), salary.categories.first().map { it.validFrom })
         assertEquals(CoachCategory.MASTER, salary.categories.first().single().category)
-        val scheme = salary.schemes.first().single().scheme
-        assertEquals(jan, scheme.validFrom)
-        assertEquals(10000, scheme.officialShareBp)
+        val (before, scheme) = salary.schemes.first().map { it.scheme }.sortedBy { it.validFrom }
+        assertEquals(jan, before.validFrom)
+        assertEquals(PaySchemeKind.NONE, before.kind)
+        assertNull(before.advanceDefault)
+        assertEquals(LocalDate(2026, 3, 1), scheme.validFrom)
+        assertEquals(5000, scheme.officialShareBp)
         assertEquals(25, scheme.advanceDay)
         assertEquals(1_354_650, scheme.advanceDefault)
         val rates = db.referenceDao().rateVersions(pt)
@@ -83,7 +88,7 @@ class SalarySetupRepositoryTest {
         // Повтор «Готово» (прерванная запись) не дублирует версий.
         salary.finish(draft, today)
         assertEquals(1, salary.categories.first().size)
-        assertEquals(1, salary.schemes.first().size)
+        assertEquals(2, salary.schemes.first().size)
         assertEquals(2, db.referenceDao().rateVersions(pt).size)
         assertEquals(1, settings.rates.tiers.first().size)
     }

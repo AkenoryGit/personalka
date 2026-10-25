@@ -51,6 +51,7 @@ import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.settings.draft
+import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
@@ -178,7 +179,7 @@ fun SettingsScreen(
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
         route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
         route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close) }
-        route == SettingsRoute.PROFILE -> ProfileScreen(settings, now.date, shell, scope, messages, close)
+        route == SettingsRoute.PROFILE -> ProfileScreen(settings, openFeatures(account, now.date), now.date, shell, scope, messages, close)
         route == SettingsRoute.CATEGORY -> CategoryEditor(settings, now.date, messages, scope, close)
         route == SettingsRoute.SCHEME -> SchemeEditor(settings, openFeatures(account, now.date), now.date, messages, scope, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
@@ -341,7 +342,7 @@ private fun SettingsHome(
  * (в схеме) и «Совместное ведение групп» (шаг 3.6б).
  */
 @Composable
-private fun ProfileScreen(settings: SettingsRepository, today: LocalDate, shell: ShellState, scope: CoroutineScope, messages: MessageState, onBack: () -> Unit) {
+private fun ProfileScreen(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, scope: CoroutineScope, messages: MessageState, onBack: () -> Unit) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
     val loaded = coach ?: return
     var last by rememberSaveable(loaded.id) { mutableStateOf(loaded.lastName) }
@@ -364,7 +365,7 @@ private fun ProfileScreen(settings: SettingsRepository, today: LocalDate, shell:
                 style = MaterialTheme.typography.bodySmall,
                 color = PersonalkaTheme.colors.textMuted,
             )
-            Column { ProfileSalaryRows(settings, today, shell, scope) }
+            Column { ProfileSalaryRows(settings, open, today, shell, scope) }
             Spacer(Modifier.height(Dimens.space2))
         }
         BottomAction(

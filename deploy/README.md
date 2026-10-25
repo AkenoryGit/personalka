@@ -73,6 +73,18 @@ sudo -u postgres pg_restore --no-owner --role=trener --dbname=trener < trener.du
 
 Проверить ключ, не трогая сервер, — первые две строки и `pg_restore --list` на своём компьютере.
 
+## Открыть возможность тренеру (ТЗ 1.5)
+
+Пока нет экрана «Тренеры» (этап 5), возможность открывает администратор строкой в базе. Тренер сначала регистрируется в приложении («Настройки → Данные → Аккаунт»). На сервере по SSH — например, «Официально с налогом 6,5 %» до конца года:
+
+```sh
+sudo -u postgres psql trener -c "INSERT INTO coach_feature (coach_id, feature, until)
+  SELECT id, 'half_official', DATE '2026-12-31' FROM coach WHERE email = 'почта тренера'
+  ON CONFLICT (coach_id, feature) DO UPDATE SET until = EXCLUDED.until"
+```
+
+`until` — последний день включительно, `NULL` — без срока. Коды: `half_official` («Официально с налогом 6,5 %»), `cabinets` («Кабинеты родителей», открывают и копию), `server_copy` («Копия на сервере»). Закрыть — `DELETE FROM coach_feature WHERE feature = '…' AND coach_id = (SELECT id FROM coach WHERE email = '…')`. Телефон тренера увидит изменение, когда тренер откроет «Аккаунт» (экран спрашивает сервер). У администратора (`TRENER_ADMIN_EMAIL`) открыто всё и без строк.
+
 ## Если что-то не так
 
 - **Выкладка красная** — в итогах сборки последние 25 строк с сервера: что не поставилось или какая версия не ответила.
