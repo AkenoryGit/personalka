@@ -42,6 +42,15 @@ class TrainingCardTest {
             CardButtons(listOf(CardAction.EDIT, CardAction.CANCEL), listOf(CardMenu.RESULT, CardMenu.COPY)),
             TrainingCardRules.buttons(pt(TrainingStatus.DONE), at(18), false),
         )
+        // Отмеченную раньше конца можно вернуть: «Снять «Проведено»» первым в «…».
+        assertEquals(
+            listOf(CardMenu.UNMARK_DONE, CardMenu.RESULT, CardMenu.COPY),
+            TrainingCardRules.buttons(pt(TrainingStatus.DONE), at(17, 10), false).menu,
+        )
+        assertEquals(
+            listOf(CardMenu.UNMARK_DONE, CardMenu.RESULT, CardMenu.COPY),
+            TrainingCardRules.buttons(pt(TrainingStatus.DONE), at(18), false, settings = StatusSettings(autoDonePersonal = false)).menu,
+        )
         // «Добавить результат» (5.11) — только когда есть чей: у дежурства клиентов нет.
         assertEquals(listOf(CardMenu.COPY), TrainingCardRules.buttons(pt(TrainingStatus.DONE, TrainingKind.DUTY, clients = emptyList()), at(18), false).menu)
         assertEquals(listOf(CardAction.RETURN), TrainingCardRules.buttons(pt(TrainingStatus.CANCELLED), at(18), false).buttons)

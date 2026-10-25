@@ -302,6 +302,7 @@ fun TrainingCardHost(
                     },
                     onMenu = { item ->
                         when (item) {
+                            CardMenu.UNMARK_DONE -> scope.launch { done(cards.unmarkDone(shown.id)) }
                             CardMenu.EDIT -> onEdit(shown.id)
                             CardMenu.COPY -> onCopy(shown.id)
                             CardMenu.SKIP_DATE -> scope.launch {
@@ -551,7 +552,7 @@ private fun ColumnScope.CardBody(
 ) {
     val colors = PersonalkaTheme.colors
     val state = card.state
-    val buttons = TrainingCardRules.buttons(state, now, card.skippable, card.keepsDiary)
+    val buttons = TrainingCardRules.buttons(state, now, card.skippable, card.keepsDiary, card.settings)
     val phase = TrainingPhase.of(state, now)
     val isGroup = state.kind == TrainingKind.GROUP
     // Имя в шапке ведёт в карточку: у одного клиента — его, у группы — группы; у сплита — строки клиентов.
@@ -686,6 +687,7 @@ private fun CardMenuButton(items: List<CardMenu>, onMenu: (CardMenu) -> Unit) {
                 MenuAction(
                     text = TrainingCardFormat.menu(item),
                     icon = when (item) {
+                        CardMenu.UNMARK_DONE -> PIcons.Undo
                         CardMenu.EDIT -> PIcons.Edit
                         CardMenu.COPY -> PIcons.ContentCopy
                         CardMenu.SKIP_DATE -> PIcons.EventBusy

@@ -131,6 +131,7 @@ object TrainingCardFormat {
     }
 
     fun menu(item: CardMenu): String = when (item) {
+        CardMenu.UNMARK_DONE -> "Снять «Проведено»"
         CardMenu.RESULT -> ResultFormat.MENU
         CardMenu.EDIT -> "Изменить"
         CardMenu.COPY -> "Копировать"
@@ -157,6 +158,7 @@ object TrainingCardFormat {
     // --- Сообщения (5.20) ---
 
     const val MARKED_DONE = "Проведено"
+    const val UNMARKED_DONE = "Отметка «Проведено» снята"
     const val RETURNED = "Тренировка возвращена"
     const val DELETED = "Тренировка удалена"
 

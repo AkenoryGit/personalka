@@ -336,6 +336,14 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
         if (!StatusRules.canMarkDone(state, now)) null else StatusRules.markDone(state, now) to TrainingCardFormat.MARKED_DONE
     }
 
+    /**
+     * «Снять «Проведено»» (4.1): обратно в «Запланировано». Списание, зарплата, кабинет и дело СПТ считаются
+     * от статусов — откатываются сами; изменение уходит на сервер с обычной синхронизацией.
+     */
+    suspend fun unmarkDone(id: String): CardResult? = change(id) { state, now, settings ->
+        if (!StatusRules.canUnmarkDone(state, now, settings)) null else StatusRules.unmarkDone(state, now, settings) to TrainingCardFormat.UNMARKED_DONE
+    }
+
     /** Нажатие на ребёнка в группе (5.4): «пришёл» ⇄ «ещё не отмечен», в проведённой — ⇄ «не пришёл». */
     suspend fun toggleAttendance(id: String, clientId: String): Boolean = change(id) { state, now, _ ->
         if (!TrainingCardRules.canToggle(state, now) || state.participants.none { it.clientId == clientId }) null

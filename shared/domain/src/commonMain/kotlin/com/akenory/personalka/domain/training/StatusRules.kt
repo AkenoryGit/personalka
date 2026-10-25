@@ -43,6 +43,34 @@ object StatusRules {
     }
 
     /**
+     * «Снять «Проведено»» — тренировку отметили по ошибке (4.1, исправление прошлого). Нельзя, где отметка тут же
+     * встанет снова: у дежурства и у закончившейся ПТ, сплита, СПТ и `OTHER` при `autoDonePersonal` — их закрывает
+     * [closeAtEnd]; не прошла — это «Отменить».
+     */
+    fun canUnmarkDone(training: TrainingState, now: LocalDateTime, settings: StatusSettings): Boolean =
+        training.status == TrainingStatus.DONE && when (training.kind) {
+            TrainingKind.DUTY -> false
+            TrainingKind.GROUP -> true
+            else -> now < training.end || !settings.autoDonePersonal
+        }
+
+    /**
+     * Обратно в «Запланировано»: кто пришёл и кто «не пришёл» — снова ожидаются, отменённые заранее остаются
+     * отменёнными. Закончившаяся — «ждёт отметки» в «Нужно сделать»; группа — пока не отметят детей.
+     * Списание с абонемента, зарплата и дело СПТ считаются от статусов и откатываются сами.
+     */
+    fun unmarkDone(training: TrainingState, now: LocalDateTime, settings: StatusSettings): TrainingState {
+        require(canUnmarkDone(training, now, settings)) { "Снять «Проведено» нельзя: ${training.kind}, статус ${training.status}" }
+        return training.copy(
+            status = TrainingStatus.PLANNED,
+            doneAt = null,
+            participants = training.participants.map {
+                if (it.status == ATTENDED || (it.status == CANCELLED && it.notifiedAt == null)) reset(it) else it
+            },
+        )
+    }
+
+    /**
      * Нажатие на ребёнка в группе (5.4). До закрытия группы: «пришёл» ⇄ «ещё не отмечен»,
      * отменённый ребёнок, который всё же пришёл, — «пришёл». В проведённой группе (исправление прошлого):
      * «пришёл» ⇄ «не пришёл».

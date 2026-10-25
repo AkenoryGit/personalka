@@ -85,6 +85,9 @@ class SptRepositoryTest {
         assertTrue(cases().isEmpty())
         assertNotNull(calendar.cards.markDone(spt))
         assertEquals(1, cases().size)
+        // «Снять «Проведено»» — дело тоже уходит.
+        assertNotNull(calendar.cards.unmarkDone(spt))
+        assertTrue(cases().isEmpty())
     }
 
     @Test

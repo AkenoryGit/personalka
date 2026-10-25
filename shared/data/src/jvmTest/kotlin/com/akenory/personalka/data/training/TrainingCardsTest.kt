@@ -15,8 +15,10 @@ import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.training.CancelReasons
+import com.akenory.personalka.domain.training.CardMenu
 import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.Repeat
+import com.akenory.personalka.domain.training.TrainingCardRules
 import com.akenory.personalka.domain.training.TrainingDraft
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -171,6 +173,27 @@ class TrainingCardsTest {
         assertEquals(ParticipationStatus.ATTENDED, statusOf(soon, orlov))
         cards.undo(done.undo)
         assertEquals(TrainingStatus.PLANNED, card(soon).state.status)
+    }
+
+    @Test
+    fun unmarkDoneReturnsPlanned(): Unit = runBlocking {
+        val orlov = client("Орлов", "Максим")
+        val id = training(at(tuesday, 15, 55), orlov)
+        assertNull(cards.unmarkDone(id))
+        assertNotNull(cards.markDone(id))
+        assertTrue(CardMenu.UNMARK_DONE in TrainingCardRules.buttons(card(id).state, now, false, settings = card(id).settings).menu)
+
+        val back = assertNotNull(cards.unmarkDone(id))
+        assertEquals("Отметка «Проведено» снята", back.message)
+        val c = card(id)
+        assertEquals(TrainingStatus.PLANNED, c.state.status)
+        assertNull(c.state.doneAt)
+        assertNull(db.trainingDao().training(id)?.doneAt)
+        assertEquals(ParticipationStatus.EXPECTED, statusOf(id, orlov))
+        // «Отменить» в сообщении — снова «Проведено».
+        cards.undo(back.undo)
+        assertEquals(TrainingStatus.DONE, card(id).state.status)
+        assertEquals(ParticipationStatus.ATTENDED, statusOf(id, orlov))
     }
 
     @Test

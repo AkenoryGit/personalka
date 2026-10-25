@@ -64,6 +64,57 @@ class StatusRulesTest {
     }
 
     @Test
+    fun unmarkDoneBeforeEndMakesPlannedAgain() {
+        val done = StatusRules.markDone(pt(), at(9, 50))
+        assertTrue(StatusRules.canUnmarkDone(done, at(10, 20), settings))
+        val t = StatusRules.unmarkDone(done, at(10, 20), settings)
+        assertEquals(TrainingStatus.PLANNED, t.status)
+        assertNull(t.doneAt)
+        assertEquals(EXPECTED, t.statusOf("orlov"))
+        assertTrue(StatusRules.canMarkDone(t, at(10, 21)))
+        assertFalse(StatusRules.canUnmarkDone(t, at(10, 21), settings))
+    }
+
+    @Test
+    fun unmarkDoneAfterEndOnlyWhereItSticks() {
+        val done = StatusRules.closeAtEnd(pt(), at(10, 50), settings)
+        // Само закрытие поставило бы «Проведено» снова — не прошла, значит «Отменить».
+        assertFalse(StatusRules.canUnmarkDone(done, at(11, 0), settings))
+        assertFailsWith<IllegalArgumentException> { StatusRules.unmarkDone(done, at(11, 0), settings) }
+        val manual = StatusSettings(autoDonePersonal = false)
+        val waits = StatusRules.unmarkDone(done, at(11, 0), manual)
+        assertEquals(TrainingStatus.PLANNED, waits.status)
+        assertSame(waits, StatusRules.closeAtEnd(waits, at(11, 1), manual))
+        assertTrue(StatusRules.needsMarking(waits, at(11, 1)))
+        // Дежурство закрывается само всегда.
+        assertFalse(StatusRules.canUnmarkDone(StatusRules.closeAtEnd(duty(), at(15, 0), manual), at(10, 30), manual))
+    }
+
+    @Test
+    fun unmarkDoneSplitKeepsCancelledClient() {
+        val one = StatusRules.cancelClients(split(), listOf("nosova"), CancelReasons.CANNOT_COME, at(8, 0), settings)
+        val done = StatusRules.markDone(one, at(12, 0))
+        val t = StatusRules.unmarkDone(done, at(12, 30), settings)
+        assertEquals(CANCELLED, t.statusOf("nosova"))
+        assertEquals(CancelReasons.CANNOT_COME, t.participant("nosova").cancelReason)
+        assertEquals(EXPECTED, t.statusOf("zaitseva"))
+    }
+
+    @Test
+    fun unmarkDoneGroupResetsMarksAndWaits() {
+        var t = StatusRules.cancelClients(group(), listOf("d"), CancelReasons.COMPETITION, at(8, 0), settings)
+        t = StatusRules.toggleAttendance(t, "a", at(9, 0))
+        t = StatusRules.closeAtEnd(t, at(10, 0), settings)
+        assertEquals(listOf(ATTENDED, CANCELLED, CANCELLED, CANCELLED), t.participants.map { it.status })
+        assertTrue(StatusRules.canUnmarkDone(t, at(20, 0), settings))
+        val back = StatusRules.unmarkDone(t, at(20, 0), settings)
+        // Пришедший и «не пришли» снова ждут отметки, отменённый заранее — отменён.
+        assertEquals(listOf(EXPECTED, EXPECTED, EXPECTED, CANCELLED), back.participants.map { it.status })
+        assertSame(back, StatusRules.closeAtEnd(back, at(20, 1), settings))
+        assertTrue(StatusRules.needsMarking(back, at(20, 1)))
+    }
+
+    @Test
     fun personalClosesItselfAtEnd() {
         val t = pt()
         assertSame(t, StatusRules.closeAtEnd(t, at(10, 49), settings))
