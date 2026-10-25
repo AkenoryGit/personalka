@@ -170,6 +170,12 @@ internal class Recorder(private val db: PersonalkaDatabase, private val now: Lon
         clientDao.upsertGroup(group.copy(pendingPlan = text, sync = group.sync.touched(now)))
     }
 
+    /** Тренировки, которые записаны через этот [Recorder], — какими они были до записи (`null` — новая). */
+    val touchedTrainings: Map<String, TrainingEntity?> get() = trainings
+
+    /** Участия тренировок до записи — у удалённой по ним видно, чья она была. */
+    val touchedParticipants: Map<String, List<ParticipationEntity>> get() = participations
+
     fun undo(): Undo = Undo(trainings.toMap(), participations.toMap(), series.toMap(), seriesClients.toMap(), clients.toMap(), groups.toMap())
 
     private suspend fun rememberTraining(id: String) {

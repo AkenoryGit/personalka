@@ -442,7 +442,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 val stored = series.toSeries(seriesClientIds(series.id))
                 recorder.saveSeries(stored.copy(skipDates = stored.skipDates + t.start.date), coach.id)
             }
-            result = CardResult(TrainingCardFormat.DELETED, recorder.undo())
+            result = CardResult(TrainingCardFormat.DELETED, recorder.alignedUndo(db, now))
             result?.let { db.recordFreed(it.undo, now) }
             db.reconcileSpt(now)
         }
@@ -466,7 +466,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val recorder = Recorder(db, now)
             recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
-            result = CardResult(TrainingCardFormat.skipped(t.start.date), recorder.undo())
+            result = CardResult(TrainingCardFormat.skipped(t.start.date), recorder.alignedUndo(db, now))
             result?.let { db.recordFreed(it.undo, now) }
         }
         return result

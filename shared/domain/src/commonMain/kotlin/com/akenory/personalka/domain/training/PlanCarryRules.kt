@@ -70,6 +70,17 @@ object PlanCarryRules {
         }
     }
 
+    /**
+     * Перенесённый план идёт на ближайшую тренировку (уточнение 25.10.2026): [carried] уходит из плана [from] в план
+     * [to]. Текст стоит у [from] как был — ответ: что остаётся у [from] (`null` — пусто) и новый план [to]; у [to]
+     * текст уже есть — её план не меняется. Текст у [from] правили или его там нет — `null`: план остаётся, где был.
+     */
+    fun move(carried: String, from: String?, to: String?): Pair<String?, String>? {
+        val left = (onReturn(carried, from) as? ReturnStep.Remove ?: return null).left
+        val target = if (carried in to.orEmpty()) to.orEmpty() else join(to, carried)
+        return left to target
+    }
+
     /** Отложенный план для новой тренировки: тексты клиентов без повторов, с новой строки. Пусто — `null`. */
     fun pending(texts: List<String?>): String? =
         texts.filterNotNull().filter { it.isNotBlank() }.distinct().joinToString("\n").ifBlank { null }

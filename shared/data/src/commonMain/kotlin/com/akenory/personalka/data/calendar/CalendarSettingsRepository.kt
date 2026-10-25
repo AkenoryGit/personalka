@@ -11,6 +11,7 @@ import com.akenory.personalka.data.series.restore
 import com.akenory.personalka.data.series.toSeries
 import com.akenory.personalka.data.series.write
 import com.akenory.personalka.data.training.TrainingRepository
+import com.akenory.personalka.data.training.alignedUndo
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.CalendarDrag
 import com.akenory.personalka.domain.calendar.CalendarSettingsRules
@@ -137,7 +138,7 @@ class CalendarSettingsRepository internal constructor(
                 recorder.write(db, changes, coach.id, now, restrictions, series.pattern) { it in duties }
                 deleted += changes.deleted.size
             }
-            result = VacationResult.Saved(CalendarSettingsFormat.vacationSaved(vacation.from, vacation.to, deleted), recorder.undo())
+            result = VacationResult.Saved(CalendarSettingsFormat.vacationSaved(vacation.from, vacation.to, deleted), recorder.alignedUndo(db, now))
         }
         return result
     }

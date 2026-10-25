@@ -290,7 +290,7 @@ class TrainingRepository internal constructor(
                 )
                 recorder.saveTraining(entity)
                 recorder.setParticipants(entity, clientsOn(draft.groupId, draft.clientIds, draft.start.date))
-                result = SaveResult.Saved(TrainingFormat.created(draft.start), recorder.undo())
+                result = SaveResult.Saved(TrainingFormat.created(draft.start), recorder.alignedUndo(db, now))
             } else {
                 val pattern = draft.pattern(repeat)
                 val created = SeriesRules.create(
@@ -316,7 +316,7 @@ class TrainingRepository internal constructor(
                 recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty = { duty })
                 // Серия для клиента закрывает его запись «постоянно» в листе ожидания (4.16).
                 if (draft.groupId == null && !duty) db.closeWaitForSeries(draft.clientIds, now)
-                result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.undo())
+                result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now))
             }
         }
         return result
@@ -401,7 +401,7 @@ class TrainingRepository internal constructor(
                         val changes = SeriesRules.changeOnlyThis(stored, training, edit, members(edit.groupId))
                         recorder.write(db, changes, coach.id, now, restrictions, stored.pattern, isDuty)
                         setPlan(recorder, id, plan, now)
-                        result = SaveResult.Saved(moved, recorder.undo())
+                        result = SaveResult.Saved(moved, recorder.alignedUndo(db, now))
                     } else {
                         val all = trainings.trainingsOfSeries(series.id).map { it.toSeriesTraining(trainings.participationsOf(it.id)) }
                         val changes = SeriesRules.changeFollowing(
@@ -425,7 +425,7 @@ class TrainingRepository internal constructor(
                         }
                         recorder.write(db, changes, coach.id, now, restrictions, stored.pattern, isDuty)
                         setPlan(recorder, id, plan, now)
-                        result = SaveResult.Saved(TrainingFormat.SAVED_FOLLOWING, recorder.undo())
+                        result = SaveResult.Saved(TrainingFormat.SAVED_FOLLOWING, recorder.alignedUndo(db, now))
                     }
                 }
                 series != null || draft.repeat == null -> {
@@ -436,7 +436,7 @@ class TrainingRepository internal constructor(
                     if (edit.groupId == null || edit.groupId != t.groupId) {
                         recorder.setParticipants(entity, clientsOn(edit.groupId, edit.clientIds, edit.start.date))
                     }
-                    result = SaveResult.Saved(moved, recorder.undo())
+                    result = SaveResult.Saved(moved, recorder.alignedUndo(db, now))
                 }
                 else -> {
                     // Разовая стала постоянной: с её даты — серия, сама она — первая тренировка серии.
@@ -467,7 +467,7 @@ class TrainingRepository internal constructor(
                     if (edit.groupId == null || edit.groupId != t.groupId) {
                         recorder.setParticipants(entity, clientsOn(edit.groupId, edit.clientIds, edit.start.date))
                     }
-                    result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.undo())
+                    result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now))
                 }
             }
         }
@@ -567,7 +567,7 @@ class TrainingRepository internal constructor(
             }
             val recorder = Recorder(db, now)
             recorder.write(db, changes, coach.id, now, restrictions, stored.pattern, isDuty)
-            result = SaveResult.Saved(ClientFormat.changedFrom(from), recorder.undo())
+            result = SaveResult.Saved(ClientFormat.changedFrom(from), recorder.alignedUndo(db, now))
         }
         // Освободилось время — кто его ждёт из листа ожидания (4.16).
         (result as? SaveResult.Saved)?.let { db.recordFreed(it.undo, clock()) }
@@ -595,7 +595,7 @@ class TrainingRepository internal constructor(
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val recorder = Recorder(db, now)
             recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
-            result = SaveResult.Saved(ClientFormat.SERIES_ENDED, recorder.undo())
+            result = SaveResult.Saved(ClientFormat.SERIES_ENDED, recorder.alignedUndo(db, now))
         }
         // Освободилось время — кто его ждёт из листа ожидания (4.16).
         (result as? SaveResult.Saved)?.let { db.recordFreed(it.undo, clock()) }

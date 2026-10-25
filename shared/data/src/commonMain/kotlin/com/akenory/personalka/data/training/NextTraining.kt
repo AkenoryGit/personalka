@@ -8,12 +8,19 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.training.PlanRules
 import com.akenory.personalka.domain.training.PlanSlot
+import kotlinx.datetime.LocalDateTime
 
 /**
  * Следующая тренировка (4.3) после [t] по [PlanRules.next]: кандидаты — тренировки группы, серии сплита или
  * клиентов [people]. Одна для «Плана на следующую» в дневнике (5.7) и переноса плана при отмене (шаг 2.2).
+ * [after] — позже чего искать; ближайшая для перенесённого плана — позже и отменённой, и «сейчас».
  */
-internal suspend fun PersonalkaDatabase.nextTraining(t: TrainingEntity, kind: TrainingKind, people: Set<String>): TrainingEntity? {
+internal suspend fun PersonalkaDatabase.nextTraining(
+    t: TrainingEntity,
+    kind: TrainingKind,
+    people: Set<String>,
+    after: LocalDateTime = t.start,
+): TrainingEntity? {
     val trainings = trainingDao()
     val groupId = t.groupId
     val seriesId = t.seriesId
@@ -21,7 +28,7 @@ internal suspend fun PersonalkaDatabase.nextTraining(t: TrainingEntity, kind: Tr
         groupId != null -> trainings.trainingsOfGroup(groupId)
         kind == TrainingKind.SPLIT && seriesId != null -> trainings.trainingsOfSeries(seriesId)
         else -> people.flatMap { trainings.trainingsOfClient(it) }.distinctBy { it.id }
-    }.filter { it.status == TrainingStatus.PLANNED && it.start > t.start && it.sync.deletedAt == null }
+    }.filter { it.status == TrainingStatus.PLANNED && it.start > after && it.sync.deletedAt == null }
     if (pool.isEmpty()) return null
     val kinds = referenceDao().trainingTypes().associate { it.id to it.kind }
     val slots = pool.map { c ->

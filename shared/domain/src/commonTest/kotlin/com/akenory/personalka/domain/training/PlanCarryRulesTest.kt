@@ -51,4 +51,17 @@ class PlanCarryRulesTest {
         assertEquals(ReturnStep.Nothing, PlanCarryRules.onReturn(brass, "Брасс 8 × 25"))
         assertEquals(ReturnStep.Nothing, PlanCarryRules.onReturn(brass, null))
     }
+
+    @Test
+    fun movedToNearestTraining() {
+        // Уточнение 25.10.2026: появилась тренировка раньше — перенесённый план уходит на неё.
+        assertEquals(null to brass, PlanCarryRules.move(brass, from = brass, to = null))
+        // У новой ближайшей свой план — перенесённый дописывается с новой строки, у прежней остаётся её план.
+        assertEquals(back to "$back\n$brass", PlanCarryRules.move(brass, from = "$back\n$brass", to = back))
+        // У новой ближайшей текст уже есть — её план не меняется.
+        assertEquals(null to brass, PlanCarryRules.move(brass, from = brass, to = brass))
+        // Перенесённый текст правили или убрали — план остаётся, где был.
+        assertNull(PlanCarryRules.move(brass, from = "$brass Ещё 4 × 25 м.", to = null))
+        assertNull(PlanCarryRules.move(brass, from = back, to = null))
+    }
 }
