@@ -13,7 +13,7 @@ import kotlinx.datetime.YearMonth
 import kotlinx.datetime.yearMonth
 
 // Счётчик ПТ, ступень месяца, оплата одной тренировки (ТЗ 4.6, 4.7) и деление групп с коллегами (4.8).
-// Деньги — копейки, длительности — минуты. Доплата за закрытие СПТ (4.9) — шаг 3.4: здесь СПТ — базовая ставка.
+// Деньги — копейки, длительности — минуты. СПТ здесь — базовая ставка, доплата за закрытие (4.9) — SptRules.
 
 /** Что расчёту нужно знать о типе тренировки (ТЗ 3.3). */
 data class PayType(
@@ -25,7 +25,7 @@ data class PayType(
     val splitFallbackTypeId: String? = null,
 )
 
-/** Версия ставки тренера (ТЗ 3.3). [locationId] пусто — для любого места. */
+/** Версия ставки тренера (ТЗ 3.3). [locationId] пусто — для любого места; [sptCloseBonus] — только у СПТ. */
 data class PayRate(
     val typeId: String,
     val locationId: String?,
@@ -33,6 +33,7 @@ data class PayRate(
     val amountT1: Long,
     val amountT2: Long? = null,
     val amountT3: Long? = null,
+    val sptCloseBonus: Long? = null,
 ) {
     /** Ставка ступени [tier]; у ступени нет своей суммы — сумма ступени ниже. */
     fun amount(tier: Int): Long = when (tier) {
@@ -115,7 +116,8 @@ data class TrainingPay(
  * Деньги месяца по 4.6: счётчик и ступень по проведённым и прогнозные, заработок по текущей ступени, прогноз — по
  * прогнозной. [accrued] — начислено клубом (группы коллег — 0, мои группы — целиком, 4.8), [settlements] — итог
  * взаиморасчёта по каждому коллеге: больше нуля — коллега должен мне. [groupChildren] — оплаченные дети в группах,
- * которые я вёл (один или вместе), [dutyMinutes] — проведённые дежурства.
+ * которые я вёл (один или вместе), [dutyMinutes] — проведённые дежурства. [sptBonus] — доплаты за СПТ, закрытые
+ * покупкой в этом месяце (4.9): входят в заработано, начислено и прогноз.
  */
 data class MonthPay(
     val month: YearMonth,
@@ -130,6 +132,7 @@ data class MonthPay(
     val settlements: Map<String, Long> = emptyMap(),
     val groupChildren: Int = 0,
     val dutyMinutes: Int = 0,
+    val sptBonus: Long = 0,
 ) {
     /** Тренировки без ставки — пункты «Нужно сделать». */
     val missingRate: List<String> get() = trainings.filter { it.rateMissing }.map { it.trainingId }
@@ -274,6 +277,7 @@ object PayRules {
      * Деньги месяца [month] (ТЗ 4.6): ступени берутся из версии, действующей 1-го числа; итоговая ступень идёт на все
      * тренировки месяца с `tier_dependent`, а не только на те, что сверх порога. Группы делятся по 4.8 со схемами
      * владельцев [owners]; взаиморасчёт по коллеге — всё, что он должен мне, минус всё, что я должен ему.
+     * Доплаты за закрытие СПТ [spt] идут в месяц покупки (4.9).
      */
     fun month(
         month: YearMonth,
@@ -282,6 +286,7 @@ object PayRules {
         rates: List<PayRate>,
         schemes: List<TierScheme>,
         owners: OwnerSchemes = OwnerSchemes(),
+        spt: List<SptCase> = emptyList(),
     ): MonthPay {
         val ofMonth = inMonth(trainings, month)
         val scheme = Versions.activeIn(schemes, month) { it.validFrom }
@@ -292,7 +297,8 @@ object PayRules {
         val forecastTier = tier(scheme, nForecast)
         val byId = types.associateBy { it.id }
         val pays = ofMonth.map { pay(it, byId, rates, tier, owners = owners) }
-        val forecast = ofMonth.sumOf { pay(it, byId, rates, forecastTier, forecast = true, owners = owners).earned }
+        val sptBonus = SptRules.bonusIn(month, spt, rates)
+        val forecast = sptBonus + ofMonth.sumOf { pay(it, byId, rates, forecastTier, forecast = true, owners = owners).earned }
         val settlements = pays.filter { it.colleagueId != null }
             .groupBy { it.colleagueId!! }
             .mapValues { (_, list) -> list.sumOf { it.settlement } }
@@ -304,11 +310,12 @@ object PayRules {
             .filter { kindOf(it) == TrainingKind.DUTY && it.status == TrainingStatus.DONE }
             .sumOf { it.durationMin }
         return MonthPay(
-            month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned }, forecast, pays,
-            accrued = pays.sumOf { it.accrued },
+            month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned } + sptBonus, forecast, pays,
+            accrued = pays.sumOf { it.accrued } + sptBonus,
             settlements = settlements,
             groupChildren = groupChildren,
             dutyMinutes = dutyMinutes,
+            sptBonus = sptBonus,
         )
     }
 
