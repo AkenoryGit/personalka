@@ -1,14 +1,19 @@
 package com.akenory.personalka.data.db
 
+import com.akenory.personalka.data.db.entity.ArchivedMonthEntity
 import com.akenory.personalka.data.db.entity.CategoryVersionEntity
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.ClientRelationEntity
 import com.akenory.personalka.data.db.entity.ClubRateGridEntity
 import com.akenory.personalka.data.db.entity.CoachEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
+import com.akenory.personalka.data.db.entity.ColleagueEntity
+import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
 import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
+import com.akenory.personalka.data.db.entity.MonthAdjustmentEntity
+import com.akenory.personalka.data.db.entity.MonthRecordEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.PaySchemeVersionEntity
 import com.akenory.personalka.data.db.entity.RateVersionEntity
@@ -43,6 +48,7 @@ import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.YearMonth
 
 /** Придуманные данные для тестов базы (реальных имён клиентов в репозитории нет). */
 object Samples {
@@ -294,5 +300,32 @@ object Samples {
         clientAId = parentId,
         clientBId = childId,
         kind = RelationKind.PARENT,
+    )
+
+    // 3.6. Деньги
+
+    fun colleague(name: String) = ColleagueEntity(id = id(), sync = sync(), name = name)
+
+    fun colleagueScheme(colleagueId: String, from: LocalDate, kind: PaySchemeKind) =
+        ColleagueSchemeVersionEntity(id = id(), sync = sync(), colleagueId = colleagueId, validFrom = from, kind = kind)
+
+    fun monthRecord(month: YearMonth) =
+        MonthRecordEntity(id = id(), sync = sync(), month = month, planAmount = 12_000_000L, advanceActual = 1_354_650L)
+
+    fun adjustment(month: YearMonth, amount: Long, comment: String, inClubAccrual: Boolean = true) =
+        MonthAdjustmentEntity(id = id(), sync = sync(), month = month, amount = amount, comment = comment, inClubAccrual = inClubAccrual)
+
+    fun archivedMonth(month: YearMonth) = ArchivedMonthEntity(
+        id = id(),
+        sync = sync(),
+        month = month,
+        earned = 12_480_000L,
+        tax = 811_200L,
+        received = 11_668_800L,
+        plan = 12_000_000L,
+        ptCount = 112,
+        splitCount = 9,
+        groupChildren = 46,
+        dutyMinutes = 960,
     )
 }

@@ -47,6 +47,10 @@ interface ReferenceDao {
     @Query("SELECT * FROM rate_version WHERE typeId = :typeId AND deletedAt IS NULL ORDER BY validFrom")
     suspend fun rateVersions(typeId: String): List<RateVersionEntity>
 
+    /** Все ставки по дате начала: ставка тренировки выбирается по типу и месту (`Versions.rateFor`, ТЗ 3.3). */
+    @Query("SELECT * FROM rate_version WHERE deletedAt IS NULL ORDER BY validFrom")
+    suspend fun allRateVersions(): List<RateVersionEntity>
+
     @Upsert
     suspend fun upsertClubRate(item: ClubRateGridEntity)
 

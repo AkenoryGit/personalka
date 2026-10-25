@@ -6,12 +6,14 @@ import com.akenory.personalka.domain.model.BackupFrequency
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.WaitStatus
+import com.akenory.personalka.domain.money.Versions
 import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.YearMonth
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -19,7 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Запись и чтение всех таблиц ТЗ 3.2–3.5 (шаг 1.1). База в памяти, SQLite тот же, что в приложении. */
+/** Запись и чтение всех таблиц ТЗ 3.2–3.6 (шаги 1.1, 3.1). База в памяти, SQLite тот же, что в приложении. */
 class PersonalkaDatabaseTest {
 
     private lateinit var db: PersonalkaDatabase
@@ -184,6 +186,61 @@ class PersonalkaDatabaseTest {
         assertEquals(listOf(participation), dao.participationsOf(training.id))
         assertEquals(listOf(result), dao.resultsOf(client.id))
         assertEquals(listOf(spt), dao.sptCasesOf(client.id))
+    }
+
+    @Test
+    fun moneyIsReadBack(): Unit = runBlocking {
+        val dao = db.moneyDao()
+        val october = YearMonth(2026, 10)
+        val lena = Samples.colleague("Лена")
+        val lenaHalf = Samples.colleagueScheme(lena.id, LocalDate(2026, 3, 1), PaySchemeKind.HALF_OFFICIAL)
+        val lenaNone = Samples.colleagueScheme(lena.id, LocalDate(2026, 1, 1), PaySchemeKind.NONE)
+        val record = Samples.monthRecord(october)
+        val bonus = Samples.adjustment(october, 500_000L, "Премия за соревнования")
+        val fine = Samples.adjustment(october, -100_000L, "Удержание за форму", inClubAccrual = false)
+        val archived = Samples.archivedMonth(YearMonth(2026, 9))
+
+        dao.upsertColleague(lena)
+        dao.upsertColleagueScheme(lenaHalf)
+        dao.upsertColleagueScheme(lenaNone)
+        dao.upsertMonthRecord(record)
+        dao.upsertAdjustment(bonus)
+        dao.upsertAdjustment(fine)
+        dao.upsertAdjustment(Samples.adjustment(YearMonth(2026, 11), 1L, "Другой месяц"))
+        dao.upsertArchivedMonth(archived)
+
+        assertEquals(lena, dao.colleague(lena.id))
+        assertEquals(listOf(lena), dao.colleagues())
+        assertEquals(listOf(lenaNone, lenaHalf), dao.colleagueSchemes(), "По дате начала")
+        assertEquals(record, dao.monthRecord(october))
+        assertNull(dao.monthRecord(YearMonth(2026, 11)))
+        assertEquals(listOf(bonus, fine), dao.adjustments(october), "Удержание — отрицательной суммой, только своего месяца")
+        assertEquals(listOf(archived), dao.archivedMonths())
+        assertEquals(960, dao.archivedMonths().single().dutyMinutes)
+
+        // Два телефона без связи завели данные октября каждый: читается последняя изменённая, база не падает.
+        val other = record.copy(id = Samples.id(), planAmount = 13_000_000L, sync = record.sync.touched(Samples.NOW + 60_000))
+        dao.upsertMonthRecord(other)
+        assertEquals(13_000_000L, dao.monthRecord(october)?.planAmount)
+        assertEquals(other, dao.observeMonthRecord(october).first())
+    }
+
+    @Test
+    fun rateKeepsClubServiceAndAllRatesAreRead(): Unit = runBlocking {
+        val dao = db.referenceDao()
+        val bb = Samples.ptRate(pt.id, bigPool.id).copy(clubService = "Персональная")
+        val db2 = Samples.ptRate(pt.id, kidsPool.id).copy(amountT1 = 83_000L, amountT2 = null, amountT3 = null)
+        val later = bb.copy(id = Samples.id(), validFrom = LocalDate(2026, 11, 1), amountT1 = 96_000L)
+        listOf(later, bb, db2).forEach { dao.upsertRateVersion(it) }
+
+        assertEquals("Персональная", dao.rateVersions(pt.id).first { it.id == bb.id }.clubService)
+        val all = dao.allRateVersions()
+        assertEquals(LocalDate(2026, 11, 1), all.last().validFrom, "По дате начала")
+        fun rate(place: String, date: LocalDate) =
+            Versions.rateFor(all, pt.id, place, date, { it.typeId }, { it.locationId }, { it.validFrom })?.amountT1
+        assertEquals(92_000L, rate(bigPool.id, LocalDate(2026, 10, 31)))
+        assertEquals(96_000L, rate(bigPool.id, LocalDate(2026, 11, 1)))
+        assertEquals(83_000L, rate(kidsPool.id, LocalDate(2026, 11, 1)))
     }
 
     @Test

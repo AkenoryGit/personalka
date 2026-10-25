@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -79,6 +79,49 @@ internal object Migration3To4 : Migration(3, 4) {
             "CREATE TABLE IF NOT EXISTS `sync_outbox` (`entity` TEXT NOT NULL, `rowId` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, " +
                 "PRIMARY KEY(`entity`, `rowId`))",
         )
+    }
+}
+
+/**
+ * Версия 5 (шаг 3.1): деньги (ТЗ 3.6) — коллеги и их схемы, данные месяцев, доплаты и удержания, итоги прошлых месяцев;
+ * у ставки — услуга сетки клуба, по которой она заполнена (ТЗ 3.3). Новые таблицы пустые, прежние записи не меняются:
+ * у прежних ставок услуги нет — они свои. Таблицы — точно такие, какие строит Room (схема `5.json`).
+ */
+internal object Migration4To5 : Migration(4, 5) {
+    private const val SYNC = "`coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+        "`version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`)"
+
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `rate_version` ADD COLUMN `clubService` TEXT")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `colleague` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `linkedCoachId` TEXT, " +
+                "`archived` INTEGER NOT NULL, $SYNC)",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_colleague_coachId` ON `colleague` (`coachId`)")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `colleague_scheme_version` (`id` TEXT NOT NULL, `colleagueId` TEXT NOT NULL, " +
+                "`validFrom` TEXT NOT NULL, `kind` TEXT NOT NULL, $SYNC)",
+        )
+        connection.exec(
+            "CREATE INDEX IF NOT EXISTS `index_colleague_scheme_version_colleagueId_validFrom` ON `colleague_scheme_version` " +
+                "(`colleagueId`, `validFrom`)",
+        )
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `month_record` (`id` TEXT NOT NULL, `month` TEXT NOT NULL, `planAmount` INTEGER, " +
+                "`advanceActual` INTEGER, `closed` INTEGER NOT NULL, $SYNC)",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_month_record_month` ON `month_record` (`month`)")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `month_adjustment` (`id` TEXT NOT NULL, `month` TEXT NOT NULL, `amount` INTEGER NOT NULL, " +
+                "`comment` TEXT NOT NULL, `inClubAccrual` INTEGER NOT NULL, $SYNC)",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_month_adjustment_month` ON `month_adjustment` (`month`)")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `archived_month` (`id` TEXT NOT NULL, `month` TEXT NOT NULL, `earned` INTEGER NOT NULL, " +
+                "`tax` INTEGER NOT NULL, `received` INTEGER NOT NULL, `plan` INTEGER, `ptCount` INTEGER NOT NULL, " +
+                "`splitCount` INTEGER NOT NULL, `groupChildren` INTEGER NOT NULL, `dutyMinutes` INTEGER NOT NULL, $SYNC)",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_archived_month_month` ON `archived_month` (`month`)")
     }
 }
 

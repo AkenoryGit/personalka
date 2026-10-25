@@ -9,19 +9,25 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.akenory.personalka.data.db.dao.ClientDao
 import com.akenory.personalka.data.db.dao.CoachDao
+import com.akenory.personalka.data.db.dao.MoneyDao
 import com.akenory.personalka.data.db.dao.ReferenceDao
 import com.akenory.personalka.data.db.dao.ScheduleDao
 import com.akenory.personalka.data.db.dao.SyncDao
 import com.akenory.personalka.data.db.dao.TrainingDao
+import com.akenory.personalka.data.db.entity.ArchivedMonthEntity
 import com.akenory.personalka.data.db.entity.CategoryVersionEntity
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.ClientRelationEntity
 import com.akenory.personalka.data.db.entity.ClubRateGridEntity
 import com.akenory.personalka.data.db.entity.CoachEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
+import com.akenory.personalka.data.db.entity.ColleagueEntity
+import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
 import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
+import com.akenory.personalka.data.db.entity.MonthAdjustmentEntity
+import com.akenory.personalka.data.db.entity.MonthRecordEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.PaySchemeVersionEntity
 import com.akenory.personalka.data.db.entity.RateVersionEntity
@@ -40,7 +46,7 @@ import com.akenory.personalka.data.sync.pooled
 import kotlin.coroutines.CoroutineContext
 
 /**
- * База телефона (ТЗ 3.1–3.5): полная копия данных тренера в обоих режимах работы.
+ * База телефона (ТЗ 3.1–3.6): полная копия данных тренера в обоих режимах работы.
  *
  * Связи между таблицами — по id без внешних ключей SQLite: при синхронизации записи приходят
  * в любом порядке, а «Удалить клиента полностью» стирает данные сразу. Целостность держит код,
@@ -76,12 +82,18 @@ import kotlin.coroutines.CoroutineContext
         SptCaseEntity::class,
         WaitEntryEntity::class,
         ClientRelationEntity::class,
+        // 3.6
+        ColleagueEntity::class,
+        ColleagueSchemeVersionEntity::class,
+        MonthRecordEntity::class,
+        MonthAdjustmentEntity::class,
+        ArchivedMonthEntity::class,
         // 3.8 — только для телефона
         SyncOutboxEntity::class,
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -93,14 +105,16 @@ abstract class PersonalkaDatabase : RoomDatabase() {
     abstract fun clientDao(): ClientDao
     abstract fun trainingDao(): TrainingDao
     abstract fun syncDao(): SyncDao
+    abstract fun moneyDao(): MoneyDao
 
     companion object {
         /**
          * 1 — шаг 1.1; 2 — шаг 1.13в: цвет у места, оттенок у типа ([Migration1To2]); 3 — «За кого» у дежурства
-         * ([Migration2To3]); 4 — очередь изменений для синхронизации ([Migration3To4], шаг 2.10). Перед переходом на новую
-         * версию — копия ([BeforeMigration], шаг 2.7б).
+         * ([Migration2To3]); 4 — очередь изменений для синхронизации ([Migration3To4], шаг 2.10); 5 — деньги: коллеги,
+         * месяцы, доплаты, итоги прошлых месяцев и услуга сетки у ставки ([Migration4To5], шаг 3.1). Перед переходом
+         * на новую версию — копия ([BeforeMigration], шаг 2.7б).
          */
-        const val VERSION = 4
+        const val VERSION = 5
         const val FILE_NAME = "personalka.db"
     }
 }

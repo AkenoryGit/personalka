@@ -6,6 +6,7 @@ import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.YearMonth
 import kotlinx.datetime.isoDayNumber
 
 /**
@@ -33,6 +34,13 @@ class Converters {
 
     @ColumnTypeConverter
     fun textToLocalDateTime(value: String): LocalDateTime = LocalDateTime.parse(value)
+
+    /** Месяц — «2026-10» (ТЗ 3.6). */
+    @ColumnTypeConverter
+    fun yearMonthToText(value: YearMonth): String = value.toString()
+
+    @ColumnTypeConverter
+    fun textToYearMonth(value: String): YearMonth = YearMonth.parse(value)
 
     /** Дни недели — номерами ISO через запятую по порядку: вт и чт → «2,4». Пусто — «». */
     @ColumnTypeConverter
