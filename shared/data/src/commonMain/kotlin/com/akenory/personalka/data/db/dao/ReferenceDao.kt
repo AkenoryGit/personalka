@@ -51,6 +51,10 @@ interface ReferenceDao {
     @Query("SELECT * FROM rate_version WHERE deletedAt IS NULL ORDER BY validFrom")
     suspend fun allRateVersions(): List<RateVersionEntity>
 
+    /** То же наблюдением: «Ставки и ступени» в настройках (5.16). */
+    @Query("SELECT * FROM rate_version WHERE deletedAt IS NULL ORDER BY validFrom")
+    fun observeRateVersions(): Flow<List<RateVersionEntity>>
+
     @Upsert
     suspend fun upsertClubRate(item: ClubRateGridEntity)
 
@@ -62,4 +66,7 @@ interface ReferenceDao {
 
     @Query("SELECT * FROM tier_scheme_version WHERE deletedAt IS NULL ORDER BY validFrom")
     suspend fun tierSchemeVersions(): List<TierSchemeVersionEntity>
+
+    @Query("SELECT * FROM tier_scheme_version WHERE deletedAt IS NULL ORDER BY validFrom")
+    fun observeTierSchemeVersions(): Flow<List<TierSchemeVersionEntity>>
 }

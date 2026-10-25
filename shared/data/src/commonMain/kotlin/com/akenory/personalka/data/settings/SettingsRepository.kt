@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.entity.CoachEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.money.RatesRepository
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.model.Scope
@@ -26,6 +27,9 @@ import kotlinx.coroutines.flow.map
 class SettingsRepository(private val db: PersonalkaDatabase, private val clock: () -> Long) {
     private val coaches = db.coachDao()
     private val reference = db.referenceDao()
+
+    /** «Ставки и ступени» (5.16, шаг 3.6) — той же базы. */
+    val rates: RatesRepository = RatesRepository(db, clock)
 
     /** Тренер телефона; `null` — первый запуск ещё не пройден. */
     val coach: Flow<CoachEntity?> = coaches.observeCurrentCoach()

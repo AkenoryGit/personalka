@@ -231,7 +231,8 @@ fun Field(
                 }
             },
         )
-        val below = error ?: hint
+        // Пустая ошибка — только рамка: текст ошибки стоит один под строкой полей.
+        val below = error?.takeIf { it.isNotEmpty() } ?: hint.takeIf { error == null }
         if (below != null) {
             Text(
                 text = below,

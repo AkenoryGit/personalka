@@ -54,6 +54,7 @@ import com.akenory.personalka.data.settings.draft
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
+import com.akenory.personalka.domain.format.RateFormat
 import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.format.TypeFormat
 import com.akenory.personalka.domain.model.TrainingKind
@@ -94,22 +95,27 @@ object SettingsRoute {
     const val DATA = "settings/data"
     const val ACCOUNT = "settings/account"
     const val CABINETS = "settings/cabinets"
+    const val RATES = "settings/rates"
+    const val TIERS = "settings/tiers"
     const val NEW_PLACE = "place/new"
     const val NEW_TYPE = "type/new"
     private const val PLACE = "place/"
     private const val TYPE = "type/"
+    private const val RATE = "rate/"
 
     fun place(id: String) = PLACE + id
     fun type(id: String) = TYPE + id
+    fun rate(typeId: String) = RATE + typeId
 
     fun isSettings(route: String): Boolean =
-        route == HOME || route.startsWith("settings/") || route.startsWith(PLACE) || route.startsWith(TYPE)
+        route == HOME || route.startsWith("settings/") || route.startsWith(PLACE) || route.startsWith(TYPE) || route.startsWith(RATE)
 
     /** Форма с «✕» во весь экран: на сложенном Fold нижняя панель прячется (макеты «Новый тип»). */
     fun isForm(route: String?): Boolean = route != null && (route.startsWith(PLACE) || route.startsWith(TYPE))
 
     internal fun placeId(route: String): String? = route.removePrefix(PLACE).takeIf { route.startsWith(PLACE) && it != "new" }
     internal fun typeId(route: String): String? = route.removePrefix(TYPE).takeIf { route.startsWith(TYPE) && it != "new" }
+    internal fun rateTypeId(route: String): String? = route.removePrefix(RATE).takeIf { route.startsWith(RATE) }
 }
 
 internal const val PROFILE_ROW_TAG = "settings-profile"
@@ -122,9 +128,8 @@ internal fun typeRowTag(name: String) = "type-$name"
 /**
  * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы», «Календарь» (шаг 1.13г) и «Данные»
  * (шаг 1.15, если платформа дала [backup]; в них — «Аккаунт», шаг 2.8а, если есть [account], и «Сервер», шаг 2.10а,
- * если есть [sync]) и «Кабинеты» (шаг 2.13, если [cabinets] — сервер подключён и «Кабинеты» открыты); остальные разделы
- * появятся в своих шагах (ставки — 3.6), до этого их
- * не видно (10.7).
+ * если есть [sync]), «Кабинеты» (шаг 2.13, если [cabinets] — сервер подключён и «Кабинеты» открыты) и «Ставки и ступени»
+ * (шаг 3.6); остальные разделы появятся в своих шагах, до этого их не видно (10.7).
  *
  * @param onForm открыть форму тренировки, дежурства или своего запрета ([com.akenory.personalka.ui.training.TrainingFormKey])
  *   из списков раздела «Календарь».
@@ -157,7 +162,13 @@ fun SettingsScreen(
     val close: () -> Unit = { shell.back() }
 
     when {
-        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces.size, activeTypes.size, shell, onBack, cabinets)
+        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces, activeTypes, now, shell, onBack, cabinets)
+        route == SettingsRoute.RATES -> RatesScreen(settings.rates, activePlaces, activeTypes, now.date, shell, close)
+        route == SettingsRoute.TIERS -> TierEditor(settings.rates, loadedTypes, now.date, messages, scope, close)
+        SettingsRoute.rateTypeId(route) != null -> {
+            val type = loadedTypes.firstOrNull { it.id == SettingsRoute.rateTypeId(route) } ?: return
+            RateEditor(settings.rates, type, activePlaces, loadedTypes, now.date, messages, scope, close)
+        }
         route == SettingsRoute.CABINETS -> if (cabinets) CabinetSettingsScreen(settings, messages, scope, close)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
@@ -246,8 +257,9 @@ private fun SettingsHome(
     settings: SettingsRepository,
     calendar: CalendarRepository,
     backup: BackupTools?,
-    places: Int,
-    types: Int,
+    places: List<LocationEntity>,
+    types: List<TrainingTypeEntity>,
+    now: LocalDateTime,
     shell: ShellState,
     onBack: (() -> Unit)?,
     cabinets: Boolean,
@@ -256,6 +268,8 @@ private fun SettingsHome(
     val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
     val prefs by remember(calendar) { calendar.settings.prefs }.collectAsState(initial = null)
     val diary by remember(calendar) { calendar.reminders.prefs }.collectAsState(initial = null)
+    val rates by remember(settings) { settings.rates.rates }.collectAsState(initial = null)
+    val tiers by remember(settings) { settings.rates.tiers }.collectAsState(initial = null)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         TopBar("Настройки", onBack = onBack)
         ListCard(Modifier.padding(horizontal = Dimens.space4)) {
@@ -268,9 +282,16 @@ private fun SettingsHome(
             RowDivider()
             NavRow(
                 title = "Места и типы",
-                subtitle = TypeFormat.placesAndTypes(places, types),
+                subtitle = TypeFormat.placesAndTypes(places.size, types.size),
                 onClick = { shell.open(SettingsRoute.PLACES) },
                 modifier = Modifier.testTag(PLACES_ROW_TAG),
+            )
+            RowDivider()
+            NavRow(
+                title = RateFormat.TITLE,
+                subtitle = rates?.let { r -> tiers?.let { t -> RateFormat.settingsRow(missingRates(types, places, r, now.date), currentTiers(types, t, now.date)) } },
+                onClick = { shell.open(SettingsRoute.RATES) },
+                modifier = Modifier.testTag(RATES_ROW_TAG),
             )
             RowDivider()
             NavRow(
