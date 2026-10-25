@@ -96,8 +96,11 @@ data class PayTraining(
     val coverFor: String? = null,
 )
 
-/** Доплата ([amount] больше нуля) или удержание месяца (ТЗ 3.6); [inClubAccrual] — входит в начисление клуба. */
-data class PayAdjustment(val amount: Long, val inClubAccrual: Boolean = true)
+/**
+ * Доплата ([amount] больше нуля) или удержание месяца (ТЗ 3.6); [inClubAccrual] — входит в начисление клуба.
+ * [date] — день внесения: на графике накопления по дням (5.12) она прибавляется в этот день.
+ */
+data class PayAdjustment(val amount: Long, val inClubAccrual: Boolean = true, val date: LocalDate? = null)
 
 /** Пометка сплита с одним клиентом (ТЗ 4.7): в календаре он остаётся сплитом. */
 enum class SplitMark { AS_PT, HALF }

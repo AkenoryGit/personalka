@@ -112,6 +112,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.yearMonth
 
 const val TRAINING_CARD_TAG = "training-card"
 const val CANCEL_PANEL_TAG = "cancel-panel"
@@ -121,6 +122,7 @@ const val CARRY_PANEL_TAG = "carry-panel"
 const val SPT_ASK_TAG = "spt-ask"
 const val CHARGE_SWITCH_TAG = "charge-switch"
 const val OWN_REASON_TAG = "own-reason"
+const val CLOSED_MONTH_TAG = "closed-month"
 
 fun cardClientTag(id: String) = "card-client-$id"
 fun cardClientActionTag(id: String) = "card-client-action-$id"
@@ -215,6 +217,15 @@ fun TrainingCardHost(
         }
     }
     val shown = card?.takeIf { it.id == id }
+    // Сверенный месяц (4.1, шаг 3.7б): первая правка в карточке спрашивает подтверждение, дальше — нет.
+    val closedMonths by remember(cards) { cards.closedMonths }.collectAsState(initial = emptySet())
+    var closedConfirmed by rememberSaveable(key) { mutableStateOf(false) }
+    var closedPending by remember(key) { mutableStateOf<(() -> Unit)?>(null) }
+    val closedMonth = shown?.state?.start?.date?.yearMonth?.takeIf { it in closedMonths }
+
+    fun guarded(action: () -> Unit) {
+        if (closedMonth != null && !closedConfirmed) closedPending = action else action()
+    }
     // «Это время ждут» (4.16) — в панели отмены и в подтверждении удаления; пересчитывается, когда они открываются.
     val waitLine by produceState<String?>(null, id, cancelWho != null, askDelete) {
         value = if (id != null && (cancelWho != null || askDelete)) cards.waitingLine(id) else null
@@ -273,13 +284,13 @@ fun TrainingCardHost(
                     onFirstName = { guestFirst = it },
                     onPick = { clientId ->
                         closeGuest()
-                        scope.launch { done(cards.addGuest(shown.id, clientId)) }
+                        guarded { scope.launch { done(cards.addGuest(shown.id, clientId)) } }
                     },
                     onAddNew = {
                         val last = guestLast
                         val first = guestFirst
                         closeGuest()
-                        scope.launch { done(cards.addNewGuest(shown.id, last, first)) }
+                        guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first)) } }
                     },
                     onBack = ::closeGuest,
                 )
@@ -293,32 +304,34 @@ fun TrainingCardHost(
                     onClose = onClose,
                     onAction = { action ->
                         when (action) {
-                            CardAction.DONE, CardAction.ALL_CAME -> scope.launch { done(cards.markDone(shown.id)) }
+                            CardAction.DONE, CardAction.ALL_CAME -> guarded { scope.launch { done(cards.markDone(shown.id)) } }
                             CardAction.CANCEL -> cancelWho = WHOLE
-                            CardAction.EDIT -> onEdit(shown.id)
-                            CardAction.RETURN -> scope.launch { done(cards.restore(shown.id)) }
+                            CardAction.EDIT -> guarded { onEdit(shown.id) }
+                            CardAction.RETURN -> guarded { scope.launch { done(cards.restore(shown.id)) } }
                             CardAction.DIARY -> onDiary(shown.id)
                         }
                     },
                     onMenu = { item ->
                         when (item) {
-                            CardMenu.UNMARK_DONE -> scope.launch { done(cards.unmarkDone(shown.id)) }
-                            CardMenu.EDIT -> onEdit(shown.id)
+                            CardMenu.UNMARK_DONE -> guarded { scope.launch { done(cards.unmarkDone(shown.id)) } }
+                            CardMenu.EDIT -> guarded { onEdit(shown.id) }
                             CardMenu.COPY -> onCopy(shown.id)
-                            CardMenu.SKIP_DATE -> scope.launch {
-                                val result = cards.skipDate(shown.id)
-                                if (result != null) onClose()
-                                done(result)
+                            CardMenu.SKIP_DATE -> guarded {
+                                scope.launch {
+                                    val result = cards.skipDate(shown.id)
+                                    if (result != null) onClose()
+                                    done(result)
+                                }
                             }
-                            CardMenu.DELETE -> askDelete = true
+                            CardMenu.DELETE -> guarded { askDelete = true }
                             CardMenu.RESULT -> addingResult = true
                         }
                     },
-                    onToggle = { clientId -> scope.launch { cards.toggleAttendance(shown.id, clientId) } },
+                    onToggle = { clientId -> guarded { scope.launch { cards.toggleAttendance(shown.id, clientId) } } },
                     onCancelClient = { clientId -> cancelWho = clientId },
-                    onReturnClient = { clientId -> scope.launch { done(cards.restoreClient(shown.id, clientId)) } },
+                    onReturnClient = { clientId -> guarded { scope.launch { done(cards.restoreClient(shown.id, clientId)) } } },
                     onAddGuest = { addingGuest = true },
-                    onRemoveGuest = { clientId -> scope.launch { done(cards.removeGuest(shown.id, clientId)) } },
+                    onRemoveGuest = { clientId -> guarded { scope.launch { done(cards.removeGuest(shown.id, clientId)) } } },
                     onClient = onClient,
                     onGroup = onGroup,
                 )
@@ -343,12 +356,14 @@ fun TrainingCardHost(
                     onCharged = { charged = it.toString() },
                     onCancel = { clientIds ->
                         val at = draft.notifiedAt ?: now
+                        val reasonText = draft.reasonText
+                        val chargedNow = draft.charged
                         cancelWho = null
-                        scope.launch { done(cards.cancel(shown.id, clientIds, draft.reasonText, at, draft.charged)) }
+                        guarded { scope.launch { done(cards.cancel(shown.id, clientIds, reasonText, at, chargedNow)) } }
                     },
                     onMove = {
                         cancelWho = null
-                        onEdit(shown.id)
+                        guarded { onEdit(shown.id) }
                     },
                 )
             }
@@ -417,6 +432,22 @@ fun TrainingCardHost(
                     },
                     secondary = TrainingCardFormat.KEEP,
                     onSecondary = { askDelete = false },
+                )
+            }
+        }
+        val pending = closedPending
+        if (pending != null && closedMonth != null) {
+            Panel(title = TrainingCardFormat.CLOSED_TITLE, onDismiss = { closedPending = null }, modifier = Modifier.testTag(CLOSED_MONTH_TAG)) {
+                Text(TrainingCardFormat.closedText(closedMonth), style = MaterialTheme.typography.bodyLarge, color = PersonalkaTheme.colors.text)
+                PanelActions(
+                    primary = TrainingCardFormat.CLOSED_CHANGE,
+                    onPrimary = {
+                        closedPending = null
+                        closedConfirmed = true
+                        pending()
+                    },
+                    secondary = TrainingCardFormat.CLOSED_KEEP,
+                    onSecondary = { closedPending = null },
                 )
             }
         }

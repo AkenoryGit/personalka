@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.salary
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,13 +41,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -66,6 +75,7 @@ import com.akenory.personalka.ui.components.CheckRow
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.Note
+import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.SecondaryButton
@@ -73,11 +83,12 @@ import com.akenory.personalka.ui.components.Segmented
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.YearMonth
-import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.yearMonth
@@ -94,6 +105,9 @@ internal const val SALARY_ON_HAND_TAG = "salary-on-hand"
 internal const val SALARY_ADVANCE_TAG = "salary-advance"
 internal const val ADVANCE_FIELD_TAG = "advance-field"
 internal const val SALARY_TOTAL_TAG = "salary-total"
+internal const val SALARY_CHART_TAG = "salary-chart"
+internal const val SALARY_CLOSE_TAG = "salary-close"
+internal const val SALARY_CLOSED_TAG = "salary-closed"
 internal fun salaryTabTag(tab: SalaryTab) = "salary-tab-${tab.name}"
 
 /** Вкладки «Зарплаты»: «Коллеги» и «Год» — шаг 3.8. */
@@ -153,7 +167,17 @@ internal fun SalaryMonthScreen(
                 verticalArrangement = Arrangement.spacedBy(Dimens.space3),
             ) {
                 when (tab) {
-                    SalaryTab.MONTH -> MonthTab(loaded, onPlan = { planOpen = true }, onAdjust = { adjusting = it })
+                    SalaryTab.MONTH -> MonthTab(
+                        loaded,
+                        onPlan = { planOpen = true },
+                        onAdjust = { adjusting = it },
+                        onClosed = { closed ->
+                            scope.launch {
+                                repo.setClosed(month, closed)
+                                messages.show(if (closed) SalaryFormat.closedMessage(month) else SalaryFormat.REOPENED)
+                            }
+                        },
+                    )
                     SalaryTab.PAYOUTS -> PayoutsTab(loaded, today, onAdvance = { advanceOpen = true })
                 }
             }
@@ -332,11 +356,120 @@ private fun MoneyRow(
 // --- Месяц ---
 
 @Composable
-private fun MonthTab(data: SalaryMonthData, onPlan: () -> Unit, onAdjust: (String) -> Unit) {
+private fun MonthTab(data: SalaryMonthData, onPlan: () -> Unit, onAdjust: (String) -> Unit, onClosed: (Boolean) -> Unit) {
     val view = data.view
     EarnedCard(view, onPlan)
     view.tiers?.let { TierCard(it, view.period, data) }
+    ChartCard(view)
     BreakdownCard(data, onAdjust)
+    if (view.canClose) CloseMonth(view, onClosed)
+}
+
+/**
+ * «По дням» (5.12, макет PayMonth): заработано сплошной линией до сегодняшней точки, прогноз пунктиром до конца
+ * месяца, темп плана — тонкая прямая к плану; вертикальный пунктир — сегодня. Подписи сетки — слева над линиями.
+ */
+@Composable
+private fun ChartCard(view: SalaryMonth) {
+    val chart = view.chart
+    val colors = PersonalkaTheme.colors
+    val measurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.bodySmall.tabular().copy(color = colors.textMuted)
+    val factDate = if (chart.factDay > 0) LocalDate(view.month.year, view.month.month, chart.factDay) else null
+    val summary = SalaryFormat.chartDescription(chart.earned.last(), factDate, chart.forecast.lastOrNull(), chart.plan)
+    SalaryCard {
+        CardHeader(SalaryFormat.CHART, SalaryFormat.CHART_RIGHT)
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .padding(top = Dimens.space2)
+                .semantics { contentDescription = summary }
+                .testTag(SALARY_CHART_TAG),
+        ) {
+            val gutter = 44.dp.toPx()
+            val bottomBand = 22.dp.toPx()
+            val left = gutter
+            val right = size.width - 4.dp.toPx()
+            val top = 4.dp.toPx()
+            val bottom = size.height - bottomBand
+            val max = chart.top.toFloat()
+            fun px(day: Int) = left + day.toFloat() / chart.days * (right - left)
+            fun py(amount: Long) = bottom - amount / max * (bottom - top)
+            val thin = 1.dp.toPx()
+            val dash = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
+
+            (listOf(0L) + chart.ticks).forEach { tick ->
+                val y = py(tick)
+                drawLine(colors.divider, Offset(left, y), Offset(right, y), strokeWidth = thin)
+                val label = measurer.measure(if (tick == 0L) "0" else SalaryFormat.axis(tick), labelStyle)
+                drawText(label, topLeft = Offset(0f, y - label.size.height / 2f))
+            }
+            listOf(1, 10, 20, chart.days).forEach { day ->
+                val label = measurer.measure("$day", labelStyle)
+                val x = (px(day) - label.size.width / 2f).coerceIn(left, size.width - label.size.width)
+                drawText(label, topLeft = Offset(x, bottom + 4.dp.toPx()))
+            }
+            chart.plan?.let { plan ->
+                drawLine(colors.outline, Offset(px(0), py(0)), Offset(px(chart.days), py(plan)), strokeWidth = 1.5.dp.toPx())
+            }
+            fun line(points: List<Long>, from: Int): Path = Path().apply {
+                points.forEachIndexed { i, v -> if (i == 0) moveTo(px(from), py(v)) else lineTo(px(from + i), py(v)) }
+            }
+            if (chart.forecast.size > 1) {
+                drawPath(line(chart.forecast, chart.factDay), colors.text, style = Stroke(width = 2.dp.toPx(), pathEffect = dash))
+            }
+            if (chart.earned.size > 1) {
+                drawPath(line(chart.earned, 0), colors.primary, style = Stroke(width = 2.5.dp.toPx()))
+            }
+            if (view.period == MonthPeriod.CURRENT) {
+                val x = px(chart.factDay)
+                drawLine(colors.outline, Offset(x, top), Offset(x, bottom), strokeWidth = thin, pathEffect = dash)
+                drawCircle(colors.primary, 4.dp.toPx(), Offset(x, py(chart.earned.last())))
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
+            if (view.period != MonthPeriod.FUTURE) LineLegend(colors.primary, SalaryFormat.CHART_EARNED)
+            if (chart.forecast.size > 1) LineLegend(colors.text, SalaryFormat.CHART_FORECAST, dashed = true)
+            if (chart.plan != null) LineLegend(colors.outline, SalaryFormat.CHART_PACE)
+        }
+    }
+}
+
+@Composable
+private fun LineLegend(color: Color, text: String, dashed: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Canvas(Modifier.size(width = 16.dp, height = 10.dp)) {
+            val y = size.height / 2f
+            val effect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 2.dp.toPx())) else null
+            drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = 2.dp.toPx(), pathEffect = effect)
+        }
+        Muted(text, Modifier.padding(start = Dimens.space1))
+    }
+}
+
+/**
+ * «Месяц сверен» (5.12, 4.1): кнопка и подсказка под ней; у сверенного — отметка «Сверен» и «Снять сверку».
+ * Одна кнопка — бюджет экрана 10.7.
+ */
+@Composable
+private fun CloseMonth(view: SalaryMonth, onClosed: (Boolean) -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        if (view.closed) {
+            Row(Modifier.testTag(SALARY_CLOSED_TAG), verticalAlignment = Alignment.CenterVertically) {
+                Icon(PIcons.CheckCircle, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
+                Text(SalaryFormat.MONTH_CLOSED, Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.titleMedium, color = colors.text)
+            }
+            Muted(SalaryFormat.closedNote(view.month))
+            TextButton(onClick = { onClosed(false) }, modifier = Modifier.heightIn(min = Dimens.button).testTag(SALARY_CLOSE_TAG)) {
+                Text(SalaryFormat.REOPEN_MONTH, style = MaterialTheme.typography.labelLarge, color = colors.text)
+            }
+        } else {
+            OutlineButton(SalaryFormat.CLOSE_MONTH, { onClosed(true) }, Modifier.fillMaxWidth().testTag(SALARY_CLOSE_TAG), icon = PIcons.CheckCircle)
+            Muted(SalaryFormat.closeNote(view.month))
+        }
+    }
 }
 
 @Composable

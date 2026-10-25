@@ -9,6 +9,7 @@ import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.SptCaseEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.money.MonthInput
@@ -136,7 +137,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
             schemes = s.tiers,
             owners = OwnerSchemes(m.schemes.map { it.owner() }, m.colleagueSchemes),
             spt = spt,
-            adjustments = m.adjustments.map { PayAdjustment(it.amount, it.inClubAccrual) },
+            adjustments = m.adjustments.map { PayAdjustment(it.amount, it.inClubAccrual, ClubTime.today(it.sync.createdAt)) },
         )
         // Две записи одного месяца с двух телефонов — берётся последняя изменённая, как в MoneyDao.monthRecord.
         val records = m.records.groupBy { it.month }.mapValues { (_, list) -> list.maxWith(compareBy({ it.sync.updatedAt }, { it.id })) }
@@ -146,6 +147,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         val view = SalaryMonthRules.build(
             input, m.schemes, plans, records[month]?.advanceActual, today, ptTypeId,
             SalaryMonthRules.ptPlace(ofMonth, ptTypeId, activePlaces),
+            closed = records[month]?.closed == true,
         )
         return SalaryMonthData(view, m.adjustments, s.types.associateBy { it.id }, places.associateBy { it.id }, colleagues)
     }
@@ -155,6 +157,9 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     /** Фактический аванс месяца [month] (4.11); `null` — снова ожидаемый. */
     suspend fun saveAdvance(month: YearMonth, amount: Long?) = updateRecord(month) { it.copy(advanceActual = amount) }
+
+    /** «Месяц сверен» (5.12): [closed] — закрыть месяц, правки его тренировок спросят подтверждение (4.1). */
+    suspend fun setClosed(month: YearMonth, closed: Boolean) = updateRecord(month) { it.copy(closed = closed) }
 
     private suspend fun updateRecord(month: YearMonth, change: (MonthRecordEntity) -> MonthRecordEntity) {
         val coach = coaches.currentCoach() ?: return

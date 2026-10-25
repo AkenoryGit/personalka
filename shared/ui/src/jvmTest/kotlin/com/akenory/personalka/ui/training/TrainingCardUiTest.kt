@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -51,13 +52,14 @@ import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.PANEL_TAG
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
-import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlinx.datetime.YearMonth
 
 /**
  * Карточка тренировки и отмена (шаг 1.14, ТЗ 5.4, 5.6, макеты «ПТ идёт», «Отмена ПТ», «Группа идёт», «Разложенный
@@ -127,6 +129,29 @@ class TrainingCardUiTest {
     private fun inCard(text: String): SemanticsMatcher = hasText(text) and hasAnyAncestor(hasTestTag(TRAINING_CARD_TAG))
 
     private fun ComposeUiTest.cardButton(action: CardAction) = onNode(inCard(TrainingCardFormat.action(action)))
+
+    @Test
+    fun closedMonthAsksBeforeChange() = runComposeUiTest {
+        training("16:20", client("Орлов", "Максим"))
+        runBlocking { settings.months.setClosed(YearMonth(2026, 10), true) }
+        openCalendar()
+        tapBlock("Орлов_М.")
+        awaitNode(inCard(TrainingCardFormat.action(CardAction.EDIT)))
+
+        // Октябрь сверен (шаг 3.7б, ТЗ 4.1): «Изменить» сначала спрашивает; «Не менять» — карточка остаётся.
+        cardButton(CardAction.EDIT).performClick()
+        awaitNode(hasTestTag(CLOSED_MONTH_TAG))
+        onNodeWithText(TrainingCardFormat.CLOSED_TITLE).assertExists()
+        onNode(hasText(TrainingCardFormat.CLOSED_KEEP) and hasAnyAncestor(hasTestTag(CLOSED_MONTH_TAG))).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(CLOSED_MONTH_TAG)).fetchSemanticsNodes().isEmpty() }
+        onAllNodes(hasTestTag(TRAINING_FORM_TAG)).assertCountEquals(0)
+
+        // «Изменить» в вопросе — форма открывается; второй раз в этой карточке не спрашивает.
+        cardButton(CardAction.EDIT).performClick()
+        awaitNode(hasTestTag(CLOSED_MONTH_TAG))
+        onNode(hasText(TrainingCardFormat.CLOSED_CHANGE) and hasAnyAncestor(hasTestTag(CLOSED_MONTH_TAG))).performClick()
+        awaitNode(hasTestTag(TRAINING_FORM_TAG))
+    }
 
     @Test
     fun cancelFortyMinutesBeforeIsChargedAndReturns() = runComposeUiTest {

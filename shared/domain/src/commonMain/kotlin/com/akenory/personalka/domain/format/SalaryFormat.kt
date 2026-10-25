@@ -287,6 +287,42 @@ object SalaryFormat {
 
     const val ADVANCE_SAVED = "Аванс сохранён"
 
+    // --- График по дням и «Месяц сверен» (шаг 3.7б) ---
+
+    const val CHART = "По дням"
+    const val CHART_RIGHT = "с начала месяца"
+    const val CHART_EARNED = "заработано"
+    const val CHART_FORECAST = "прогноз"
+    const val CHART_PACE = "темп плана"
+
+    /** Подпись линии сетки: «100 тыс.»; шаг меньше 10 000 ₽ — «5 000 ₽». */
+    fun axis(kopecks: Long): String {
+        val rub = kopecks / 100
+        return if (rub % 1000 == 0L && rub >= 10_000) "${RuText.digits(rub / 1000)}${NBSP}тыс." else MoneyFormat.rub(kopecks)
+    }
+
+    /** Для TalkBack: «График по дням: заработано 126 645 ₽ к 20.10, прогноз ≈ 203 490 ₽, план 210 000 ₽». */
+    fun chartDescription(earned: Long, day: LocalDate?, forecast: Long?, plan: Long?): String = buildList {
+        add("заработано ${MoneyFormat.rub(earned)}" + (day?.let { " к ${DateFormat.dayMonth(it)}" } ?: ""))
+        forecast?.let { add("прогноз ${MoneyFormat.approxRub(it)}") }
+        plan?.let { add("план ${MoneyFormat.rub(it)}") }
+    }.joinToString(", ", prefix = "График по дням: ")
+
+    const val CLOSE_MONTH = "Месяц сверен"
+    const val REOPEN_MONTH = "Снять сверку"
+    const val MONTH_CLOSED = "Сверен"
+
+    /** Под кнопкой: «После сверки правки тренировок октября спросят подтверждение». */
+    fun closeNote(month: YearMonth): String = "После сверки правки тренировок ${DateFormat.monthGenitive(month.firstDay)} спросят подтверждение"
+
+    /** У сверенного: «Правки тренировок октября спрашивают подтверждение». */
+    fun closedNote(month: YearMonth): String = "Правки тренировок ${DateFormat.monthGenitive(month.firstDay)} спрашивают подтверждение"
+
+    /** «Октябрь сверен». */
+    fun closedMessage(month: YearMonth): String = "${DateFormat.month(month.firstDay).replaceFirstChar { it.uppercaseChar() }} сверен"
+
+    const val REOPENED = "Сверка снята"
+
     /** «13 %», «50 %», «6,5 %» — из десятитысячных. */
     private fun percentBp(bp: Int): String {
         val whole = bp / 100

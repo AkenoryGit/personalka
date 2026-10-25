@@ -3,15 +3,18 @@ package com.akenory.personalka.ui.salary
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
@@ -32,12 +35,13 @@ import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.YearMonth
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.YearMonth
 
 /** «Зарплата»: месяц и выплаты (шаг 3.7, ТЗ 5.12). «Сейчас» — вт 20.10.2026. */
 @OptIn(ExperimentalTestApi::class)
@@ -125,5 +129,24 @@ class SalaryMonthUiTest {
         onNodeWithText(SalaryFormat.SAVE).performClick()
         awaitNode(hasText(SalaryFormat.ADVANCE_RECEIVED))
         assertEquals(rub(950), runBlocking { db.moneyDao().monthRecord(october) }?.advanceActual)
+    }
+
+    @Test
+    fun chartAndCloseMonth() = runComposeUiTest {
+        start()
+        // График по дням кончается на «Заработано» (1 840 ₽ к 20.10), прогноз — 2 760 ₽.
+        onNodeWithTag(SALARY_CHART_TAG).performScrollTo().assertExists()
+        onNode(hasContentDescription(SalaryFormat.chartDescription(rub(1840), LocalDate(2026, 10, 20), rub(2760), null))).assertExists()
+
+        onNodeWithTag(SALARY_CLOSE_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(SALARY_CLOSED_TAG))
+        onNodeWithText(SalaryFormat.closedNote(october)).assertExists()
+        assertEquals(true, runBlocking { db.moneyDao().monthRecord(october) }?.closed)
+
+        // Сообщение «Октябрь сверен» ещё стоит внизу поверх кнопки — нажатие действием, а не касанием.
+        onNodeWithTag(SALARY_CLOSE_TAG).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.moneyDao().monthRecord(october) }?.closed == false }
+        awaitNode(hasText(SalaryFormat.closeNote(october)))
+        assertEquals(false, runBlocking { db.moneyDao().monthRecord(october) }?.closed)
     }
 }

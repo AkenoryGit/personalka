@@ -36,6 +36,7 @@ import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.money.SalaryMonthRules
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.training.CancelRules
@@ -55,11 +56,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.YearMonth
 import kotlinx.datetime.plus
 
 /**
@@ -171,6 +174,13 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
 
     /** СПТ (4.9, шаг 3.7а): вопрос на первой оплаченной ПТ и «Купил блок со скидкой» в карточке. */
     val spt: SptRepository = SptRepository(db, clock)
+
+    /**
+     * Сверенные месяцы (4.1, «Месяц сверен» в «Зарплате»): правка тренировки такого месяца в карточке сначала
+     * спрашивает «Изменится зарплата за закрытый месяц».
+     */
+    val closedMonths: Flow<Set<YearMonth>> = db.moneyDao().observeMonthRecords()
+        .map { records -> SalaryMonthRules.closedMonths(records.map { it.month to it.closed }) }
 
     /** Карточка; `null` — тренировки нет (удалили). Обновляется сама после каждого действия. */
     @OptIn(ExperimentalCoroutinesApi::class)

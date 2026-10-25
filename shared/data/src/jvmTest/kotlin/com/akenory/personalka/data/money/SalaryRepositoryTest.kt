@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.money
 
+import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ParticipationEntity
@@ -25,6 +26,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Месяц «Зарплаты» из базы: тренировки и ставки → расчёт, план, аванс и доплаты (шаг 3.7). */
 class SalaryRepositoryTest {
@@ -125,5 +127,28 @@ class SalaryRepositoryTest {
         assertEquals(2, data.adjustments.size)
         // План и аванс октября — одна запись месяца.
         assertEquals(1, db.moneyDao().monthRecords().count { it.month == october })
+    }
+
+    @Test
+    fun closedMonthAndChart(): Unit = runBlocking {
+        setUp()
+        val cards = CalendarRepository(db) { now }.cards
+        assertEquals(emptySet(), cards.closedMonths.first())
+        months.savePlan(october, rub(200_000))
+        months.setClosed(october, true)
+        assertEquals(setOf(october), cards.closedMonths.first())
+        assertTrue(months.month(october, today).first().view.closed)
+        // План и сверка — одна запись месяца; снятие сверки план не трогает.
+        months.setClosed(october, false)
+        assertEquals(emptySet(), cards.closedMonths.first())
+        assertEquals(rub(200_000), months.month(october, today).first().view.plan)
+
+        // Доплата ложится на графике в день внесения (20.10), линия кончается на «Заработано».
+        months.addAdjustment(october, rub(1200), "Судейство", inClubAccrual = true)
+        val view = months.month(october, today).first().view
+        assertEquals(rub(3 * 920), view.chart.earned[15])
+        assertEquals(rub(4 * 920), view.chart.earned[19])
+        assertEquals(view.pay.earned, view.chart.earned[20])
+        assertEquals(view.pay.forecast, view.chart.forecast.last())
     }
 }

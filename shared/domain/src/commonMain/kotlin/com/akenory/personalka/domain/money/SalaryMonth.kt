@@ -9,7 +9,7 @@ import kotlinx.datetime.YearMonth
 import kotlinx.datetime.yearMonth
 
 // Экран «Зарплата» (ТЗ 5.12): вкладки «Месяц» и «Выплаты» из расчёта 4.6–4.12. Здесь только сборка того, что
-// показать: сами правила — в PayRules, Payouts, SalaryPlan и SptRules.
+// показать: сами правила — в PayRules, Payouts, SalaryPlan, SptRules и SalaryChartRules.
 
 /** Месяц относительно сегодняшнего дня: у прошедшего нет прогноза и «не хватает», у будущего — только прогноз. */
 enum class MonthPeriod { PAST, CURRENT, FUTURE }
@@ -75,7 +75,8 @@ data class TierProgress(
  * Всё для вкладок «Месяц» и «Выплаты» месяца [month]. [plan] — свой план месяца или план последнего месяца до него
  * (4.12), [planOwn] — план задан именно в этом месяце. [today] и [todayAhead] — заработано сегодня и ожидается ещё
  * сегодня (только у текущего месяца). [payout] — выплаты по проведённым, [forecastPayout] — если всё пройдёт по
- * расписанию. [advanceActual] — введённый аванс.
+ * расписанию. [advanceActual] — введённый аванс. [chart] — график накопления по дням, [closed] — «Месяц сверен»
+ * (правки его тренировок спрашивают подтверждение, 4.1).
  */
 data class SalaryMonth(
     val month: YearMonth,
@@ -92,7 +93,12 @@ data class SalaryMonth(
     val tiers: TierProgress?,
     val breakdown: List<BreakdownLine>,
     val advanceActual: Long?,
+    val chart: SalaryChart,
+    val closed: Boolean = false,
 ) {
+    /** «Месяц сверен» — у прошедшего и текущего: сверять будущий не с чем. */
+    val canClose: Boolean get() = period != MonthPeriod.FUTURE
+
     val payout: MonthPayout get() = totals.payout
 
     /** Выполнение плана, проценты вниз до целого. */
@@ -140,6 +146,7 @@ object SalaryMonthRules {
         today: LocalDate,
         ptTypeId: String?,
         ptPlaceId: String?,
+        closed: Boolean = false,
     ): SalaryMonth {
         val month = input.month
         val period = period(month, today)
@@ -174,6 +181,8 @@ object SalaryMonthRules {
             tiers = tierProgress(input, pay, period, ptTypeId, ptPlaceId, on),
             breakdown = breakdown(input, pay),
             advanceActual = advanceActual,
+            chart = SalaryChartRules.build(input, pay, period, today, plan),
+            closed = closed,
         )
     }
 
@@ -304,6 +313,13 @@ object SalaryMonthRules {
     private fun unitRate(t: PayTraining, type: PayType?, tier: Int, rates: List<PayRate>): Long? =
         Versions.rateFor(rates, t.typeId, t.locationId, t.start.date, { it.typeId }, { it.locationId }, { it.validFrom })
             ?.amount(if (type?.tierDependent == true) tier else 1)
+
+    /**
+     * Сверенные месяцы (4.1) из записей месяцев: у месяца с двумя записями (два телефона) решает последняя
+     * изменённая — записи приходят по возрастанию изменения.
+     */
+    fun closedMonths(records: List<Pair<YearMonth, Boolean>>): Set<YearMonth> =
+        records.associate { it }.filterValues { it }.keys
 
     /** Дальше подсказка «ещё N ПТ сверх расписания» не показывается: столько сверх расписания не набрать. */
     const val MAX_BEYOND = 20

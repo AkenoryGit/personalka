@@ -11,6 +11,7 @@ import com.akenory.personalka.domain.training.TrainingPhase
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.YearMonth
 
 /** Строки карточки тренировки (ТЗ 5.4) и панели отмены (5.6). */
 object TrainingCardFormat {
@@ -154,6 +155,17 @@ object TrainingCardFormat {
     /** «вт 20.10, 17:00 · Орлов М. Вернуть её можно только сразу — кнопкой «Отменить» в сообщении.» */
     fun deleteText(title: String, start: LocalDateTime): String =
         CalendarFormat.at(start) + DOT + title + ". Вернуть её можно только сразу — кнопкой «Отменить» в сообщении."
+
+    // --- Закрытый месяц (4.1, шаг 3.7б) ---
+
+    const val CLOSED_TITLE = "Изменится зарплата за закрытый месяц"
+    const val CLOSED_CHANGE = "Изменить"
+    const val CLOSED_KEEP = "Не менять"
+
+    /** «Октябрь 2026 отмечен в «Зарплате» как сверенный. Правка этой тренировки изменит его заработок.» */
+    fun closedText(month: YearMonth): String =
+        "${DateFormat.monthYear(month.firstDay)} отмечен в «Зарплате» как сверенный. " +
+            "Правка этой тренировки изменит его заработок."
 
     // --- Сообщения (5.20) ---
 
