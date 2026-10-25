@@ -95,6 +95,8 @@ class CabinetUiTest {
     }
 
     private fun ComposeUiTest.openCard(name: String) {
+        // Оболочка с нижним меню появляется после ответа базы — в Actions раз не успела к нажатию (сборка 178).
+        awaitNode(hasTestTag(navTag(Section.CLIENTS)))
         onNodeWithTag(navTag(Section.CLIENTS)).performClick()
         awaitNode(hasTestTag(clientRowTag(name)))
         onNodeWithTag(clientRowTag(name)).performClick()
