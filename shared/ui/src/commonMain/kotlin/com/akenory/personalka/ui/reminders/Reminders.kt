@@ -3,6 +3,7 @@ package com.akenory.personalka.ui.reminders
 import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.money.SalaryRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.reminders.DiaryPrefs
 import com.akenory.personalka.domain.ClubTime
@@ -15,10 +16,15 @@ import com.akenory.personalka.ui.home.homeTodos
 import com.akenory.personalka.ui.home.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.plus
+import kotlinx.datetime.yearMonth
 
 /** Канал уведомления: его видно в настройках телефона, каждый можно выключить отдельно. */
 enum class NoticeChannel { DIGEST, INSTANT }
@@ -48,6 +54,7 @@ data class ReminderCheck(val notices: List<Notice>, val next: LocalDateTime?)
  * задержал, ничего не теряет, а повторный не повторяет.
  *
  * @param backup копия для пункта «нет резервной копии»; `null` — пункта нет.
+ * @param salary аванс для уведомления 25-го и пункта «Введите сумму аванса»; `null` — их нет (тесты без зарплаты).
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
 class Reminders(
@@ -56,14 +63,31 @@ class Reminders(
     private val backup: BackupRepository?,
     private val prefs: DevicePrefs,
     private val clock: () -> Long,
+    private val salary: SalaryRepository? = null,
 ) {
     /** «План на день» — настройка этого телефона (в базе тренера для неё поля нет). */
     var dayPlan: Boolean
         get() = prefs.boolean(DAY_PLAN) ?: false
         set(value) = prefs.putBoolean(DAY_PLAN, value)
 
+    /** «Аванс» 25-го в 19:00 — настройка этого телефона, по умолчанию включена (5.19). */
+    var advance: Boolean
+        get() = prefs.boolean(ADVANCE) ?: true
+        set(value) = prefs.putBoolean(ADVANCE, value)
+
     private fun settings(diary: DiaryPrefs) =
-        ReminderSettings(diary.digest, diary.digestTime, diary.instantDiary && diary.diary, diary.instantGroup, dayPlan)
+        ReminderSettings(diary.digest, diary.digestTime, diary.instantDiary && diary.diary, diary.instantGroup, dayPlan, advance)
+
+    /**
+     * Дни аванса, сумма которого ещё не введена: этого месяца и следующего — после 25-го будильник ставится сразу
+     * на следующий месяц. Схема без аванса — пусто.
+     */
+    private fun advanceDays(today: LocalDate): Flow<List<LocalDate>> {
+        val repo = salary ?: return flowOf(emptyList())
+        val month = today.yearMonth
+        val next = month.firstDay.plus(1, DateTimeUnit.MONTH).yearMonth
+        return combine(repo.advance(month), repo.advance(next)) { a, b -> listOfNotNull(a, b).filter { it.actual == null }.map { it.date } }
+    }
 
     /** Проверка по будильнику: что показать с прошлой проверки и когда следующая. До первого запуска — ничего. */
     suspend fun check(): ReminderCheck {
@@ -77,7 +101,9 @@ class Reminders(
         val home = calendar.homeTrainings(now.date).first()
         val slots = home.map { it.slot() }
         val noDiary = calendar.diaries.missing.first()
-        val due = ReminderRules.due(last, now, settings, slots, noDiary.map { it.id }.toSet())
+        val advance = salary?.advance(now.date.yearMonth)?.first()
+        val advanceDays = advanceDays(now.date).first()
+        val due = ReminderRules.due(last, now, settings, slots, noDiary.map { it.id }.toSet(), advanceDays)
         val byId = home.associateBy { it.id }
         val notices = due.mapNotNull { reminder ->
             when (reminder) {
@@ -91,6 +117,7 @@ class Reminders(
                         clients.waitlist.observe(now).first(),
                         // В сводке — только СПТ, у которых до конца окна 3 дня или меньше (5.19, 4.9, п. 6).
                         spt = calendar.cards.spt.waiting(now.date).first().filter { it.remind },
+                        advance = advance,
                     )
                     if (todos.isEmpty()) {
                         null
@@ -111,6 +138,7 @@ class Reminders(
                         Notice(DAY_PLAN_KEY, NoticeChannel.INSTANT, ReminderFormat.DAY_PLAN_TITLE, ReminderFormat.dayPlan(today.size, first.start), AppLink.Home)
                     }
                 }
+                Reminder.Advance -> Notice(ADVANCE_KEY, NoticeChannel.INSTANT, ReminderFormat.ADVANCE_TITLE, ReminderFormat.ADVANCE_TEXT, AppLink.Advance)
                 is Reminder.Diary -> byId[reminder.id]?.let { t ->
                     Notice(t.id, NoticeChannel.INSTANT, t.title, ReminderFormat.instantDiary(t.start, t.slot().end), AppLink.Diary(t.id))
                 }
@@ -119,7 +147,7 @@ class Reminders(
                 }
             }
         }
-        return ReminderCheck(notices, ReminderRules.next(now, settings, slots))
+        return ReminderCheck(notices, ReminderRules.next(now, settings, slots, advanceDays))
     }
 
     /**
@@ -128,14 +156,18 @@ class Reminders(
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun nextCheck(): Flow<LocalDateTime?> = calendar.reminders.prefs.flatMapLatest { diary ->
-        calendar.homeTrainings(ClubTime.now(clock()).date)
-            .map { home -> ReminderRules.next(ClubTime.now(clock()), settings(diary), home.map { it.slot() }) }
+        val today = ClubTime.now(clock()).date
+        combine(calendar.homeTrainings(today), advanceDays(today)) { home, advance ->
+            ReminderRules.next(ClubTime.now(clock()), settings(diary), home.map { it.slot() }, advance)
+        }
     }
 
     companion object {
         /** Время прошлой проверки по часам клуба. */
         const val CHECKED = "reminders.checkedAt"
         const val DAY_PLAN = "reminders.dayPlan"
+        const val ADVANCE = "reminders.advance"
+        const val ADVANCE_KEY = "advance"
         const val DIGEST_KEY = "digest"
         const val DAY_PLAN_KEY = "dayPlan"
     }

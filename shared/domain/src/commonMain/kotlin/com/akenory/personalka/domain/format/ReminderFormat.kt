@@ -44,6 +44,10 @@ object ReminderFormat {
 
     const val DAY_PLAN_TITLE = "План на день"
 
+    /** «Аванс» 25-го в 19:00 (5.19): нажатие — окно ввода суммы в «Зарплате». */
+    const val ADVANCE_TITLE = "Аванс"
+    const val ADVANCE_TEXT = "Введите сумму аванса"
+
     /** «Сегодня 9 тренировок, первая в 08:00»; одна — «Сегодня 1 тренировка, в 08:00». */
     fun dayPlan(count: Int, first: LocalDateTime): String =
         "Сегодня " + CalendarFormat.trainings(count) + (if (count == 1) ", в$NBSP" else ", первая в$NBSP") + DateFormat.time(first.time)
@@ -72,6 +76,8 @@ object ReminderFormat {
     const val INSTANT_GROUP_NOTE = "Через 15 минут после конца группы без отметки"
     const val DAY_PLAN = "План на день"
     const val DAY_PLAN_NOTE = "В 07:00: сколько тренировок и когда первая. Если тренировок нет, не приходит"
+    const val ADVANCE = "Аванс"
+    const val ADVANCE_NOTE = "В день аванса в 19:00: ввести, сколько пришло. Если сумма уже введена, не приходит"
     const val BLOCKED = "Уведомления «Персоналки» выключены в настройках телефона"
     const val BLOCKED_ACTION = "Включить"
 

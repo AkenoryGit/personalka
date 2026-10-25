@@ -114,4 +114,22 @@ class ReminderRulesTest {
         assertEquals(s("Дневник · сводка в_21:00"), ReminderFormat.summary(diary = true, digest = true, time = LocalTime(21, 0)))
         assertTrue(ReminderFormat.summary(diary = false, digest = false, time = LocalTime(21, 0)).startsWith("Без дневника"))
     }
+
+    @Test
+    fun advanceAtSevenOnAdvanceDay() {
+        // Шаг 3.9: аванс 25.10, сумма не введена — уведомление в 19:00 того дня, и будильник ставится на него.
+        val day = LocalDate(2026, 10, 25)
+        val advance = listOf(day)
+        assertEquals(at(19, 0, day), ReminderRules.next(at(10, 0, day), defaults.copy(digest = false), emptyList(), advance))
+        assertEquals(listOf(Reminder.Advance), ReminderRules.due(at(18, 0, day), at(19, 2, day), defaults, emptyList(), emptySet(), advance))
+        assertEquals(emptyList(), ReminderRules.due(at(19, 2, day), at(20, 0, day), defaults, emptyList(), emptySet(), advance))
+        // Сумму уже ввели (дней нет) или «Аванс» выключен — не приходит.
+        assertEquals(emptyList(), ReminderRules.due(at(18, 0, day), at(19, 2, day), defaults, emptyList(), emptySet()))
+        assertEquals(emptyList(), ReminderRules.due(at(18, 0, day), at(19, 2, day), defaults.copy(advance = false), emptyList(), emptySet(), advance))
+        assertNull(ReminderRules.next(at(10, 0, day), defaults.copy(digest = false, advance = false), emptyList(), advance))
+        // После 19:00 будильник — на аванс следующего месяца.
+        val next = LocalDate(2026, 11, 25)
+        assertEquals(at(19, 0, next), ReminderRules.next(at(20, 0, day), defaults.copy(digest = false), emptyList(), listOf(day, next)))
+        assertEquals("Введите сумму аванса", ReminderFormat.ADVANCE_TEXT)
+    }
 }

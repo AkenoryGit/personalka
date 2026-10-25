@@ -15,6 +15,7 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.money.AdvanceState
 import com.akenory.personalka.domain.money.MonthInput
 import com.akenory.personalka.domain.money.OwnerScheme
 import com.akenory.personalka.domain.money.OwnerSchemes
@@ -24,6 +25,7 @@ import com.akenory.personalka.domain.money.PayRules
 import com.akenory.personalka.domain.money.PayScheme
 import com.akenory.personalka.domain.money.PayTraining
 import com.akenory.personalka.domain.money.PayType
+import com.akenory.personalka.domain.money.Payouts
 import com.akenory.personalka.domain.money.SalaryMonth
 import com.akenory.personalka.domain.money.SalaryDaysRules
 import com.akenory.personalka.domain.money.SalaryMonthRules
@@ -250,6 +252,17 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     /** План месяца [month] (4.12); `null` — стереть, тогда месяц возьмёт план прошлого. */
     suspend fun savePlan(month: YearMonth, amount: Long?) = updateRecord(month) { it.copy(planAmount = amount) }
+
+    /**
+     * Аванс месяца [month] (4.11): для пункта «Введите сумму аванса» на «Главной» (5.2) и уведомления 25-го (5.19).
+     * Читает только схемы выплат и записи месяцев — не пересчитывает зарплату. У схемы без аванса — `null`.
+     */
+    fun advance(month: YearMonth): Flow<AdvanceState?> =
+        combine(coaches.observePaySchemeVersions(), money.observeMonthRecords()) { schemes, records ->
+            // Две записи месяца с двух телефонов — последняя изменённая, как в build.
+            val record = records.filter { it.month == month }.maxWithOrNull(compareBy({ it.sync.updatedAt }, { it.id }))
+            Payouts.advance(month, schemes.map { it.payScheme() }, record?.advanceActual)
+        }
 
     /** Фактический аванс месяца [month] (4.11); `null` — снова ожидаемый. */
     suspend fun saveAdvance(month: YearMonth, amount: Long?) = updateRecord(month) { it.copy(advanceActual = amount) }

@@ -27,11 +27,17 @@ sealed interface AppLink {
         override val code = "card/$id"
     }
 
+    /** «Зарплата» → «Выплаты» с открытым окном аванса этого месяца: уведомление «Аванс» (шаг 3.9). */
+    data object Advance : AppLink {
+        override val code = "advance"
+    }
+
     companion object {
         fun parse(code: String?): AppLink? = when {
             code == null -> null
             code == Home.code -> Home
             code == FirstDiary.code -> FirstDiary
+            code == Advance.code -> Advance
             code.startsWith("diary/") -> Diary(code.removePrefix("diary/"))
             code.startsWith("card/") -> Card(code.removePrefix("card/"))
             else -> null

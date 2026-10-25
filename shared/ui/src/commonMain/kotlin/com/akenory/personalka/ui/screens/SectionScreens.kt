@@ -43,6 +43,7 @@ import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.calendar.ZoneKind
+import com.akenory.personalka.domain.money.SalarySetupRules
 import com.akenory.personalka.ui.calendar.CalendarScreen
 import com.akenory.personalka.ui.clients.CabinetTools
 import com.akenory.personalka.ui.clients.ClientFilter
@@ -54,6 +55,7 @@ import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
+import com.akenory.personalka.ui.home.HomeMoney
 import com.akenory.personalka.ui.home.HomeScreen
 import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
@@ -74,6 +76,7 @@ import com.akenory.personalka.ui.training.VoiceInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.yearMonth
 
 /**
  * Экраны разделов. С шага 1.5 — заготовки: заголовок и пустой экран с тем, в каком шаге раздел появится.
@@ -134,6 +137,8 @@ fun SectionScreen(
     waiting: List<WaitRow> = emptyList(),
     cabinets: CabinetTools? = null,
     shareText: ((String) -> Unit)? = null,
+    advanceAsk: Boolean = false,
+    onAdvanceAsk: (Boolean) -> Unit = {},
 ) {
     // «Кабинет» в карточке — только при включённых кабинетах (5.9); раздел «Кабинеты» в настройках — чтобы их включить.
     val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
@@ -146,7 +151,17 @@ fun SectionScreen(
         shell.open(GroupRoute.card(id))
     }
     when (section) {
-        Section.HOME -> HomeScreen(
+        Section.HOME -> {
+            // «Деньги» (5.2, шаг 3.9): текущий месяц тем же расчётом, что «Зарплата»; читается, только пока «Главная» открыта.
+            val categories by remember(settings) { settings.salary.categories }.collectAsState(initial = null)
+            val month by remember(settings, now.date) { settings.months.month(now.date.yearMonth, now.date) }.collectAsState(initial = null)
+            val loadedCategories = categories
+            val money = when {
+                loadedCategories == null -> null
+                SalarySetupRules.needed(loadedCategories) -> HomeMoney.NotSet
+                else -> month?.takeIf { it.view.month == now.date.yearMonth }?.let { HomeMoney.Month(it.view) }
+            }
+            HomeScreen(
             calendar = calendar,
             trainings = home,
             todos = todos,
@@ -180,7 +195,14 @@ fun SectionScreen(
                 openGroup(id)
             },
             onDiary = onDiary,
+            money = money,
+            onSalary = { shell.selectRoot(Section.SALARY) },
+            onAdvance = {
+                onAdvanceAsk(true)
+                shell.selectRoot(Section.SALARY)
+            },
         )
+        }
         Section.CALENDAR -> CalendarScreen(
             calendar = calendar,
             prefs = prefs,
@@ -208,7 +230,7 @@ fun SectionScreen(
             onDiary = onDiary,
         )
         Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting, cabinets?.takeIf { cabinetsOn })
-        Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope, shareText) {
+        Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope, shareText, advanceAsk, { onAdvanceAsk(false) }) {
             shell.select(Section.MORE)
             shell.reset(SettingsRoute.HOME)
             shell.open(SettingsRoute.RATES)

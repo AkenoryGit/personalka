@@ -58,12 +58,13 @@ internal const val MORE_TAG = "reminders-more"
 internal const val INSTANT_DIARY_TAG = "reminders-instant-diary"
 internal const val INSTANT_GROUP_TAG = "reminders-instant-group"
 internal const val DAY_PLAN_TAG = "reminders-day-plan"
+internal const val ADVANCE_TAG = "reminders-advance"
 internal const val BLOCKED_TAG = "reminders-blocked"
 internal fun followupDaysTag(days: Int) = "followup-$days"
 
 /**
  * «Настройки → Дневник и напоминания» (ТЗ 5.16, 5.19, шаг 2.5): «Вести дневник», автоотметка «Проведено», вечерняя
- * сводка и её время, «Клиенты без записи» со сроком; под свёрнутой строкой «Дополнительно» — мгновенные напоминания
+ * сводка и её время, «Клиенты без записи» со сроком, «Аванс» (шаг 3.9); под свёрнутой строкой «Дополнительно» — мгновенные напоминания
  * и «План на день». Всё пишется сразу, без «Сохранить». Время сводки и срок видны, только когда они включены (10.7).
  *
  * @param reminders «План на день» — настройка телефона; `null` — строки нет (тесты без платформы).
@@ -81,6 +82,7 @@ internal fun ReminderSettingsScreen(
     val loaded = prefs ?: return
     var more by rememberSaveable { mutableStateOf(loaded.instantDiary || loaded.instantGroup || reminders?.dayPlan == true) }
     var dayPlan by remember(reminders) { mutableStateOf(reminders?.dayPlan ?: false) }
+    var advance by remember(reminders) { mutableStateOf(reminders?.advance ?: false) }
     var timeOpen by rememberSaveable { mutableStateOf(false) }
     // Разрешение меняется в окне Android или в настройках телефона: строка «Включить» сверяется с ним, когда окно
     // приложения снова в фокусе, и сразу после нажатия.
@@ -99,7 +101,7 @@ internal fun ReminderSettingsScreen(
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             TopBar(ReminderFormat.TITLE, onBack = onBack)
             Column(Modifier.padding(horizontal = Dimens.space4)) {
-                if (blocked && (loaded.digest || loaded.instantDiary || loaded.instantGroup || dayPlan)) {
+                if (blocked && (loaded.digest || loaded.instantDiary || loaded.instantGroup || dayPlan || advance)) {
                     Column(Modifier.padding(top = Dimens.space2).testTag(BLOCKED_TAG)) {
                         Text(ReminderFormat.BLOCKED, style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.error)
                         OutlineButton(
@@ -129,6 +131,20 @@ internal fun ReminderSettingsScreen(
                     Chips(ReminderRules.FOLLOWUP_DAYS, loaded.followupDays, ReminderFormat::days, ::followupDaysTag) { days ->
                         save { saveFollowupDays(days) }
                     }
+                }
+                if (reminders != null) {
+                    // «Аванс» 25-го в 19:00 (5.19) — по умолчанию включён, поэтому не под «Дополнительно».
+                    SwitchRow(
+                        ReminderFormat.ADVANCE,
+                        advance,
+                        { on ->
+                            reminders.advance = on
+                            advance = on
+                            notifications?.changed()
+                        },
+                        Modifier.testTag(ADVANCE_TAG),
+                        ReminderFormat.ADVANCE_NOTE,
+                    )
                 }
                 MoreRow(more) { more = !more }
                 if (more) {

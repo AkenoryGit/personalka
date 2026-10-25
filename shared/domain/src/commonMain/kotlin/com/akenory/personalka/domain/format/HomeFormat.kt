@@ -3,6 +3,8 @@ package com.akenory.personalka.domain.format
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.RuText.NBSP
 import com.akenory.personalka.domain.home.BackupTodo
+import com.akenory.personalka.domain.money.AdvanceState
+import com.akenory.personalka.domain.money.TierProgress
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -126,4 +128,44 @@ object HomeFormat {
 
     /** Для TalkBack у счётчика дел рядом с заголовком: «Нужно сделать: 3». */
     fun todoCount(count: Int): String = "$TODO: $count"
+
+    /** Пункт «Нужно сделать» с 25-го (4.11): фактическая сумма аванса ещё не введена. */
+    const val ADVANCE = "Введите сумму аванса"
+
+    /** Подпись пункта: «аванс 25.10 · ожидается 13 546,50 ₽»; ожидаемой суммы в схеме нет — «аванс 25.10». */
+    fun advanceNote(advance: AdvanceState): String =
+        "аванс " + DateFormat.dayMonth(advance.date) + (advance.expected?.let { DOT + "ожидается " + MoneyFormat.rub(it) } ?: "")
+
+    // --- «Деньги» (шаг 3.9) ---
+
+    const val MONEY = "Деньги"
+
+    /** Заголовок карточки: «Деньги · октябрь». */
+    fun moneyTitle(month: LocalDate): String = MONEY + DOT + DateFormat.month(month)
+
+    /** Под полосой плана справа: «прогноз 97 %». */
+    fun forecastPercent(percent: Int): String = "прогноз $percent$NBSP%"
+
+    /**
+     * Строка ступени (5.2): прогноз меняет ступень — «94 ПТ · ступень 1 · по расписанию будет 2»; не меняет —
+     * «102 ПТ · ступень 2 · до 151 ещё 49 ПТ»; ступень 3 — «160 ПТ · ступень 3»; ступени выключены ([tiers] `null`) —
+     * «94 ПТ».
+     */
+    fun tierLine(ptCount: Int, tiers: TierProgress?): String {
+        val pts = RuText.digits(ptCount.toLong()) + NBSP + "ПТ"
+        if (tiers == null) return pts
+        val head = pts + DOT + "ступень " + tiers.tier
+        if (tiers.forecastTier > tiers.tier) return head + DOT + "по расписанию будет " + tiers.forecastTier
+        val next = when (tiers.tier) {
+            1 -> tiers.t2From
+            2 -> tiers.t3From
+            else -> return head
+        }
+        return head + DOT + "до$NBSP$next ещё " + RuText.digits((next - ptCount).toLong()) + NBSP + "ПТ"
+    }
+
+    /** Зарплата не настроена (5.18): вместо суммы — приглашение и кнопка. */
+    const val SALARY_NOT_SET = "Зарплата ещё не настроена"
+    const val SALARY_NOT_SET_NOTE = "Посчитаю заработок, ступень и выплаты по вашим тренировкам."
+    const val SALARY_SETUP = "Настроить зарплату"
 }

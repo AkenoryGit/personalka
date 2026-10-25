@@ -91,7 +91,8 @@ internal fun openFeatures(account: AccountRepository?, today: LocalDate): Set<Fe
 
 /**
  * Раздел «Зарплата»: при первом открытии — мастер «Настроить зарплату» (ТЗ 5.18), после него — месяц и выплаты
- * (5.12).
+ * (5.12). [advanceAsk] — открыть «Выплаты» этого месяца с окном аванса (пункт «Главной» и уведомление, шаг 3.9);
+ * [onAdvanceShown] — окно открыто, просьба выполнена.
  */
 @Composable
 fun SalaryScreen(
@@ -101,6 +102,8 @@ fun SalaryScreen(
     messages: MessageState,
     scope: CoroutineScope,
     shareText: ((String) -> Unit)? = null,
+    advanceAsk: Boolean = false,
+    onAdvanceShown: () -> Unit = {},
     onRates: () -> Unit,
 ) {
     val categories by remember(settings) { settings.salary.categories }.collectAsState(initial = null)
@@ -113,7 +116,7 @@ fun SalaryScreen(
         SalarySetupWizard(settings, loadedPlaces.filter { !it.archived }, loadedTypes.filter { !it.archived }, openFeatures(account, today), today, messages, scope)
         return
     }
-    SalaryMonthScreen(settings, today, messages, scope, onRates, shareText)
+    SalaryMonthScreen(settings, today, messages, scope, onRates, shareText, advanceAsk, onAdvanceShown)
 }
 
 /**

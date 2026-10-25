@@ -62,6 +62,15 @@ data class MonthPayout(
     val advanceExceedsCard: Boolean get() = cardRest < 0
 }
 
+/**
+ * Аванс месяца [month] (4.11): приходит [date] (25-го), ожидается [expected] (`advance_default`), введён [actual].
+ * Пока сумма не введена, с дня аванса «Главная» просит её ввести, а 25-го в 19:00 приходит уведомление (5.2, 5.19).
+ */
+data class AdvanceState(val month: YearMonth, val date: LocalDate, val expected: Long?, val actual: Long?) {
+    /** Пора ввести фактическую сумму: сегодня день аванса или позже, а суммы нет. */
+    fun ask(today: LocalDate): Boolean = actual == null && today >= date
+}
+
 /** Итоги месяца (ТЗ 4.10): заработано E, начислено клубом A, взаиморасчёт S, на руки R = карта + наличные + S. */
 data class MonthTotals(
     val earned: Long,
@@ -118,6 +127,16 @@ object Payouts {
     fun totals(pay: MonthPay, schemes: List<PayScheme>, advanceActual: Long? = null): MonthTotals {
         val payout = of(pay.month, pay.accrued, schemes, advanceActual)
         return MonthTotals(pay.earned, pay.accrued, pay.settlement, payout.card + payout.cash + pay.settlement, payout)
+    }
+
+    /**
+     * Аванс месяца [month] (4.11, 5.2, 5.19): день, ожидаемая сумма и введённая [advanceActual]. У схемы без аванса —
+     * `null`: ни пункта «Нужно сделать», ни уведомления 25-го.
+     */
+    fun advance(month: YearMonth, schemes: List<PayScheme>, advanceActual: Long?): AdvanceState? {
+        val scheme = scheme(schemes, month)
+        val date = advanceDate(month, scheme) ?: return null
+        return AdvanceState(month, date, scheme?.advanceDefault, advanceActual)
     }
 
     /** Спросить фактический аванс (4.11): сегодня день аванса месяца или позже, а сумма ещё не введена. */

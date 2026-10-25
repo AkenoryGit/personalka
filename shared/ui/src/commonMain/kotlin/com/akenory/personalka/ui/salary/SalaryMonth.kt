@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -146,6 +147,8 @@ internal fun SalaryMonthScreen(
     scope: CoroutineScope,
     onRates: () -> Unit,
     shareText: ((String) -> Unit)? = null,
+    advanceAsk: Boolean = false,
+    onAdvanceShown: () -> Unit = {},
 ) {
     var monthText by rememberSaveable { mutableStateOf(today.yearMonth.toString()) }
     val month = YearMonth.parse(monthText)
@@ -179,6 +182,15 @@ internal fun SalaryMonthScreen(
         if (needYear) repo.year(month.year, today) else flowOf(null)
     }.collectAsState(initial = null)
     val colors = PersonalkaTheme.colors
+    // «Введите сумму аванса» с «Главной» или из уведомления (шаг 3.9): этот месяц, «Выплаты» и окно аванса.
+    LaunchedEffect(advanceAsk) {
+        if (advanceAsk) {
+            monthText = today.yearMonth.toString()
+            tab = SalaryTab.PAYOUTS
+            advanceOpen = true
+            onAdvanceShown()
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val sideWidth = (maxWidth * 0.45f).coerceIn(280.dp, 360.dp)

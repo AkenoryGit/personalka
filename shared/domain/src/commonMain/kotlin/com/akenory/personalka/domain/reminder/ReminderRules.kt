@@ -3,6 +3,7 @@ package com.akenory.personalka.domain.reminder
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.home.HomeSlot
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
@@ -14,6 +15,7 @@ import kotlinx.datetime.plus
  * @param instantDiary «Дневник сразу»: через 15 минут после конца тренировки без дневника.
  * @param instantGroup «Группа сразу»: через 15 минут после конца группы без отметки.
  * @param dayPlan «План на день» в 07:00.
+ * @param advance «Аванс»: в день аванса (25-го) в 19:00, пока сумма не введена.
  */
 data class ReminderSettings(
     val digest: Boolean = true,
@@ -21,15 +23,19 @@ data class ReminderSettings(
     val instantDiary: Boolean = false,
     val instantGroup: Boolean = false,
     val dayPlan: Boolean = false,
+    val advance: Boolean = true,
 )
 
-/** Что пора показать. Аванс 25-го — с зарплатой (этап 3). */
+/** Что пора показать. */
 sealed interface Reminder {
     /** Вечерняя сводка: пункты «Нужно сделать»; дел нет — она не приходит. */
     data object Digest : Reminder
 
     /** «План на день»: сегодняшние тренировки; их нет — не приходит. */
     data object DayPlan : Reminder
+
+    /** «Аванс» (шаг 3.9): «Введите сумму аванса»; сумму уже ввели — не приходит. */
+    data object Advance : Reminder
 
     /** «Дневник сразу» — тренировка [id] проведена, дневника нет; у группы — когда детей уже отметили. */
     data class Diary(val id: String) : Reminder
@@ -45,6 +51,7 @@ sealed interface Reminder {
 object ReminderRules {
     val DIGEST_DEFAULT = LocalTime(21, 0)
     val DAY_PLAN_TIME = LocalTime(7, 0)
+    val ADVANCE_TIME = LocalTime(19, 0)
 
     /** Через сколько после конца тренировки приходят «Дневник сразу» и «Группа сразу». */
     const val INSTANT_DELAY_MIN = 15
@@ -61,6 +68,7 @@ object ReminderRules {
     /**
      * Что пора показать за промежуток ([from]; [to]]. [slots] — тренировки «Главной», [noDiary] — id проведённых без
      * дневника на момент [to]: если тренер успел заполнить дневник или отметить группу, напоминание не приходит.
+     * [advance] — дни аванса, сумма которого ещё не введена (этого месяца и следующего).
      * Сводка и план на день — не больше одного раза, даже если проверка пропустила несколько дней.
      */
     fun due(
@@ -69,12 +77,14 @@ object ReminderRules {
         settings: ReminderSettings,
         slots: List<HomeSlot>,
         noDiary: Set<String>,
+        advance: List<LocalDate> = emptyList(),
     ): List<Reminder> {
         val start = maxOf(from, ClubTime.plusMinutes(to, -CATCH_UP_HOURS * 60))
         if (start >= to) return emptyList()
         fun inside(moment: LocalDateTime) = moment > start && moment <= to
         return buildList {
             if (settings.dayPlan && daily(DAY_PLAN_TIME, start, to)) add(Reminder.DayPlan)
+            if (settings.advance && advance.any { inside(LocalDateTime(it, ADVANCE_TIME)) }) add(Reminder.Advance)
             if (settings.instantGroup) {
                 slots.filter { it.group && !it.cancelled && !it.marked && inside(instantAt(it)) }
                     .sortedBy { it.start }
@@ -90,13 +100,14 @@ object ReminderRules {
     }
 
     /**
-     * Следующий момент проверки после [after]: сводка, план на день, конец тренировки плюс 15 минут. `null` — всё
+     * Следующий момент проверки после [after]: сводка, план на день, аванс, конец тренировки плюс 15 минут. `null` — всё
      * выключено, будильник не нужен. Есть ли у тренировки дневник, заранее не известно — это решит [due].
      */
-    fun next(after: LocalDateTime, settings: ReminderSettings, slots: List<HomeSlot>): LocalDateTime? {
+    fun next(after: LocalDateTime, settings: ReminderSettings, slots: List<HomeSlot>, advance: List<LocalDate> = emptyList()): LocalDateTime? {
         val moments = buildList {
             if (settings.digest) add(nextDaily(settings.digestTime, after))
             if (settings.dayPlan) add(nextDaily(DAY_PLAN_TIME, after))
+            if (settings.advance) advance.map { LocalDateTime(it, ADVANCE_TIME) }.filter { it > after }.let(::addAll)
             slots.filter { !it.cancelled && (settings.instantDiary || settings.instantGroup && it.group) }
                 .map { instantAt(it) }
                 .filter { it > after }

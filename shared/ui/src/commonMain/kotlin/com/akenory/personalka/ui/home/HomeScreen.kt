@@ -63,6 +63,8 @@ import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
+import com.akenory.personalka.domain.format.MoneyFormat
+import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.WaitFormat
@@ -71,6 +73,8 @@ import com.akenory.personalka.domain.home.HomeSlot
 import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.money.AdvanceState
+import com.akenory.personalka.domain.money.SalaryMonth
 import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.StatusRules
@@ -80,6 +84,7 @@ import com.akenory.personalka.ui.calendar.EntryRow
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SecondaryButton
+import com.akenory.personalka.ui.salary.TwoPartBar
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
@@ -106,6 +111,8 @@ internal const val NEXT_TAG = "home-next"
 internal const val TODO_TAG = "home-todo"
 internal const val PAST_TAG = "home-past"
 internal const val TOMORROW_TAG = "home-tomorrow"
+internal const val MONEY_TAG = "home-money"
+internal const val MONEY_SETUP_TAG = "home-money-setup"
 internal fun todoTag(kind: TodoKind) = "home-todo-${kind.name.lowercase()}"
 internal fun dayRowTag(id: String) = "home-day-$id"
 
@@ -128,6 +135,16 @@ data class HomeTodo(
 
 internal fun CalendarTraining.slot() = HomeSlot(id, start, durationMin, group, cancelled, marked)
 
+/**
+ * Карточка «Деньги» (5.2, шаг 3.9): [NotSet] — зарплата не настроена, «Настроить зарплату» (5.18); [Month] — текущий
+ * месяц тем же расчётом, что вкладка «Месяц» «Зарплаты».
+ */
+sealed interface HomeMoney {
+    data object NotSet : HomeMoney
+
+    data class Month(val view: SalaryMonth) : HomeMoney
+}
+
 /** Синхронизация для «Нужно сделать»: сервер подключён; [late] — изменения ждут отправки больше суток (5.2). */
 data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
 
@@ -136,8 +153,9 @@ data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
  * с шага 2.1 — «Без дневника» ([noDiary] — `DiaryRepository.missing`), с шага 2.4 — клиенты без записи ([followup]),
  * с шага 2.4б — освободившееся время листа ожидания ([waiting]), с шага 2.10а — [sync]: сервер подключён — вместо
  * копии «Изменения не отправлены больше суток»; с шага 2.13а — отозванные согласия ([consents] —
- * `CabinetRepository.due`); с шага 3.7а — СПТ, ждущие покупки ([spt] — `SptRepository.waiting`); остальные деньги
- * добавит этап 3. [backup] `null` — раздела копии нет (тесты). Их число —
+ * `CabinetRepository.due`); с шага 3.7а — СПТ, ждущие покупки ([spt] — `SptRepository.waiting`); с шага 3.9 — аванс
+ * ([advance] — `SalaryRepository.advance`): с дня аванса, пока сумма не введена. [backup] `null` — раздела копии нет
+ * (тесты). Их число —
  * счётчик дел на значке «Главной».
  */
 fun homeTodos(
@@ -150,6 +168,7 @@ fun homeTodos(
     sync: SyncTodo? = null,
     consents: List<ConsentDue> = emptyList(),
     spt: List<SptWaiting> = emptyList(),
+    advance: AdvanceState? = null,
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -188,6 +207,10 @@ fun homeTodos(
         // СПТ ждут покупки (4.9): ближайший срок и его клиент; нажатие — «Инфо» клиента с «Купил блок со скидкой».
         add(HomeTodo(TodoKind.SPT_PURCHASE, SptFormat.TODO, SptFormat.todoNote(nearest.case.windowUntil, nearest.name), count = spt.size, clientId = nearest.case.clientId))
     }
+    if (advance != null && advance.ask(now.date)) {
+        // Аванс (4.11): нажатие — «Зарплата» → «Выплаты» с открытым окном суммы.
+        add(HomeTodo(TodoKind.ADVANCE, HomeFormat.ADVANCE, HomeFormat.advanceNote(advance), count = null))
+    }
     if (sync != null) {
         // «С сервером» (5.2): вместо напоминаний о копии — изменения, не отправленные больше суток.
         if (sync.late) add(HomeTodo(TodoKind.BACKUP, SyncFormat.LATE, SyncFormat.lateNote(sync.lastSync), count = null))
@@ -211,7 +234,7 @@ fun homeTodos(
 }.sortedBy { it.kind }
 
 /**
- * «Главная» (ТЗ 5.2, шаг 1.16): «Ближайшая» и «Нужно сделать»; «Деньги» — на шаге 3.9. На разложенном Fold слева —
+ * «Главная» (ТЗ 5.2, шаг 1.16): «Ближайшая», «Нужно сделать» и «Деньги» (шаг 3.9). На разложенном Fold слева —
  * расписание дня, справа — блоки. Нажатие на тренировку открывает её карточку здесь же ([TrainingCardHost]), как в
  * календаре.
  *
@@ -225,6 +248,9 @@ fun homeTodos(
  * @param onDiary «Дневник» у «Ближайшей» и в карточке, пункт «Без дневника» — экран дневника (5.7).
  * @param onNoBooking пункт «Клиенты без записи» — «Клиенты» с фильтром «Без записи».
  * @param onClientInfo пункт «СПТ ждут покупки» — карточка клиента на «Инфо».
+ * @param money карточка «Деньги»; `null` — её нет (ещё не прочитана или тесты без зарплаты).
+ * @param onSalary нажатие на «Деньги» и «Настроить зарплату» — раздел «Зарплата».
+ * @param onAdvance пункт «Введите сумму аванса» — «Зарплата» → «Выплаты» с окном аванса.
  */
 @Composable
 fun HomeScreen(
@@ -244,6 +270,9 @@ fun HomeScreen(
     onGroup: (String) -> Unit,
     onDiary: (String) -> Unit = {},
     onClientInfo: (String) -> Unit = onClient,
+    money: HomeMoney? = null,
+    onSalary: () -> Unit = {},
+    onAdvance: () -> Unit = onSalary,
 ) {
     val wide = LocalWide.current
     val scroll = rememberScrollState()
@@ -267,6 +296,7 @@ fun HomeScreen(
         val client = todo.clientId
         when {
             todo.kind == TodoKind.NOT_BOOKED || todo.kind == TodoKind.FREED_TIME -> onNoBooking()
+            todo.kind == TodoKind.ADVANCE -> onAdvance()
             client != null && todo.kind == TodoKind.SPT_PURCHASE -> onClientInfo(client)
             client != null -> onClient(client)
             id == null -> onBackup()
@@ -288,6 +318,7 @@ fun HomeScreen(
             onDay = onDay,
         )
         if (todos.isNotEmpty()) TodoBlock(todos, onTodo)
+        money?.let { MoneyBlock(it, today, onSalary) }
     }
 
     TrainingCardHost(
@@ -545,6 +576,7 @@ private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.NO_DIARY -> PIcons.EditNote
     TodoKind.CONSENT_REVOKED -> PIcons.Delete
     TodoKind.SPT_PURCHASE -> PIcons.ShoppingBag
+    TodoKind.ADVANCE -> PIcons.Payments
     else -> PIcons.Info
 }
 
@@ -578,6 +610,65 @@ private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: ()
         }
         todo.count?.let { Text(it.toString(), style = MaterialTheme.typography.labelLarge.tabular(), color = colors.text) }
         Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * «Деньги» (5.2): заработано за месяц (28 sp), полоса плана — проведено основным цветом, прогноз цветом рамок, конец
+ * полосы — план; под ней «60 % плана» и «прогноз 97 %», затем строка ступени. Плана нет — полосы нет, под суммой
+ * «Прогноз ≈ 203 490 ₽». Нажатие — «Зарплата». Зарплата не настроена — приглашение и «Настроить зарплату» (5.18).
+ */
+@Composable
+private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    when (money) {
+        HomeMoney.NotSet -> Block(Modifier.testTag(MONEY_TAG)) {
+            Padded {
+                Text(HomeFormat.MONEY, style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
+                Text(HomeFormat.SALARY_NOT_SET, style = MaterialTheme.typography.titleMedium, color = colors.text)
+                Text(HomeFormat.SALARY_NOT_SET_NOTE, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                PrimaryButton(
+                    text = HomeFormat.SALARY_SETUP,
+                    onClick = onSalary,
+                    modifier = Modifier.fillMaxWidth().padding(top = Dimens.space1).testTag(MONEY_SETUP_TAG),
+                )
+            }
+        }
+        is HomeMoney.Month -> {
+            val view = money.view
+            Block(Modifier.clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
+                Padded {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(HomeFormat.moneyTitle(today), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
+                        Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+                    }
+                    Text(
+                        MoneyFormat.rub(view.pay.earned),
+                        style = MaterialTheme.typography.displaySmall.tabular(),
+                        color = colors.text,
+                    )
+                    val plan = view.plan
+                    if (plan != null && plan > 0) {
+                        val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
+                        val forecast = (view.pay.forecast.toFloat() / plan).coerceIn(done, 1f)
+                        TwoPartBar(done, forecast)
+                        Row(Modifier.fillMaxWidth()) {
+                            view.percent?.let { Text(SalaryFormat.ofPlan(it), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted) }
+                            view.forecastPercent?.let { Text(HomeFormat.forecastPercent(it), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted) }
+                        }
+                    } else {
+                        Text(SalaryFormat.forecast(view.pay.forecast), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
+                    }
+                }
+                HorizontalDivider(Modifier.padding(horizontal = Dimens.space4), thickness = 1.dp, color = colors.divider)
+                Text(
+                    HomeFormat.tierLine(view.pay.ptCount, view.tiers),
+                    Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space3),
+                    style = MaterialTheme.typography.bodyLarge.tabular(),
+                    color = colors.text,
+                )
+            }
+        }
     }
 }
 

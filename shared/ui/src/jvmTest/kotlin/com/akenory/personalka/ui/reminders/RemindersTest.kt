@@ -8,6 +8,11 @@ import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.training.TrainingDraft
+import com.akenory.personalka.domain.model.CoachCategory
+import com.akenory.personalka.domain.model.PaySchemeKind
+import com.akenory.personalka.domain.money.RateAmounts
+import com.akenory.personalka.domain.money.SalarySetupDraft
+import com.akenory.personalka.domain.money.TierDraft
 import com.akenory.personalka.ui.TestData
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -15,6 +20,7 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.YearMonth
 import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -128,4 +134,37 @@ class RemindersTest {
         assertEquals(ReminderFormat.DAY_PLAN_TITLE, plan.title)
         assertEquals(ReminderFormat.dayPlan(2, at(13)), plan.text)
     }
+
+    @Test
+    fun advanceOnAdvanceDayAtSeven() {
+        // Шаг 3.9: аванс 25-го в 19:00, пока сумма не введена; нажатие — окно аванса в «Зарплате».
+        val settings = TestData.ready()
+        runBlocking {
+            val pt = settings.types.first().single { it.shortName == "ПТ" }.id
+            val bb = settings.places.first().single { it.shortName == "ББ" }.id
+            settings.salary.finish(
+                SalarySetupDraft(
+                    category = CoachCategory.MASTER,
+                    scheme = PaySchemeKind.FULL_OFFICIAL,
+                    advance = 1_000_000,
+                    schemeFrom = YearMonth(2026, 1),
+                    rates = mapOf(pt to mapOf(bb to RateAmounts(92_000, 96_000, 100_000))),
+                    services = emptyMap(),
+                    tiers = TierDraft(true, 101, 151, setOf(pt)),
+                ),
+                today,
+            )
+            TestData.calendarOf(settings).reminders.saveDigest(false)
+        }
+        val reminders = Reminders(TestData.calendarOf(settings), TestData.clientsOf(settings), null, prefs, { ClubTime.toMillis(now) }, settings.months)
+        val day = LocalDate(2026, 10, 25)
+        assertEquals(at(19, 0, day), check(reminders, at(10, 0, day)).next)
+        val evening = check(reminders, at(19, 3, day))
+        assertEquals(listOf(Notice(Reminders.ADVANCE_KEY, NoticeChannel.INSTANT, ReminderFormat.ADVANCE_TITLE, ReminderFormat.ADVANCE_TEXT, AppLink.Advance)), evening.notices)
+        assertEquals(at(19, 0, LocalDate(2026, 11, 25)), evening.next)
+        // Выключили «Аванс» — будильника нет (сводка тоже выключена).
+        reminders.advance = false
+        assertNull(check(reminders, at(19, 10, day)).next)
+    }
 }
+

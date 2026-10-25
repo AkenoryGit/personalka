@@ -77,7 +77,7 @@ class PersonalkaApplication : Application() {
     val cabinets: CabinetRepository by lazy { androidCabinets(this, database) { settings.coach.first()?.serverUrl } }
 
     /** Напоминания (шаг 2.5): проверка по будильнику ([ReminderReceiver]) и время следующей. */
-    val reminders: Reminders by lazy { Reminders(calendar, clients, backup, prefs, System::currentTimeMillis) }
+    val reminders: Reminders by lazy { Reminders(calendar, clients, backup, prefs, System::currentTimeMillis, settings.months) }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.yearMonth
 
 /**
  * Приложение целиком: тема 0.2; пока тренера нет — первый запуск (шаг 1.6), потом оболочка с пятью
@@ -138,6 +139,12 @@ fun App(
         val sptWaiting by remember(calendar, hasCoach, now.date) {
             if (hasCoach == true) calendar.cards.spt.waiting(now.date) else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
+        // Аванс (4.11, шаг 3.9): пункт «Введите сумму аванса» с дня аванса, пока сумма не введена.
+        val advance by remember(settings, hasCoach, now.date.yearMonth) {
+            if (hasCoach == true) settings.months.advance(now.date.yearMonth) else flowOf(null)
+        }.collectAsState(initial = null)
+        // Просьба открыть окно аванса в «Зарплате»: пункт «Главной» или уведомление «Аванс».
+        var advanceAsk by rememberSaveable { mutableStateOf(false) }
         // «С сервером» (5.2): вместо копии — изменения, не отправленные больше суток.
         val syncState by remember(sync) { sync?.repository?.state ?: flowOf(null) }.collectAsState(initial = null)
         val pending by remember(sync) { sync?.repository?.pending ?: flowOf(0) }.collectAsState(initial = 0)
@@ -155,8 +162,8 @@ fun App(
         LaunchedEffect(cabinets, cabinetsOpen, syncState?.lastSync) {
             if (cabinetsOpen) cabinets?.repository?.refresh()
         }
-        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting) {
-            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting)
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance)
         }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()
@@ -186,6 +193,12 @@ fun App(
                     val first = calendar.diaries.missing.first().firstOrNull()?.id
                     if (first == null) shell.selectRoot(Section.HOME)
                     diary = first
+                }
+                AppLink.Advance -> {
+                    diary = null
+                    homeCard = null
+                    advanceAsk = true
+                    shell.selectRoot(Section.SALARY)
                 }
                 is AppLink.Diary -> diary = link.id
                 is AppLink.Card -> {
@@ -267,6 +280,8 @@ fun App(
                             notifications = notifications,
                             voice = voice,
                             waiting = waiting,
+                            advanceAsk = advanceAsk,
+                            onAdvanceAsk = { advanceAsk = it },
                         )
                     }
                     form?.let { key ->
