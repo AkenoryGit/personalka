@@ -2,6 +2,8 @@ package com.akenory.personalka.data.money
 
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
+import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
+import com.akenory.personalka.data.db.entity.ColleagueSettlementEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.MonthAdjustmentEntity
 import com.akenory.personalka.data.db.entity.MonthRecordEntity
@@ -11,6 +13,7 @@ import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
+import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.money.MonthInput
 import com.akenory.personalka.domain.money.OwnerScheme
@@ -27,10 +30,12 @@ import com.akenory.personalka.domain.money.SalaryMonthRules
 import com.akenory.personalka.domain.money.SalaryPeriod
 import com.akenory.personalka.domain.money.SptCase
 import com.akenory.personalka.domain.money.TierScheme
+import com.akenory.personalka.domain.money.Versions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -44,6 +49,7 @@ import kotlinx.datetime.yearMonth
  * Месяц экрана «Зарплата» (5.12) и всё, что к нему нужно: [view] — расчёт, [adjustments] — доплаты и удержания
  * в порядке внесения, имена типов, мест и коллег — по id. [input] — вход расчёта (для периода, 3.7в);
  * [trainings] — тренировки месяца по id, [whom] — за кого тренировка: клиенты или название группы (день графика).
+ * [groups] — названия групп по id, [colleagueSchemes] — схема выплат коллеги в этом месяце (вкладка «Коллеги», 3.8).
  */
 data class SalaryMonthData(
     val view: SalaryMonth,
@@ -54,6 +60,8 @@ data class SalaryMonthData(
     val input: MonthInput? = null,
     val trainings: Map<String, TrainingEntity> = emptyMap(),
     val whom: Map<String, String> = emptyMap(),
+    val groups: Map<String, String> = emptyMap(),
+    val colleagueSchemes: Map<String, PaySchemeKind> = emptyMap(),
 )
 
 /** «Период» (5.12, 3.7в): расчёт [view] и месяцы, которые он задевает, — для имён, доплат и тренировок. */
@@ -89,7 +97,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     private data class Money(
         val schemes: List<PayScheme>,
-        val colleagueSchemes: Map<String, List<OwnerScheme>>,
+        val colleagueSchemes: Map<String, List<ColleagueSchemeVersionEntity>>,
         val spt: List<SptCaseEntity>,
         val adjustments: List<MonthAdjustmentEntity>,
         val records: List<MonthRecordEntity>,
@@ -121,10 +129,12 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         ) { schemes, colleagueSchemes, spt, adjustments, records ->
             Money(
                 schemes.map { it.payScheme() },
-                colleagueSchemes.groupBy { it.colleagueId }.mapValues { (_, list) -> list.map { OwnerScheme.of(it.validFrom, it.kind) } },
+                colleagueSchemes.groupBy { it.colleagueId },
                 spt, adjustments, records,
             )
         }
+        // Отметки «Рассчитались» (3.8): у коллеги с двумя записями (два телефона) — последняя изменённая.
+        val settled = money.observeSettlements(month).map { list -> list.associate { it.colleagueId to it.amount } }
         val names = combine(
             reference.observeLocations(),
             money.observeColleagues(),
@@ -138,7 +148,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
                 groups.associate { it.id to it.name },
             )
         }
-        return combine(sources, moneySources, names) { s, m, n -> build(month, today, s, m, n) }.flowOn(Dispatchers.Default)
+        return combine(sources, moneySources, names, settled) { s, m, n, marks -> build(month, today, s, m, n, marks) }.flowOn(Dispatchers.Default)
     }
 
     /**
@@ -160,6 +170,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         s: Sources,
         m: Money,
         n: Names,
+        settled: Map<String, Long>,
     ): SalaryMonthData {
         val places = n.places
         val byTraining = s.participations.groupBy { it.trainingId }
@@ -177,7 +188,10 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
             types = types,
             rates = s.rates,
             schemes = s.tiers,
-            owners = OwnerSchemes(m.schemes.map { it.owner() }, m.colleagueSchemes),
+            owners = OwnerSchemes(
+                m.schemes.map { it.owner() },
+                m.colleagueSchemes.mapValues { (_, list) -> list.map { OwnerScheme.of(it.validFrom, it.kind) } },
+            ),
             spt = spt,
             adjustments = m.adjustments.map { PayAdjustment(it.amount, it.inClubAccrual, ClubTime.today(it.sync.createdAt)) },
         )
@@ -189,6 +203,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
             input, m.schemes, plans, records[month]?.advanceActual, today, ptTypeId,
             SalaryMonthRules.ptPlace(PayRules.inMonth(trainings, month), ptTypeId, activePlaces),
             closed = records[month]?.closed == true,
+            settled = settled,
         )
         val ofMonth = s.trainings.filter { it.start.date.yearMonth == month }
         val shown = view.days.mapNotNull { it.trainingId }.toSet()
@@ -198,7 +213,10 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         }
         return SalaryMonthData(
             view, m.adjustments, s.types.associateBy { it.id }, places.associateBy { it.id }, n.colleagues,
-            input = input, trainings = ofMonth.associateBy { it.id }, whom = whom,
+            input = input, trainings = ofMonth.associateBy { it.id }, whom = whom, groups = n.groups,
+            colleagueSchemes = m.colleagueSchemes.mapNotNull { (id, list) ->
+                Versions.activeIn(list, month) { it.validFrom }?.let { id to it.kind }
+            }.toMap(),
         )
     }
 
@@ -219,6 +237,21 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         val changed = change(record)
         if (old != null && changed == old) return
         money.upsertMonthRecord(if (old == null) changed else changed.copy(sync = old.sync.touched(now)))
+    }
+
+    /**
+     * «Рассчитались» с коллегой [colleagueId] за месяц [month] (4.11, 5.12): запоминается итог [amount], на котором
+     * отметили; `null` — снять отметку. Повторная отметка после изменения расчёта правит ту же запись.
+     */
+    suspend fun settle(month: YearMonth, colleagueId: String, amount: Long?) {
+        val coach = coaches.currentCoach() ?: return
+        val now = clock()
+        val old = money.settlement(month, colleagueId)
+        when {
+            amount == null -> old?.let { money.upsertSettlement(it.copy(sync = it.sync.deleted(now))) }
+            old == null -> money.upsertSettlement(ColleagueSettlementEntity(Ids.newId(now), SyncFields.new(coach.id, now), month, colleagueId, amount))
+            old.amount != amount -> money.upsertSettlement(old.copy(sync = old.sync.touched(now), amount = amount))
+        }
     }
 
     /** «+ Доплата» (5.12): доплата ([amount] больше нуля) или удержание месяца. Возвращает id записи. */

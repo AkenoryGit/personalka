@@ -23,6 +23,7 @@ import com.akenory.personalka.data.db.entity.CoachEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.ColleagueEntity
 import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
+import com.akenory.personalka.data.db.entity.ColleagueSettlementEntity
 import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
@@ -88,12 +89,13 @@ import kotlin.coroutines.CoroutineContext
         MonthRecordEntity::class,
         MonthAdjustmentEntity::class,
         ArchivedMonthEntity::class,
+        ColleagueSettlementEntity::class,
         // 3.8 — только для телефона
         SyncOutboxEntity::class,
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -111,10 +113,11 @@ abstract class PersonalkaDatabase : RoomDatabase() {
         /**
          * 1 — шаг 1.1; 2 — шаг 1.13в: цвет у места, оттенок у типа ([Migration1To2]); 3 — «За кого» у дежурства
          * ([Migration2To3]); 4 — очередь изменений для синхронизации ([Migration3To4], шаг 2.10); 5 — деньги: коллеги,
-         * месяцы, доплаты, итоги прошлых месяцев и услуга сетки у ставки ([Migration4To5], шаг 3.1). Перед переходом
+         * месяцы, доплаты, итоги прошлых месяцев и услуга сетки у ставки ([Migration4To5], шаг 3.1); 6 — отметки
+         * «Рассчитались» с коллегами ([Migration5To6], шаг 3.8). Перед переходом
          * на новую версию — копия ([BeforeMigration], шаг 2.7б).
          */
-        const val VERSION = 5
+        const val VERSION = 6
         const val FILE_NAME = "personalka.db"
     }
 }

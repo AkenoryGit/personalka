@@ -3,6 +3,7 @@ package com.akenory.personalka.data.db
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.YearMonth
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -10,7 +11,7 @@ import kotlin.test.assertTrue
 
 /**
  * Переходы базы со старых версий: файл версии 1 (до шага 1.13в), 2 (до «За кого» у дежурства), 3 (до очереди
- * изменений) и 4 (до таблиц денег, шаг 3.1) — как на телефоне
+ * изменений), 4 (до таблиц денег, шаг 3.1) и 5 (до отметок «Рассчитались», шаг 3.8) — как на телефоне
  * до новой сборки — открываются нынешней версией без потерь. Таблицы старой версии строятся по её схеме
  * из `shared/data/schemas`, которую когда-то записал Room ([createVersion]).
  */
@@ -174,8 +175,44 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion5() {
-        assertEquals(5, PersonalkaDatabase.VERSION)
-        assertTrue((1..4).all { schemaFile(it).exists() }, "Схемы версий 1–4 хранятся: по ним строятся переходы")
+    fun version5KeepsMoneyAndGetsSettlements(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v5", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.1–3.7: коллега и доплата месяца.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 5)
+                raw.exec(
+                    "INSERT INTO colleague (id, name, linkedCoachId, archived, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('lena', 'Лена', NULL, 0, 'c1', 1, 1, 1, NULL)",
+                )
+                raw.exec(
+                    "INSERT INTO month_adjustment (id, month, amount, comment, inClubAccrual, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('a1', '2026-10', 120000, 'Соревнования', 1, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val money = db.moneyDao()
+                assertEquals("Лена", money.colleague("lena")!!.name, "Коллега не тронут")
+                assertEquals(120000L, money.adjustments(YearMonth(2026, 10)).single().amount, "Доплата не тронута")
+                assertNull(money.settlement(YearMonth(2026, 10), "lena"), "Отметок «Рассчитались» ещё нет")
+                money.upsertSettlement(Samples.settlement("lena", 88358))
+                assertEquals(88358L, money.settlement(YearMonth(2026, 10), "lena")!!.amount)
+                assertEquals(1, db.syncDao().pending(), "Новая таблица пишет в очередь изменений")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion6() {
+        assertEquals(6, PersonalkaDatabase.VERSION)
+        assertTrue((1..5).all { schemaFile(it).exists() }, "Схемы версий 1–5 хранятся: по ним строятся переходы")
     }
 }

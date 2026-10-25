@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -122,6 +122,21 @@ internal object Migration4To5 : Migration(4, 5) {
                 "`splitCount` INTEGER NOT NULL, `groupChildren` INTEGER NOT NULL, `dutyMinutes` INTEGER NOT NULL, $SYNC)",
         )
         connection.exec("CREATE INDEX IF NOT EXISTS `index_archived_month_month` ON `archived_month` (`month`)")
+    }
+}
+
+/**
+ * Версия 6 (шаг 3.8): отметки «Рассчитались» с коллегами за месяц (ТЗ 4.11, 5.12). Новая таблица пустая, прежние
+ * записи не меняются. Таблица — точно такая, какую строит Room (схема `6.json`).
+ */
+internal object Migration5To6 : Migration(5, 6) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `colleague_settlement` (`id` TEXT NOT NULL, `month` TEXT NOT NULL, " +
+                "`colleagueId` TEXT NOT NULL, `amount` INTEGER NOT NULL, `coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL, `version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_colleague_settlement_month` ON `colleague_settlement` (`month`)")
     }
 }
 

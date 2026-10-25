@@ -9,6 +9,7 @@ import com.akenory.personalka.data.db.entity.CoachEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.ColleagueEntity
 import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
+import com.akenory.personalka.data.db.entity.ColleagueSettlementEntity
 import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
@@ -308,6 +309,9 @@ object Samples {
 
     fun colleagueScheme(colleagueId: String, from: LocalDate, kind: PaySchemeKind) =
         ColleagueSchemeVersionEntity(id = id(), sync = sync(), colleagueId = colleagueId, validFrom = from, kind = kind)
+
+    fun settlement(colleagueId: String, amount: Long, month: YearMonth = YearMonth(2026, 10)) =
+        ColleagueSettlementEntity(id = id(), sync = sync(), month = month, colleagueId = colleagueId, amount = amount)
 
     fun monthRecord(month: YearMonth) =
         MonthRecordEntity(id = id(), sync = sync(), month = month, planAmount = 12_000_000L, advanceActual = 1_354_650L)

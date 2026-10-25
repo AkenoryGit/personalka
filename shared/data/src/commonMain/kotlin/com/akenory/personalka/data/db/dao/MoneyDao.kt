@@ -6,6 +6,7 @@ import androidx.room3.Upsert
 import com.akenory.personalka.data.db.entity.ArchivedMonthEntity
 import com.akenory.personalka.data.db.entity.ColleagueEntity
 import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
+import com.akenory.personalka.data.db.entity.ColleagueSettlementEntity
 import com.akenory.personalka.data.db.entity.MonthAdjustmentEntity
 import com.akenory.personalka.data.db.entity.MonthRecordEntity
 import kotlinx.coroutines.flow.Flow
@@ -66,6 +67,20 @@ interface MoneyDao {
 
     @Query("SELECT * FROM month_adjustment WHERE month = :month AND deletedAt IS NULL ORDER BY createdAt, id")
     fun observeAdjustments(month: YearMonth): Flow<List<MonthAdjustmentEntity>>
+
+    @Upsert
+    suspend fun upsertSettlement(item: ColleagueSettlementEntity)
+
+    /** Отметка «Рассчитались» с коллегой за месяц: при двух записях — последняя изменённая. */
+    @Query(
+        "SELECT * FROM colleague_settlement WHERE month = :month AND colleagueId = :colleagueId AND deletedAt IS NULL " +
+            "ORDER BY updatedAt DESC, id DESC LIMIT 1",
+    )
+    suspend fun settlement(month: YearMonth, colleagueId: String): ColleagueSettlementEntity?
+
+    /** Отметки «Рассчитались» месяца по возрастанию изменения: у коллеги с двумя записями решает последняя. */
+    @Query("SELECT * FROM colleague_settlement WHERE month = :month AND deletedAt IS NULL ORDER BY updatedAt, id")
+    fun observeSettlements(month: YearMonth): Flow<List<ColleagueSettlementEntity>>
 
     @Upsert
     suspend fun upsertArchivedMonth(item: ArchivedMonthEntity)

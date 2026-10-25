@@ -8,9 +8,11 @@ import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.model.CoachCategory
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.money.GroupCase
 import com.akenory.personalka.domain.money.RateAmounts
 import com.akenory.personalka.domain.money.SalaryDaysRules
 import com.akenory.personalka.domain.money.SalarySetupDraft
@@ -168,5 +170,39 @@ class SalaryRepositoryTest {
         assertEquals(rub(3 * 920), period.view.total)
         // Весь октябрь — ровно «Заработано».
         assertEquals(data.view.pay.earned, months.period(LocalDate(2026, 10, 1), LocalDate(2026, 10, 31), today).first().view.total)
+    }
+
+    /** «Коллеги» (3.8): взаиморасчёт из базы, схема коллеги и «Рассчитались» — запись, повтор и снятие. */
+    @Test
+    fun colleaguesAndSettled(): Unit = runBlocking {
+        setUp()
+        val group = typeId("Группа")
+        val bb = placeId("ББ")
+        settings.rates.saveRates(group, LocalDate(2026, 1, 1), mapOf(bb to RateAmounts(rub(270))))
+        val lena = settings.colleagues.add("Лена", PaySchemeKind.HALF_OFFICIAL, today)
+        val coach = db.coachDao().currentCoach()!!.id
+        // Группа Лены 14.10, провёл я (замена), 8 детей: Лена отдаёт 2 160 × (1 − 0,065) = 2 019,60 ₽.
+        db.trainingDao().upsertTraining(
+            TrainingEntity(
+                "g1", SyncFields.new(coach, now), group, bb, LocalDateTime(2026, 10, 14, 18, 0), 60, groupId = "grp",
+                status = TrainingStatus.DONE, owner = Owner.COLLEAGUE, ownerColleagueId = lena,
+            ),
+        )
+        repeat(8) { db.trainingDao().upsertParticipation(ParticipationEntity("pg$it", SyncFields.new(coach, now), "g1", "c$it", ParticipationStatus.ATTENDED)) }
+
+        val data = months.month(october, today).first()
+        val row = data.view.colleagues.single()
+        assertEquals(lena, row.colleagueId)
+        assertEquals(rub(2019) + 60, row.total)
+        assertEquals(GroupCase.THEIRS_BY_ME, row.cases.single().case)
+        assertEquals(PaySchemeKind.HALF_OFFICIAL, data.colleagueSchemes[lena])
+        assertNull(row.settled)
+
+        months.settle(october, lena, row.total)
+        assertTrue(months.month(october, today).first().view.colleagues.single().isSettled)
+        months.settle(october, lena, row.total)
+        assertEquals(1, db.moneyDao().observeSettlements(october).first().size, "Повтор не заводит вторую запись")
+        months.settle(october, lena, null)
+        assertNull(months.month(october, today).first().view.colleagues.single().settled, "Отметка снята")
     }
 }

@@ -77,6 +77,7 @@ data class TierProgress(
  * сегодня (только у текущего месяца). [payout] — выплаты по проведённым, [forecastPayout] — если всё пройдёт по
  * расписанию. [advanceActual] — введённый аванс. [chart] — график накопления по дням, [closed] — «Месяц сверен»
  * (правки его тренировок спрашивают подтверждение, 4.1). [days] — заработанное по дням (3.7в): нажатие на день графика.
+ * [colleagues] — взаиморасчёт по каждому коллеге для вкладки «Коллеги» (3.8).
  */
 data class SalaryMonth(
     val month: YearMonth,
@@ -96,6 +97,7 @@ data class SalaryMonth(
     val chart: SalaryChart,
     val closed: Boolean = false,
     val days: List<DayItem> = emptyList(),
+    val colleagues: List<ColleagueSettlement> = emptyList(),
 ) {
     /** «Месяц сверен» — у прошедшего и текущего: сверять будущий не с чем. */
     val canClose: Boolean get() = period != MonthPeriod.FUTURE
@@ -138,6 +140,7 @@ object SalaryMonthRules {
     /**
      * Месяц для экрана: деньги (4.6–4.10), выплаты (4.11), план и «не хватает» (4.12), ступень и разбивка.
      * [ptTypeId] и [ptPlaceId] — ПТ и место для добавочных ПТ; нет — строка «не хватает» без числа ПТ.
+     * [settled] — отметки «Рассчитались» месяца: id коллеги → сумма, на которой отметили.
      */
     fun build(
         input: MonthInput,
@@ -148,6 +151,7 @@ object SalaryMonthRules {
         ptTypeId: String?,
         ptPlaceId: String?,
         closed: Boolean = false,
+        settled: Map<String, Long> = emptyMap(),
     ): SalaryMonth {
         val month = input.month
         val period = period(month, today)
@@ -186,6 +190,7 @@ object SalaryMonthRules {
             chart = SalaryChartRules.build(input, pay, period, today, plan, days),
             closed = closed,
             days = days,
+            colleagues = SettlementRules.colleagues(input, pay, settled),
         )
     }
 
