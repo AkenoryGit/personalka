@@ -45,6 +45,9 @@ object BackupRules {
     /** Выгрузка в календарь: `trener-calendar-20261023.ics`. */
     fun calendarFileName(today: LocalDate): String = "trener-calendar-${stamp(today)}.ics"
 
+    /** Выгрузка в Excel (шаг 3.8в): `trener-data-20261025.xlsx`. */
+    fun excelFileName(today: LocalDate): String = "trener-data-${stamp(today)}.xlsx"
+
     fun isBackupName(name: String): Boolean = NAME.matches(name)
 
     /**

@@ -32,6 +32,7 @@ object BackupFormat {
     const val SHARE = "Поделиться копией"
     const val RESTORE = "Восстановить из копии"
     const val UPDATE_COPY = "Вернуть данные до обновления"
+    const val EXPORTS = "Выгрузки"
     const val CALENDAR = "Выгрузить в календарь (.ics)"
     const val CALENDAR_NOTE = "Тренировки за 3 месяца назад и 3 вперёд — для просмотра в любом календаре."
     const val NO_COPIES = "Копий ещё не было"

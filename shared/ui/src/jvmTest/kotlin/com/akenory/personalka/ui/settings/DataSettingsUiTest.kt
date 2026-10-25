@@ -132,6 +132,11 @@ class DataSettingsUiTest {
         onNodeWithTag(CALENDAR_EXPORT_TAG).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         waitUntil(timeoutMillis = 5_000) { files.shared.isNotEmpty() }
         assertTrue(files.shared.single().endsWith(".ics"))
+
+        // Выгрузка в Excel (3.8в) — тоже через «Поделиться», файл книги на день клуба.
+        onNodeWithTag(EXCEL_EXPORT_TAG).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil(timeoutMillis = 10_000) { files.shared.size == 2 }
+        assertEquals("trener-data-20261020.xlsx", files.shared.last())
     }
 
     /** Копия перед обновлением базы (2.7б) лежит в папке приложения: своя кнопка, дальше — как обычное восстановление. */

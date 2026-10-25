@@ -238,6 +238,16 @@ interface TrainingDao {
     )
     fun observeClientVisits(from: LocalDateTime, training: TrainingStatus, participation: ParticipationStatus): Flow<List<ClientVisit>>
 
+    /** Все тренировки, участие и результаты — для выгрузки в Excel (7.6, шаг 3.8в). */
+    @Query("SELECT * FROM training WHERE deletedAt IS NULL ORDER BY start")
+    suspend fun allTrainings(): List<TrainingEntity>
+
+    @Query("SELECT * FROM participation WHERE deletedAt IS NULL")
+    suspend fun allParticipations(): List<ParticipationEntity>
+
+    @Query("SELECT * FROM result WHERE deletedAt IS NULL ORDER BY date, id")
+    suspend fun allResults(): List<ResultEntity>
+
     @Upsert
     suspend fun upsertResult(item: ResultEntity)
 

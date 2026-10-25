@@ -31,8 +31,10 @@ import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.domain.backup.BackupFrequency
 import com.akenory.personalka.domain.backup.BackupRules
+import com.akenory.personalka.domain.backup.Xlsx
 import com.akenory.personalka.domain.format.AccountFormat
 import com.akenory.personalka.domain.format.BackupFormat
+import com.akenory.personalka.domain.format.ExcelFormat
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
@@ -80,6 +82,7 @@ internal const val SHARE_TAG = "backup-share"
 internal const val RESTORE_TAG = "backup-restore"
 internal const val UPDATE_COPY_TAG = "backup-update-copy"
 internal const val CALENDAR_EXPORT_TAG = "backup-ics"
+internal const val EXCEL_EXPORT_TAG = "backup-xlsx"
 internal const val PASSWORD_FIELD_TAG = "backup-password-field"
 internal const val PASSWORD_REPEAT_TAG = "backup-password-repeat"
 internal fun frequencyTag(f: BackupFrequency) = "backup-${f.code}"
@@ -279,7 +282,7 @@ internal fun DataSettingsScreen(
                     Hint(BackupFormat.updateCopyNote(updateCopy))
                 }
 
-                SectionLabel(BackupFormat.CALENDAR)
+                SectionLabel(BackupFormat.EXPORTS)
                 OutlineButton(
                     BackupFormat.CALENDAR,
                     {
@@ -291,6 +294,18 @@ internal fun DataSettingsScreen(
                     Modifier.fillMaxWidth().testTag(CALENDAR_EXPORT_TAG),
                 )
                 Hint(BackupFormat.CALENDAR_NOTE)
+                // Excel для чтения (7.6, шаг 3.8в): тем же «Поделиться» — в Google Таблицы, на почту или себе в мессенджер.
+                OutlineButton(
+                    ExcelFormat.BUTTON,
+                    {
+                        work {
+                            val made = backup.excel()
+                            files.share(made.name, Xlsx.MIME, made.bytes)
+                        }
+                    },
+                    Modifier.fillMaxWidth().padding(top = Dimens.space4).testTag(EXCEL_EXPORT_TAG),
+                )
+                Hint(ExcelFormat.NOTE)
                 Spacer(Modifier.height(Dimens.space6))
             }
         }

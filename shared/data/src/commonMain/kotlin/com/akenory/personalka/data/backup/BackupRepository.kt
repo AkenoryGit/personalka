@@ -8,6 +8,15 @@ import androidx.room3.useWriterConnection
 import androidx.sqlite.SQLiteConnection
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.prefs.DevicePrefs
+import com.akenory.personalka.data.money.SalaryRepository
+import com.akenory.personalka.domain.backup.ExcelClient
+import com.akenory.personalka.domain.backup.ExcelExport
+import com.akenory.personalka.domain.backup.ExcelResult
+import com.akenory.personalka.domain.backup.ExcelTraining
+import com.akenory.personalka.domain.backup.Xlsx
+import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.domain.model.ParticipationStatus
+import kotlinx.coroutines.flow.first
 import com.akenory.personalka.data.sync.SyncOutbox
 import com.akenory.personalka.data.sync.pullFromStart
 import com.akenory.personalka.domain.ClubTime
@@ -318,6 +327,77 @@ class BackupRepository(
             )
         }
         return BackupRules.calendarFileName(today) to IcsCalendar.build(events, millis)
+    }
+
+    // --- Выгрузка в Excel ---
+
+    /**
+     * Книга Excel для чтения (7.6, шаг 3.8в): листы «Клиенты», «Тренировки», «Результаты», «Зарплата по месяцам».
+     * Зарплата — годы с первой тренировки по нынешний, тем же расчётом, что вкладка «Год» ([SalaryRepository.year]).
+     */
+    suspend fun excel(): BackupMade {
+        val today = ClubTime.today(clock())
+        val trainingDao = db.trainingDao()
+        val clientDao = db.clientDao()
+        val reference = db.referenceDao()
+        val clients = clientDao.observeAllClients().first()
+        val names = clients.associate { it.id to ClientName(it.lastName, it.firstName, it.middleName) }
+        val groups = clientDao.groups().associateBy { it.id }
+        val members = clientDao.observeAllMembers().first()
+        val types = reference.trainingTypes().associateBy { it.id }
+        val places = reference.locations().associateBy { it.id }
+        val colleagues = db.moneyDao().colleagues().associateBy { it.id }
+        val trainings = trainingDao.allTrainings()
+        val byId = trainings.associateBy { it.id }
+        val people = trainingDao.allParticipations().groupBy { it.trainingId }
+        val visits = people.values.flatten()
+            .filter { it.status == ParticipationStatus.ATTENDED && byId[it.trainingId]?.status == TrainingStatus.DONE }
+            .groupBy({ it.clientId }, { byId.getValue(it.trainingId).start.date })
+
+        val excelClients = clients.map { c ->
+            ExcelClient(
+                name = names.getValue(c.id),
+                birthDate = c.birthDate,
+                contactName = c.contactName,
+                contactPhone = c.contactPhone,
+                groups = members.filter { it.clientId == c.id && (it.toDate == null || it.toDate >= today) && it.fromDate <= today }
+                    .mapNotNull { groups[it.groupId]?.name }.distinct(),
+                archived = c.status == ClientStatus.ARCHIVED,
+                attended = visits[c.id]?.size ?: 0,
+                lastVisit = visits[c.id]?.max(),
+                mediaUrl = c.mediaUrl,
+                note = c.privateNote,
+            )
+        }
+        val excelTrainings = trainings.map { t ->
+            ExcelTraining(
+                start = t.start,
+                durationMin = t.durationMin,
+                type = types[t.typeId]?.name.orEmpty(),
+                place = places[t.locationId]?.name.orEmpty(),
+                group = t.groupId?.let { groups[it]?.name },
+                people = people[t.id].orEmpty().mapNotNull { p -> names[p.clientId]?.let { it to p.status } },
+                status = t.status,
+                conductedBy = t.conductedBy,
+                colleague = t.colleagueId?.let { colleagues[it]?.name },
+                cancelReason = t.cancelReason,
+                plan = t.plan,
+                fact = t.fact,
+            )
+        }
+        val excelResults = trainingDao.allResults().mapNotNull { r ->
+            val name = names[r.clientId] ?: return@mapNotNull null
+            ExcelResult(r.date, name, r.distanceM, r.style, r.poolM, r.timeCs, r.kind, r.eventName, r.note)
+        }
+        val salary = SalaryRepository(db, clock)
+        val firstYear = minOf(trainings.firstOrNull()?.start?.year ?: today.year, today.year)
+        val years = (firstYear..today.year).map { salary.year(it, today).first() }
+
+        val sheets = ExcelExport.sheets(excelClients, excelTrainings, excelResults, years)
+        val bytes = withContext(Dispatchers.Default) {
+            BackupPlatform.zip(Xlsx.files(sheets).mapValues { it.value.encodeToByteArray() })
+        }
+        return BackupMade(BackupRules.excelFileName(today), bytes)
     }
 
     // --- Таблицы ---
