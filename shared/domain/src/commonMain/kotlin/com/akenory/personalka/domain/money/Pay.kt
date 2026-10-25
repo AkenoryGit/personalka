@@ -1,6 +1,9 @@
 package com.akenory.personalka.domain.money
 
+import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.PayUnit
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -9,9 +12,8 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.YearMonth
 import kotlinx.datetime.yearMonth
 
-// Счётчик ПТ, ступень месяца и оплата одной тренировки (ТЗ 4.6, 4.7). Деньги — копейки, длительности — минуты.
-// Деление групп с коллегами (4.8) и доплата за закрытие СПТ (4.9) — шаги 3.3 и 3.4: здесь группа — p × ставка,
-// СПТ — базовая ставка.
+// Счётчик ПТ, ступень месяца, оплата одной тренировки (ТЗ 4.6, 4.7) и деление групп с коллегами (4.8).
+// Деньги — копейки, длительности — минуты. Доплата за закрытие СПТ (4.9) — шаг 3.4: здесь СПТ — базовая ставка.
 
 /** Что расчёту нужно знать о типе тренировки (ТЗ 3.3). */
 data class PayType(
@@ -49,7 +51,31 @@ data class TierScheme(
     val ptTypeIds: Set<String>,
 )
 
-/** Тренировка для расчёта: [start] — локальное время клуба, [clients] — статусы участия её клиентов. */
+/**
+ * Версия схемы выплат владельца группы (ТЗ 3.2, 3.6) — для его доли налога w (4.8). У коллеги хранится только вид
+ * схемы — [of]; у тренера доля и НДФЛ берутся из его PaySchemeVersion.
+ */
+data class OwnerScheme(
+    val validFrom: LocalDate,
+    val officialShareBp: Int,
+    val ndflBp: Int = Versions.NDFL_BP,
+) {
+    companion object {
+        fun of(validFrom: LocalDate, kind: PaySchemeKind) = OwnerScheme(validFrom, Versions.officialShareBp(kind))
+    }
+}
+
+/** Схемы владельцев групп: [self] — тренера, [colleagues] — по id коллеги. Нет версии на дату — w = 0. */
+data class OwnerSchemes(
+    val self: List<OwnerScheme> = emptyList(),
+    val colleagues: Map<String, List<OwnerScheme>> = emptyMap(),
+)
+
+/**
+ * Тренировка для расчёта: [start] — локальное время клуба, [clients] — статусы участия её клиентов.
+ * [owner] / [ownerColleagueId] — на ком числится группа, [conductedBy] / [colleagueId] — кто провёл (ТЗ 3.4, 4.8);
+ * учитываются только у групп.
+ */
 data class PayTraining(
     val id: String,
     val typeId: String,
@@ -59,21 +85,38 @@ data class PayTraining(
     val status: TrainingStatus,
     val clients: List<ParticipationStatus>,
     val splitHalf: Boolean = false,
+    val owner: Owner = Owner.SELF,
+    val ownerColleagueId: String? = null,
+    val conductedBy: ConductedBy = ConductedBy.SELF,
+    val colleagueId: String? = null,
 )
 
 /** Пометка сплита с одним клиентом (ТЗ 4.7): в календаре он остаётся сплитом. */
 enum class SplitMark { AS_PT, HALF }
 
-/** Оплата одной тренировки: сумма, пометка сплита и «нет ставки» (0 ₽ и пункт в «Нужно сделать»). */
+/**
+ * Оплата одной тренировки: [amount] — G по 4.7, пометка сплита и «нет ставки» (0 ₽ и пункт в «Нужно сделать»).
+ * По 4.8: [earned] — заработано мной, [accrued] — начислено мне клубом, [settlement] — взаиморасчёт с коллегой
+ * [colleagueId]: больше нуля — коллега отдаёт мне, меньше — я коллеге. Не у групп — всё моё: G, G, 0.
+ */
 data class TrainingPay(
     val trainingId: String,
     val amount: Long,
     val paidClients: Int,
     val splitMark: SplitMark? = null,
     val rateMissing: Boolean = false,
+    val earned: Long = amount,
+    val accrued: Long = amount,
+    val colleagueId: String? = null,
+    val settlement: Long = 0,
 )
 
-/** Деньги месяца по 4.6: счётчик и ступень по проведённым и прогнозные, заработок по текущей ступени, прогноз — по прогнозной. */
+/**
+ * Деньги месяца по 4.6: счётчик и ступень по проведённым и прогнозные, заработок по текущей ступени, прогноз — по
+ * прогнозной. [accrued] — начислено клубом (группы коллег — 0, мои группы — целиком, 4.8), [settlements] — итог
+ * взаиморасчёта по каждому коллеге: больше нуля — коллега должен мне. [groupChildren] — оплаченные дети в группах,
+ * которые я вёл (один или вместе), [dutyMinutes] — проведённые дежурства.
+ */
 data class MonthPay(
     val month: YearMonth,
     val ptCount: Int,
@@ -83,6 +126,10 @@ data class MonthPay(
     val earned: Long,
     val forecast: Long,
     val trainings: List<TrainingPay>,
+    val accrued: Long = earned,
+    val settlements: Map<String, Long> = emptyMap(),
+    val groupChildren: Int = 0,
+    val dutyMinutes: Int = 0,
 ) {
     /** Тренировки без ставки — пункты «Нужно сделать». */
     val missingRate: List<String> get() = trainings.filter { it.rateMissing }.map { it.trainingId }
@@ -132,6 +179,7 @@ object PayRules {
      * Оплата одной тренировки по ступени месяца [tier] (ТЗ 4.7). Ставка — по типу, месту и дню тренировки (3.3),
      * ступень — только у типов с `tier_dependent`. Округление — до копейки по каждой тренировке, половина вверх.
      * Дежурство и `OTHER` без клиентов оплачиваются, когда проведены (в прогнозе — когда не отменены).
+     * Группа делится с коллегами по 4.8 ([share]); G считается по ставкам тренера.
      */
     fun pay(
         training: PayTraining,
@@ -139,6 +187,7 @@ object PayRules {
         rates: List<PayRate>,
         tier: Int,
         forecast: Boolean = false,
+        owners: OwnerSchemes = OwnerSchemes(),
     ): TrainingPay {
         val type = types[training.typeId]
         val p = paidClients(training, forecast)
@@ -164,7 +213,7 @@ object PayRules {
                 else -> type.splitFallbackTypeId?.let { types[it] }?.let(::amountOf)
                     ?.let { result(it, SplitMark.AS_PT) } ?: missing
             }
-            TrainingKind.GROUP -> if (p == 0) result(0) else amountOf(type)?.let { result(p * it) } ?: missing
+            TrainingKind.GROUP -> if (p == 0) result(0) else amountOf(type)?.let { share(result(p * it), training, owners) } ?: missing
             TrainingKind.DUTY -> if (!happened) result(0) else amountOf(type)?.let { result(perHour(it, training.durationMin)) } ?: missing
             TrainingKind.OTHER -> {
                 val due = if (training.clients.isEmpty()) happened else p > 0
@@ -182,8 +231,49 @@ object PayRules {
     }
 
     /**
+     * Доля налога владельца группы w (ТЗ 4.8) в стомиллионных: `official_share × ndfl_rate` по его схеме на день
+     * тренировки. Половина официально — 6 500 000 (0,065), полностью — 13 000 000, ИП и нет схемы — 0.
+     */
+    fun ownerTax(training: PayTraining, owners: OwnerSchemes): Long {
+        val versions = when (training.owner) {
+            Owner.SELF -> owners.self
+            Owner.COLLEAGUE -> training.ownerColleagueId?.let { owners.colleagues[it] }.orEmpty()
+        }
+        val scheme = Versions.activeOn(versions, training.start.date) { it.validFrom } ?: return 0
+        return scheme.officialShareBp.toLong() * scheme.ndflBp
+    }
+
+    /**
+     * Деление группы с коллегами (ТЗ 4.8). Доля каждого проводившего на руки — G × (1 − w(O)) / |C|, до копейки,
+     * половина вверх. Заработано — G делённое на число проводивших, если я среди них; начислено клубом — G, если
+     * группа моя. Коллега для взаиморасчёта — владелец, если группа его, иначе проводивший со мной или вместо меня.
+     */
+    fun share(pay: TrainingPay, training: PayTraining, owners: OwnerSchemes): TrainingPay {
+        val g = pay.amount
+        val mine = training.owner == Owner.SELF
+        val conductors = if (training.conductedBy == ConductedBy.SELF_AND_COLLEAGUE) 2L else 1L
+        val iConducted = training.conductedBy != ConductedBy.COLLEAGUE
+        val handShare = roundDiv(g * (TAX_ONE - ownerTax(training, owners)), TAX_ONE * conductors)
+        val earned = if (iConducted) roundDiv(g, conductors) else 0
+        val settlement = when {
+            mine && training.conductedBy == ConductedBy.SELF -> 0
+            mine -> -handShare
+            iConducted -> handShare
+            else -> 0
+        }
+        val colleague = if (mine) training.colleagueId else training.ownerColleagueId
+        return pay.copy(
+            earned = earned,
+            accrued = if (mine) g else 0,
+            colleagueId = colleague.takeIf { settlement != 0L },
+            settlement = settlement,
+        )
+    }
+
+    /**
      * Деньги месяца [month] (ТЗ 4.6): ступени берутся из версии, действующей 1-го числа; итоговая ступень идёт на все
-     * тренировки месяца с `tier_dependent`, а не только на те, что сверх порога.
+     * тренировки месяца с `tier_dependent`, а не только на те, что сверх порога. Группы делятся по 4.8 со схемами
+     * владельцев [owners]; взаиморасчёт по коллеге — всё, что он должен мне, минус всё, что я должен ему.
      */
     fun month(
         month: YearMonth,
@@ -191,6 +281,7 @@ object PayRules {
         types: List<PayType>,
         rates: List<PayRate>,
         schemes: List<TierScheme>,
+        owners: OwnerSchemes = OwnerSchemes(),
     ): MonthPay {
         val ofMonth = inMonth(trainings, month)
         val scheme = Versions.activeIn(schemes, month) { it.validFrom }
@@ -200,9 +291,25 @@ object PayRules {
         val tier = tier(scheme, n)
         val forecastTier = tier(scheme, nForecast)
         val byId = types.associateBy { it.id }
-        val pays = ofMonth.map { pay(it, byId, rates, tier) }
-        val forecast = ofMonth.sumOf { pay(it, byId, rates, forecastTier, forecast = true).amount }
-        return MonthPay(month, n, tier, nForecast, forecastTier, pays.sumOf { it.amount }, forecast, pays)
+        val pays = ofMonth.map { pay(it, byId, rates, tier, owners = owners) }
+        val forecast = ofMonth.sumOf { pay(it, byId, rates, forecastTier, forecast = true, owners = owners).earned }
+        val settlements = pays.filter { it.colleagueId != null }
+            .groupBy { it.colleagueId!! }
+            .mapValues { (_, list) -> list.sumOf { it.settlement } }
+        val kindOf = { t: PayTraining -> byId[t.typeId]?.kind }
+        val groupChildren = ofMonth.zip(pays)
+            .filter { (t, _) -> kindOf(t) == TrainingKind.GROUP && t.conductedBy != ConductedBy.COLLEAGUE }
+            .sumOf { (_, pay) -> pay.paidClients }
+        val dutyMinutes = ofMonth
+            .filter { kindOf(it) == TrainingKind.DUTY && it.status == TrainingStatus.DONE }
+            .sumOf { it.durationMin }
+        return MonthPay(
+            month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned }, forecast, pays,
+            accrued = pays.sumOf { it.accrued },
+            settlements = settlements,
+            groupChildren = groupChildren,
+            dutyMinutes = dutyMinutes,
+        )
     }
 
     private fun rateOf(typeId: String, training: PayTraining, rates: List<PayRate>): PayRate? =
@@ -213,6 +320,9 @@ object PayRules {
 
     /** Оплата по часам: минуты / 60 × ставка за час, до копейки, половина вверх. */
     fun perHour(ratePerHour: Long, minutes: Int): Long = roundDiv(ratePerHour * minutes, 60)
+
+    /** Единица доли налога [ownerTax]: десятитысячные доли × десятитысячные НДФЛ. */
+    private const val TAX_ONE = 100_000_000L
 
     private fun roundDiv(a: Long, b: Long): Long = (a * 2 + b) / (b * 2)
 }
