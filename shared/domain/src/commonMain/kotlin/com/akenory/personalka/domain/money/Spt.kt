@@ -1,6 +1,8 @@
 package com.akenory.personalka.domain.money
 
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.SptCaseStatus
+import com.akenory.personalka.domain.model.TrainingKind
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.YearMonth
@@ -39,6 +41,17 @@ sealed interface SptPrompt {
     data class AskRetro(val case: SptCase, val windowUntil: LocalDate) : SptPrompt
 }
 
+/** Проведённая СПТ в базе (4.9, п. 1): тренировка, её клиент и день. По ней должно быть одно дело. */
+data class SptDone(val trainingId: String, val clientId: String, val date: LocalDate)
+
+/**
+ * Что записать, чтобы дела СПТ совпали с проведёнными СПТ ([SptRules.reconcile]): [opened] — новые дела `OPEN`,
+ * [changed] — дела с новым днём, клиентом или статусом, [removed] — дела без проведённой СПТ и повторы.
+ */
+data class SptChanges(val opened: List<SptDone>, val changed: List<SptCase>, val removed: List<SptCase>) {
+    val isEmpty: Boolean get() = opened.isEmpty() && changed.isEmpty() && removed.isEmpty()
+}
+
 /** Конверсия стартовых за период: закрытые / (закрытые + незакрытые); открытые не считаются. */
 data class SptConversion(val closed: Int, val notClosed: Int) {
     val total: Int get() = closed + notClosed
@@ -58,6 +71,55 @@ object SptRules {
     /** СПТ отмечена проведённой → новое дело `OPEN` с окном до той же даты следующего месяца. */
     fun open(id: String, clientId: String, sptTrainingId: String, typeId: String, locationId: String, sptDate: LocalDate) =
         SptCase(id, clientId, sptTrainingId, typeId, locationId, sptDate)
+
+    /**
+     * Дела СПТ по проведённым СПТ на день [today] (шаг 3.7а): СПТ отметили проведённой — новое дело `OPEN`; её
+     * вернули, отменили или удалили — дело убирается; перенесли на другой день — окно считается от нового дня, а
+     * дата покупки вне нового окна снимается; окно прошло без покупки — `NOT_CLOSED` ([expired]). Два дела одной СПТ
+     * (два телефона отметили её вместе) — остаётся дело с покупкой, иначе с меньшим id: так решат оба телефона.
+     */
+    fun reconcile(done: List<SptDone>, cases: List<SptCase>, today: LocalDate): SptChanges {
+        val doneById = done.associateBy { it.trainingId }
+        val known = cases.map { it.sptTrainingId }.toSet()
+        val changed = mutableListOf<SptCase>()
+        val removed = mutableListOf<SptCase>()
+        for ((trainingId, list) in cases.groupBy { it.sptTrainingId }) {
+            val spt = doneById[trainingId]
+            if (spt == null) {
+                removed += list
+                continue
+            }
+            val keep = list.sortedWith(compareBy({ it.purchaseDate == null }, { it.id })).first()
+            removed += list.filter { it !== keep }
+            var case = keep
+            if (case.sptDate != spt.date || case.clientId != spt.clientId) {
+                case = case.copy(clientId = spt.clientId, sptDate = spt.date, windowUntil = windowUntil(spt.date))
+                val bought = case.purchaseDate
+                if (bought != null && purchaseProblem(case, bought) != null) case = reopen(case, today)
+            }
+            if (case.purchaseDate == null) {
+                val status = if (today > case.windowUntil) SptCaseStatus.NOT_CLOSED else SptCaseStatus.OPEN
+                if (case.status != status) case = case.copy(status = status)
+            }
+            if (case != keep) changed += case
+        }
+        val opened = done.filter { it.trainingId !in known }
+        return SptChanges(opened, changed, removed)
+    }
+
+    /**
+     * Оплаченная ПТ клиента для вопроса 4.9, п. 4–5: персональная или сплит, клиент пришёл или отменил со списанием.
+     * Сплит считается: блок мог быть куплен на сплит.
+     */
+    fun isPaidPt(kind: TrainingKind, status: ParticipationStatus): Boolean =
+        (kind == TrainingKind.PERSONAL || kind == TrainingKind.SPLIT) && PayRules.isPaid(status)
+
+    /** День для «Купил блок со скидкой» по умолчанию: сегодня, но в пределах окна — от дня СПТ до его конца. */
+    fun defaultPurchase(case: SptCase, today: LocalDate): LocalDate = case.purchaseDate ?: when {
+        today < case.sptDate -> case.sptDate
+        today > case.windowUntil -> case.windowUntil
+        else -> today
+    }
 
     /** Можно ли сохранить [date] как покупку блока со скидкой: не раньше СПТ и не позже конца окна. */
     fun purchaseProblem(case: SptCase, date: LocalDate): PurchaseProblem? = when {

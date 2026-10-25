@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.money.SptAsk
 import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.training.CardClient
 import com.akenory.personalka.data.training.CardResult
@@ -70,10 +71,12 @@ import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.money.SptPrompt
 import com.akenory.personalka.domain.training.CancelReasons
 import com.akenory.personalka.domain.training.CancelRules
 import com.akenory.personalka.domain.training.CardAction
@@ -86,6 +89,7 @@ import com.akenory.personalka.domain.training.came
 import com.akenory.personalka.ui.clients.MenuAction
 import com.akenory.personalka.ui.clients.PersonRow
 import com.akenory.personalka.ui.clients.SearchField
+import com.akenory.personalka.ui.clients.SptPurchasePanel
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
@@ -114,6 +118,7 @@ const val CANCEL_PANEL_TAG = "cancel-panel"
 const val CARD_MENU_TAG = "card-menu"
 const val CARD_SCRIM_TAG = "card-scrim"
 const val CARRY_PANEL_TAG = "carry-panel"
+const val SPT_ASK_TAG = "spt-ask"
 const val CHARGE_SWITCH_TAG = "charge-switch"
 const val OWN_REASON_TAG = "own-reason"
 
@@ -214,6 +219,9 @@ fun TrainingCardHost(
     val waitLine by produceState<String?>(null, id, cancelWho != null, askDelete) {
         value = if (id != null && (cancelWho != null || askDelete)) cards.waitingLine(id) else null
     }
+    // Вопрос СПТ на первой оплаченной ПТ (4.9, п. 4–5, шаг 3.7а) и его окно с датой покупки.
+    val sptAsk by remember(id) { id?.let { cards.spt.ask(it) } ?: flowOf(null) }.collectAsState(initial = null)
+    var sptAnswering by rememberSaveable(key) { mutableStateOf(false) }
     val guestChoices by remember(id, addingGuest) {
         if (id != null && addingGuest) cards.guestChoices(id) else flowOf(emptyList())
     }.collectAsState(emptyList())
@@ -280,6 +288,8 @@ fun TrainingCardHost(
                     card = shown,
                     now = now,
                     wide = wide,
+                    sptAsk = sptAsk,
+                    onSpt = { sptAnswering = true },
                     onClose = onClose,
                     onAction = { action ->
                         when (action) {
@@ -442,6 +452,25 @@ fun TrainingCardHost(
                 )
             }
         }
+        val ask = sptAsk
+        if (shown != null && sptAnswering && ask != null) {
+            SptPurchasePanel(
+                case = ask.case,
+                name = ask.name,
+                initial = ask.purchaseDate,
+                bonus = ask.bonus,
+                title = sptQuestion(ask),
+                onSave = { date ->
+                    sptAnswering = false
+                    scope.launch {
+                        val saved = cards.spt.close(ask.case.id, date).first ?: return@launch
+                        messages.showUndo(SptFormat.closedMessage(saved.name)) { scope.launch { cards.spt.undo(saved) } }
+                    }
+                },
+                onUnmark = null,
+                onDismiss = { sptAnswering = false },
+            )
+        }
         if (shown != null && addingResult) {
             // Отменённых не предлагаем; один клиент — сразу он.
             val present = shown.clients.filter { it.outcome != ClientOutcome.CANCELLED && it.outcome != ClientOutcome.CANCELLED_CHARGED }
@@ -507,6 +536,8 @@ private fun ColumnScope.CardBody(
     card: TrainingCard,
     now: LocalDateTime,
     wide: Boolean,
+    sptAsk: SptAsk?,
+    onSpt: () -> Unit,
     onClose: () -> Unit,
     onAction: (CardAction) -> Unit,
     onMenu: (CardMenu) -> Unit,
@@ -561,6 +592,7 @@ private fun ColumnScope.CardBody(
             note = TrainingCardFormat.statusNote(card.outcome, phase, now, state.start, end, came, TrainingCardRules.groupTotal(state), state.doneAt),
         )
         card.warnings.forEach { WarningLine(it) }
+        sptAsk?.let { SptAskRow(it, onSpt) }
 
         // Отменённая целиком или отменённый единственный клиент: причина и когда предупредили.
         val cancelled = card.clients.singleOrNull()?.state?.takeIf { it.isCancelled && !isGroup }
@@ -606,6 +638,38 @@ private fun ColumnScope.CardBody(
         Spacer(Modifier.height(Dimens.space4))
     }
     CardButtonsRow(buttons.buttons, diaryFirst = card.noDiary, onAction = onAction)
+}
+
+/** Вопрос СПТ (4.9, п. 4–5): в окне — «Засчитать СПТ закрытой?», после — «Блок был куплен со скидкой до …?». */
+private fun sptQuestion(ask: SptAsk): String = when (val prompt = ask.prompt) {
+    is SptPrompt.CloseNow -> SptFormat.ASK_CLOSE
+    is SptPrompt.AskRetro -> SptFormat.askRetro(prompt.windowUntil)
+}
+
+/** Строка вопроса СПТ в карточке: значок, вопрос, «Орлов М. · СПТ пн 12.10»; нажатие — окно с датой покупки. */
+@Composable
+private fun SptAskRow(ask: SptAsk, onClick: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = Dimens.space3)
+            .clip(MaterialTheme.shapes.medium)
+            .background(colors.surface)
+            .clickable(role = Role.Button, onClick = onClick)
+            .heightIn(min = Dimens.row)
+            .padding(horizontal = Dimens.space3, vertical = Dimens.space2)
+            .testTag(SPT_ASK_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(PIcons.ShoppingBag, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(Dimens.space3))
+        Column(Modifier.weight(1f)) {
+            Text(sptQuestion(ask), style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            Text(SptFormat.askNote(ask.name, ask.case.sptDate), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
+        }
+        Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+    }
 }
 
 /** Кнопка «⋮» с меню карточки: «Удалить» — цветом ошибки. */

@@ -14,6 +14,8 @@ import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.toSeriesTraining
+import com.akenory.personalka.data.money.SptRepository
+import com.akenory.personalka.data.money.reconcileSpt
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
 import com.akenory.personalka.data.restrictions.toRestriction
@@ -166,6 +168,9 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
     private val reference = db.referenceDao()
     private val coaches = db.coachDao()
     private val schedule = db.scheduleDao()
+
+    /** СПТ (4.9, шаг 3.7а): вопрос на первой оплаченной ПТ и «Купил блок со скидкой» в карточке. */
+    val spt: SptRepository = SptRepository(db, clock)
 
     /** Карточка; `null` — тренировки нет (удалили). Обновляется сама после каждого действия. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -439,6 +444,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             }
             result = CardResult(TrainingCardFormat.DELETED, recorder.undo())
             result?.let { db.recordFreed(it.undo, now) }
+            db.reconcileSpt(now)
         }
         return result
     }
@@ -480,13 +486,17 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
     /** «Отменить» в сообщении: всё как было до действия. */
     suspend fun undo(undo: Undo) {
         val now = clock()
-        db.withWriteTransaction { db.restore(undo, now) }
+        db.withWriteTransaction {
+            db.restore(undo, now)
+            db.reconcileSpt(now)
+        }
     }
 
     /**
      * Закрытие в конце (4.1): ПТ, сплит и СПТ — «Проведено», если это включено в настройках; группа с отмеченными —
      * «Проведено», неотмеченные — «не пришёл»; дежурство — «Проведено». Вызывается при открытии приложения и каждую
-     * минуту; повторный вызов ничего не меняет. Возвращает, сколько закрыто.
+     * минуту; повторный вызов ничего не меняет. Заодно дела СПТ сверяются с проведёнными СПТ (4.9, шаг 3.7а) — и после
+     * правки тренировки в форме. Возвращает, сколько закрыто.
      */
     suspend fun closeEnded(): Int {
         val now = clock()
@@ -504,6 +514,8 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 save(t, people, closed, now)
                 count++
             }
+            // Проведённая СПТ — дело «ждём покупку блока» (4.9, п. 1); вернули или перенесли — дело за ней.
+            db.reconcileSpt(now)
         }
         return count
     }
@@ -530,6 +542,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             val recorder = Recorder(db, now)
             save(t, people, next, now, recorder)
             result = follow?.invoke(t, next, recorder, message) ?: CardResult(message, recorder.undo())
+            db.reconcileSpt(now)
             // Отменили — время освободилось: кто его ждёт из листа ожидания (4.16).
             result?.let { db.recordFreed(it.undo, now) }
         }

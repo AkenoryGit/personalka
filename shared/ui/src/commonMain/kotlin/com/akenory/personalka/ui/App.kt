@@ -132,6 +132,10 @@ fun App(
         val waiting by remember(clients, hasCoach, now) {
             if (hasCoach == true) clients.waitlist.observe(now) else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
+        // СПТ ждут покупки (4.9, шаг 3.7а): пункт «Нужно сделать» с ближайшим сроком.
+        val sptWaiting by remember(calendar, hasCoach, now.date) {
+            if (hasCoach == true) calendar.cards.spt.waiting(now.date) else flowOf(emptyList())
+        }.collectAsState(initial = emptyList())
         // «С сервером» (5.2): вместо копии — изменения, не отправленные больше суток.
         val syncState by remember(sync) { sync?.repository?.state ?: flowOf(null) }.collectAsState(initial = null)
         val pending by remember(sync) { sync?.repository?.pending ?: flowOf(0) }.collectAsState(initial = 0)
@@ -149,8 +153,8 @@ fun App(
         LaunchedEffect(cabinets, cabinetsOpen, syncState?.lastSync) {
             if (cabinetsOpen) cabinets?.repository?.refresh()
         }
-        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue) {
-            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue)
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting)
         }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()

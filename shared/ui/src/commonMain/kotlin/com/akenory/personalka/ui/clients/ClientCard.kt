@@ -57,6 +57,7 @@ import com.akenory.personalka.data.clients.RelativeRow
 import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.db.entity.ClientEntity
+import com.akenory.personalka.data.money.SptCaseView
 import com.akenory.personalka.data.training.SaveResult
 import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.client.ClientRules
@@ -68,11 +69,14 @@ import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.ResultFormat
+import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.SptCaseStatus
+import com.akenory.personalka.domain.money.SptRules
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.series.ClientScheduleRules
 import com.akenory.personalka.domain.series.ScheduleSeries
@@ -137,6 +141,7 @@ private enum class HistoryFilter(val title: String) { ALL("Все"), DONE("Пр�
  * открытые и включённые кабинеты.
  *
  * @param onForm открыть форму тренировки ([TrainingFormKey]): «+ Тренировка», «+ Серия», «Изменить с даты…».
+ * @param startTab вкладка при открытии: «СПТ ждут покупки» открывает «Инфо».
  */
 @Composable
 fun ClientCard(
@@ -153,6 +158,7 @@ fun ClientCard(
     followup: Followup = Followup.EMPTY,
     waiting: List<WaitRow> = emptyList(),
     cabinet: CabinetTools? = null,
+    startTab: CardTab = CardTab.TRAININGS,
 ) {
     val today = now.date
     val waits = waiting.firstOrNull { it.client.id == clientId }
@@ -162,7 +168,7 @@ fun ClientCard(
     val series by remember(forms, clientId) { forms.seriesOf(clientId) }.collectAsState(initial = null)
     val results by remember(clients, clientId) { clients.results.results(clientId) }.collectAsState(initial = null)
     val upcomingCount by produceState(initialValue = 4, clients) { value = clients.upcomingInCard() }
-    var tab by rememberSaveable(clientId) { mutableStateOf(CardTab.TRAININGS) }
+    var tab by rememberSaveable(clientId) { mutableStateOf(startTab) }
     var deleteStep by rememberSaveable(clientId) { mutableStateOf(0) }
     var surname by rememberSaveable(clientId) { mutableStateOf("") }
     // «Завершить»: какая серия, последний день и открыт ли выбор даты.
@@ -175,6 +181,9 @@ fun ClientCard(
     var cabinetOpen by rememberSaveable(clientId) { mutableStateOf(false) }
     // Согласия из кабинета (6.1, шаг 2.13а): «Нет согласия на фото» у ссылки в «Инфо».
     val consents by remember(cabinet) { cabinet?.repository?.consents ?: flowOf(emptyMap()) }.collectAsState(initial = emptyMap())
+    // СПТ клиента (4.9, шаг 3.7а): блок в «Инфо» и окно «Купил блок со скидкой» — id дела.
+    val spt by remember(clients, clientId, today) { clients.spt.ofClient(clientId, today) }.collectAsState(initial = emptyList())
+    var sptEditing by rememberSaveable(clientId) { mutableStateOf<String?>(null) }
 
     if (row == null) {
         // Клиента только что удалили или объединили — карточка вот-вот закроется.
@@ -288,6 +297,8 @@ fun ClientCard(
                             messages,
                             scope,
                             noPhoto = cabinet != null && CabinetLinkRules.noPhoto(consents[client.id]),
+                            spt = spt,
+                            onSpt = { sptEditing = it.case.id },
                         )
                         CardTab.SCHEDULE -> ScheduleTab(
                             list = schedule,
@@ -304,6 +315,35 @@ fun ClientCard(
                 }
                 Spacer(Modifier.height(Dimens.space6))
             }
+        }
+
+        spt.firstOrNull { it.case.id == sptEditing }?.let { view ->
+            val close = { sptEditing = null }
+            SptPurchasePanel(
+                case = view.case,
+                name = name,
+                initial = SptRules.defaultPurchase(view.case, today),
+                bonus = view.bonus,
+                onSave = { date ->
+                    close()
+                    scope.launch {
+                        val saved = clients.spt.close(view.case.id, date).first ?: return@launch
+                        messages.showUndo(SptFormat.closedMessage(saved.name)) { scope.launch { clients.spt.undo(saved) } }
+                    }
+                },
+                onUnmark = if (view.status == SptCaseStatus.CLOSED) {
+                    {
+                        close()
+                        scope.launch {
+                            val saved = clients.spt.reopen(view.case.id) ?: return@launch
+                            messages.showUndo(SptFormat.reopenedMessage(saved.name)) { scope.launch { clients.spt.undo(saved) } }
+                        }
+                    }
+                } else {
+                    null
+                },
+                onDismiss = close,
+            )
         }
 
         if (cabinetOpen && cabinet != null) {
@@ -747,7 +787,7 @@ private fun ScheduleTab(
 
 /**
  * «Инфо» (5.9): дата рождения и пол, родственники (4.17), для связи, фото и видео, имя в 1С. Заметка «видна
- * только вам» — шаг 2.4, стартовая тренировка — с расчётом СПТ (3.4).
+ * только вам» — шаг 2.4, стартовая тренировка со статусом и «Купил блок со скидкой» — шаг 3.7а.
  */
 @Composable
 private fun InfoTab(
@@ -759,6 +799,8 @@ private fun InfoTab(
     messages: MessageState,
     scope: CoroutineScope,
     noPhoto: Boolean,
+    spt: List<SptCaseView>,
+    onSpt: (SptCaseView) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val uri = LocalUriHandler.current
@@ -859,6 +901,8 @@ private fun InfoTab(
                 NoteLine(note)
             }
         }
+        // Стартовая тренировка (4.9): статус и «Купил блок со скидкой» — последним блоком, как в макете ClCardInfo.
+        spt.forEach { view -> SptBlock(view) { onSpt(view) } }
     }
 }
 

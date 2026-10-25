@@ -89,6 +89,8 @@ class Reminders(
                         noDiary,
                         clients.followup.observe(now).first(),
                         clients.waitlist.observe(now).first(),
+                        // В сводке — только СПТ, у которых до конца окна 3 дня или меньше (5.19, 4.9, п. 6).
+                        spt = calendar.cards.spt.waiting(now.date).first().filter { it.remind },
                     )
                     if (todos.isEmpty()) {
                         null

@@ -166,4 +166,69 @@ class SptTest {
         assertEquals(33, conv.percent)
         assertNull(SptConversion(0, 0).percent)
     }
+
+    // --- Шаг 3.7а: дела по проведённым СПТ ---
+
+    private fun done(day: Int, training: String = "t", client: String = "client") = SptDone(training, client, d(day))
+
+    @Test
+    fun reconcile_opensCaseForDoneSpt() {
+        val changes = SptRules.reconcile(listOf(done(12)), emptyList(), d(12))
+        assertEquals(listOf(done(12)), changes.opened)
+        assertTrue(changes.changed.isEmpty() && changes.removed.isEmpty())
+        assertTrue(SptRules.reconcile(listOf(done(12)), listOf(case(12)), d(12)).isEmpty)
+    }
+
+    @Test
+    fun reconcile_removesCaseWhenSptNoLongerDone() {
+        val changes = SptRules.reconcile(emptyList(), listOf(case(12)), d(12))
+        assertEquals(listOf(case(12)), changes.removed)
+        assertTrue(changes.opened.isEmpty())
+    }
+
+    @Test
+    fun reconcile_movedSptMovesWindowAndDropsPurchaseOutside() {
+        val closed = SptRules.close(case(12), d(20))!!
+        // СПТ перенесли на 21.10: покупка 20.10 раньше СПТ — снимается, окно до 21.11.
+        val moved = SptRules.reconcile(listOf(done(21)), listOf(closed), d(22)).changed.single()
+        assertEquals(d(21), moved.sptDate)
+        assertEquals(d(21, 11), moved.windowUntil)
+        assertNull(moved.purchaseDate)
+        assertEquals(SptCaseStatus.OPEN, moved.status)
+        // Перенесли на 14.10: покупка 20.10 в окне — остаётся.
+        val kept = SptRules.reconcile(listOf(done(14)), listOf(closed), d(22)).changed.single()
+        assertEquals(d(20), kept.purchaseDate)
+        assertEquals(SptCaseStatus.CLOSED, kept.status)
+    }
+
+    @Test
+    fun reconcile_expiredBecomesNotClosed() {
+        val changed = SptRules.reconcile(listOf(done(12)), listOf(case(12)), d(13, 11)).changed.single()
+        assertEquals(SptCaseStatus.NOT_CLOSED, changed.status)
+        // Последний день окна — ещё открыто.
+        assertTrue(SptRules.reconcile(listOf(done(12)), listOf(case(12)), d(12, 11)).isEmpty)
+        // Закрытое задним числом не трогается.
+        val retro = SptRules.close(case(12).copy(status = SptCaseStatus.NOT_CLOSED), d(1, 11))!!
+        assertTrue(SptRules.reconcile(listOf(done(12)), listOf(retro), d(1, 12)).isEmpty)
+    }
+
+    @Test
+    fun reconcile_duplicatesKeepPurchasedOrSmallestId() {
+        val a = case(12).copy(id = "b")
+        val b = case(12).copy(id = "a")
+        assertEquals(listOf(a), SptRules.reconcile(listOf(done(12)), listOf(a, b), d(12)).removed)
+        val bought = SptRules.close(a, d(13))!!
+        assertEquals(listOf(b), SptRules.reconcile(listOf(done(12)), listOf(bought, b), d(13)).removed)
+    }
+
+    @Test
+    fun paidPtAndDefaultPurchase() {
+        assertTrue(SptRules.isPaidPt(TrainingKind.PERSONAL, ATTENDED))
+        assertTrue(SptRules.isPaidPt(TrainingKind.SPLIT, CANCELLED_CHARGED))
+        assertTrue(!SptRules.isPaidPt(TrainingKind.SPT, ATTENDED))
+        assertTrue(!SptRules.isPaidPt(TrainingKind.GROUP, ATTENDED))
+        assertEquals(d(20), SptRules.defaultPurchase(case(12), d(20)))
+        assertEquals(d(12, 11), SptRules.defaultPurchase(case(12), d(1, 12)))
+        assertEquals(d(18), SptRules.defaultPurchase(SptRules.close(case(12), d(18))!!, d(25)))
+    }
 }

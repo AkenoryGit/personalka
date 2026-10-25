@@ -52,6 +52,7 @@ import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
+import com.akenory.personalka.data.money.SptWaiting
 import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.data.training.TrainingCard
 import com.akenory.personalka.domain.cabinet.ConsentDue
@@ -62,6 +63,7 @@ import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
+import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.home.HomeRules
@@ -134,7 +136,8 @@ data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
  * с шага 2.1 — «Без дневника» ([noDiary] — `DiaryRepository.missing`), с шага 2.4 — клиенты без записи ([followup]),
  * с шага 2.4б — освободившееся время листа ожидания ([waiting]), с шага 2.10а — [sync]: сервер подключён — вместо
  * копии «Изменения не отправлены больше суток»; с шага 2.13а — отозванные согласия ([consents] —
- * `CabinetRepository.due`); деньги добавит этап 3. [backup] `null` — раздела копии нет (тесты). Их число —
+ * `CabinetRepository.due`); с шага 3.7а — СПТ, ждущие покупки ([spt] — `SptRepository.waiting`); остальные деньги
+ * добавит этап 3. [backup] `null` — раздела копии нет (тесты). Их число —
  * счётчик дел на значке «Главной».
  */
 fun homeTodos(
@@ -146,6 +149,7 @@ fun homeTodos(
     waiting: List<WaitRow> = emptyList(),
     sync: SyncTodo? = null,
     consents: List<ConsentDue> = emptyList(),
+    spt: List<SptWaiting> = emptyList(),
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -179,6 +183,10 @@ fun homeTodos(
     if (followup.rows.isNotEmpty()) {
         val names = followup.rows.map { ClientName(it.client.lastName, it.client.firstName) }
         add(HomeTodo(TodoKind.NOT_BOOKED, FollowupFormat.todo(names.size), FollowupFormat.todoNote(names), count = names.size))
+    }
+    spt.firstOrNull()?.let { nearest ->
+        // СПТ ждут покупки (4.9): ближайший срок и его клиент; нажатие — «Инфо» клиента с «Купил блок со скидкой».
+        add(HomeTodo(TodoKind.SPT_PURCHASE, SptFormat.TODO, SptFormat.todoNote(nearest.case.windowUntil, nearest.name), count = spt.size, clientId = nearest.case.clientId))
     }
     if (sync != null) {
         // «С сервером» (5.2): вместо напоминаний о копии — изменения, не отправленные больше суток.
@@ -216,6 +224,7 @@ fun homeTodos(
  * @param onBackup пункт про копию — «Настройки → Данные».
  * @param onDiary «Дневник» у «Ближайшей» и в карточке, пункт «Без дневника» — экран дневника (5.7).
  * @param onNoBooking пункт «Клиенты без записи» — «Клиенты» с фильтром «Без записи».
+ * @param onClientInfo пункт «СПТ ждут покупки» — карточка клиента на «Инфо».
  */
 @Composable
 fun HomeScreen(
@@ -234,6 +243,7 @@ fun HomeScreen(
     onClient: (String) -> Unit,
     onGroup: (String) -> Unit,
     onDiary: (String) -> Unit = {},
+    onClientInfo: (String) -> Unit = onClient,
 ) {
     val wide = LocalWide.current
     val scroll = rememberScrollState()
@@ -257,6 +267,7 @@ fun HomeScreen(
         val client = todo.clientId
         when {
             todo.kind == TodoKind.NOT_BOOKED || todo.kind == TodoKind.FREED_TIME -> onNoBooking()
+            client != null && todo.kind == TodoKind.SPT_PURCHASE -> onClientInfo(client)
             client != null -> onClient(client)
             id == null -> onBackup()
             todo.kind == TodoKind.NO_DIARY -> onDiary(id)
@@ -533,6 +544,7 @@ private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.BACKUP -> PIcons.FolderOpen
     TodoKind.NO_DIARY -> PIcons.EditNote
     TodoKind.CONSENT_REVOKED -> PIcons.Delete
+    TodoKind.SPT_PURCHASE -> PIcons.ShoppingBag
     else -> PIcons.Info
 }
 

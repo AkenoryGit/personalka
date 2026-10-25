@@ -168,6 +168,11 @@ fun SectionScreen(
                 onHomeCard(null)
                 openClient(id)
             },
+            onClientInfo = { id ->
+                onHomeCard(null)
+                shell.select(Section.CLIENTS)
+                shell.open(ClientRoute.info(id))
+            },
             onGroup = { id ->
                 onHomeCard(null)
                 openGroup(id)

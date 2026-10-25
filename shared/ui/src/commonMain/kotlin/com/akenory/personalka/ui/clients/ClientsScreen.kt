@@ -55,6 +55,9 @@ object ClientRoute {
     /** Новый клиент; [prefill] — то, что набрано в поиске: «Новый клиент: Ковалёва». */
     fun new(prefill: String = ""): String = if (prefill.isBlank()) NEW else "$NEW/${prefill.trim()}"
     fun card(id: String) = PREFIX + id
+
+    /** Карточка сразу на «Инфо»: пункт «СПТ ждут покупки» ведёт к «Купил блок со скидкой» (шаг 3.7а). */
+    fun info(id: String) = "$PREFIX$id/info"
     fun edit(id: String) = "$PREFIX$id/edit"
     fun relative(id: String) = "$PREFIX$id/relative"
     fun relation(id: String, relationId: String) = "$PREFIX$id/relation/$relationId"
@@ -79,6 +82,7 @@ object ClientRoute {
         val parts = route.removePrefix(PREFIX).split('/')
         return when {
             parts.size == 1 -> ClientScreen.Card(parts[0])
+            parts.size == 2 && parts[1] == "info" -> ClientScreen.Card(parts[0], info = true)
             parts.size == 2 && parts[1] == "edit" -> ClientScreen.Edit(parts[0])
             parts.size == 2 && parts[1] == "relative" -> ClientScreen.AddRelative(parts[0])
             parts.size == 2 && parts[1] == "merge" -> ClientScreen.Merge(parts[0])
@@ -95,7 +99,7 @@ object ClientRoute {
 sealed interface ClientScreen {
     val clientId: String?
 
-    data class Card(override val clientId: String) : ClientScreen
+    data class Card(override val clientId: String, val info: Boolean = false) : ClientScreen
     data class New(val prefill: String) : ClientScreen {
         override val clientId: String? get() = null
     }
@@ -324,7 +328,10 @@ private fun ClientDetail(
     onBack: (() -> Unit)?,
 ) {
     when (screen) {
-        is ClientScreen.Card -> ClientCard(screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack, followup, waiting, cabinet)
+        is ClientScreen.Card -> ClientCard(
+            screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack, followup, waiting, cabinet,
+            startTab = if (screen.info) CardTab.INFO else CardTab.TRAININGS,
+        )
         is ClientScreen.Wait -> WaitEditor(screen.entryId, screen.clientId, rows, followup, clients, nav, messages, scope, now.date, voice)
         is ClientScreen.New -> ClientEditor(
             clientId = null,

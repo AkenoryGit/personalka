@@ -13,6 +13,7 @@ import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.syncGroupTrainings
 import com.akenory.personalka.data.groups.toSeriesTraining
+import com.akenory.personalka.data.money.SptRepository
 import com.akenory.personalka.data.restrictions.toRestriction
 import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.series.Recorder
@@ -91,6 +92,9 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     /** Лист ожидания (4.16): «Ждут время», «+ В ожидание», «Записать», «Больше не ждёт». */
     val waitlist = ClientWaitList(db, clock)
+
+    /** СПТ клиента в «Инфо» (5.9) и «Купил блок со скидкой» (4.9, шаг 3.7а). */
+    val spt = SptRepository(db, clock)
 
     /** Все клиенты, и в архиве, со строкой списка. [now] — «сейчас» клуба: от него ближайшая тренировка. */
     fun rows(now: LocalDateTime): Flow<List<ClientRow>> = combine(

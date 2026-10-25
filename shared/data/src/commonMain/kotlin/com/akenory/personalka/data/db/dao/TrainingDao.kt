@@ -261,6 +261,34 @@ interface TrainingDao {
     @Query("SELECT * FROM spt_case WHERE deletedAt IS NULL ORDER BY sptDate")
     fun observeSptCases(): Flow<List<SptCaseEntity>>
 
+    /** Все действующие дела СПТ — для сверки с проведёнными СПТ (шаг 3.7а). */
+    @Query("SELECT * FROM spt_case WHERE deletedAt IS NULL")
+    suspend fun sptCases(): List<SptCaseEntity>
+
+    @Query("SELECT * FROM spt_case WHERE id = :id")
+    suspend fun sptCase(id: String): SptCaseEntity?
+
+    /** Тренировки типов вида [kind] со статусом [status]: проведённые СПТ (4.9, п. 1). */
+    @Query(
+        """
+        SELECT t.* FROM training AS t
+        JOIN training_type AS y ON y.id = t.typeId
+        WHERE y.kind = :kind AND t.status = :status AND t.deletedAt IS NULL
+        """
+    )
+    suspend fun trainingsOfKind(kind: TrainingKind, status: TrainingStatus): List<TrainingEntity>
+
+    /** Участие в тренировках типов вида [kind] со статусом [status]. */
+    @Query(
+        """
+        SELECT p.* FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        JOIN training_type AS y ON y.id = t.typeId
+        WHERE y.kind = :kind AND t.status = :status AND t.deletedAt IS NULL AND p.deletedAt IS NULL
+        """
+    )
+    suspend fun participationsOfKind(kind: TrainingKind, status: TrainingStatus): List<ParticipationEntity>
+
     @Query("SELECT * FROM spt_case WHERE clientId = :clientId AND deletedAt IS NULL ORDER BY sptDate")
     suspend fun sptCasesOf(clientId: String): List<SptCaseEntity>
 
