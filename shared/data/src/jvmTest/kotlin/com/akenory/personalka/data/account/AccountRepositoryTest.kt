@@ -52,7 +52,7 @@ class AccountRepositoryTest {
     fun formIsCheckedBeforeServer() = runBlocking<Unit> {
         val account = repo()
         assertEquals(AccountFormat.EMAIL_WRONG, (account.register("Имя", "не почта", "длинный-пароль") as AccountResult.Failed).message)
-        assertEquals("Пароль — не короче 10 знаков", (account.register("Имя", "a@b.ru", "короткий") as AccountResult.Failed).message)
+        assertEquals("Пароль — не короче 8 знаков", (account.register("Имя", "a@b.ru", "коротко") as AccountResult.Failed).message)
         assertEquals(AccountFormat.NAME_EMPTY, (account.register("  ", "a@b.ru", "длинный-пароль") as AccountResult.Failed).message)
         assertEquals(AccountFormat.PASSWORD_EMPTY, (account.login("a@b.ru", "") as AccountResult.Failed).message)
         assertTrue(server.requests.isEmpty())

@@ -135,9 +135,9 @@ class AuthTest {
 
     @Test
     fun weakPasswordBadEmailAndNoName() = withServer {
-        val short = client.json("/api/v1/auth/register", "email" to "a@example.ru", "password" to "123456789", "display_name" to "Иван")
+        val short = client.json("/api/v1/auth/register", "email" to "a@example.ru", "password" to "1234567", "display_name" to "Иван")
         assertEquals("weak_password", short.code())
-        assertEquals("Пароль — не короче 10 знаков", short.obj()["message"]!!.jsonPrimitive.content)
+        assertEquals("Пароль — не короче 8 знаков", short.obj()["message"]!!.jsonPrimitive.content)
         assertEquals("invalid_email", client.json("/api/v1/auth/register", "email" to "a@b", "password" to password, "display_name" to "Иван").code())
         assertEquals("no_name", client.json("/api/v1/auth/register", "email" to "a@example.ru", "password" to password, "display_name" to " ").code())
         assertEquals("bad_request", client.post("/api/v1/auth/register") { setBody("не json") }.code())

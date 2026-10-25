@@ -87,9 +87,9 @@ class AccountUiTest {
         // Имя подставлено из «Профиля».
         onNodeWithTag(ACCOUNT_NAME_TAG).assertTextContains("Андрей")
         onNodeWithTag(ACCOUNT_EMAIL_TAG).performTextInput("coach@example.ru")
-        onNodeWithTag(ACCOUNT_PASSWORD_TAG).performTextInput("короткий")
+        onNodeWithTag(ACCOUNT_PASSWORD_TAG).performTextInput("коротко")
         onNodeWithTag(ACCOUNT_SUBMIT_TAG).performClick()
-        awaitNode(hasText("Пароль — не короче 10 знаков"))
+        awaitNode(hasText("Пароль — не короче 8 знаков"))
         assertTrue(server.requests.isEmpty())
 
         onNodeWithTag(ACCOUNT_PASSWORD_TAG).performTextReplacement("длинный-пароль")

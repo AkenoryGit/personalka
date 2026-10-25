@@ -17,9 +17,9 @@ class AccountRulesTest {
     }
 
     @Test
-    fun passwordIsAtLeastTenSigns() {
-        assertEquals("Пароль — не короче 10 знаков", AccountRules.passwordProblem("123456789"))
-        assertNull(AccountRules.passwordProblem("1234567890"))
+    fun passwordIsAtLeastEightSigns() {
+        assertEquals("Пароль — не короче 8 знаков", AccountRules.passwordProblem("1234567"))
+        assertNull(AccountRules.passwordProblem("12345678"))
         assertEquals("Пароль не может состоять из пробелов", AccountRules.passwordProblem(" ".repeat(12)))
         assertEquals("Пароль — не длиннее 200 знаков", AccountRules.passwordProblem("а".repeat(201)))
     }

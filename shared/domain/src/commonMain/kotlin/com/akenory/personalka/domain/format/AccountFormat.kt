@@ -19,7 +19,7 @@ object AccountFormat {
     const val NAME_HINT = "Так вас увидят родители в кабинете"
     const val EMAIL = "Почта"
     const val PASSWORD = "Пароль"
-    const val PASSWORD_HINT = "Не короче 10 знаков"
+    const val PASSWORD_HINT = "Не короче 8 знаков"
     const val NEW_PASSWORD = "Новый пароль"
     const val CODE = "Код из письма"
     const val DO_SIGN_IN = "Войти"

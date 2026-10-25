@@ -37,8 +37,8 @@ data class FeatureGrant(val feature: Feature, val until: LocalDate?)
 
 /** Правила аккаунта: почта, пароль, имя и открытые возможности. Одни и те же для сервера и формы в приложении. */
 object AccountRules {
-    /** Пароль — не короче 10 знаков (7.3). */
-    const val PASSWORD_MIN = 10
+    /** Пароль — не короче 8 знаков (7.3). */
+    const val PASSWORD_MIN = 8
 
     /** Длиннее пароли не нужны, а Argon2 на сервере не должен считать мегабайты. */
     const val PASSWORD_MAX = 200
