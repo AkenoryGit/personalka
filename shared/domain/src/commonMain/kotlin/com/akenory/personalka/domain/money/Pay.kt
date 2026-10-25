@@ -14,6 +14,7 @@ import kotlinx.datetime.yearMonth
 
 // Счётчик ПТ, ступень месяца, оплата одной тренировки (ТЗ 4.6, 4.7) и деление групп с коллегами (4.8).
 // Деньги — копейки, длительности — минуты. СПТ здесь — базовая ставка, доплата за закрытие (4.9) — SptRules.
+// Итоги месяца (4.10) — здесь же, выплаты (4.11) — Payouts, план и «не хватает K ПТ» (4.12) — SalaryPlan.
 
 /** Что расчёту нужно знать о типе тренировки (ТЗ 3.3). */
 data class PayType(
@@ -75,7 +76,7 @@ data class OwnerSchemes(
 /**
  * Тренировка для расчёта: [start] — локальное время клуба, [clients] — статусы участия её клиентов.
  * [owner] / [ownerColleagueId] — на ком числится группа, [conductedBy] / [colleagueId] — кто провёл (ТЗ 3.4, 4.8);
- * учитываются только у групп.
+ * учитываются только у групп. [groupId] — группа тренировки: по ней прогноз берёт ожидаемое число детей (4.12).
  */
 data class PayTraining(
     val id: String,
@@ -90,7 +91,11 @@ data class PayTraining(
     val ownerColleagueId: String? = null,
     val conductedBy: ConductedBy = ConductedBy.SELF,
     val colleagueId: String? = null,
+    val groupId: String? = null,
 )
+
+/** Доплата ([amount] больше нуля) или удержание месяца (ТЗ 3.6); [inClubAccrual] — входит в начисление клуба. */
+data class PayAdjustment(val amount: Long, val inClubAccrual: Boolean = true)
 
 /** Пометка сплита с одним клиентом (ТЗ 4.7): в календаре он остаётся сплитом. */
 enum class SplitMark { AS_PT, HALF }
@@ -117,7 +122,8 @@ data class TrainingPay(
  * прогнозной. [accrued] — начислено клубом (группы коллег — 0, мои группы — целиком, 4.8), [settlements] — итог
  * взаиморасчёта по каждому коллеге: больше нуля — коллега должен мне. [groupChildren] — оплаченные дети в группах,
  * которые я вёл (один или вместе), [dutyMinutes] — проведённые дежурства. [sptBonus] — доплаты за СПТ, закрытые
- * покупкой в этом месяце (4.9): входят в заработано, начислено и прогноз.
+ * покупкой в этом месяце (4.9): входят в заработано, начислено и прогноз. [adjustments] — доплаты и удержания месяца
+ * (4.10): все — в заработано и прогноз, с `in_club_accrual` — ещё и в начислено.
  */
 data class MonthPay(
     val month: YearMonth,
@@ -133,7 +139,11 @@ data class MonthPay(
     val groupChildren: Int = 0,
     val dutyMinutes: Int = 0,
     val sptBonus: Long = 0,
+    val adjustments: Long = 0,
 ) {
+    /** Взаиморасчёт S (4.10): мне должны минус я должен, по всем коллегам. */
+    val settlement: Long get() = settlements.values.sum()
+
     /** Тренировки без ставки — пункты «Нужно сделать». */
     val missingRate: List<String> get() = trainings.filter { it.rateMissing }.map { it.trainingId }
 }
@@ -146,10 +156,27 @@ object PayRules {
 
     /**
      * p — число оплаченных клиентов. В прогнозе ([forecast]) запланированная тренировка считается состоявшейся:
-     * её ожидаемые клиенты — тоже оплаченные (4.6, 4.12).
+     * её ожидаемые клиенты — тоже оплаченные (4.6, 4.12). [expected] — ожидаемое число детей запланированной группы
+     * ([expectedChildren]): с ним в прогнозе p — оно, а не состав.
      */
-    fun paidClients(training: PayTraining, forecast: Boolean = false): Int = training.clients.count {
-        isPaid(it) || (forecast && training.status == TrainingStatus.PLANNED && it == ParticipationStatus.EXPECTED)
+    fun paidClients(training: PayTraining, forecast: Boolean = false, expected: Int? = null): Int {
+        val planned = forecast && training.status == TrainingStatus.PLANNED
+        if (planned && expected != null) return expected
+        return training.clients.count { isPaid(it) || (planned && it == ParticipationStatus.EXPECTED) }
+    }
+
+    /**
+     * Ожидаемое число детей запланированной группы (ТЗ 4.12): среднее оплаченных по последним 4 проведённым
+     * тренировкам этой группы до неё, до целого, половина вверх. Истории нет — `null`, и прогноз берёт состав.
+     */
+    fun expectedChildren(training: PayTraining, history: List<PayTraining>): Int? {
+        val groupId = training.groupId ?: return null
+        val last = history
+            .filter { it.groupId == groupId && it.status == TrainingStatus.DONE && it.start < training.start }
+            .sortedByDescending { it.start }
+            .take(EXPECTED_FROM_LAST)
+        if (last.isEmpty()) return null
+        return roundDiv(last.sumOf { paidClients(it).toLong() }, last.size.toLong()).toInt()
     }
 
     /** Тренировки месяца [month] — по дате начала в поясе клуба. */
@@ -191,9 +218,10 @@ object PayRules {
         tier: Int,
         forecast: Boolean = false,
         owners: OwnerSchemes = OwnerSchemes(),
+        expected: Int? = null,
     ): TrainingPay {
         val type = types[training.typeId]
-        val p = paidClients(training, forecast)
+        val p = paidClients(training, forecast, expected)
         val happened = when (training.status) {
             TrainingStatus.DONE -> true
             TrainingStatus.PLANNED -> forecast
@@ -277,7 +305,9 @@ object PayRules {
      * Деньги месяца [month] (ТЗ 4.6): ступени берутся из версии, действующей 1-го числа; итоговая ступень идёт на все
      * тренировки месяца с `tier_dependent`, а не только на те, что сверх порога. Группы делятся по 4.8 со схемами
      * владельцев [owners]; взаиморасчёт по коллеге — всё, что он должен мне, минус всё, что я должен ему.
-     * Доплаты за закрытие СПТ [spt] идут в месяц покупки (4.9).
+     * Доплаты за закрытие СПТ [spt] идут в месяц покупки (4.9), доплаты и удержания [adjustments] — этого месяца (4.10).
+     * В прогнозе запланированная группа ждёт столько детей, сколько в среднем было на её последних 4 проведённых
+     * (4.12): поэтому в [trainings] можно передавать и прошлые месяцы — считаются только тренировки [month].
      */
     fun month(
         month: YearMonth,
@@ -287,6 +317,7 @@ object PayRules {
         schemes: List<TierScheme>,
         owners: OwnerSchemes = OwnerSchemes(),
         spt: List<SptCase> = emptyList(),
+        adjustments: List<PayAdjustment> = emptyList(),
     ): MonthPay {
         val ofMonth = inMonth(trainings, month)
         val scheme = Versions.activeIn(schemes, month) { it.validFrom }
@@ -298,11 +329,16 @@ object PayRules {
         val byId = types.associateBy { it.id }
         val pays = ofMonth.map { pay(it, byId, rates, tier, owners = owners) }
         val sptBonus = SptRules.bonusIn(month, spt, rates)
-        val forecast = sptBonus + ofMonth.sumOf { pay(it, byId, rates, forecastTier, forecast = true, owners = owners).earned }
+        val adjusted = adjustments.sumOf { it.amount }
+        val adjustedInClub = adjustments.filter { it.inClubAccrual }.sumOf { it.amount }
+        val kindOf = { t: PayTraining -> byId[t.typeId]?.kind }
+        val forecast = sptBonus + adjusted + ofMonth.sumOf {
+            val expected = if (it.status == TrainingStatus.PLANNED && kindOf(it) == TrainingKind.GROUP) expectedChildren(it, trainings) else null
+            pay(it, byId, rates, forecastTier, forecast = true, owners = owners, expected = expected).earned
+        }
         val settlements = pays.filter { it.colleagueId != null }
             .groupBy { it.colleagueId!! }
             .mapValues { (_, list) -> list.sumOf { it.settlement } }
-        val kindOf = { t: PayTraining -> byId[t.typeId]?.kind }
         val groupChildren = ofMonth.zip(pays)
             .filter { (t, _) -> kindOf(t) == TrainingKind.GROUP && t.conductedBy != ConductedBy.COLLEAGUE }
             .sumOf { (_, pay) -> pay.paidClients }
@@ -310,12 +346,13 @@ object PayRules {
             .filter { kindOf(it) == TrainingKind.DUTY && it.status == TrainingStatus.DONE }
             .sumOf { it.durationMin }
         return MonthPay(
-            month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned } + sptBonus, forecast, pays,
-            accrued = pays.sumOf { it.accrued } + sptBonus,
+            month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned } + sptBonus + adjusted, forecast, pays,
+            accrued = pays.sumOf { it.accrued } + sptBonus + adjustedInClub,
             settlements = settlements,
             groupChildren = groupChildren,
             dutyMinutes = dutyMinutes,
             sptBonus = sptBonus,
+            adjustments = adjusted,
         )
     }
 
@@ -331,5 +368,9 @@ object PayRules {
     /** Единица доли налога [ownerTax]: десятитысячные доли × десятитысячные НДФЛ. */
     private const val TAX_ONE = 100_000_000L
 
-    private fun roundDiv(a: Long, b: Long): Long = (a * 2 + b) / (b * 2)
+    /** По скольким последним проведённым тренировкам группы ждать детей в прогнозе (4.12). */
+    private const val EXPECTED_FROM_LAST = 4
+
+    /** Деление до целого, половина — от нуля (для положительных — вверх): так округляются деньги до копейки. */
+    internal fun roundDiv(a: Long, b: Long): Long = if (a < 0) -roundDiv(-a, b) else (a * 2 + b) / (b * 2)
 }
