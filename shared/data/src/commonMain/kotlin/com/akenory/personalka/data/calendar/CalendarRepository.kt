@@ -284,7 +284,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
             coaches.observeSettings(),
         ) { list, participations, n, settings ->
             val byTraining = participations.groupBy { it.trainingId }
-            val diaryEnabled = settings?.diaryEnabled ?: true
+            val diaryEnabled = settings?.diaryEnabled ?: false
             // Дежурства — не блоки, но по ним видно, какая тренировка стоит поверх дежурства.
             val duties = list.filter { n.types[it.typeId]?.kind == TrainingKind.DUTY }.map { it.placed(isDuty = true) }
             list.mapNotNull { t ->

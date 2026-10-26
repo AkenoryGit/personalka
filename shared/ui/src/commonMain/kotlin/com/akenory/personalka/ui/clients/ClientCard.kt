@@ -651,7 +651,6 @@ private fun TrainingItem(row: ClientTrainingRow, showPlan: Boolean, expanded: Bo
     val training = row.training
     val outcome = row.outcome
     val what = listOfNotNull(row.type?.shortName, row.place?.shortName).joinToString(" · ").ifEmpty { "Тренировка" }
-    val diaryMissing = outcome == ClientOutcome.DONE && row.type?.diaryFact == true && training.fact.isNullOrBlank()
     Row(
         Modifier
             .fillMaxWidth()
@@ -664,7 +663,7 @@ private fun TrainingItem(row: ClientTrainingRow, showPlan: Boolean, expanded: Bo
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(what, style = MaterialTheme.typography.bodyLarge, color = colors.text)
-            if (diaryMissing) {
+            if (row.noDiary) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(6.dp).background(colors.accentGraphic, CircleShape))
                     Spacer(Modifier.width(6.dp))

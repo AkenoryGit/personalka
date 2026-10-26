@@ -10,7 +10,7 @@ import kotlinx.datetime.LocalTime
 
 /** Настройки дневника и напоминаний тренера (3.2, 5.16). «План на день» — настройка телефона, она не здесь. */
 data class DiaryPrefs(
-    val diary: Boolean = true,
+    val diary: Boolean = false,
     val autoDone: Boolean = true,
     val digest: Boolean = true,
     val digestTime: LocalTime = ReminderRules.DIGEST_DEFAULT,

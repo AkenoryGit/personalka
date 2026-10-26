@@ -78,7 +78,7 @@ class PersonalkaDatabaseTest {
         assertEquals(4, s.upcomingInCard)
         assertEquals(3, s.weekViewDays)
         assertEquals(BackupFrequency.DAILY, s.backupFrequency)
-        assertTrue(s.autoDonePersonal && s.diaryEnabled && !s.cabinetsEnabled && !s.instantDiary)
+        assertTrue(s.autoDonePersonal && !s.diaryEnabled && !s.cabinetsEnabled && !s.instantDiary)
     }
 
     @Test

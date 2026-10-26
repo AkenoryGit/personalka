@@ -77,7 +77,7 @@ class DiaryRepository internal constructor(private val db: PersonalkaDatabase, p
         coaches.observeSettings(),
     ) { list, types, settings ->
         val typeById = types.associateBy { it.id }
-        val enabled = settings?.diaryEnabled ?: true
+        val enabled = settings?.diaryEnabled ?: false
         list.filter { t -> DiaryRules.missing(t.status, enabled, typeById[t.typeId]?.diaryFact == true, t.fact) }
             .map { t -> MissingDiary(t.id, t.start, title(t, typeById[t.typeId]?.name.orEmpty())) }
     }
@@ -86,7 +86,7 @@ class DiaryRepository internal constructor(private val db: PersonalkaDatabase, p
     suspend fun diary(id: String): Diary? {
         val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null && it.status != TrainingStatus.CANCELLED } ?: return null
         val type = reference.trainingType(t.typeId) ?: return null
-        if (coaches.currentCoach()?.let { coaches.settings(it.id) }?.diaryEnabled == false) return null
+        if (coaches.currentCoach()?.let { coaches.settings(it.id) }?.diaryEnabled != true) return null
         val fields = DiaryRules.fields(type.kind, type.diaryPlan, type.diaryFact, type.diaryBehavior)
         if (!fields.any) return null
         val people = trainings.participationsOf(id).ordered()

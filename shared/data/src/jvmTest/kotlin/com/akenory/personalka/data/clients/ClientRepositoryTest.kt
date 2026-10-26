@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.clients
 
+import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.Samples
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
@@ -72,6 +73,19 @@ class ClientRepositoryTest {
             db.trainingDao().upsertParticipation(Samples.participation(training.id, it).copy(status = ParticipationStatus.EXPECTED, behavior = null, cancelReason = null, notifiedAt = null))
         }
         return training.id
+    }
+
+    @Test
+    fun noDiaryMarkFollowsDiarySetting(): Unit = runBlocking {
+        val id = create("Орлова", "Ксения")
+        val t = planned(LocalDateTime(2026, 10, 19, 16, 0), id)
+        db.trainingDao().upsertTraining(db.trainingDao().training(t)!!.copy(status = TrainingStatus.DONE, fact = null))
+        val p = db.trainingDao().participationRow(t, id)!!
+        db.trainingDao().upsertParticipation(p.copy(status = ParticipationStatus.ATTENDED))
+        // Дневник у нового тренера выключен — метки «нет дневника» нет, а записи тренировки на месте.
+        assertEquals(listOf(false), repo.trainings(id).first().map { it.noDiary })
+        CalendarRepository(db) { millis }.reminders.saveDiary(true)
+        assertEquals(listOf(true), repo.trainings(id).first().map { it.noDiary })
     }
 
     // --- Список ---

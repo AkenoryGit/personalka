@@ -82,7 +82,7 @@ class ReminderSettingsUiTest {
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
         onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
-        awaitNode(hasText(s("Дневник · сводка в_21:00")))
+        awaitNode(hasText(s("Без дневника · сводка в_21:00")))
         onNodeWithTag(REMINDERS_ROW_TAG).performClick()
         awaitNode(hasTestTag(DIGEST_TAG))
     }
@@ -90,7 +90,8 @@ class ReminderSettingsUiTest {
     @Test
     fun defaultsAndDigestOffHidesTime() = runComposeUiTest {
         openReminders()
-        onNodeWithTag(DIARY_SWITCH_TAG).assertIsOn()
+        // Дневник у нового тренера выключен: кому нужен, включит сам.
+        onNodeWithTag(DIARY_SWITCH_TAG).assertIsOff()
         onNodeWithTag(AUTO_DONE_TAG).assertIsOn()
         onNodeWithTag(DIGEST_TAG).assertIsOn()
         onNodeWithTag(DIGEST_TIME_TAG).assertIsDisplayed()
@@ -109,6 +110,8 @@ class ReminderSettingsUiTest {
     @Test
     fun moreHoldsInstantAndDayPlan() = runComposeUiTest {
         openReminders(access)
+        onNodeWithTag(DIARY_SWITCH_TAG).performClick()
+        waitUntil(timeoutMillis = 5_000) { saved().diary }
         onNodeWithTag(MORE_TAG).performScrollTo().performClick()
         onNodeWithTag(INSTANT_DIARY_TAG).performScrollTo().assertIsOff().performClick()
         waitUntil(timeoutMillis = 5_000) { saved().instantDiary }
@@ -135,10 +138,11 @@ class ReminderSettingsUiTest {
     @Test
     fun diaryOffHidesInstantDiary() = runComposeUiTest {
         openReminders()
-        onNodeWithTag(DIARY_SWITCH_TAG).performClick()
-        waitUntil(timeoutMillis = 5_000) { !saved().diary }
         onNodeWithTag(MORE_TAG).performScrollTo().performClick()
         onNodeWithTag(INSTANT_GROUP_TAG).performScrollTo().assertIsDisplayed()
         assertFalse(onAllNodes(hasTestTag(INSTANT_DIARY_TAG)).fetchSemanticsNodes().isNotEmpty())
+        onNodeWithTag(DIARY_SWITCH_TAG).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { saved().diary }
+        onNodeWithTag(INSTANT_DIARY_TAG).performScrollTo().assertIsDisplayed()
     }
 }

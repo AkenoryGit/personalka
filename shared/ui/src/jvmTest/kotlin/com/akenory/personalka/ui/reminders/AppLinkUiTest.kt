@@ -30,7 +30,7 @@ import kotlin.test.assertNull
 /** Нажатие на уведомление (шаг 2.5, ТЗ 5.19): нужный экран сразу. «Сейчас» — вт 20.10.2026 15:40. Имена придуманы. */
 @OptIn(ExperimentalTestApi::class)
 class AppLinkUiTest {
-    private val settings = TestData.ready()
+    private val settings = TestData.ready(diary = true)
     private val calendar = TestData.calendarOf(settings)
     private val clients = TestData.clientsOf(settings)
 

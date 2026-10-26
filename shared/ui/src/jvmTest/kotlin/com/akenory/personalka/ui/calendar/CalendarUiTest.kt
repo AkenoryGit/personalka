@@ -102,7 +102,7 @@ class CalendarUiTest {
     private val folded = 412.dp
     private val unfolded = 760.dp
     private val height = 960.dp
-    private val settings = TestData.ready()
+    private val settings = TestData.ready(diary = true)
     private val clients = TestData.clientsOf(settings)
     private val db = TestData.dbOf(settings)
     private val prefs = MemoryPrefs()

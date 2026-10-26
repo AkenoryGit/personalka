@@ -39,6 +39,8 @@ import com.akenory.personalka.domain.model.Sex
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.series.SeriesRules
+import com.akenory.personalka.domain.training.ClientOutcome
+import com.akenory.personalka.domain.training.DiaryRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.datetime.DateTimeUnit
@@ -61,12 +63,16 @@ data class ClientRow(val client: ClientEntity, val schedule: List<ScheduleLine>,
  */
 data class RelativeRow(val link: RelativeLink, val relative: ClientEntity, val schedule: List<ScheduleLine>, val clientLabel: String? = null)
 
-/** Тренировка в карточке клиента (5.9): тренировка, участие клиента, тип и место. */
+/**
+ * Тренировка в карточке клиента (5.9): тренировка, участие клиента, тип и место. [noDiary] — клиент был, а дневника
+ * нет ([DiaryRules.missing]); дневник выключен в настройках — `false`.
+ */
 data class ClientTrainingRow(
     val training: TrainingEntity,
     val participation: ParticipationEntity,
     val type: TrainingTypeEntity?,
     val place: LocationEntity?,
+    val noDiary: Boolean = false,
 )
 
 /**
@@ -151,13 +157,18 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         trainings.observeParticipationsOfClient(clientId),
         reference.observeTrainingTypes(),
         reference.observeLocations(),
-    ) { list, participations, types, places ->
+        coaches.observeSettings(),
+    ) { list, participations, types, places, settings ->
         val byTraining = participations.associateBy { it.trainingId }
         val typeOf = types.associateBy { it.id }
         val placeOf = places.associateBy { it.id }
+        val diaryEnabled = settings?.diaryEnabled ?: false
         list.mapNotNull { t ->
             val p = byTraining[t.id] ?: return@mapNotNull null
-            ClientTrainingRow(t, p, typeOf[t.typeId], placeOf[t.locationId])
+            val type = typeOf[t.typeId]
+            val noDiary = ClientOutcome.of(t.status, p.status) == ClientOutcome.DONE &&
+                DiaryRules.missing(t.status, diaryEnabled, type?.diaryFact == true, t.fact)
+            ClientTrainingRow(t, p, type, placeOf[t.locationId], noDiary)
         }
     }
 

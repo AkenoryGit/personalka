@@ -52,6 +52,7 @@ class DiaryRepositoryTest {
         settings = SettingsRepository(db) { millis }
         settings.completeFirstRun(CoachName("Соколов", "Андрей"), ReferenceRules.defaultPlaces, ReferenceRules.defaultTypes)
         calendar = CalendarRepository(db) { millis }
+        calendar.reminders.saveDiary(true)
         diaries = calendar.diaries
         clients = ClientRepository(db) { millis++ }
         groups = GroupRepository(db) { millis++ }

@@ -48,9 +48,12 @@ internal object TestData {
     /** Сама база — записать тренировки через DAO, пока их не создать в приложении (форма — шаг 1.13). */
     fun dbOf(settings: SettingsRepository): PersonalkaDatabase = databases.getValue(settings)
 
-    /** Первый запуск пройден с местами и типами по умолчанию. */
-    fun ready(): SettingsRepository = fresh().also {
-        runBlocking { it.completeFirstRun(coach, ReferenceRules.defaultPlaces, ReferenceRules.defaultTypes) }
+    /** Первый запуск пройден с местами и типами по умолчанию; [diary] — включить «Вести дневник» (по умолчанию выключен). */
+    fun ready(diary: Boolean = false): SettingsRepository = fresh().also {
+        runBlocking {
+            it.completeFirstRun(coach, ReferenceRules.defaultPlaces, ReferenceRules.defaultTypes)
+            if (diary) calendarOf(it).reminders.saveDiary(true)
+        }
     }
 }
 

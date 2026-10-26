@@ -82,7 +82,7 @@ class RemindersTest {
 
     @Test
     fun eveningDigestWithTodosAndDiaryButton() {
-        val settings = TestData.ready()
+        val settings = TestData.ready(diary = true)
         dayWithTodos(settings)
         val reminders = remindersOf(settings)
         val day = check(reminders, at(15, 40))
@@ -103,7 +103,7 @@ class RemindersTest {
 
     @Test
     fun instantDiaryAndGroupWhenEnabled() {
-        val settings = TestData.ready()
+        val settings = TestData.ready(diary = true)
         val pt = dayWithTodos(settings)
         val calendar = TestData.calendarOf(settings)
         runBlocking {

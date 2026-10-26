@@ -43,7 +43,8 @@ data class CoachSettingsEntity(
     @Embedded val sync: SyncFields,
     /** Меньше этого до начала — отмена со списанием. */
     val cancelNoticeMinutes: Int = 60,
-    val diaryEnabled: Boolean = true,
+    /** Выключен у нового тренера: кому нужен, включит сам (решение Дмитрия 26.10.2026). */
+    val diaryEnabled: Boolean = false,
     val digestEnabled: Boolean = true,
     val digestTime: LocalTime = LocalTime(21, 0),
     val instantDiary: Boolean = false,

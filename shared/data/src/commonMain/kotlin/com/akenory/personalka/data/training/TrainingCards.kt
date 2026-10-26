@@ -271,9 +271,9 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 fact = t.fact?.takeIf { it.isNotBlank() },
                 warnings = warnings,
                 skippable = series != null && t.toSeriesTraining(ordered).changeableAt(clubNow),
-                noDiary = DiaryRules.missing(t.status, settingsRow?.diaryEnabled ?: true, type?.diaryFact == true, t.fact),
+                noDiary = DiaryRules.missing(t.status, settingsRow?.diaryEnabled ?: false, type?.diaryFact == true, t.fact),
                 settings = settingsRow.statusSettings(),
-                keepsDiary = (settingsRow?.diaryEnabled ?: true) && type != null &&
+                keepsDiary = (settingsRow?.diaryEnabled ?: false) && type != null &&
                     DiaryRules.fields(kind, type.diaryPlan, type.diaryFact, type.diaryBehavior).any,
                 carriedTo = if (t.status == TrainingStatus.CANCELLED) trainings.trainingsCarriedFrom(t.id).firstOrNull()?.start?.date else null,
                 sharing = if (kind == TrainingKind.GROUP && t.status != TrainingStatus.CANCELLED && settingsRow?.coCoachingEnabled == true) cardSharing(t.sharing()) else null,

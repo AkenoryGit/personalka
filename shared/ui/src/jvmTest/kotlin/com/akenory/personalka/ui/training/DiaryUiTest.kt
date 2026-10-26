@@ -45,7 +45,7 @@ import kotlin.test.assertEquals
  */
 @OptIn(ExperimentalTestApi::class)
 class DiaryUiTest {
-    private val settings = TestData.ready()
+    private val settings = TestData.ready(diary = true)
     private val clients = TestData.clientsOf(settings)
     private val groups = TestData.groupsOf(settings)
     private val calendar = TestData.calendarOf(settings)
