@@ -74,7 +74,7 @@ class SyncUiTest {
         val tokens = MemoryTokens()
         val prefs = MemoryPrefs()
         val account = AccountRepository(server.api(url), tokens, prefs, "Samsung SM-F976B") { settings.coach.first()?.id }
-        val sync = SyncRepository(TestData.dbOf(settings), SyncApi(server.client) { url }, tokens, prefs, TestData.clock)
+        val sync = SyncRepository(TestData.dbOf(settings), SyncApi(server.client) { url }, tokens, prefs, clock = TestData.clock)
         val tools = SyncTools(sync) { CoroutineScope(Dispatchers.Default).launch { sync.sync() } }
 
         fun signIn() = runBlocking { account.login(EMAIL, PASSWORD) }
@@ -148,7 +148,7 @@ class SyncUiTest {
         coach()
         // Первый телефон уже выгрузил свои данные (сессия «Второй телефон» — токен t-other).
         val first = TestData.ready()
-        val firstSync = SyncRepository(TestData.dbOf(first), SyncApi(server.client) { url }, MemoryTokens("t-other"), MemoryPrefs(), TestData.clock)
+        val firstSync = SyncRepository(TestData.dbOf(first), SyncApi(server.client) { url }, MemoryTokens("t-other"), MemoryPrefs(), clock = TestData.clock)
         assertTrue(runBlocking { firstSync.connect() })
         val firstCoach = runBlocking { first.coach.first()!!.id }
 
@@ -172,7 +172,7 @@ class SyncUiTest {
     fun signInOnFirstRunLoadsDataFromServer() = runComposeUiTest {
         coach()
         val first = TestData.ready()
-        val firstSync = SyncRepository(TestData.dbOf(first), SyncApi(server.client) { url }, MemoryTokens("t-other"), MemoryPrefs(), TestData.clock)
+        val firstSync = SyncRepository(TestData.dbOf(first), SyncApi(server.client) { url }, MemoryTokens("t-other"), MemoryPrefs(), clock = TestData.clock)
         assertTrue(runBlocking { firstSync.connect() })
 
         val phone = Phone(TestData.fresh())

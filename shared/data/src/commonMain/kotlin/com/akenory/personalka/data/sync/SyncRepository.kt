@@ -58,6 +58,10 @@ data class SyncState(
  * Всё, что нужно только этому телефону — подключён ли сервер, номер последнего полученного изменения, id устройства, —
  * лежит в [prefs], а не в базе: в копию и на другой телефон не попадает. Обмены идут по одному ([busy]).
  *
+ * Сервер подключается для одного аккаунта ([OWNER]). Вошли в другой — обмен и «Отключиться» не идут
+ * ([SyncProblem.OTHER_ACCOUNT]): данные телефона и обоих аккаунтов на сервере не трогаются и не смешиваются.
+ *
+ * @param owner почта аккаунта, в который сейчас вошли, `null` — не вошли.
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
 class SyncRepository(
@@ -65,6 +69,7 @@ class SyncRepository(
     private val api: SyncApi,
     private val tokens: TokenStore,
     private val prefs: DevicePrefs,
+    private val owner: () -> String? = { null },
     private val clock: () -> Long,
 ) {
     private val _state = MutableStateFlow(
@@ -105,6 +110,7 @@ class SyncRepository(
                 return@withLock failed(e)
             }
             setConnected(true)
+            rememberOwner()
             prefs.pullFromStart()
             db.useWriterConnection { connection ->
                 connection.immediateTransaction {
@@ -119,6 +125,7 @@ class SyncRepository(
         db.useWriterConnection { connection -> connection.immediateTransaction { SyncOutbox.requeueAll(this) } }
         prefs.pullFromStart()
         setConnected(true)
+        rememberOwner()
         val total = db.syncDao().pending()
         _state.update { it.copy(progress = SyncProgress(0, total)) }
         val ok = exchange(token, push = true)
@@ -157,21 +164,41 @@ class SyncRepository(
     suspend fun sync(): Boolean = busy.withLock {
         if (!_state.value.connected) return@withLock false
         val token = tokens.read() ?: return@withLock fail(SyncProblem.SIGNED_OUT)
+        if (otherAccount()) return@withLock false
         exchange(token, push = true)
     }
 
     /**
+     * Вошли не в тот аккаунт, для которого подключали сервер: обмена нет — иначе правки ушли бы в чужой аккаунт, а его
+     * данные пришли бы в этот телефон. Подключение и номер получения не трогаются: вернулись в свой — обмен идёт дальше.
+     * Подключённые до шага 3.9б запоминают аккаунт здесь.
+     */
+    private fun otherAccount(): Boolean {
+        val now = owner() ?: return false
+        val was = prefs.string(OWNER)?.takeIf { it.isNotEmpty() }
+        if (was == null) prefs.putString(OWNER, now)
+        if (was == null || was.equals(now, ignoreCase = true)) return false
+        fail(SyncProblem.OTHER_ACCOUNT)
+        return true
+    }
+
+    private fun rememberOwner() = prefs.putString(OWNER, owner().orEmpty())
+
+    /**
      * «Отключиться от сервера» (1.5): данные тренера на сервере стираются, на телефоне всё остаётся, обмен больше
-     * не идёт. Без связи — `false`, сервер остаётся подключённым.
+     * не идёт. Без связи или под чужим аккаунтом — `false`, сервер остаётся подключённым.
      */
     suspend fun disconnect(): Boolean = busy.withLock {
         val token = tokens.read() ?: return@withLock fail(SyncProblem.SIGNED_OUT)
+        // Под чужим аккаунтом «Отключиться» стёрло бы на сервере его данные.
+        if (otherAccount()) return@withLock false
         try {
             api.deleteData(token)
         } catch (e: AccountException) {
             return@withLock failed(e)
         }
         setConnected(false)
+        prefs.putString(OWNER, "")
         prefs.pullFromStart()
         _state.update { it.copy(problem = null, failures = 0, progress = null) }
         true
@@ -335,6 +362,9 @@ class SyncRepository(
 
         /** Момент последнего полного обмена. */
         const val LAST = "sync.last"
+
+        /** Почта аккаунта, для которого подключён сервер. */
+        const val OWNER = "sync.owner"
 
         /** Id этого устройства для сервера. */
         const val DEVICE = "sync.device"

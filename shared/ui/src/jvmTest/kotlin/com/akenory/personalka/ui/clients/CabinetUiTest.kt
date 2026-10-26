@@ -71,7 +71,7 @@ class CabinetUiTest {
         val account = AccountRepository(server.api(url), tokens, prefs, "Samsung SM-F976B") { settings.coach.first()?.id }
         runBlocking { account.login(EMAIL, PASSWORD) }
         val db = TestData.dbOf(settings)
-        sync = SyncRepository(db, SyncApi(server.client) { url }, tokens, prefs, TestData.clock)
+        sync = SyncRepository(db, SyncApi(server.client) { url }, tokens, prefs, clock = TestData.clock)
         val cabinets = CabinetRepository(db, CabinetApi(server.client) { url }, tokens, MemorySecrets(), TestData.clock)
         setContent {
             Box(Modifier.size(412.dp, 900.dp)) {
