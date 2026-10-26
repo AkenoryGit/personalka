@@ -335,10 +335,20 @@ class SyncRepositoryTest {
         val before = server.requests.size
         assertFalse(a.sync.sync(), "В чужом аккаунте обмена нет")
         assertEquals(before, server.requests.size)
-        assertFalse(a.sync.state.value.connected, "Сервер на телефоне отключён")
+        assertEquals(SyncProblem.OTHER_ACCOUNT, a.sync.state.value.problem)
+        assertFalse(a.sync.disconnect(), "«Отключиться» не стирает чужие данные")
+        assertEquals(before, server.requests.size)
         assertEquals(listOf("Ксения", "Правка"), a.live().map { it.firstName }.sorted(), "Данные телефона на месте, чужих нет")
         assertEquals(1, server.liveRows(EMAIL, "client").size, "Первый аккаунт на сервере не тронут")
         assertEquals(1, server.liveRows(OTHER, "client").size, "Во второй аккаунт ничего не ушло")
+
+        // Вернулись в свой аккаунт — обмен идёт дальше без нового подключения.
+        a.tokens.write("t-a")
+        a.email = EMAIL
+        assertTrue(a.sync.sync())
+        assertTrue(a.sync.state.value.connected)
+        assertEquals(2, server.liveRows(EMAIL, "client").size, "Правка, сделанная под чужим входом, ушла в свой аккаунт")
+        assertEquals(1, server.liveRows(OTHER, "client").size)
     }
 
     @Test
