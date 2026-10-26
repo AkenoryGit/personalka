@@ -69,6 +69,8 @@ import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
 import com.akenory.personalka.ui.settings.SyncTools
+import com.akenory.personalka.ui.slots.SlotsRoute
+import com.akenory.personalka.ui.slots.SlotsScreen
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.ShellState
@@ -155,6 +157,10 @@ fun SectionScreen(
         shell.select(Section.MORE)
         shell.open(GroupRoute.card(id))
     }
+    val openSlots: (String) -> Unit = { route ->
+        shell.select(Section.MORE)
+        shell.reset(route)
+    }
     when (section) {
         Section.HOME -> {
             // «Деньги» (5.2, шаг 3.9): текущий месяц тем же расчётом, что «Зарплата»; читается, только пока «Главная» открыта.
@@ -238,9 +244,12 @@ fun SectionScreen(
             goTo = calendarDay,
             onWent = { onCalendarDay(null) },
             onDiary = onDiary,
+            onSlots = { openSlots(SlotsRoute.ROOT) },
         )
-        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting, cabinets?.takeIf { cabinetsOn })
-        Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope, shareText, advanceAsk, { onAdvanceAsk(false) }) {
+        Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting, cabinets?.takeIf { cabinetsOn }) { id ->
+            openSlots(SlotsRoute.forWait(id))
+        }
+        Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope, shareText, advanceAsk, { onAdvanceAsk(false) }, { openSlots(SlotsRoute.ROOT) }) {
             shell.select(Section.MORE)
             shell.reset(SettingsRoute.HOME)
             shell.open(SettingsRoute.RATES)
@@ -252,6 +261,7 @@ fun SectionScreen(
                 route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText, backup?.files) { id ->
                     shell.open(Report1cRoute.of(id))
                 }
+                SlotsRoute.isSlots(route) -> SlotsScreen(calendar, prefs, now, messages, onBack, onForm, shareText, SlotsRoute.waitOf(route))
                 Report1cRoute.idOf(route) != null -> Report1cResultScreen(settings.report1c, Report1cRoute.idOf(route)!!, messages, scope, onBack, shareText)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }
@@ -269,7 +279,8 @@ enum class MoreItem(
 ) {
     // У «Групп» с шага 1.8 свой экран (ui/groups), заготовка не показывается.
     GROUPS("groups", "Группы", PIcons.Groups, "Группы", "Состав с датами."),
-    SLOTS("slots", "Свободные слоты", PIcons.EventAvailable, "Здесь будут свободные окна", "Поиск окон за период — шаг 4.3."),
+    // «Свободные слоты» (4.13, 5.13, шаг 4.3) — свой экран (ui/slots).
+    SLOTS(SlotsRoute.ROOT, "Свободные слоты", PIcons.EventAvailable, "Свободные слоты", "Окна за период."),
     // «Сверки» (5.14, шаг 3.9в) — свой экран (ui/reconcile): месяц зарплаты, дежурства, с шага 4.2 — отчёт 1С.
     RECONCILE("reconcile", "Сверки", PIcons.FactCheck, "Сверки", "Месяц зарплаты, дежурства, отчёт 1С."),
     // У «Настроек» с шага 1.6 свой экран (ui/settings), заготовка не показывается.

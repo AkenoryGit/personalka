@@ -70,6 +70,7 @@ import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.RateFormat
 import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.SettlementFormat
+import com.akenory.personalka.domain.format.SlotFormat
 import com.akenory.personalka.domain.money.BreakdownLine
 import com.akenory.personalka.domain.money.BreakdownSection
 import com.akenory.personalka.domain.money.MonthPeriod
@@ -105,6 +106,7 @@ import kotlin.math.roundToInt
 
 internal const val SALARY_EARNED_TAG = "salary-earned"
 internal const val SALARY_PLAN_TAG = "salary-plan"
+internal const val SALARY_SLOTS_TAG = "salary-slots"
 internal const val SALARY_PLAN_FIELD_TAG = "salary-plan-field"
 internal const val SALARY_TITLE_TAG = "salary-title"
 internal const val SALARY_PREV_TAG = "salary-prev"
@@ -148,6 +150,7 @@ internal fun SalaryMonthScreen(
     shareText: ((String) -> Unit)? = null,
     advanceAsk: Boolean = false,
     onAdvanceShown: () -> Unit = {},
+    onSlots: (() -> Unit)? = null,
 ) {
     var monthText by rememberSaveable { mutableStateOf(today.yearMonth.toString()) }
     val month = YearMonth.parse(monthText)
@@ -244,6 +247,7 @@ internal fun SalaryMonthScreen(
                         },
                         onPlan = { planOpen = true },
                         onAdjust = { adjusting = it },
+                        onSlots = onSlots,
                     )
                     SalaryTab.PAYOUTS -> PayoutsTab(loaded, today, onAdvance = { advanceOpen = true })
                     SalaryTab.COLLEAGUES -> ColleaguesTab(
@@ -492,9 +496,10 @@ private fun MonthTab(
     onPeriod: () -> Unit,
     onPlan: () -> Unit,
     onAdjust: (String) -> Unit,
+    onSlots: (() -> Unit)? = null,
 ) {
     val view = data.view
-    EarnedCard(view, onPlan)
+    EarnedCard(view, onPlan, onSlots)
     view.tiers?.let { TierCard(it, view.period, data) }
     ChartCard(data, day, onDay, onPeriod)
     BreakdownCard(data, onAdjust)
@@ -627,7 +632,7 @@ private fun ClosedMark(view: SalaryMonth) {
 }
 
 @Composable
-private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit) {
+private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Unit)? = null) {
     val colors = PersonalkaTheme.colors
     SalaryCard {
         Muted(SalaryFormat.EARNED)
@@ -667,6 +672,13 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit) {
         }
         if (view.plan != null && !view.planOwn) Muted(SalaryFormat.PLAN_CARRIED)
         view.shortfall?.let { Note(SalaryFormat.shortfall(it)) }
+        // «Найти свободные слоты» (макет PayMonth, 5.13): куда поставить недостающие ПТ.
+        if (view.shortfall != null && onSlots != null) {
+            TextButton(onClick = onSlots, modifier = Modifier.testTag(SALARY_SLOTS_TAG)) {
+                Icon(PIcons.EventAvailable, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(SlotFormat.FIND_SLOTS, Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.labelLarge)
+            }
+        }
     }
 }
 

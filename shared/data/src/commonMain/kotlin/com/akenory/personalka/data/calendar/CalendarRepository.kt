@@ -266,6 +266,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     /** Форма запрета (5.5): свои запреты, «Удалить запрет» и «Отменить». */
     val restrictions: RestrictionRepository = RestrictionRepository(db, clock)
 
+    /** Свободные слоты (4.13, 5.13). */
+    val slots: FreeSlotRepository = FreeSlotRepository(db)
+
     /** Раздел «Календарь» в настройках (5.16): часы, шаг, горизонт серий, «Отпуск», списки запретов и дежурств. */
     val settings: CalendarSettingsRepository = CalendarSettingsRepository(db, clock, forms)
 

@@ -59,6 +59,7 @@ import com.akenory.personalka.domain.client.WaitRules
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.FollowupFormat
+import com.akenory.personalka.domain.format.SlotFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.ui.components.Field
@@ -112,6 +113,7 @@ internal fun FollowupList(
     nav: ClientNav,
     onForm: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onFindTime: ((String) -> Unit)? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val today = now.date
@@ -201,6 +203,7 @@ internal fun FollowupList(
                         }
                     },
                     onCopied = { messages.show(FollowupFormat.PHONE_COPIED) },
+                    onFindTime = onFindTime?.let { find -> { find(row.entry.id) } },
                 )
             }
             item(key = "title") {
@@ -452,8 +455,8 @@ fun waitFreedTag(name: String) = "wait-freed-$name"
 
 /**
  * Строка «Ждут время» (5.8, макет ClNoBooking): имя и «ждёт 37 дней», «писали 02.10», что ждёт, заметка одной
- * строкой; «Записать», звонок и «⋮» с «Написал», «Изменить» и «Больше не ждёт». «Найти время» — с экраном
- * свободных слотов (шаг 4.3): до него кнопки нет (10.7).
+ * строкой; «Записать», звонок и «⋮» с «Найти время» (свободные слоты по её дням, времени и месту — шаг 4.3),
+ * «Написал», «Изменить» и «Больше не ждёт».
  */
 @Composable
 private fun WaitItem(
@@ -466,6 +469,7 @@ private fun WaitItem(
     onNotSuitable: () -> Unit,
     onClose: () -> Unit,
     onCopied: () -> Unit,
+    onFindTime: (() -> Unit)? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val client = row.client
@@ -551,6 +555,12 @@ private fun WaitItem(
                         MenuAction(WaitFormat.NOT_SUITABLE, PIcons.Close, {
                             menu = false
                             onNotSuitable()
+                        })
+                    }
+                    if (onFindTime != null) {
+                        MenuAction(SlotFormat.FIND_TIME, PIcons.EventAvailable, {
+                            menu = false
+                            onFindTime()
                         })
                     }
                     MenuAction(WaitFormat.CONTACTED, PIcons.Check, {

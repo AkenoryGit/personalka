@@ -55,6 +55,7 @@ import com.akenory.personalka.domain.calendar.CalendarDrag
 import com.akenory.personalka.domain.calendar.CalendarView
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.SlotFormat
 import com.akenory.personalka.ui.clients.MenuChoice
 import com.akenory.personalka.ui.components.CheckBox
 import com.akenory.personalka.ui.components.ChoiceChip
@@ -69,6 +70,7 @@ import kotlin.math.roundToInt
 const val CALENDAR_VIEW_TAG = "calendar-view"
 const val CALENDAR_PLACE_TAG = "calendar-place"
 const val CALENDAR_MONTH_TAG = "calendar-month"
+const val CALENDAR_SLOTS_TAG = "calendar-slots"
 
 /** Пункт меню вида: показ отменённых (ТЗ 5.3) — на этом телефоне, по умолчанию включён. */
 internal const val SHOW_CANCELLED = "Показывать отменённые"
@@ -126,6 +128,7 @@ internal fun CalendarHeader(
     onShowCancelled: (Boolean) -> Unit,
     onPlace: (CalendarPlace?) -> Unit,
     onPick: (LocalDate) -> Unit,
+    onSlots: (() -> Unit)? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val filter = places.size > 1
@@ -186,6 +189,19 @@ internal fun CalendarHeader(
             MenuToggle(SHOW_CANCELLED, showCancelled) {
                 close()
                 onShowCancelled(!showCancelled)
+            }
+            // «Свободные слоты» (5.13): поиск окон — из меню календаря.
+            if (onSlots != null) {
+                HorizontalDivider(color = colors.divider)
+                DropdownMenuItem(
+                    text = { Text(SlotFormat.TITLE, style = MaterialTheme.typography.bodyLarge, color = colors.text) },
+                    onClick = {
+                        close()
+                        onSlots()
+                    },
+                    modifier = Modifier.testTag(CALENDAR_SLOTS_TAG),
+                    leadingIcon = { Icon(PIcons.EventAvailable, contentDescription = null, tint = colors.text) },
+                )
             }
         }
         if (filter && !chips) {

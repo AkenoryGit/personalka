@@ -165,6 +165,7 @@ fun CalendarScreen(
     goTo: LocalDate? = null,
     onWent: () -> Unit = {},
     onDiary: (String) -> Unit = {},
+    onSlots: (() -> Unit)? = null,
 ) {
     val onOpen: (CalendarTraining) -> Unit = { training -> onCard(TrainingCardKey.card(training.id)) }
     val today = now.date
@@ -372,6 +373,7 @@ fun CalendarScreen(
                     },
                     onPlace = { placeId = it?.id },
                     onPick = { date -> go(date, animate = false) },
+                    onSlots = onSlots,
                 )
                 // Свайп по строке дней — неделя вперёд или назад, тот же день недели.
                 val onWeek: (Int) -> Unit = { days ->

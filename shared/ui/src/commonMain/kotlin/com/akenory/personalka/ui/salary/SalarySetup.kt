@@ -104,6 +104,7 @@ fun SalaryScreen(
     shareText: ((String) -> Unit)? = null,
     advanceAsk: Boolean = false,
     onAdvanceShown: () -> Unit = {},
+    onSlots: (() -> Unit)? = null,
     onRates: () -> Unit,
 ) {
     val categories by remember(settings) { settings.salary.categories }.collectAsState(initial = null)
@@ -116,7 +117,7 @@ fun SalaryScreen(
         SalarySetupWizard(settings, loadedPlaces.filter { !it.archived }, loadedTypes.filter { !it.archived }, openFeatures(account, today), today, messages, scope)
         return
     }
-    SalaryMonthScreen(settings, today, messages, scope, onRates, shareText, advanceAsk, onAdvanceShown)
+    SalaryMonthScreen(settings, today, messages, scope, onRates, shareText, advanceAsk, onAdvanceShown, onSlots)
 }
 
 /**

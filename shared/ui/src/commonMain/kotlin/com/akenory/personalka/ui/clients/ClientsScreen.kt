@@ -213,6 +213,7 @@ fun ClientsScreen(
     voice: VoiceInput? = null,
     waiting: List<WaitRow> = emptyList(),
     cabinet: CabinetTools? = null,
+    onFindTime: ((String) -> Unit)? = null,
 ) {
     val wide = LocalWide.current
     val scroll = rememberLazyListState()
@@ -238,7 +239,7 @@ fun ClientsScreen(
                 onNew = nav::newFromList,
                 noBookingCount = followup.rows.size + waiting.size,
                 noBooking = { modifier ->
-                    FollowupList(followup, waiting, list.query, followupScroll, clients, messages, scope, now, nav, onForm, modifier)
+                    FollowupList(followup, waiting, list.query, followupScroll, clients, messages, scope, now, nav, onForm, modifier, onFindTime)
                 },
                 modifier = if (wide) Modifier.width(ListWidth).fillMaxHeight() else Modifier.weight(1f).fillMaxHeight(),
             )
