@@ -229,7 +229,7 @@
 - **Код:** `FollowupInput.dismissedAt`, правило — `FollowupRules.notBooked` (shared/domain); `ClientFollowup.dismiss`, `undo` возвращает и это поле; пункт меню и сообщение «Захаров Никита — убрали из списка» — `ui/clients/FollowupList.kt`, `FollowupFormat.DISMISS`, `dismissedMessage`. Кнопок на карточке строки не прибавилось (10.7): пункт — в меню «⋮» между «Пауза до…» и «Больше не ходит».
 - **База:** версия 10, `Migration9To10` — столбец `client.followupDismissedAt` (момент UTC, пусто у прежних клиентов); `SyncRules.SCHEMA_VERSION` = 10. Номер шага: 3.9м — последний в `main` на момент работы.
 - **Тесты:** `FollowupRulesTest.dismissedUntilNewIndividualVisit`, `ClientFollowupTest.dismissHidesUntilNextIndividualVisit` (группа впереди и проведённая группа не возвращают, новая ПТ возвращает, «Отменить»), `FollowupUiTest.dismissLeavesListWithoutArchive`, `MigrationTest.version9KeepsClientsAndGetsDismissed`.
-- **Сборки:** здесь `check :androidApp:assembleDebug` без тестов сервера (нет PostgreSQL) — зелёная, с зеркалом Maven Central (`-I`).
+- **Сборки:** здесь `check :androidApp:assembleDebug` без тестов сервера (нет PostgreSQL) — зелёная, с зеркалом Maven Central (`-I`); в Actions — зелёные сборка ветки `claude/project-thread-ltujit` 289 и 290 (`main`), APK 0.1.290.
 - **Проверить на телефоне (Дмитрий)** — после установки APK из релиза «Последняя сборка»:
   1. Приложение открывается, клиенты и тренировки на месте (база обновилась до версии 10, перед этим сделана копия).
   2. «Клиенты → Без записи»: у ребёнка, который перешёл в группу, «⋮ → Убрать из списка» — строка исчезла, внизу «… — убрали из списка» с «Отменить»; число на чипе «Без записи» уменьшилось.
