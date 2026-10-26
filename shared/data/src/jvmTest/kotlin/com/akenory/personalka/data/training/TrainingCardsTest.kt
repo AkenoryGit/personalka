@@ -356,6 +356,19 @@ class TrainingCardsTest {
     }
 
     @Test
+    fun deleteFollowingWorksForGroupSeries(): Unit = runBlocking {
+        val group = groups.create(GroupDraft("Вт 12:00 ББ", typeId("Группа"), placeId("ББ")))
+        groups.addMember(group, client("Белов", "Артём"), LocalDate(2026, 9, 1))
+        calendar.forms.create(TrainingDraft(at(tuesday, 18, 0), typeId("Группа"), emptyList(), group, placeId("ББ"), 60, Repeat(setOf(DayOfWeek.TUESDAY), null)))
+        val all = db.trainingDao().trainingsOfGroup(group).sortedBy { it.start }
+        val next = all[1]
+        assertTrue(card(next.id).skippable)
+        assertEquals(all.size - 1, cards.followingCount(next.id))
+        assertNotNull(cards.deleteFollowing(next.id))
+        assertEquals(listOf(all[0].id), db.trainingDao().trainingsOfGroup(group).map { it.id })
+    }
+
+    @Test
     fun skipDateCarriesPlanToNext(): Unit = runBlocking {
         val orlov = client("Орлов", "Максим")
         training(at(tuesday, 17, 0), orlov, repeat = Repeat(setOf(DayOfWeek.TUESDAY), null), plan = "Спина 4 × 50 м")
