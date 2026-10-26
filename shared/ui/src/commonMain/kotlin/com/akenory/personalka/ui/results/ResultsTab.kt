@@ -58,11 +58,12 @@ import kotlinx.datetime.daysUntil
 const val RESULT_CHART_TAG = "result-chart"
 const val CHART_EVENT_TAG = "chart-event"
 fun resultRowTag(id: String) = "result-$id"
+fun recordRowTag(id: String) = "record-$id"
 
 /**
  * Вкладка «Результаты» карточки клиента (5.9, макет ClCardResults): бассейн 25 / 50 м — если результаты есть
- * в обоих; личные рекорды; график по дистанции с выбором; все результаты от новых к старым — нажатие открывает
- * форму с «Удалить».
+ * в обоих; личные рекорды; график по дистанции с выбором; все результаты от новых к старым. Нажатие на рекорд
+ * или на строку списка открывает форму: дату, время и остальное можно поправить или удалить результат.
  */
 @Composable
 fun ResultsTab(clientId: String, list: List<ResultItem>, today: LocalDate, onOpen: (ResultItem) -> Unit) {
@@ -83,7 +84,7 @@ fun ResultsTab(clientId: String, list: List<ResultItem>, today: LocalDate, onOpe
         ListCard {
             records.forEachIndexed { index, item ->
                 if (index > 0) RowDivider()
-                ResultLine(item, ResultFormat.recordLine(item, today), today, onClick = null)
+                ResultLine(item, ResultFormat.recordLine(item, today), today, recordRowTag(item.id), onClick = { onOpen(item) })
             }
         }
         if (event != null) {
@@ -91,10 +92,11 @@ fun ResultsTab(clientId: String, list: List<ResultItem>, today: LocalDate, onOpe
             if (chart != null) ChartCard(events, event, chart, onPick = { eventKey = key(it) })
         }
         SectionTitle(ResultFormat.ALL)
+        Text(ResultFormat.EDIT_HINT, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
         ListCard {
             all.forEachIndexed { index, item ->
                 if (index > 0) RowDivider()
-                ResultLine(item, ResultFormat.listLine(item, today), today, onClick = { onOpen(item) })
+                ResultLine(item, ResultFormat.listLine(item, today), today, resultRowTag(item.id), onClick = { onOpen(item) })
             }
         }
     }
@@ -112,15 +114,16 @@ private fun SectionTitle(text: String) {
     )
 }
 
-/** Строка результата: дистанция и «соревнования · 10.10» слева, время справа. */
+/** Строка результата: дистанция и «соревнования · 10.10» слева, время и стрелка справа — нажатие открывает форму. */
 @Composable
-private fun ResultLine(item: ResultItem, line: String, today: LocalDate, onClick: (() -> Unit)?) {
+private fun ResultLine(item: ResultItem, line: String, today: LocalDate, tag: String, onClick: () -> Unit) {
     val colors = PersonalkaTheme.colors
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = Dimens.row)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick).testTag(resultRowTag(item.id)) else Modifier)
+            .clickable(onClick = onClick)
+            .testTag(tag)
             .semantics(mergeDescendants = true) { contentDescription = ResultFormat.spoken(item, today) }
             .padding(horizontal = Dimens.space4, vertical = Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
@@ -131,6 +134,7 @@ private fun ResultLine(item: ResultItem, line: String, today: LocalDate, onClick
         }
         Spacer(Modifier.width(Dimens.space3))
         Text(ResultFormat.time(item.timeCs), style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text)
+        Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
     }
 }
 

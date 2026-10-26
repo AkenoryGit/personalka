@@ -55,6 +55,9 @@ object ResultFormat {
     fun listLine(item: ResultItem, today: LocalDate): String =
         where(item) + DOT + if (item.date.year == today.year) DateFormat.short(item.date) else DateFormat.full(item.date)
 
+    /** Что удаляется, в окне «Удалить результат?»: «50 м вольный стиль · 39,62 · 10.10.2026». */
+    fun deleteLine(item: ResultItem): String = event(item.event) + DOT + time(item.timeCs) + DOT + DateFormat.full(item.date)
+
     /** Подпись оси графика: «40», «40,5», «1:05». */
     fun tick(cs: Int): String {
         if (cs % 100 != 0) return time(cs).trimEnd('0')
@@ -91,6 +94,8 @@ object ResultFormat {
     const val CANCEL = "Отмена"
     const val SAVED = "Результат сохранён"
     const val DELETED = "Результат удалён"
+    const val DELETE_TITLE = "Удалить результат?"
+    const val EDIT_HINT = "Нажмите на результат, чтобы изменить дату, время или удалить"
     const val RECORDS = "Личные рекорды"
     const val ALL = "Все результаты"
     const val LEGEND_COMPETITION = "соревнования"

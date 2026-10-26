@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
@@ -143,11 +144,35 @@ class ResultsUiTest {
         onNodeWithTag(resultRowTag(id)).performScrollTo().performClick()
         awaitNode(hasText(ResultFormat.EDIT_TITLE))
         onNodeWithTag(RESULT_DELETE_TAG).performScrollTo().performClick()
+        // Сначала окно «Удалить результат?» с тем, что удаляется; до «Удалить» в нём ничего не стёрто.
+        awaitNode(hasText(ResultFormat.DELETE_TITLE))
+        onNodeWithText(s("50_м вольный стиль · 39,62 · 10.10.2026")).assertExists()
+        assertEquals(1, results(orlova).size)
+        onNodeWithTag(RESULT_DELETE_CONFIRM_TAG).performClick()
         awaitNode(hasText(ResultFormat.DELETED))
         waitUntil(timeoutMillis = 5_000) { results(orlova).isEmpty() }
         onNodeWithText(MessageState.UNDO_LABEL).performClick()
         waitUntil(timeoutMillis = 5_000) { results(orlova).isNotEmpty() }
         assertEquals("Кубок города", results(orlova).single().eventName)
+    }
+
+    @Test
+    fun editFromRecord() = runComposeUiTest {
+        // Рекорд тоже открывает форму: время поправлено, запись та же.
+        val orlova = client("Орлова", "Ксения")
+        runBlocking { clients.results.save(ResultDraft(orlova, LocalDate(2026, 10, 10), free50, 3962, ResultKind.TRAINING)) }
+        val id = results(orlova).single().id
+        openCard("Орлова Ксения")
+        awaitNode(hasTestTag(cardTabTag(CardTab.RESULTS)))
+        onNodeWithTag(cardTabTag(CardTab.RESULTS)).performClick()
+        awaitNode(hasText(ResultFormat.EDIT_HINT))
+        onNodeWithTag(recordRowTag(id)).performScrollTo().performClick()
+        awaitNode(hasText(ResultFormat.EDIT_TITLE) and hasAnyAncestor(hasTestTag(PANEL_TAG)))
+        onNodeWithTag(RESULT_TIME_TAG).performScrollTo().performTextClearance()
+        typeTime("4012")
+        save()
+        waitUntil(timeoutMillis = 5_000) { results(orlova).single().timeCs == 4012 }
+        assertEquals(id, results(orlova).single().id)
     }
 
     @Test

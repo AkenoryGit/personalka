@@ -175,6 +175,7 @@ class ResultRulesTest {
         assertEquals(s("тренировка · чт_15.10"), ResultFormat.listLine(ksenia.last(), today))
         assertEquals("тренировка · 15.10.2025", ResultFormat.recordLine(ksenia.last().copy(date = LocalDate(2025, 10, 15)), today))
         assertEquals(s("Бассейн 25_м"), ResultFormat.pool(25))
+        assertEquals(s("25_м вольный стиль · 17,84 · 10.10.2026"), ResultFormat.deleteLine(start))
         assertEquals("сентябрь", com.akenory.personalka.domain.format.DateFormat.month(d(1, 9)))
     }
 }

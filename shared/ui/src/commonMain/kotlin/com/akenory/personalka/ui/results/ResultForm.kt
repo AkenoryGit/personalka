@@ -2,10 +2,12 @@ package com.akenory.personalka.ui.results
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -55,6 +57,7 @@ const val RESULT_TIME_TAG = "result-time"
 const val RESULT_DATE_TAG = "result-date"
 const val RESULT_RECORD_TAG = "result-record"
 const val RESULT_DELETE_TAG = "result-delete"
+const val RESULT_DELETE_CONFIRM_TAG = "result-delete-confirm"
 fun resultWhoTag(clientId: String) = "result-who-$clientId"
 
 /** Кому вносится результат: id и «Орлова Ксения». */
@@ -68,7 +71,7 @@ data class ResultWho(val id: String, val name: String)
  *
  * @param who кому: в карточке клиента — он один, в карточке группы или сплита — все, кто не отменён; выбор чипами.
  * @param date день по умолчанию: сегодня или день тренировки.
- * @param editing изменяемый результат — тогда есть «Удалить».
+ * @param editing изменяемый результат — тогда есть «Удалить»: окно «Удалить результат?», после — «Отменить» в сообщении.
  * @param onSaved после «Сохранить» — карточка клиента переходит на «Результаты».
  */
 @Composable
@@ -85,6 +88,7 @@ fun ResultFormPanel(
     var clientId by rememberSaveable { mutableStateOf(who.singleOrNull()?.id) }
     var day by rememberSaveable { mutableStateOf((editing?.date ?: date).toString()) }
     var pickingDay by rememberSaveable { mutableStateOf(false) }
+    var confirmingDelete by rememberSaveable { mutableStateOf(false) }
     // Пока тренер не выбрал сам — дистанция последнего результата клиента (null — «по умолчанию»).
     var styleName by rememberSaveable { mutableStateOf(editing?.event?.style?.name) }
     var distance by rememberSaveable { mutableStateOf(editing?.event?.distanceM) }
@@ -186,13 +190,7 @@ fun ResultFormPanel(
             )
             if (editing != null) {
                 TextButton(
-                    onClick = {
-                        onClose()
-                        scope.launch {
-                            val undo = results.delete(editing.id) ?: return@launch
-                            messages.showUndo(ResultFormat.DELETED) { scope.launch { results.undo(undo) } }
-                        }
-                    },
+                    onClick = { confirmingDelete = true },
                     modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(RESULT_DELETE_TAG),
                 ) {
                     Text(ResultFormat.DELETE, style = MaterialTheme.typography.labelLarge, color = PersonalkaTheme.colors.error)
@@ -208,6 +206,29 @@ fun ResultFormPanel(
                 },
                 onDismiss = { pickingDay = false },
             )
+        }
+        if (confirmingDelete && editing != null) {
+            Panel(ResultFormat.DELETE_TITLE, onDismiss = { confirmingDelete = false }) {
+                Text(ResultFormat.deleteLine(editing), style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
+                Column(Modifier.fillMaxWidth().padding(top = Dimens.space2)) {
+                    TextButton(
+                        onClick = {
+                            confirmingDelete = false
+                            onClose()
+                            scope.launch {
+                                val undo = results.delete(editing.id) ?: return@launch
+                                messages.showUndo(ResultFormat.DELETED) { scope.launch { results.undo(undo) } }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(RESULT_DELETE_CONFIRM_TAG),
+                    ) {
+                        Text(ResultFormat.DELETE, style = MaterialTheme.typography.labelLarge, color = PersonalkaTheme.colors.error)
+                    }
+                    TextButton(onClick = { confirmingDelete = false }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button)) {
+                        Text(ResultFormat.CANCEL, style = MaterialTheme.typography.labelLarge, color = PersonalkaTheme.colors.text)
+                    }
+                }
+            }
         }
     }
 }
