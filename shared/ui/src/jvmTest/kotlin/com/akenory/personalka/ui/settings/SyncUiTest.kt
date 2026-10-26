@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -204,6 +205,8 @@ class SyncUiTest {
         onNodeWithText(SyncFormat.DISCONNECT_CONFIRM).performClick()
         // Копия стёрта, аккаунт вышел (сервер закрыл все входы), раздела «Сервер» нет, в телефоне всё осталось.
         waitUntil(timeoutMillis = 5_000) { phone.account.account.value == null }
+        // Экран перерисовывается после выхода не сразу — ждём, пока раздел пропадёт (в Actions бывало раньше времени).
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText(SyncFormat.SECTION).fetchSemanticsNodes().isEmpty() }
         onNodeWithText(SyncFormat.SECTION).assertDoesNotExist()
         assertTrue(server.liveRows(EMAIL, "coach").isEmpty(), "Данные на сервере стёрты")
         assertTrue(runBlocking { phone.settings.coach.first() } != null, "В телефоне всё осталось")
