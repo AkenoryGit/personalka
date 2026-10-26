@@ -1,13 +1,19 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.ReconcileItemKind
+import com.akenory.personalka.domain.model.Sex
 import com.akenory.personalka.domain.money.DutyCheck
 import com.akenory.personalka.domain.money.DutyRow
+import com.akenory.personalka.domain.report1c.Diff1c
+import com.akenory.personalka.domain.report1c.Reconcile1c
+import com.akenory.personalka.domain.report1c.Status1c
 import com.akenory.personalka.domain.training.TrainingTime
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.YearMonth
 
 /**
- * Строки раздела «Сверки» (ТЗ 5.14, шаг 3.9в): месяц зарплаты и дежурства месяца; отчёт 1С добавится на шаге 4.2.
+ * Строки раздела «Сверки» (ТЗ 5.14, шаг 3.9в): месяц зарплаты, дежурства месяца и отчёт 1С (ТЗ 8.4, шаг 4.2).
  * Кнопка и отметки «Месяц сверен» — те же, что были в «Зарплате» (`SalaryFormat`).
  */
 object ReconcileFormat {
@@ -72,6 +78,54 @@ object ReconcileFormat {
         }
         append("Итого: ${SalaryFormat.hours(check.doneMinutes)}")
     }
+
+    // --- Отчёт 1С (ТЗ 8, шаг 4.2) ---
+
+    const val REPORT_TITLE = "Отчёт 1С"
+    const val NOT_A_REPORT = "Это не похоже на отчёт 1С по тренировкам"
+    const val INCOMPLETE = "Отчёт прочитан не полностью"
+    const val OTHER_COACH = "Это отчёт другого тренера?"
+    const val ONLY_1C = "Только в 1С"
+    const val ONLY_APP = "Только в приложении"
+    const val DIFFER = "Статус или услуга расходятся"
+
+    /** Сводка: «Совпало 189 · Расхождений 4». */
+    fun summary(result: Reconcile1c): String = "Совпало ${result.matched}${DOT}Расхождений ${result.diffs.size}"
+
+    /** Статус строки 1С, как его пишет 1С: «Пришел», «Не пришел», «Отменил». */
+    fun status1c(status: Status1c): String = when (status) {
+        Status1c.CAME -> "Пришел"
+        Status1c.NO_SHOW -> "Не пришел"
+        Status1c.CANCELLED -> "Отменил"
+    }
+
+    /**
+     * Строка для администратора (ТЗ 8.4): «08.10 09:00, группа, Пестов Егор — был на тренировке, в 1С «Отменил». Прошу
+     * исправить». [what] — что за тренировка словами тренера («группа», «ПТ»), [name] — фамилия и имя, [service1c] —
+     * как услугу назвала 1С. Пунктам «Только в 1С» и неотмеченным в приложении администратор не нужен — `null`.
+     */
+    fun adminLine(diff: Diff1c, what: String, name: String, sex: Sex?): String? {
+        val visit = diff.visit ?: return null
+        val at = "${DateFormat.dayMonth(visit.start.date)} ${DateFormat.time(visit.start.time)}"
+        val app = when (visit.status) {
+            ParticipationStatus.ATTENDED -> RuText.bySex(sex, "был на тренировке", "была на тренировке", "был(а) на тренировке")
+            ParticipationStatus.CANCELLED_CHARGED -> "отмена со списанием"
+            ParticipationStatus.CANCELLED -> RuText.bySex(sex, "отменил", "отменила", "отменил(а)")
+            ParticipationStatus.EXPECTED -> return null
+        }
+        val row = diff.row
+        val tail = when {
+            diff.kind == ReconcileItemKind.ONLY_APP -> "в 1С нет. Прошу добавить"
+            row == null -> return null
+            diff.statusDiffers -> "в 1С «${status1c(row.status)}». Прошу исправить"
+            diff.serviceDiffers -> "в 1С «${row.serviceName}». Прошу исправить"
+            else -> return null
+        }
+        return "$at, $what, $name — $app, $tail"
+    }
+
+    /** Выбранные пункты одним текстом — по строке на пункт. */
+    fun adminText(lines: List<String>): String = lines.joinToString("\n")
 
     private fun end(row: DutyRow): LocalDateTime = TrainingTime.end(row.start, row.durationMin)
 

@@ -74,3 +74,11 @@ enum class WaitStatus { WAITING, BOOKED, CLOSED }
  * бабушка или дедушка, дядя или тётя для клиента B. Остальные — взаимные. OTHER — со своими подписями.
  */
 enum class RelationKind { PARENT, GRANDPARENT, AUNT_UNCLE, SIBLING, COUSIN, SPOUSE, OTHER }
+
+// --- 3.7. Сверка с 1С ---
+
+/** Пункт сверки с 1С (ТЗ 3.7, 8.3): только в приложении, только в 1С, статус или услуга расходятся, неизвестные услуга или клиент. */
+enum class ReconcileItemKind { ONLY_APP, ONLY_1C, STATUS_DIFF, UNKNOWN_SERVICE, UNKNOWN_CLIENT }
+
+/** Что сделано с пунктом сверки (ТЗ 8.4): открыт, исправлен в приложении, написал администратору, игнорировать. */
+enum class ReconcileResolution { OPEN, FIXED_IN_APP, ASKED_ADMIN, IGNORED }
