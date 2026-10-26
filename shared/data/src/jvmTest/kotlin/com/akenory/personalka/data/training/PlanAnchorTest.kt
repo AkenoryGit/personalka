@@ -224,6 +224,22 @@ class PlanAnchorTest {
     }
 
     @Test
+    fun deleteFollowingSendsCarriedPlanToPendingOnce(): Unit = runBlocking {
+        // Серия по вторникам; план отменённой перенёсся на вт 27.10. «Эту и все следующие» с неё — план один раз в отложенном.
+        val orlov = clients.create(ClientDraft("Орлов", "Максим"))
+        create(at(tuesday, 17), orlov, plan = brass, repeat = Repeat(setOf(DayOfWeek.TUESDAY), null))
+        val today = id(at(tuesday, 17))
+        val holder = id(at(nextTuesday, 17))
+        cancel(today)
+        assertEquals(brass, t(holder).plan)
+
+        assertNotNull(cards.deleteFollowing(holder))
+        assertEquals(brass, db.clientDao().client(orlov)!!.pendingPlan)
+        val fresh = training(at(nextThursday, 17), orlov)
+        assertEquals(brass, t(fresh).plan)
+    }
+
+    @Test
     fun cancelledHolderCarriesAsUsual(): Unit = runBlocking {
         // Отменили и ту, куда план перенёсся, — он идёт дальше обычным переносом.
         val orlov = clients.create(ClientDraft("Орлов", "Максим"))

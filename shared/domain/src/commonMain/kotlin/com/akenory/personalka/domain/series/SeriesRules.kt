@@ -260,6 +260,24 @@ object SeriesRules {
     }
 
     /**
+     * «Удалить → Эту и все следующие» (5.4): серия заканчивается накануне [training], она и все следующие
+     * тренировки серии удаляются — и перенесённые «Только эту»; прошлое и начатое не трогается, как у «Завершить».
+     * Планы удалённых — в [SeriesChanges.pendingPlans]: следующей тренировки серии уже нет.
+     */
+    fun deleteFollowing(
+        series: Series,
+        training: SeriesTraining,
+        trainings: List<SeriesTraining>,
+        now: LocalDateTime,
+    ): SeriesChanges {
+        require(training.seriesId == series.id) { "Тренировка ${training.id} не из серии ${series.id}" }
+        require(training.changeableAt(now)) {
+            "Удалить эту и следующие можно с будущей тренировки без записи о занятии и без списания"
+        }
+        return end(series, training.date.plusDays(-1), trainings, now)
+    }
+
+    /**
      * «Отпуск с … по …» для всех серий тренера: будущие тренировки серий в эти дни удаляются, дни уходят
      * в [Series.skipDates] — и те, до которых серия ещё не создана. Прошлое и начатое не трогается.
      * Лист ожидания отпуск не задевает (4.16): тренер сам не работает.

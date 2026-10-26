@@ -43,6 +43,7 @@ import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.CardMenu
+import com.akenory.personalka.domain.training.Repeat
 import com.akenory.personalka.domain.training.TrainingDraft
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
@@ -376,6 +377,33 @@ class TrainingCardUiTest {
 
         onNodeWithText(MessageState.UNDO_LABEL).performClick()
         waitUntil(timeoutMillis = 5_000) { runBlocking { db.trainingDao().training(id)!!.sync.deletedAt == null } }
+    }
+
+    @Test
+    fun deleteSeriesTrainingAndFollowing() = runComposeUiTest {
+        val orlov = client("Орлов", "Максим")
+        val id = runBlocking {
+            calendar.forms.create(TrainingDraft(at("17:00"), typeId("ПТ"), listOf(orlov), null, placeId("ББ"), 50, Repeat(setOf(at("17:00").date.dayOfWeek))))
+            db.trainingDao().trainingsBetween(at("17:00"), at("23:59")).single().id
+        }
+        val seriesId = runBlocking { db.trainingDao().training(id)!!.seriesId!! }
+        val count = runBlocking { db.trainingDao().trainingsOfSeries(seriesId).size }
+        openCalendar()
+        tapBlock("Орлов Максим")
+        awaitNode(hasTestTag(CARD_MENU_TAG))
+        onNodeWithTag(CARD_MENU_TAG).performClick()
+        onNodeWithText(TrainingCardFormat.menu(CardMenu.DELETE)).performClick()
+        // У тренировки серии — «Только эту — …» и «Эту и все следующие», затем подтверждение с числом.
+        awaitNode(hasTestTag(DELETE_FOLLOWING_TAG))
+        onNodeWithText(TrainingCardFormat.deleteOnly(at("17:00").date)).assertIsDisplayed()
+        onNodeWithTag(DELETE_FOLLOWING_TAG).performClick()
+        awaitNode(hasText(TrainingCardFormat.FOLLOWING_TITLE))
+        onNodeWithText(TrainingCardFormat.deleteFollowing(count)).performClick()
+        awaitNode(hasText(TrainingCardFormat.deletedFollowing(count, at("17:00").date)))
+        assertEquals(emptyList(), runBlocking { db.trainingDao().trainingsOfSeries(seriesId) })
+
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.trainingDao().trainingsOfSeries(seriesId).size == count } }
     }
 
     @Test

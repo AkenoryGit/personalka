@@ -490,6 +490,28 @@ class SeriesRulesTest {
     }
 
     @Test
+    fun deleteFollowingEndsSeriesTheDayBefore() {
+        val s = created()
+        val detach = SeriesRules.changeOnlyThis(s.series, s.on(day(12, 11)), edit(s.on(day(12, 11)), start = at(day(13, 11), 13, 30)))
+        val moved = detach.updated.single()
+        val all = s.with(moved).with(s.on(day(17, 11)).copy(plan = "Старты"))
+        val c = SeriesRules.deleteFollowing(detach.series.single(), all.on(day(10, 11)), all.trainings, now)
+
+        assertEquals(day(9, 11), c.series.single().validTo)
+        assertEquals(11, c.deleted.size) // с вт 10.11 по вт 15.12, и перенесённая на пт 13.11
+        assertTrue(c.deleted.all { it.date >= day(10, 11) })
+        assertTrue(moved.id in c.deleted.map { it.id })
+        assertTrue(c.created.isEmpty() && c.updated.isEmpty())
+        assertEquals(listOf("Старты"), c.pendingPlans)
+    }
+
+    @Test
+    fun deleteFollowingOnlyFromFuture() {
+        val s = created()
+        assertFailsWith<IllegalArgumentException> { SeriesRules.deleteFollowing(s.series, s.on(day(20)), s.trainings, now) }
+    }
+
+    @Test
     fun skipOnlyFuture() {
         val s = created()
         assertFailsWith<IllegalArgumentException> { SeriesRules.skip(s.series, s.on(day(20)), s.trainings, now) }

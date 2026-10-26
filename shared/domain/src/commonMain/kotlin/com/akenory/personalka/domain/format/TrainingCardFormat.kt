@@ -159,6 +159,30 @@ object TrainingCardFormat {
     fun deleteText(title: String, start: LocalDateTime): String =
         CalendarFormat.at(start) + DOT + title + ". Вернуть её можно только сразу — кнопкой «Отменить» в сообщении."
 
+    // --- Удаление тренировки серии (шаг 3.9к) ---
+
+    /** Кнопка «Только эту — вт 20.10» — как в вопросе об изменении серии. */
+    fun deleteOnly(date: LocalDate): String = TrainingFormat.onlyThis(date)
+
+    const val DELETE_FOLLOWING = "Эту и все следующие"
+    const val FOLLOWING_TITLE = "Удалить эту и все следующие?"
+
+    /**
+     * «Тренировки серии с вт 20.10 — всего 9 тренировок. Новые по ней больше не появятся. Прошедшие и проведённые
+     * не меняются. План из удалённых — в первую новую тренировку.»
+     */
+    fun followingText(count: Int, from: LocalDate): String =
+        "Тренировки серии с ${DateFormat.short(from)} — всего ${trainings(count)}. Новые по ней больше не появятся. " +
+            "Прошедшие и проведённые не меняются. План из удалённых — в первую новую тренировку."
+
+    /** «Удалить 9 тренировок». */
+    fun deleteFollowing(count: Int): String = "Удалить ${trainings(count)}"
+
+    /** «Удалено: 9 тренировок с вт 20.10». */
+    fun deletedFollowing(count: Int, from: LocalDate): String = "Удалено: ${trainings(count)} с ${DateFormat.short(from)}"
+
+    private fun trainings(n: Int): String = RuText.count(n, "тренировка", "тренировки", "тренировок")
+
     // --- Закрытый месяц (4.1, шаг 3.7б) ---
 
     const val CLOSED_TITLE = "Изменится зарплата за закрытый месяц"

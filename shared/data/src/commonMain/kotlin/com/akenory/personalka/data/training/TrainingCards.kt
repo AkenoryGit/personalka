@@ -42,6 +42,8 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.money.SalaryMonthRules
 import com.akenory.personalka.domain.restriction.RestrictionRules
+import com.akenory.personalka.domain.series.Series
+import com.akenory.personalka.domain.series.SeriesChanges
 import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.training.CancelRules
 import com.akenory.personalka.domain.training.CarryChoice
@@ -501,6 +503,43 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             result?.let { db.recordFreed(it.undo, now) }
         }
         return result
+    }
+
+    /**
+     * «Удалить → Эту и все следующие» (5.4, 4.4): серия заканчивается накануне, эта и все следующие тренировки
+     * серии удаляются, их планы — в отложенный план клиента или группы. Прошлое и начатое не меняется.
+     */
+    suspend fun deleteFollowing(id: String): CardResult? {
+        val now = clock()
+        val clubNow = ClubTime.now(now)
+        var result: CardResult? = null
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val (stored, changes) = followingChanges(id, clubNow) ?: return@withWriteTransaction
+            val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
+            val recorder = Recorder(db, now)
+            recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
+            val from = changes.deleted.minOf { it.date }
+            result = CardResult(TrainingCardFormat.deletedFollowing(changes.deleted.size, from), recorder.alignedUndo(db, now))
+            result?.let { db.recordFreed(it.undo, now) }
+            db.reconcileSpt(now)
+        }
+        return result
+    }
+
+    /** Сколько тренировок удалит «Эту и все следующие» — для подтверждения; нельзя — `null`. */
+    suspend fun followingCount(id: String): Int? =
+        followingChanges(id, ClubTime.now(clock()))?.second?.deleted?.size?.takeIf { it > 0 }
+
+    private suspend fun followingChanges(id: String, clubNow: LocalDateTime): Pair<Series, SeriesChanges>? {
+        val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null } ?: return null
+        val series = t.seriesId?.let { schedule.series(it) }?.takeIf { it.sync.deletedAt == null } ?: return null
+        val training = t.toSeriesTraining(trainings.participationsOf(id))
+        if (!training.changeableAt(clubNow)) return null
+        val stored = series.toSeries(seriesClientIds(series.id))
+        val all = trainings.trainingsOfSeries(series.id).map { it.toSeriesTraining(trainings.participationsOf(it.id)) }
+        val changes = SeriesRules.deleteFollowing(stored, training, all, clubNow)
+        return if (changes.deleted.isEmpty()) null else stored to changes
     }
 
     /**

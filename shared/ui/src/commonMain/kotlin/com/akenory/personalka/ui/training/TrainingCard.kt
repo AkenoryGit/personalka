@@ -123,6 +123,7 @@ const val SPT_ASK_TAG = "spt-ask"
 const val CHARGE_SWITCH_TAG = "charge-switch"
 const val OWN_REASON_TAG = "own-reason"
 const val CLOSED_MONTH_TAG = "closed-month"
+const val DELETE_FOLLOWING_TAG = "delete-following"
 
 fun cardClientTag(id: String) = "card-client-$id"
 fun cardClientActionTag(id: String) = "card-client-action-$id"
@@ -197,6 +198,8 @@ fun TrainingCardHost(
     var pickDate by rememberSaveable(key) { mutableStateOf<String?>(null) }
     var pickingDate by rememberSaveable(key) { mutableStateOf(false) }
     var askDelete by rememberSaveable(key) { mutableStateOf(false) }
+    // «Удалить → Эту и все следующие» у тренировки серии (шаг 3.9к): второе подтверждение с числом тренировок.
+    var askFollowing by rememberSaveable(key) { mutableStateOf(false) }
     // «Добавить результат» (5.11): форма с днём тренировки и её клиентами.
     var addingResult by rememberSaveable(key) { mutableStateOf(false) }
     // «Добавить на раз»: открыт выбор, набранный поиск, «Новый клиент» с фамилией и именем.
@@ -229,6 +232,10 @@ fun TrainingCardHost(
     // «Это время ждут» (4.16) — в панели отмены и в подтверждении удаления; пересчитывается, когда они открываются.
     val waitLine by produceState<String?>(null, id, cancelWho != null, askDelete) {
         value = if (id != null && (cancelWho != null || askDelete)) cards.waitingLine(id) else null
+    }
+    // Сколько удалит «Эту и все следующие»: выбор есть, только если их больше одной.
+    val followingCount by produceState<Int?>(null, id, askDelete, askFollowing) {
+        if (id != null && (askDelete || askFollowing)) value = cards.followingCount(id)
     }
     // Вопрос СПТ на первой оплаченной ПТ (4.9, п. 4–5, шаг 3.7а) и его окно с датой покупки.
     val sptAsk by remember(id) { id?.let { cards.spt.ask(it) } ?: flowOf(null) }.collectAsState(initial = null)
@@ -423,18 +430,60 @@ fun TrainingCardHost(
             Panel(title = TrainingCardFormat.DELETE_TITLE, onDismiss = { askDelete = false }) {
                 Text(TrainingCardFormat.deleteText(shown.title, shown.state.start), style = MaterialTheme.typography.bodyLarge.tabular(), color = PersonalkaTheme.colors.text)
                 waitLine?.let { Note(it, Modifier.testTag(WAIT_LINE_TAG)) }
+                val deleteOne = {
+                    askDelete = false
+                    scope.launch {
+                        val result = cards.delete(shown.id)
+                        if (result != null) onClose()
+                        done(result)
+                    }
+                    Unit
+                }
+                if ((followingCount ?: 0) > 1) {
+                    Column(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        PrimaryButton(TrainingCardFormat.deleteOnly(shown.state.start.date), deleteOne, Modifier.fillMaxWidth())
+                        OutlineButton(
+                            TrainingCardFormat.DELETE_FOLLOWING,
+                            {
+                                askDelete = false
+                                askFollowing = true
+                            },
+                            Modifier.fillMaxWidth().testTag(DELETE_FOLLOWING_TAG),
+                        )
+                        TextButton(onClick = { askDelete = false }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button)) {
+                            Text(TrainingCardFormat.KEEP, style = MaterialTheme.typography.labelLarge, color = PersonalkaTheme.colors.text)
+                        }
+                    }
+                } else {
+                    PanelActions(
+                        primary = TrainingCardFormat.DELETE,
+                        onPrimary = deleteOne,
+                        secondary = TrainingCardFormat.KEEP,
+                        onSecondary = { askDelete = false },
+                    )
+                }
+            }
+        }
+        val following = followingCount
+        if (shown != null && askFollowing && following != null) {
+            Panel(title = TrainingCardFormat.FOLLOWING_TITLE, onDismiss = { askFollowing = false }) {
+                Text(
+                    TrainingCardFormat.followingText(following, shown.state.start.date),
+                    style = MaterialTheme.typography.bodyLarge.tabular(),
+                    color = PersonalkaTheme.colors.text,
+                )
                 PanelActions(
-                    primary = TrainingCardFormat.DELETE,
+                    primary = TrainingCardFormat.deleteFollowing(following),
                     onPrimary = {
-                        askDelete = false
+                        askFollowing = false
                         scope.launch {
-                            val result = cards.delete(shown.id)
+                            val result = cards.deleteFollowing(shown.id)
                             if (result != null) onClose()
                             done(result)
                         }
                     },
                     secondary = TrainingCardFormat.KEEP,
-                    onSecondary = { askDelete = false },
+                    onSecondary = { askFollowing = false },
                 )
             }
         }

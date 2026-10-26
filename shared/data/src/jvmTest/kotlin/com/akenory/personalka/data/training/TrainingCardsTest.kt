@@ -333,6 +333,29 @@ class TrainingCardsTest {
     }
 
     @Test
+    fun deleteFollowingEndsSeriesAndKeepsPast(): Unit = runBlocking {
+        val orlov = client("Орлов", "Максим")
+        val week = tuesday.plus(-7, DateTimeUnit.DAY)
+        val past = training(at(week, 17, 0), orlov, repeat = Repeat(setOf(DayOfWeek.TUESDAY), null))
+        val seriesId = db.trainingDao().training(past)!!.seriesId!!
+        val all = db.trainingDao().trainingsOfSeries(seriesId)
+        val today = all.single { it.start.date == tuesday }
+        // Прошедшая — не из «этой и следующих»: выбора у неё нет.
+        assertNull(cards.followingCount(past))
+        assertEquals(all.size - 1, cards.followingCount(today.id))
+
+        val result = assertNotNull(cards.deleteFollowing(today.id))
+        assertEquals(s("Удалено: ${all.size - 1}_тренировок с вт_20.10"), result.message)
+        assertEquals(listOf(past), db.trainingDao().trainingsOfSeries(seriesId).map { it.id })
+        // Серия закончилась накануне — продление её не возвращает.
+        calendar.forms.extendSeries()
+        assertEquals(listOf(past), db.trainingDao().trainingsOfSeries(seriesId).map { it.id })
+
+        cards.undo(result.undo)
+        assertEquals(all.map { it.id }, db.trainingDao().trainingsOfSeries(seriesId).map { it.id })
+    }
+
+    @Test
     fun skipDateCarriesPlanToNext(): Unit = runBlocking {
         val orlov = client("Орлов", "Максим")
         training(at(tuesday, 17, 0), orlov, repeat = Repeat(setOf(DayOfWeek.TUESDAY), null), plan = "Спина 4 × 50 м")
