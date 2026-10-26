@@ -20,12 +20,16 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.training.Repeat
 import com.akenory.personalka.domain.training.TrainingDraft
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.home.NOTICE_PANEL_TAG
+import com.akenory.personalka.ui.home.noticeDoneTag
+import com.akenory.personalka.ui.home.todoTag
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.shell.Section
@@ -106,12 +110,40 @@ class CalendarSettingsUiTest {
         onNodeWithTag(VACATION_FROM_TAG).assertIsDisplayed()
         onNodeWithText(s("вт_20.10.2026")).assertIsDisplayed()
         onNodeWithText(s("пн_26.10.2026")).assertIsDisplayed()
-        onNodeWithText(CalendarSettingsFormat.VACATION_SAVE).performClick()
+        // До записи видно, кого предупредить, а на кнопке — сколько удалится; в базе пока всё на месте.
+        awaitNode(hasTestTag(vacationRowTag(client)))
+        onNodeWithText("Орлова Ксения").assertIsDisplayed()
+        onNodeWithText(s("1_тренировка · чт_22.10")).assertIsDisplayed()
+        assertEquals(before, trainings().size)
+        onNodeWithText(s("Удалить 1_тренировку")).performScrollTo().performClick()
 
         awaitNode(hasText(s("Отпуск_20.10–26.10: удалена 1_тренировка")))
         assertEquals(before - 1, trainings().size)
         onNodeWithText("Отменить").performClick()
         waitUntil(timeoutMillis = 5_000) { trainings().size == before }
+    }
+
+    @Test
+    fun vacationLeavesWarnTodoOnHome() = runComposeUiTest {
+        val client = runBlocking { TestData.clientsOf(settings).create(ClientDraft("Орлова", "Ксения")) }
+        val pt = runBlocking { settings.types.first().single { it.shortName == "ПТ" }.id }
+        runBlocking { calendar.forms.create(TrainingDraft(LocalDateTime(day(2), LocalTime(13, 30)), pt, listOf(client), null, placeId("ББ"), 50, Repeat(setOf(DayOfWeek.THURSDAY)))) }
+        openCalendarSettings()
+        onNodeWithTag(VACATION_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(vacationRowTag(client)))
+        onNodeWithText(s("Удалить 1_тренировку")).performScrollTo().performClick()
+        awaitNode(hasText(s("Отпуск_20.10–26.10: удалена 1_тренировка")))
+
+        // На «Главной» — «Предупредить об отпуске»; «Предупредил» — пункт уходит.
+        onNodeWithTag(navTag(Section.HOME)).performClick()
+        awaitNode(hasTestTag(todoTag(TodoKind.VACATION_NOTICE)))
+        onNodeWithTag(todoTag(TodoKind.VACATION_NOTICE)).performScrollTo().performClick()
+        awaitNode(hasTestTag(NOTICE_PANEL_TAG))
+        onNodeWithText(s("Отпуск_20.10–26.10")).assertIsDisplayed()
+        val id = runBlocking { calendar.settings.notices(today).first().single().id }
+        onNodeWithTag(noticeDoneTag(id)).performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { calendar.settings.notices(today).first().isEmpty() } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.VACATION_NOTICE))).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test

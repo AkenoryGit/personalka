@@ -31,6 +31,7 @@ object ReminderFormat {
     private fun digestItem(kind: TodoKind, n: Int): String = when (kind) {
         TodoKind.UNMARKED_GROUPS ->
             if (n == 1) "группа не отмечена" else RuText.count(n, "группа", "группы", "групп") + " не отмечены"
+        TodoKind.VACATION_NOTICE -> "предупредить об отпуске " + RuText.count(n, "клиента", "клиентов", "клиентов")
         TodoKind.NO_DIARY -> RuText.digits(n.toLong()) + NBSP + "без дневника"
         TodoKind.FREED_TIME -> "освободилось время"
         TodoKind.NOT_BOOKED -> RuText.count(n, "клиент", "клиента", "клиентов") + " без записи"

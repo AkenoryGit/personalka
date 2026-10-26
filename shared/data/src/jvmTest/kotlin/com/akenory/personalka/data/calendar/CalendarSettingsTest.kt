@@ -5,6 +5,7 @@ import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.Samples
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
+import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.restrictions.RestrictionSaveResult
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.training.SaveResult
@@ -12,6 +13,7 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.Vacation
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.domain.restriction.RestrictionDraft
@@ -42,6 +44,7 @@ class CalendarSettingsTest {
     private lateinit var repo: CalendarSettingsRepository
     private lateinit var settings: SettingsRepository
     private lateinit var clients: ClientRepository
+    private lateinit var groups: GroupRepository
     private val tuesday = LocalDate(2026, 10, 20)
     private val tueThu = setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY)
 
@@ -53,6 +56,7 @@ class CalendarSettingsTest {
         calendar = CalendarRepository(db) { millis }
         repo = calendar.settings
         clients = ClientRepository(db) { millis++ }
+        groups = GroupRepository(db) { millis++ }
     }
 
     @AfterTest
@@ -136,6 +140,67 @@ class CalendarSettingsTest {
         repo.undo(result.undo)
         assertEquals(before.map { it.id to it.plan }.toSet(), all().map { it.id to it.plan }.toSet())
         assertEquals(emptyList(), db.scheduleDao().series(id)!!.skipDates)
+    }
+
+    @Test
+    fun vacationShowsWhoToWarnAndKeepsTodoUntilWarned(): Unit = runBlocking {
+        val orlova = clients.create(ClientDraft("Орлова", "Ксения"))
+        series(orlova)
+        // Группа по пятницам 18:00 с Беловым и Захаровой; дежурство по пятницам 15:00.
+        val belov = clients.create(ClientDraft("Белов", "Артём"))
+        val zakharova = clients.create(ClientDraft("Захарова", "Ника"))
+        val group = groups.create(GroupDraft("Пт 18:00 ББ", typeId("Группа"), placeId("ББ")))
+        groups.addMember(group, belov, day(-30))
+        groups.addMember(group, zakharova, day(-30))
+        assertIs<SaveResult.Saved>(calendar.forms.create(TrainingDraft(at(day(3), 18), typeId("Группа"), emptyList(), group, placeId("ББ"), 45, Repeat(setOf(DayOfWeek.FRIDAY)))))
+        assertIs<SaveResult.Saved>(calendar.forms.create(TrainingDraft(at(day(3), 15), typeId("Деж"), emptyList(), null, placeId("ББ"), 240, Repeat(setOf(DayOfWeek.FRIDAY)))))
+        val before = all()
+
+        // Отпуск чт 22.10 — пт 30.10: Орлова — чт 22, вт 27, чт 29; группа и дежурство — пт 23 и пт 30.
+        val vacation = Vacation(day(2), day(10))
+        val preview = repo.vacationPreview(vacation)
+        assertEquals(7, preview.trainings)
+        assertEquals(
+            listOf(
+                "Орлова Ксения" to s("3_тренировки · чт_22.10, вт_27.10, чт_29.10"),
+                "Белов Артём" to s("2_тренировки · пт_23.10, пт_30.10"),
+                "Захарова Ника" to s("2_тренировки · пт_23.10, пт_30.10"),
+                "Дежурства" to s("2_тренировки · пт_23.10, пт_30.10"),
+            ),
+            preview.rows.map { it.title to it.subtitle },
+        )
+        // Окно только показывает: в базе ничего не изменилось.
+        assertEquals(before.map { it.id }.toSet(), all().map { it.id }.toSet())
+
+        val result = assertIs<VacationResult.Saved>(repo.vacation(vacation))
+        assertEquals(s("Отпуск_22.10–30.10: удалено 7_тренировок"), result.message)
+        val notices = repo.notices(tuesday).first()
+        assertEquals(listOf("Орлова Ксения", "Белов Артём", "Захарова Ника"), notices.map { it.title })
+        assertEquals(listOf(day(2), day(7), day(9)), notices.first().dates)
+
+        // «Предупредил» — строка уходит, «Отменить» — возвращается.
+        repo.notified(notices.first().id, done = true)
+        assertEquals(listOf("Белов Артём", "Захарова Ника"), repo.notices(tuesday).first().map { it.title })
+        repo.notified(notices.first().id, done = false)
+        assertEquals(3, repo.notices(tuesday).first().size)
+        // После отпуска дело уходит само.
+        assertEquals(emptyList(), repo.notices(day(11)).first())
+
+        // «Отменить» отпуск — тренировки на месте, предупреждать некого.
+        repo.undo(result.undo, result.notices)
+        assertEquals(before.map { it.id }.toSet(), all().map { it.id }.toSet())
+        assertEquals(emptyList(), repo.notices(tuesday).first())
+    }
+
+    @Test
+    fun vacationPreviewCountsDaysBeyondHorizon(): Unit = runBlocking {
+        series(clients.create(ClientDraft("Орлова", "Ксения")))
+        // Тренировки созданы по вт 15.12; отпуск 14.12–20.12 — вт 15.12 есть, чт 17.12 ещё не создан, но тоже пропадёт.
+        val preview = repo.vacationPreview(Vacation(LocalDate(2026, 12, 14), LocalDate(2026, 12, 20)))
+        assertEquals(2, preview.trainings)
+        assertEquals(s("2_тренировки · вт_15.12, чт_17.12"), preview.rows.single().subtitle)
+        // Даты с ошибкой — пусто.
+        assertEquals(VacationPreview.EMPTY, repo.vacationPreview(Vacation(day(-1), day(3))))
     }
 
     @Test

@@ -100,6 +100,13 @@ object HomeFormat {
         return if (rest > 0) "$shown и ещё ${RuText.digits(rest.toLong())}" else shown
     }
 
+    /** Подпись пункта с именами: «Смирнова Анна, Орлов Пётр и ещё 3». */
+    fun names(names: List<String>): String {
+        val shown = names.take(MAX_NAMES).joinToString(", ")
+        val rest = names.size - MAX_NAMES
+        return if (rest > 0) "$shown и ещё ${RuText.digits(rest.toLong())}" else shown
+    }
+
     const val NO_DIARY = "Без дневника"
 
     /**

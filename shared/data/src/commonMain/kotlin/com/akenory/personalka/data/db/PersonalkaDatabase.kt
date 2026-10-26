@@ -1,10 +1,10 @@
 package com.akenory.personalka.data.db
 
+import androidx.room3.ColumnTypeConverters
 import androidx.room3.ConstructedBy
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import androidx.room3.RoomDatabaseConstructor
-import androidx.room3.ColumnTypeConverters
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.akenory.personalka.data.db.dao.ClientDao
@@ -41,6 +41,7 @@ import com.akenory.personalka.data.db.entity.SyncOutboxEntity
 import com.akenory.personalka.data.db.entity.TierSchemeVersionEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.db.entity.VacationNoticeEntity
 import com.akenory.personalka.data.db.entity.WaitEntryEntity
 import com.akenory.personalka.data.sync.SyncOutbox
 import com.akenory.personalka.data.sync.pooled
@@ -73,6 +74,8 @@ import kotlin.coroutines.CoroutineContext
         ScheduleBlockEntity::class,
         SeriesEntity::class,
         SeriesClientEntity::class,
+        // 3.4, шаг 3.12
+        VacationNoticeEntity::class,
         // 3.5
         ClientEntity::class,
         GroupEntity::class,
@@ -95,7 +98,7 @@ import kotlin.coroutines.CoroutineContext
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -114,10 +117,10 @@ abstract class PersonalkaDatabase : RoomDatabase() {
          * 1 — шаг 1.1; 2 — шаг 1.13в: цвет у места, оттенок у типа ([Migration1To2]); 3 — «За кого» у дежурства
          * ([Migration2To3]); 4 — очередь изменений для синхронизации ([Migration3To4], шаг 2.10); 5 — деньги: коллеги,
          * месяцы, доплаты, итоги прошлых месяцев и услуга сетки у ставки ([Migration4To5], шаг 3.1); 6 — отметки
-         * «Рассчитались» с коллегами ([Migration5To6], шаг 3.8). Перед переходом
-         * на новую версию — копия ([BeforeMigration], шаг 2.7б).
+         * «Рассчитались» с коллегами ([Migration5To6], шаг 3.8); 7 — «Предупредить об отпуске» ([Migration6To7], шаг 3.12).
+         * Перед переходом на новую версию — копия ([BeforeMigration], шаг 2.7б).
          */
-        const val VERSION = 6
+        const val VERSION = 7
         const val FILE_NAME = "personalka.db"
     }
 }
