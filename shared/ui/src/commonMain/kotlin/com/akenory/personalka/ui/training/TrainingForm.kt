@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.restrictions.RestrictionRepository
 import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.data.training.FormClient
@@ -70,6 +71,7 @@ import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.WaitFormat
+import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.ReferenceRules
@@ -84,13 +86,12 @@ import com.akenory.personalka.domain.training.TrainingFormRules
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.clients.PersonRow
 import com.akenory.personalka.ui.clients.SearchField
+import com.akenory.personalka.ui.clients.SimilarClientPanel
 import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.Note
-import com.akenory.personalka.ui.components.Panel
-import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.Segmented
@@ -466,6 +467,14 @@ private fun TrainingFields(
         query = ""
     }
 
+    /** «Да, выбрать» у похожего (5.8): архивный возвращается в действующие — он снова ходит. */
+    fun pickSimilar(similar: ClientEntity) {
+        scope.launch {
+            if (similar.status == ClientStatus.ARCHIVED) clients.unarchive(similar.id)
+            select(FormClient(similar.id, ClientName(similar.lastName, similar.firstName, similar.middleName)))
+        }
+    }
+
     fun createClient(name: ClientName) {
         scope.launch {
             val id = clients.create(ClientDraft(name.lastName, name.firstName, name.middleName.orEmpty()))
@@ -543,24 +552,21 @@ private fun TrainingFields(
                             save(answer, confirmed = true)
                         },
                     )
-                    Panels.isSimilar(open) -> {
-                        val similar = form.clients.firstOrNull { it.id == Panels.similarId(open) }
-                        if (similar != null) {
-                            SimilarPanel(
-                                client = similar,
-                                onPick = {
-                                    panel = null
-                                    select(similar)
-                                },
-                                onCreate = {
-                                    val text = Panels.similarText(open)
-                                    panel = null
-                                    newClientName(text)?.let(::createClient)
-                                },
-                                onDismiss = { panel = null },
-                            )
-                        }
-                    }
+                    Panels.isSimilar(open) -> SimilarClientPanel(
+                        clientId = Panels.similarId(open),
+                        clients = clients,
+                        today = now.date,
+                        onPick = { similar ->
+                            panel = null
+                            pickSimilar(similar)
+                        },
+                        onCreate = {
+                            val text = Panels.similarText(open)
+                            panel = null
+                            newClientName(text)?.let(::createClient)
+                        },
+                        onDismiss = { panel = null },
+                    )
                 }
             }
         },
@@ -644,8 +650,12 @@ private fun TrainingFields(
                     }
                 },
                 onNewClient = { name ->
-                    val similar = ClientRules.similar(name, form.clients) { it.name }.firstOrNull()
-                    if (similar != null) panel = Panels.similar(similar.id, query) else createClient(name)
+                    // Похожих ищем среди всех, и в архиве, — не только среди тех, кого предлагает форма (шаг 3.9о).
+                    val text = query
+                    scope.launch {
+                        val similar = clients.similar(name)
+                        if (similar != null) panel = Panels.similar(similar.id, text) else createClient(name)
+                    }
                 },
             )
         }
@@ -927,17 +937,6 @@ internal fun PickBox(text: String, icon: ImageVector?, onClick: () -> Unit, modi
 @Composable
 internal fun ErrorText(text: String) {
     Text(text, modifier = Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.error)
-}
-
-/** Похожий клиент уже есть (5.8): выбрать его или всё же создать нового. */
-@Composable
-private fun SimilarPanel(client: FormClient, onPick: () -> Unit, onCreate: () -> Unit, onDismiss: () -> Unit) {
-    val colors = PersonalkaTheme.colors
-    Panel(title = "Похожий клиент уже есть", onDismiss = onDismiss) {
-        Text(client.name.full(), style = MaterialTheme.typography.labelLarge, color = colors.text)
-        Text("Это тот же клиент?", style = MaterialTheme.typography.bodyLarge, color = colors.text)
-        PanelActions(primary = "Да, выбрать", onPrimary = onPick, secondary = "Нет, создать нового", onSecondary = onCreate)
-    }
 }
 
 private fun ClientName.full(): String = listOfNotNull(lastName, firstName, middleName?.takeIf { it.isNotBlank() }).joinToString(" ")

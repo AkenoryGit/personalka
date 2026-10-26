@@ -1,6 +1,5 @@
 package com.akenory.personalka.ui.clients
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,20 +31,15 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
-import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientField
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
-import com.akenory.personalka.domain.format.RuText
-import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.Sex
 import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
-import com.akenory.personalka.ui.components.Panel
-import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.Segmented
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
@@ -68,17 +62,15 @@ const val CLIENT_NOTE_TAG = "client-note"
  * приложение предлагает само по отчеству или фамилии (4.17), пока тренер не выбрал его сам. С датой рождения
  * «ребёнок / взрослый» считается сам, без неё — переключателем.
  *
- * Перед созданием — проверка похожих: та же фамилия и имя или фамилия, отличающаяся на 1–2 буквы, при том же
- * имени — «Похожий клиент уже есть. Это она?».
+ * Перед созданием — проверка похожих среди всех клиентов, и в архиве: та же фамилия и имя или фамилия, отличающаяся
+ * на 1–2 буквы, при том же имени — «Похожий клиент уже есть. Это она?» ([SimilarClientPanel]).
  *
  * @param clientId `null` — новый клиент.
- * @param rows все клиенты: среди них ищутся похожие.
  */
 @Composable
 fun ClientEditor(
     clientId: String?,
     initial: ClientDraft,
-    rows: List<ClientRow>,
     clients: ClientRepository,
     nav: ClientNav,
     scope: CoroutineScope,
@@ -123,9 +115,14 @@ fun ClientEditor(
                 scope.launch { clients.update(clientId, draft) }
                 nav.back()
             }
-            else -> {
-                val similar = ClientRules.similar(draft.name, rows) { it.name }.firstOrNull()
-                if (similar != null) similarId = similar.client.id else create()
+            !saving -> {
+                // Пока идёт проверка, второе нажатие не заводит второго клиента.
+                saving = true
+                scope.launch {
+                    val similar = clients.similar(draft.name)
+                    saving = false
+                    if (similar != null) similarId = similar.id else create()
+                }
             }
         }
     }
@@ -225,32 +222,18 @@ fun ClientEditor(
             BottomAction("Сохранить", onClick = ::save)
         }
 
-        val similar = similarId?.let { id -> rows.firstOrNull { it.client.id == id } }
-        if (similar != null) {
-            Panel(title = "Похожий клиент уже есть", onDismiss = { similarId = null }) {
-                val colors = PersonalkaTheme.colors
-                Column(
-                    Modifier.fillMaxWidth().background(colors.surfaceAlt, MaterialTheme.shapes.medium).padding(Dimens.space3),
-                ) {
-                    Text("${similar.client.lastName} ${similar.client.firstName}", style = MaterialTheme.typography.labelLarge, color = colors.text)
-                    val archived = if (similar.client.status == ClientStatus.ARCHIVED) " · в архиве" else ""
-                    Text(similar.subtitle(today) + archived, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-                }
-                Text(
-                    RuText.bySex(similar.client.sex, "Это он?", "Это она?", "Это тот же клиент?"),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colors.text,
-                )
-                PanelActions(
-                    primary = "Да, выбрать",
-                    onPrimary = { nav.replace(ClientRoute.card(similar.client.id)) },
-                    secondary = "Нет, создать нового",
-                    onSecondary = {
-                        similarId = null
-                        create()
-                    },
-                )
-            }
+        similarId?.let { id ->
+            SimilarClientPanel(
+                clientId = id,
+                clients = clients,
+                today = today,
+                onPick = { nav.replace(ClientRoute.card(it.id)) },
+                onCreate = {
+                    similarId = null
+                    create()
+                },
+                onDismiss = { similarId = null },
+            )
         }
     }
 }

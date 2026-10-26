@@ -162,7 +162,8 @@ class ClientsUiTest {
         onNodeWithTag(CLIENT_FIRST_TAG).performTextInput("Аделина")
         onNodeWithText("Сохранить").performClick()
 
-        onNodeWithText("Похожий клиент уже есть").assertIsDisplayed()
+        awaitNode(hasText("Похожий клиент уже есть"))
+        onNodeWithText("12.05.2017 · ", substring = true).assertIsDisplayed()
         onNodeWithText("Дельфенурова Аделина").assertIsDisplayed()
         onNodeWithText("Это она?").assertIsDisplayed()
         onNodeWithText("Да, выбрать").performClick()
@@ -182,7 +183,9 @@ class ClientsUiTest {
         onNodeWithTag(CLIENT_LAST_TAG).performTextInput("Дельфинурова")
         onNodeWithTag(CLIENT_FIRST_TAG).performTextInput("Аделина")
         onNodeWithText("Сохранить").performClick()
-        onNodeWithText("Нет, создать нового").performClick()
+        // Полные тёзки бывают: второй заводится, но только осознанно.
+        awaitNode(hasText("Нет, это другой человек"))
+        onNodeWithText("Нет, это другой человек").performClick()
 
         awaitNode(hasText("Дельфинурова Аделина"))
         waitUntil(timeoutMillis = 5_000) { all().size == 2 }
@@ -282,6 +285,30 @@ class ClientsUiTest {
         onNodeWithContentDescription("Назад").performClick()
         awaitNode(hasTestTag(relativeRowTag("Ковалёва Наталья")))
         onNodeWithText("Ребёнок").assertIsDisplayed()
+    }
+
+    @Test
+    fun newRelativeWhoIsAlreadyClientIsNotDuplicated() = runComposeUiTest {
+        // У брата и сестры одна мама: во второй карточке её набирают заново — приложение находит её (шаг 3.9о).
+        seed("Ковалёв", "Артём", Sex.MALE, LocalDate(2016, 2, 14))
+        val natalya = seed("Ковалёва", "Наталья", Sex.FEMALE, LocalDate(1985, 6, 23))
+        show()
+        openCard("Ковалёв Артём")
+        onNodeWithTag(ADD_RELATIVE_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(NEW_RELATIVE_TAG))
+        onNodeWithTag(NEW_RELATIVE_TAG).performClick()
+        onNodeWithTag(NEW_RELATIVE_LAST_TAG).performTextClearance()
+        onNodeWithTag(NEW_RELATIVE_LAST_TAG).performTextInput("Ковалева")
+        onNodeWithTag(NEW_RELATIVE_FIRST_TAG).performTextInput("Наталья")
+        onNodeWithText("Мать").performClick()
+        onNodeWithText("Сохранить").performClick()
+        awaitNode(hasText("Похожий клиент уже есть"))
+        onNodeWithText("Да, выбрать").performClick()
+
+        awaitNode(hasTestTag(relativeRowTag("Ковалёва Наталья")))
+        onNodeWithTag(relativeRowTag("Ковалёва Наталья")).assertTextContains("Мать")
+        assertEquals(2, all().size)
+        assertEquals(natalya, all().single { it.client.firstName == "Наталья" }.client.id)
     }
 
     @Test

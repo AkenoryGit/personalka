@@ -46,12 +46,14 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.data.clients.adultOn
+import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.groups.GroupRow
 import com.akenory.personalka.data.groups.GroupTrainingRow
 import com.akenory.personalka.data.groups.sharing
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.CoCoachingFormat
@@ -68,6 +70,7 @@ import com.akenory.personalka.ui.clients.FormLabel
 import com.akenory.personalka.ui.clients.MenuAction
 import com.akenory.personalka.ui.clients.PersonRow
 import com.akenory.personalka.ui.clients.SearchField
+import com.akenory.personalka.ui.clients.SimilarClientPanel
 import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
@@ -353,6 +356,8 @@ internal fun AddMemberForm(
     var newFirst by rememberSaveable { mutableStateOf("") }
     var fromText by rememberSaveable { mutableStateOf(DateFormat.full(today)) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
+    var similarId by rememberSaveable { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
 
     val inGroup = row.members.filter { (it.toDate ?: today) >= today }.map { it.clientId }.toSet()
     val candidates = kids.filter { it.client.status == ClientStatus.ACTIVE && it.client.id !in inGroup }
@@ -373,82 +378,127 @@ internal fun AddMemberForm(
         val picked = pickedId
         if (picked != null) {
             scope.launch { groups.addMember(groupId, picked, date) }
-        } else {
+            close()
+        } else if (!checking) {
             val last = newLast.trim()
             val first = newFirst.trim()
+            // Сначала — нет ли его уже среди клиентов, и в архиве (5.8, шаг 3.9о): иначе в базе появится дубль.
+            checking = true
             scope.launch {
-                val id = clients.create(ClientDraft(last, first, sex = ClientRules.guessSex(null, last)?.sex))
-                groups.addMember(groupId, id, date)
+                val similar = clients.similar(ClientName(last, first))
+                checking = false
+                if (similar != null) {
+                    similarId = similar.id
+                } else {
+                    close()
+                    val id = clients.create(ClientDraft(last, first, sex = ClientRules.guessSex(null, last)?.sex))
+                    groups.addMember(groupId, id, date)
+                }
             }
         }
-        close()
     }
 
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.systemBars))) {
-        TopBar("В состав", onBack = close, close = true)
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
-            Text(row.group.name, style = MaterialTheme.typography.bodyLarge, color = PersonalkaTheme.colors.textMuted)
-            Spacer(Modifier.height(Dimens.space3))
-            FormLabel("Кто")
-            SearchField(query, { query = it }, "Фамилия или имя", Modifier.testTag(MEMBER_SEARCH_TAG))
-            Spacer(Modifier.height(Dimens.space2))
-            Column(Modifier.clip(MaterialTheme.shapes.medium)) {
-                shown.forEach { kid ->
-                    val selected = kid.client.id == pickedId
+    /** «Да, выбрать» у похожего: архивный возвращается в действующие; уже в составе — добавлять нечего. */
+    fun pickSimilar(similar: ClientEntity) {
+        val date = from ?: return
+        similarId = null
+        close()
+        scope.launch {
+            if (similar.status == ClientStatus.ARCHIVED) clients.unarchive(similar.id)
+            if (similar.id !in inGroup) groups.addMember(groupId, similar.id, date)
+        }
+    }
+
+    /** «Нет, это другой человек» — полный тёзка: заводится новый клиент. */
+    fun createAnyway() {
+        val date = from ?: return
+        val last = newLast.trim()
+        val first = newFirst.trim()
+        similarId = null
+        close()
+        scope.launch {
+            val id = clients.create(ClientDraft(last, first, sex = ClientRules.guessSex(null, last)?.sex))
+            groups.addMember(groupId, id, date)
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.systemBars))) {
+            TopBar("В состав", onBack = close, close = true)
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
+                Text(row.group.name, style = MaterialTheme.typography.bodyLarge, color = PersonalkaTheme.colors.textMuted)
+                Spacer(Modifier.height(Dimens.space3))
+                FormLabel("Кто")
+                SearchField(query, { query = it }, "Фамилия или имя", Modifier.testTag(MEMBER_SEARCH_TAG))
+                Spacer(Modifier.height(Dimens.space2))
+                Column(Modifier.clip(MaterialTheme.shapes.medium)) {
+                    shown.forEach { kid ->
+                        val selected = kid.client.id == pickedId
+                        PersonRow(
+                            title = "${kid.client.lastName} ${kid.client.firstName}",
+                            subtitle = kid.client.birthDate?.let { ClientFormat.age(it, today) },
+                            onClick = {
+                                pickedId = kid.client.id
+                                creating = false
+                            },
+                            selected = selected,
+                            leading = if (selected) PIcons.CheckCircle else null,
+                            modifier = Modifier.testTag(memberPickTag("${kid.client.lastName} ${kid.client.firstName}")),
+                        )
+                    }
+                    val prefill = query.trim()
                     PersonRow(
-                        title = "${kid.client.lastName} ${kid.client.firstName}",
-                        subtitle = kid.client.birthDate?.let { ClientFormat.age(it, today) },
+                        title = if (prefill.isEmpty()) "Новый клиент…" else "Новый клиент: $prefill…",
+                        subtitle = null,
                         onClick = {
-                            pickedId = kid.client.id
-                            creating = false
+                            creating = true
+                            pickedId = null
+                            val words = prefill.split(' ').filter { it.isNotEmpty() }.map { w -> w.replaceFirstChar { it.uppercaseChar() } }
+                            newLast = words.firstOrNull().orEmpty()
+                            newFirst = words.drop(1).joinToString(" ")
                         },
-                        selected = selected,
-                        leading = if (selected) PIcons.CheckCircle else null,
-                        modifier = Modifier.testTag(memberPickTag("${kid.client.lastName} ${kid.client.firstName}")),
+                        selected = creating,
+                        leading = PIcons.PersonAdd,
+                        modifier = Modifier.testTag(NEW_MEMBER_TAG),
                     )
                 }
-                val prefill = query.trim()
-                PersonRow(
-                    title = if (prefill.isEmpty()) "Новый клиент…" else "Новый клиент: $prefill…",
-                    subtitle = null,
-                    onClick = {
-                        creating = true
-                        pickedId = null
-                        val words = prefill.split(' ').filter { it.isNotEmpty() }.map { w -> w.replaceFirstChar { it.uppercaseChar() } }
-                        newLast = words.firstOrNull().orEmpty()
-                        newFirst = words.drop(1).joinToString(" ")
-                    },
-                    selected = creating,
-                    leading = PIcons.PersonAdd,
-                    modifier = Modifier.testTag(NEW_MEMBER_TAG),
-                )
-            }
-            if (creating) {
-                Spacer(Modifier.height(Dimens.space3))
-                val words = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next)
-                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                    Field("Фамилия", newLast, { newLast = it }, Modifier.weight(1f), keyboardOptions = words, tag = NEW_MEMBER_LAST_TAG)
-                    Field("Имя", newFirst, { newFirst = it }, Modifier.weight(1f), keyboardOptions = words, tag = NEW_MEMBER_FIRST_TAG)
+                if (creating) {
+                    Spacer(Modifier.height(Dimens.space3))
+                    val words = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next)
+                    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        Field("Фамилия", newLast, { newLast = it }, Modifier.weight(1f), keyboardOptions = words, tag = NEW_MEMBER_LAST_TAG)
+                        Field("Имя", newFirst, { newFirst = it }, Modifier.weight(1f), keyboardOptions = words, tag = NEW_MEMBER_FIRST_TAG)
+                    }
                 }
+                if (showErrors && !who) ErrorLine(if (creating) "Введите фамилию и имя" else "Выберите ребёнка или добавьте нового")
+                Spacer(Modifier.height(Dimens.space5))
+                Field(
+                    label = "С какого дня в группе",
+                    value = fromText,
+                    onValueChange = { fromText = it.take(12) },
+                    error = if (showErrors && from == null) "Дата в виде 22.10.2026" else null,
+                    hint = "С этого дня — в будущих тренировках группы. Прошедшие не изменятся.",
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    tag = MEMBER_DATE_TAG,
+                )
+                Spacer(Modifier.height(Dimens.space6))
             }
-            if (showErrors && !who) ErrorLine(if (creating) "Введите фамилию и имя" else "Выберите ребёнка или добавьте нового")
-            Spacer(Modifier.height(Dimens.space5))
-            Field(
-                label = "С какого дня в группе",
-                value = fromText,
-                onValueChange = { fromText = it.take(12) },
-                error = if (showErrors && from == null) "Дата в виде 22.10.2026" else null,
-                hint = "С этого дня — в будущих тренировках группы. Прошедшие не изменятся.",
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                tag = MEMBER_DATE_TAG,
-            )
-            Spacer(Modifier.height(Dimens.space6))
+            BottomAction("Сохранить", onClick = ::save)
         }
-        BottomAction("Сохранить", onClick = ::save)
+        similarId?.let { id ->
+            SimilarClientPanel(
+                clientId = id,
+                clients = clients,
+                today = today,
+                onPick = ::pickSimilar,
+                onCreate = ::createAnyway,
+                onDismiss = { similarId = null },
+            )
+        }
     }
 }
 
-private fun name(row: ClientRow) = com.akenory.personalka.domain.client.ClientName(row.client.lastName, row.client.firstName, row.client.middleName)
+private fun name(row: ClientRow) = ClientName(row.client.lastName, row.client.firstName, row.client.middleName)
 
 /**
  * Место ребёнка в составе (5.10): «В группе с» и «Не ходит с» — «исключить с даты». Будущие тренировки группы

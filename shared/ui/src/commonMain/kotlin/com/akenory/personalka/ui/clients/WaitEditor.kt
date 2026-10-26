@@ -42,7 +42,9 @@ import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitChoices
 import com.akenory.personalka.data.clients.want
+import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.WaitDraft
 import com.akenory.personalka.domain.client.WaitProblem
@@ -141,6 +143,7 @@ fun WaitEditor(
     var exactTo by rememberSaveable { mutableStateOf("09:00") }
     var picking by rememberSaveable { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var similarId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // «Изменить» — поля из записи, один раз.
     LaunchedEffect(entryId) {
@@ -179,19 +182,39 @@ fun WaitEditor(
     val problems = WaitRules.problems(WaitDraft(client ?: "new".takeIf { newReady }, want), today)
     val shown = if (showErrors) problems else emptySet()
 
+    /** Запись в лист: [picked] — выбранный клиент, `null` — новый из полей «Новый клиент». */
+    fun finish(picked: String?) {
+        saving = true
+        scope.launch {
+            val id = picked ?: clients.create(ClientDraft(newLast.trim(), newFirst.trim(), contactPhone = newPhone))
+            clients.waitlist.save(WaitDraft(id, want))
+            messages.show(if (entryId == null) WaitFormat.SAVED else WaitFormat.CHANGED)
+        }
+        nav.back()
+    }
+
     fun save() {
         if (saving) return
         if (problems.isNotEmpty()) {
             showErrors = true
             return
         }
+        val picked = client
+        if (picked != null) return finish(picked)
+        // Новый — сначала нет ли его уже среди клиентов, и в архиве (5.8, шаг 3.9о): иначе в базе появится дубль.
         saving = true
         scope.launch {
-            val id = client ?: clients.create(ClientDraft(newLast.trim(), newFirst.trim(), contactPhone = newPhone))
-            clients.waitlist.save(WaitDraft(id, want))
-            messages.show(if (entryId == null) WaitFormat.SAVED else WaitFormat.CHANGED)
+            val similar = clients.similar(ClientName(newLast.trim(), newFirst.trim()))
+            saving = false
+            if (similar != null) similarId = similar.id else finish(null)
         }
-        nav.back()
+    }
+
+    /** «Да, выбрать» у похожего: архивный возвращается в действующие, запись — на него. */
+    fun pickSimilar(similar: ClientEntity) {
+        similarId = null
+        if (similar.status == ClientStatus.ARCHIVED) scope.launch { clients.unarchive(similar.id) }
+        finish(similar.id)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -423,6 +446,19 @@ fun WaitEditor(
                 exactTo = it.toString()
                 picking = null
             }, { picking = null }, title = WaitFormat.EXACT_TO)
+        }
+        similarId?.let { id ->
+            SimilarClientPanel(
+                clientId = id,
+                clients = clients,
+                today = today,
+                onPick = ::pickSimilar,
+                onCreate = {
+                    similarId = null
+                    finish(null)
+                },
+                onDismiss = { similarId = null },
+            )
         }
     }
 }

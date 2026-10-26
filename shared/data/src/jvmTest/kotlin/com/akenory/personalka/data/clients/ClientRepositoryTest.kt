@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.RelationRole
 import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.model.ClientStatus
@@ -73,6 +74,19 @@ class ClientRepositoryTest {
             db.trainingDao().upsertParticipation(Samples.participation(training.id, it).copy(status = ParticipationStatus.EXPECTED, behavior = null, cancelReason = null, notifiedAt = null))
         }
         return training.id
+    }
+
+    @Test
+    fun similarLooksAtArchivedButNotErased(): Unit = runBlocking {
+        val adelina = create("Дельфенурова", "Аделина")
+        val artem = create("Белов", "Артём")
+        repo.archive(adelina)
+        // Архивный тоже похожий: вернуть его, а не завести второго (5.8, шаг 3.9о).
+        assertEquals(adelina, repo.similar(ClientName("Дельфинурова", "Аделина"))?.id)
+        assertEquals(artem, repo.similar(ClientName("Артем", "Белов"))?.id, "Имя и фамилия наоборот")
+        assertNull(repo.similar(ClientName("Белов", "Артём"), except = artem), "Сам себе не похожий")
+        repo.erase(adelina)
+        assertNull(repo.similar(ClientName("Дельфенурова", "Аделина")), "Удалённый полностью не предлагается")
     }
 
     @Test

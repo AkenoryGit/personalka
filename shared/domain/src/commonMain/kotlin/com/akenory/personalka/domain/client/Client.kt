@@ -84,6 +84,7 @@ object ClientRules {
     /**
      * Похожие клиенты перед созданием нового (5.8): то же имя и фамилия, отличающаяся не больше чем на
      * [SIMILAR_LETTERS] буквы, — «Дельфенурова» и «Дельфинурова». Регистр и «ё» не считаются. Ближайшие первыми.
+     * Имя и фамилия, набранные наоборот («Аделина Дельфенурова»), — тоже похожий (шаг 3.9о): так их пишут в поиске.
      */
     fun <T> similar(name: ClientName, candidates: List<T>, nameOf: (T) -> ClientName): List<T> {
         val first = key(name.firstName)
@@ -92,8 +93,13 @@ object ClientRules {
         return candidates
             .mapNotNull { candidate ->
                 val other = nameOf(candidate)
-                if (key(other.firstName) != first) return@mapNotNull null
-                val letters = distance(key(other.lastName), last)
+                val otherFirst = key(other.firstName)
+                val otherLast = key(other.lastName)
+                val letters = when {
+                    otherFirst == first -> distance(otherLast, last)
+                    otherFirst == last && otherLast == first -> 0
+                    else -> return@mapNotNull null
+                }
                 if (letters <= SIMILAR_LETTERS) candidate to letters else null
             }
             .sortedBy { it.second }

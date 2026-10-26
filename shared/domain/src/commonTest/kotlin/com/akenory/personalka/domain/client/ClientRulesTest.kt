@@ -61,6 +61,13 @@ class ClientRulesTest {
     }
 
     @Test
+    fun similarFindsNameTypedTheOtherWayRound() {
+        val adelina = ClientName("Дельфенурова", "Аделина")
+        assertEquals(listOf(adelina), ClientRules.similar(ClientName("Аделина", "Дельфенурова"), listOf(adelina), { it }))
+        assertTrue(ClientRules.similar(ClientName("Аделина", "Дельфинурова"), listOf(adelina), { it }).isEmpty())
+    }
+
+    @Test
     fun levenshteinDistance() {
         assertEquals(0, ClientRules.distance("", ""))
         assertEquals(3, ClientRules.distance("", "абв"))

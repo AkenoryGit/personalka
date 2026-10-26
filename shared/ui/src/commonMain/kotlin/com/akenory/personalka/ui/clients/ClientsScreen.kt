@@ -336,7 +336,6 @@ private fun ClientDetail(
         is ClientScreen.New -> ClientEditor(
             clientId = null,
             initial = prefillDraft(screen.prefill),
-            rows = rows,
             clients = clients,
             nav = nav,
             scope = scope,
@@ -344,7 +343,7 @@ private fun ClientDetail(
         )
         is ClientScreen.Edit -> {
             val row = rows.firstOrNull { it.client.id == screen.clientId } ?: return
-            ClientEditor(row.client.id, row.client.draft(), rows, clients, nav, scope, now.date)
+            ClientEditor(row.client.id, row.client.draft(), clients, nav, scope, now.date)
         }
         is ClientScreen.AddRelative -> RelativeEditor(screen.clientId, relationId = null, rows, clients, nav, scope, now.date)
         is ClientScreen.EditRelation -> RelativeEditor(screen.clientId, screen.relationId, rows, clients, nav, scope, now.date)

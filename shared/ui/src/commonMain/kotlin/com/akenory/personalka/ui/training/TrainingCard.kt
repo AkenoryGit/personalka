@@ -89,6 +89,7 @@ import com.akenory.personalka.domain.training.came
 import com.akenory.personalka.ui.clients.MenuAction
 import com.akenory.personalka.ui.clients.PersonRow
 import com.akenory.personalka.ui.clients.SearchField
+import com.akenory.personalka.ui.clients.SimilarClientPanel
 import com.akenory.personalka.ui.clients.SptPurchasePanel
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
@@ -208,6 +209,9 @@ fun TrainingCardHost(
     var newGuest by rememberSaveable(key) { mutableStateOf(false) }
     var guestLast by rememberSaveable(key) { mutableStateOf("") }
     var guestFirst by rememberSaveable(key) { mutableStateOf("") }
+    // Похожий на нового ребёнка «на раз» (5.8, шаг 3.9о): окно «Похожий клиент уже есть».
+    var guestSimilar by rememberSaveable(key) { mutableStateOf<String?>(null) }
+    var guestChecking by remember(key) { mutableStateOf(false) }
 
     // Вопрос о переносе плана после отмены или «Вернуть» (4.3): ждёт ответа и после закрытия карточки.
     var asked by remember { mutableStateOf<CardResult?>(null) }
@@ -252,6 +256,7 @@ fun TrainingCardHost(
         newGuest = false
         guestLast = ""
         guestFirst = ""
+        guestSimilar = null
     }
 
     fun done(result: CardResult?) {
@@ -298,8 +303,20 @@ fun TrainingCardHost(
                     onAddNew = {
                         val last = guestLast
                         val first = guestFirst
-                        closeGuest()
-                        guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first)) } }
+                        // Сначала — нет ли его уже среди клиентов, и в архиве: иначе в базе появится дубль.
+                        if (!guestChecking) {
+                            guestChecking = true
+                            scope.launch {
+                                val similar = cards.similarGuest(last, first)
+                                guestChecking = false
+                                if (similar != null) {
+                                    guestSimilar = similar.id
+                                } else {
+                                    closeGuest()
+                                    guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first)) } }
+                                }
+                            }
+                        }
                     },
                     onBack = ::closeGuest,
                 )
@@ -426,6 +443,25 @@ fun TrainingCardHost(
             }
         }
 
+        val similar = guestSimilar
+        if (shown != null && similar != null) {
+            SimilarClientPanel(
+                clientId = similar,
+                load = cards::client,
+                today = now.date,
+                onPick = { client ->
+                    closeGuest()
+                    guarded { scope.launch { done(cards.addSimilarGuest(shown.id, client.id)) } }
+                },
+                onCreate = {
+                    val last = guestLast
+                    val first = guestFirst
+                    closeGuest()
+                    guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first)) } }
+                },
+                onDismiss = { guestSimilar = null },
+            )
+        }
         if (shown != null && askDelete) {
             Panel(title = TrainingCardFormat.DELETE_TITLE, onDismiss = { askDelete = false }) {
                 Text(TrainingCardFormat.deleteText(shown.title, shown.state.start), style = MaterialTheme.typography.bodyLarge.tabular(), color = PersonalkaTheme.colors.text)

@@ -5,8 +5,11 @@ import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.clients.freedSlot
 import com.akenory.personalka.data.clients.newClientEntity
 import com.akenory.personalka.data.clients.recordFreed
+import com.akenory.personalka.data.clients.similarClient
+import com.akenory.personalka.data.clients.unarchiveClient
 import com.akenory.personalka.data.clients.waitingLine
 import com.akenory.personalka.data.db.PersonalkaDatabase
+import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
@@ -319,6 +322,19 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             clients.upsertClient(client)
             client.id
         }
+    }
+
+    /** Похожий на нового ребёнка «на раз» (5.8, шаг 3.9о) — среди всех клиентов, и в архиве. */
+    suspend fun similarGuest(lastName: String, firstName: String): ClientEntity? =
+        db.similarClient(ClientName(lastName.trim(), firstName.trim()))
+
+    /** Клиент для окна «Похожий клиент уже есть». */
+    fun client(clientId: String): Flow<ClientEntity?> = clients.observeClient(clientId)
+
+    /** «Да, выбрать» у похожего: архивный возвращается в действующие и добавляется «на раз», как [addGuest]. */
+    suspend fun addSimilarGuest(id: String, clientId: String): CardResult? {
+        db.unarchiveClient(clientId, clock())
+        return addGuest(id, clientId)
     }
 
     /**

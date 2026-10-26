@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.model.ConductedBy
@@ -334,6 +335,19 @@ class TrainingCardUiTest {
         onNodeWithText(TrainingCardFormat.ADD).performClick()
         awaitNode(hasText(s("Добавили на раз: Ершов_Т.")))
         awaitNode(inCard(TrainingCardFormat.members(2, 1)))
+
+        // Набрали заново того, кто уже есть, — «Похожий клиент уже есть», «Да, выбрать»: второй Зуевой нет (шаг 3.9о).
+        val before = runBlocking { db.clientDao().observeAllClients().first().size }
+        onNodeWithTag(ADD_GUEST_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(GUEST_SEARCH_TAG))
+        onNodeWithTag(GUEST_SEARCH_TAG).performTextInput("Зуева Вера")
+        onNodeWithTag(NEW_GUEST_TAG).performClick()
+        awaitNode(hasTestTag(NEW_GUEST_LAST_TAG))
+        onNodeWithText(TrainingCardFormat.ADD).performClick()
+        awaitNode(hasText(ClientFormat.SIMILAR_TITLE))
+        onNodeWithText(ClientFormat.SIMILAR_PICK).performClick()
+        awaitNode(hasText(s("Добавили на раз: Зуева_В.")))
+        assertEquals(before, runBlocking { db.clientDao().observeAllClients().first().size })
     }
 
     @Test

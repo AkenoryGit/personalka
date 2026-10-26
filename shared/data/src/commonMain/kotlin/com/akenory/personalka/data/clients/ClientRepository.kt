@@ -46,6 +46,7 @@ import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.DiaryRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -192,6 +193,12 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         return client.id
     }
 
+    /**
+     * Похожий клиент перед созданием нового (5.8, шаг 3.9о): ближайший среди всех, и в архиве, кроме [except].
+     * Все места, где заводится клиент, спрашивают его — дубль не появится незаметно.
+     */
+    suspend fun similar(name: ClientName, except: String? = null): ClientEntity? = db.similarClient(name, except)
+
     /** Правка из «Изменить». Поля, которых нет в форме (1С, кабинет), не трогаются. */
     suspend fun update(id: String, draft: ClientDraft) {
         val client = clients.client(id) ?: return
@@ -255,12 +262,7 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     }
 
     /** «Вернуть из архива» из меню: клиент снова в списке; в группы его возвращают через состав. */
-    suspend fun unarchive(id: String) {
-        val client = clients.client(id) ?: return
-        if (client.status != ClientStatus.ACTIVE) {
-            clients.upsertClient(client.copy(sync = client.sync.touched(clock()), status = ClientStatus.ACTIVE))
-        }
-    }
+    suspend fun unarchive(id: String) = db.unarchiveClient(id, clock())
 
     /**
      * «Объединить с…» (5.8, 4.17): тренировки, результаты, серии, группы, стартовые, лист ожидания и связи
@@ -531,6 +533,20 @@ fun ClientEntity.avatar(today: LocalDate): AvatarLook =
     AvatarRules.client(ClientName(lastName, firstName, middleName), sex, birthDate, isAdult, today)
 
 /** Новый клиент из черновика — из формы клиента и из «Добавить на раз» (5.4). */
+/** Ближайший похожий клиент среди всех, и в архиве, кроме [except] (5.8, шаг 3.9о). */
+internal suspend fun PersonalkaDatabase.similarClient(name: ClientName, except: String? = null): ClientEntity? =
+    ClientRules.similar(name, clientDao().observeAllClients().first().filter { it.id != except }) {
+        ClientName(it.lastName, it.firstName, it.middleName)
+    }.firstOrNull()
+
+/** Клиент из архива снова действующий; уже действующий не меняется. */
+internal suspend fun PersonalkaDatabase.unarchiveClient(id: String, now: Long) {
+    val client = clientDao().client(id) ?: return
+    if (client.status != ClientStatus.ACTIVE) {
+        clientDao().upsertClient(client.copy(sync = client.sync.touched(now), status = ClientStatus.ACTIVE))
+    }
+}
+
 internal fun newClientEntity(coachId: String, now: Long, draft: ClientDraft): ClientEntity {
     val blank = ClientEntity(id = Ids.newId(now), sync = SyncFields.new(coachId, now), lastName = "", firstName = "")
     return draft.applyTo(blank, ClubTime.today(now))

@@ -56,6 +56,27 @@ object ClientFormat {
     fun next(start: LocalDateTime, today: LocalDate): String =
         if (start.date == today) "сегодня ${DateFormat.time(start.time)}" else DateFormat.short(start.date)
 
+    // --- Похожий клиент перед созданием нового (5.8, шаг 3.9о) ---
+
+    const val SIMILAR_TITLE = "Похожий клиент уже есть"
+    const val SIMILAR_PICK = "Да, выбрать"
+
+    /** Полные тёзки бывают: создать второго можно, но только осознанно. */
+    const val SIMILAR_OTHER = "Нет, это другой человек"
+
+    fun similarQuestion(sex: Sex?): String = RuText.bySex(sex, "Это он?", "Это она?", "Это тот же клиент?")
+
+    /**
+     * Под именем похожего — чем отличить тёзок: «12.05.2017 · 9 лет · +7 912 384-20-17 · в архиве».
+     * Ничего нет — `null`.
+     */
+    fun similarDetail(birth: LocalDate?, phone: String?, archived: Boolean, today: LocalDate): String? =
+        listOfNotNull(
+            birth?.let { birth(it, today) },
+            phone?.takeIf { it.isNotBlank() }?.let(::phone),
+            "в архиве".takeIf { archived },
+        ).joinToString(DOT).ifEmpty { null }
+
     /** «42 клиента». */
     fun clients(count: Int): String = RuText.count(count, "клиент", "клиента", "клиентов")
 

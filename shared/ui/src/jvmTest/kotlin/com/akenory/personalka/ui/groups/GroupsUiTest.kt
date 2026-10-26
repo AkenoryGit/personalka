@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupDraft
+import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.Sex
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
@@ -166,6 +167,31 @@ class GroupsUiTest {
         awaitNode(hasTestTag(memberRowTag("Смирнова Аня")))
         val anya = runBlocking { clients.rows(TestData.now).first().single().client }
         assertEquals(Sex.FEMALE, anya.sex)
+    }
+
+    @Test
+    fun similarClientInsteadOfDuplicate() = runComposeUiTest {
+        val anna = kid("Смирнова", "Анна")
+        runBlocking { clients.archive(anna) }
+        group()
+        openGroups()
+        awaitNode(hasTestTag(groupRowTag("Сб 9:00 ББ")))
+        onNodeWithTag(groupRowTag("Сб 9:00 ББ")).performClick()
+        awaitNode(hasTestTag(MEMBER_ADD_TAG))
+        onNodeWithTag(MEMBER_ADD_TAG).performClick()
+
+        // Архивной в списке нет — тренер набирает её заново; приложение находит её и в архиве (шаг 3.9о).
+        onNodeWithTag(MEMBER_SEARCH_TAG).performTextInput("Смирнова Анна")
+        onNodeWithTag(NEW_MEMBER_TAG).performClick()
+        onNodeWithText("Сохранить").performClick()
+        awaitNode(hasText("Похожий клиент уже есть"))
+        onNodeWithText("в архиве", substring = true).assertIsDisplayed()
+        onNodeWithText("Да, выбрать").performClick()
+
+        awaitNode(hasTestTag(memberRowTag("Смирнова Анна")))
+        val all = runBlocking { clients.rows(TestData.now).first().map { it.client } }
+        assertEquals(listOf(anna), all.map { it.id }, "Дубля нет")
+        assertEquals(ClientStatus.ACTIVE, all.single().status, "Вернулась из архива")
     }
 
     @Test

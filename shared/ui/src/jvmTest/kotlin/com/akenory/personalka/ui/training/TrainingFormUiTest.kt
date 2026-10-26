@@ -41,6 +41,7 @@ import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.training.CardAction
@@ -204,6 +205,25 @@ class TrainingFormUiTest {
         awaitNode(hasText("Выберите клиента"))
         onNodeWithTag(TRAINING_FORM_TAG).assertIsDisplayed()
         assertEquals(emptyList(), trainings())
+    }
+
+    @Test
+    fun archivedClientIsFoundInsteadOfDuplicate() = runComposeUiTest {
+        // Раньше форма искала похожих только среди действующих — архивный заводился второй раз (шаг 3.9о).
+        val alisa = client("Дельфинурова", "Алиса")
+        runBlocking { clients.archive(alisa) }
+        openCalendar()
+        onNodeWithTag(FAB_TAG).performClick()
+        awaitNode(hasTestTag(FORM_SEARCH_TAG))
+        onNodeWithTag(FORM_SEARCH_TAG).performTextInput("Дельфинурова Алиса")
+        onNodeWithText("Новый клиент «Дельфинурова Алиса»").performScrollTo().performClick()
+        awaitNode(hasText("Похожий клиент уже есть"))
+        onNodeWithText("Да, выбрать").performClick()
+        awaitNode(hasTestTag(formClientTag(alisa)))
+        onNodeWithTag(formClientTag(alisa)).onChild().assertIsSelected()
+        val all = runBlocking { db.clientDao().observeAllClients().first() }
+        assertEquals(listOf(alisa), all.map { it.id })
+        assertEquals(ClientStatus.ACTIVE, all.single().status)
     }
 
     @Test
