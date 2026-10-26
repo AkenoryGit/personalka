@@ -82,6 +82,7 @@ data class CardClient(
     val outcome: ClientOutcome,
     val guest: Boolean = false,
     val behavior: String? = null,
+    val erased: Boolean = false,
 )
 
 /**
@@ -225,16 +226,21 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             val names = all.associateBy { it.id }
             val guests = if (t.groupId == null) emptySet() else GroupRules.guests(ordered.map { it.clientId }, members.map { it.member() }, t.start.date).toSet()
             // Дети группы — по алфавиту, как в составе (5.10): новый ребёнок встаёт на своё место, а не в конец.
-            val inOrder = if (t.groupId == null) ordered else ordered.sortedBy { p -> names[p.clientId]?.let { ClientRules.sortKey(ClientName(it.lastName, it.firstName, it.middleName)) } }
-            val cardClients = inOrder.mapNotNull { p ->
-                val c = names[p.clientId] ?: return@mapNotNull null
+            // Удалённый полностью (5.9) остаётся в прошедшей тренировке без имени — строкой «Удалённый клиент» в конце,
+            // чтобы состав сходился со счётом детей и зарплатой и ошибочную отметку можно было убрать.
+            val inOrder = if (t.groupId == null) ordered else ordered.sortedWith(
+                compareBy(nullsLast()) { p -> names[p.clientId]?.let { ClientRules.sortKey(ClientName(it.lastName, it.firstName, it.middleName)) } },
+            )
+            val cardClients = inOrder.map { p ->
+                val c = names[p.clientId]
                 CardClient(
                     id = p.clientId,
-                    name = CalendarFormat.client(ClientName(c.lastName, c.firstName, c.middleName)),
+                    name = c?.let { CalendarFormat.client(ClientName(it.lastName, it.firstName, it.middleName)) } ?: TrainingCardFormat.ERASED_CLIENT,
                     state = p.toState(),
                     outcome = ClientOutcome.of(t.status, p.status),
                     guest = p.clientId in guests,
                     behavior = p.behavior?.takeIf { it.isNotBlank() },
+                    erased = c == null,
                 )
             }
             val group = t.groupId?.let { clients.group(it) }
@@ -746,7 +752,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
     }
 
     private suspend fun clientName(id: String): String =
-        clients.client(id)?.let { CalendarFormat.client(ClientName(it.lastName, it.firstName, it.middleName)) }.orEmpty()
+        clients.client(id)?.let { CalendarFormat.client(ClientName(it.lastName, it.firstName, it.middleName)) } ?: TrainingCardFormat.ERASED_CLIENT
 
     private suspend fun seriesClientIds(seriesId: String): List<String> =
         schedule.seriesClients(seriesId).sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }

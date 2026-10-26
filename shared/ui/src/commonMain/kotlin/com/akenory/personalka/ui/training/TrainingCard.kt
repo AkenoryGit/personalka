@@ -651,7 +651,7 @@ private fun ColumnScope.CardBody(
     val phase = TrainingPhase.of(state, now)
     val isGroup = state.kind == TrainingKind.GROUP
     // Имя в шапке ведёт в карточку: у одного клиента — его, у группы — группы; у сплита — строки клиентов.
-    val single = card.clients.singleOrNull()?.takeIf { !isGroup }
+    val single = card.clients.singleOrNull()?.takeIf { !isGroup && !it.erased }
     val titleLink: (() -> Unit)? = single?.let { c -> { onClient(c.id) } } ?: card.groupId?.let { g -> { onGroup(g) } }
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
         Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
@@ -898,11 +898,11 @@ private fun ClientLine(
     val colors = PersonalkaTheme.colors
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(cardClientTag(c.id)), verticalAlignment = Alignment.CenterVertically) {
         Row(
-            Modifier.weight(1f).heightIn(min = Dimens.touch).clickable(role = Role.Button) { onClient(c.id) },
+            Modifier.weight(1f).heightIn(min = Dimens.touch).then(if (c.erased) Modifier else Modifier.clickable(role = Role.Button) { onClient(c.id) }),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(c.name, style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+            if (!c.erased) Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
         }
         val (bg, fg) = when (c.outcome) {
             ClientOutcome.DONE -> colors.doneContainer to colors.onDoneContainer
@@ -1002,7 +1002,7 @@ private fun GroupMembers(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = Dimens.touch)
-                    .clickable(role = Role.Checkbox) { if (toggle) onToggle(c.id) else onClient(c.id) }
+                    .clickable(role = Role.Checkbox) { if (toggle) onToggle(c.id) else if (!c.erased) onClient(c.id) }
                     .semantics { selected = c.state.came }
                     .testTag(cardClientTag(c.id)),
                 verticalAlignment = Alignment.CenterVertically,

@@ -274,6 +274,30 @@ class TrainingCardsTest {
     }
 
     @Test
+    fun erasedChildStaysAsRowAndIsRemovable(): Unit = runBlocking {
+        // Шаг 3.9м, вопрос Дмитрия 26.10.2026: ребёнка отметили, удалили полностью и добавили другого — в счёте он оставался,
+        // а в составе его не было. Теперь он строка «Удалённый клиент» в конце, его отметку убирает «×».
+        val (_, kids, ids) = groupWith(at(tuesday, 15, 30))
+        val id = ids.single()
+        assertTrue(cards.toggleAttendance(id, kids[0]))
+        clients.erase(kids[0])
+        val zueva = client("Зуева", "Вера")
+        assertNotNull(cards.addGuest(id, zueva))
+
+        val c = card(id)
+        assertEquals(listOf(kids[1], zueva, kids[0]), c.clients.map { it.id })
+        val ghost = c.clients.last()
+        assertEquals("Удалённый клиент", ghost.name)
+        assertTrue(ghost.erased && ghost.guest)
+        assertEquals(ParticipationStatus.ATTENDED, ghost.state.status)
+        assertTrue(c.clients.dropLast(1).none { it.erased })
+
+        val removed = assertNotNull(cards.removeGuest(id, kids[0]))
+        assertEquals("Убрали: Удалённый клиент", removed.message)
+        assertEquals(listOf(kids[1], zueva), card(id).clients.map { it.id })
+    }
+
+    @Test
     fun guestDuringTrainingCameAndNewClient(): Unit = runBlocking {
         // Идёт с 15:30: гость сразу «пришёл»; «Новый клиент» заводится по фамилии и имени.
         val (_, _, ids) = groupWith(at(tuesday, 15, 30))

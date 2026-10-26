@@ -262,6 +262,9 @@ object TrainingCardFormat {
     /** «Убрать: Белов А.» — подпись значка в строке. */
     fun removeGuest(name: String): String = "Убрать: $name"
 
+    /** Строка клиента, удалённого полностью (5.9): в прошедшей тренировке он остаётся для зарплаты без имени. */
+    const val ERASED_CLIENT = "Удалённый клиент"
+
     /** «Новый клиент…», с набранным — «Новый клиент: Белов…». */
     fun newClient(query: String): String = if (query.isBlank()) "Новый клиент…" else "Новый клиент: ${query.trim()}…"
 
