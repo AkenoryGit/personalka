@@ -26,6 +26,7 @@ import com.akenory.personalka.data.db.entity.SptCaseEntity
 import com.akenory.personalka.data.db.entity.TierSchemeVersionEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.db.entity.VacationNoticeEntity
 import com.akenory.personalka.data.db.entity.WaitEntryEntity
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.model.CoachCategory
@@ -33,8 +34,8 @@ import com.akenory.personalka.domain.model.ConductedBy
 import com.akenory.personalka.domain.model.ConsentSource
 import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
-import com.akenory.personalka.domain.model.PayUnit
 import com.akenory.personalka.domain.model.PaySchemeKind
+import com.akenory.personalka.domain.model.PayUnit
 import com.akenory.personalka.domain.model.RecordSource
 import com.akenory.personalka.domain.model.RelationKind
 import com.akenory.personalka.domain.model.ResultKind
@@ -312,6 +313,9 @@ object Samples {
 
     fun settlement(colleagueId: String, amount: Long, month: YearMonth = YearMonth(2026, 10)) =
         ColleagueSettlementEntity(id = id(), sync = sync(), month = month, colleagueId = colleagueId, amount = amount)
+
+    fun vacationNotice(clientId: String, from: LocalDate, to: LocalDate) =
+        VacationNoticeEntity(id = id(), sync = sync(), vacationFrom = from, vacationTo = to, clientId = clientId, dates = listOf(LocalDate.fromEpochDays(from.toEpochDays() + 1)))
 
     fun monthRecord(month: YearMonth) =
         MonthRecordEntity(id = id(), sync = sync(), month = month, planAmount = 12_000_000L, advanceActual = 1_354_650L)

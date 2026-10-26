@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
+import com.akenory.personalka.data.calendar.NoticeRow
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.money.SptWaiting
@@ -58,14 +59,15 @@ import com.akenory.personalka.data.training.TrainingCard
 import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CabinetLinkFormat
-import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.SptFormat
+import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.home.HomeRules
@@ -84,8 +86,8 @@ import com.akenory.personalka.ui.calendar.EntryRow
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SecondaryButton
-import com.akenory.personalka.ui.salary.TwoPartBar
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.salary.TwoPartBar
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
@@ -156,7 +158,8 @@ data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
  * с шага 2.4б — освободившееся время листа ожидания ([waiting]), с шага 2.10а — [sync]: сервер подключён — вместо
  * копии «Изменения не отправлены больше суток»; с шага 2.13а — отозванные согласия ([consents] —
  * `CabinetRepository.due`); с шага 3.7а — СПТ, ждущие покупки ([spt] — `SptRepository.waiting`); с шага 3.9 — аванс
- * ([advance] — `SalaryRepository.advance`): с дня аванса, пока сумма не введена. [backup] `null` — раздела копии нет
+ * ([advance] — `SalaryRepository.advance`): с дня аванса, пока сумма не введена; с шага 3.12 — кого предупредить
+ * об отпуске ([notices] — `CalendarSettingsRepository.notices`). [backup] `null` — раздела копии нет
  * (тесты). Их число —
  * счётчик дел на значке «Главной».
  */
@@ -171,6 +174,7 @@ fun homeTodos(
     consents: List<ConsentDue> = emptyList(),
     spt: List<SptWaiting> = emptyList(),
     advance: AdvanceState? = null,
+    notices: List<NoticeRow> = emptyList(),
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -184,6 +188,10 @@ fun homeTodos(
                 trainingId = groups.first().id,
             ),
         )
+    }
+    if (notices.isNotEmpty()) {
+        // Кого предупредить об отпуске (5.16, шаг 3.12): нажатие — список с «Предупредил» у каждого.
+        add(HomeTodo(TodoKind.VACATION_NOTICE, CalendarSettingsFormat.NOTICE_TODO, HomeFormat.names(notices.map { it.title }), count = notices.size))
     }
     if (noDiary.isNotEmpty()) {
         add(
@@ -253,6 +261,7 @@ fun homeTodos(
  * @param money карточка «Деньги»; `null` — её нет (ещё не прочитана или тесты без зарплаты).
  * @param onSalary нажатие на «Деньги» и «Настроить зарплату» — раздел «Зарплата».
  * @param onAdvance пункт «Введите сумму аванса» — «Зарплата» → «Выплаты» с окном аванса.
+ * @param notices пункт «Предупредить об отпуске» — окно со списком ([VacationNoticePanel]) здесь же.
  */
 @Composable
 fun HomeScreen(
@@ -275,8 +284,10 @@ fun HomeScreen(
     money: HomeMoney? = null,
     onSalary: () -> Unit = {},
     onAdvance: () -> Unit = onSalary,
+    notices: List<NoticeRow> = emptyList(),
 ) {
     val wide = LocalWide.current
+    var noticesOpen by rememberSaveable { mutableStateOf(false) }
     val scroll = rememberScrollState()
     val dayScroll = rememberScrollState()
     var showPast by rememberSaveable { mutableStateOf(false) }
@@ -299,6 +310,7 @@ fun HomeScreen(
         when {
             todo.kind == TodoKind.NOT_BOOKED || todo.kind == TodoKind.FREED_TIME -> onNoBooking()
             todo.kind == TodoKind.ADVANCE -> onAdvance()
+            todo.kind == TodoKind.VACATION_NOTICE -> noticesOpen = true
             client != null && todo.kind == TodoKind.SPT_PURCHASE -> onClientInfo(client)
             client != null -> onClient(client)
             id == null -> onBackup()
@@ -339,6 +351,7 @@ fun HomeScreen(
         onCopy = { id -> scope.launch { if (calendar.copy(id)) messages.show(COPIED) } },
         onDiary = onDiary,
     ) {
+      Box(Modifier.fillMaxSize()) {
         if (wide) {
             Row(Modifier.fillMaxSize()) {
                 Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(dayScroll)) {
@@ -376,6 +389,20 @@ fun HomeScreen(
                 }
             }
         }
+        if (noticesOpen && notices.isNotEmpty()) {
+            VacationNoticePanel(
+                notices = notices,
+                onDone = { row ->
+                    scope.launch {
+                        calendar.settings.notified(row.id, done = true)
+                        messages.showUndo(CalendarSettingsFormat.noticeDone(row.title)) { scope.launch { calendar.settings.notified(row.id, done = false) } }
+                    }
+                },
+                onCopied = { messages.show(CalendarSettingsFormat.NOTICE_COPIED) },
+                onClose = { noticesOpen = false },
+            )
+        }
+      }
     }
 }
 
@@ -580,6 +607,7 @@ private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.CONSENT_REVOKED -> PIcons.Delete
     TodoKind.SPT_PURCHASE -> PIcons.ShoppingBag
     TodoKind.ADVANCE -> PIcons.Payments
+    TodoKind.VACATION_NOTICE -> PIcons.Call
     else -> PIcons.Info
 }
 

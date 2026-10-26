@@ -6,6 +6,7 @@ import androidx.room3.Upsert
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.SeriesClientEntity
 import com.akenory.personalka.data.db.entity.SeriesEntity
+import com.akenory.personalka.data.db.entity.VacationNoticeEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDate
 
@@ -93,4 +94,17 @@ interface ScheduleDao {
 
     @Query("DELETE FROM series_client WHERE clientId = :clientId")
     suspend fun eraseSeriesClientsOf(clientId: String)
+
+    @Upsert
+    suspend fun upsertVacationNotice(item: VacationNoticeEntity)
+
+    @Query("SELECT * FROM vacation_notice WHERE id = :id")
+    suspend fun vacationNotice(id: String): VacationNoticeEntity?
+
+    /** Строки «Предупредить об отпуске», которые ещё нужны: не предупреждён и отпуск не кончился до [today]. */
+    @Query(
+        "SELECT * FROM vacation_notice WHERE deletedAt IS NULL AND notifiedAt IS NULL AND vacationTo >= :today " +
+            "ORDER BY vacationFrom, createdAt, id",
+    )
+    fun observeOpenVacationNotices(today: LocalDate): Flow<List<VacationNoticeEntity>>
 }

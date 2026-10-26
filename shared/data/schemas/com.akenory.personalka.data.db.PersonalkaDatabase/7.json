@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 7,
-    "identityHash": "034719895e3f9a7752a0e0f7df59f1d5",
+    "identityHash": "a75eb63a6b216beda15b7e4d36bf00a6",
     "entities": [
       {
         "tableName": "coach",
@@ -1309,6 +1309,93 @@
         ]
       },
       {
+        "tableName": "vacation_notice",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `vacationFrom` TEXT NOT NULL, `vacationTo` TEXT NOT NULL, `clientId` TEXT NOT NULL, `dates` TEXT NOT NULL, `notifiedAt` INTEGER, `coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vacationFrom",
+            "columnName": "vacationFrom",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vacationTo",
+            "columnName": "vacationTo",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientId",
+            "columnName": "clientId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dates",
+            "columnName": "dates",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notifiedAt",
+            "columnName": "notifiedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.coachId",
+            "columnName": "coachId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_vacation_notice_vacationTo",
+            "unique": false,
+            "columnNames": [
+              "vacationTo"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_vacation_notice_vacationTo` ON `${TABLE_NAME}` (`vacationTo`)"
+          }
+        ]
+      },
+      {
         "tableName": "client",
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `lastName` TEXT NOT NULL, `firstName` TEXT NOT NULL, `middleName` TEXT, `birthDate` TEXT, `isAdult` INTEGER NOT NULL, `sex` TEXT, `contactName` TEXT, `contactPhone` TEXT, `mediaUrl` TEXT, `privateNote` TEXT, `name1c` TEXT, `cabinetEnabled` INTEGER NOT NULL, `consentAt` INTEGER, `consentSource` TEXT, `followupContactedAt` INTEGER, `followupPausedUntil` TEXT, `followupPauseNote` TEXT, `pendingPlan` TEXT, `status` TEXT NOT NULL, `source` TEXT NOT NULL, `coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
         "fields": [
@@ -2589,7 +2676,7 @@
       },
       {
         "tableName": "month_record",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `month` TEXT NOT NULL, `planAmount` INTEGER, `advanceActual` INTEGER, `closed` INTEGER NOT NULL, `dutiesCheckedMin` INTEGER, `coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `month` TEXT NOT NULL, `planAmount` INTEGER, `advanceActual` INTEGER, `closed` INTEGER NOT NULL, `coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -2618,11 +2705,6 @@
             "columnName": "closed",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "dutiesCheckedMin",
-            "columnName": "dutiesCheckedMin",
-            "affinity": "INTEGER"
           },
           {
             "fieldPath": "sync.coachId",
@@ -2975,7 +3057,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '034719895e3f9a7752a0e0f7df59f1d5')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a75eb63a6b216beda15b7e4d36bf00a6')"
     ]
   }
 }

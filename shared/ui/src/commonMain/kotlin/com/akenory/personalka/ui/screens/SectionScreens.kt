@@ -33,9 +33,9 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.account.AccountRepository
-import com.akenory.personalka.ui.settings.SyncTools
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
+import com.akenory.personalka.data.calendar.NoticeRow
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
@@ -62,10 +62,11 @@ import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reconcile.ReconcileScreen
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
-import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.salary.SalaryScreen
+import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
+import com.akenory.personalka.ui.settings.SyncTools
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.ShellState
@@ -125,6 +126,7 @@ fun SectionScreen(
     sync: SyncTools? = null,
     home: List<CalendarTraining> = emptyList(),
     todos: List<HomeTodo> = emptyList(),
+    notices: List<NoticeRow> = emptyList(),
     homeCard: String? = null,
     onHomeCard: (String?) -> Unit = {},
     calendarDay: LocalDate? = null,
@@ -202,6 +204,7 @@ fun SectionScreen(
                 onAdvanceAsk(true)
                 shell.selectRoot(Section.SALARY)
             },
+            notices = notices,
         )
         }
         Section.CALENDAR -> CalendarScreen(
