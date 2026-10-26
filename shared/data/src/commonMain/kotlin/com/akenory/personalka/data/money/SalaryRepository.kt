@@ -16,6 +16,8 @@ import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.money.AdvanceState
+import com.akenory.personalka.domain.money.DutyCheck
+import com.akenory.personalka.domain.money.DutyCheckRules
 import com.akenory.personalka.domain.money.MonthInput
 import com.akenory.personalka.domain.money.OwnerScheme
 import com.akenory.personalka.domain.money.OwnerSchemes
@@ -55,6 +57,7 @@ import kotlinx.datetime.yearMonth
  * в порядке внесения, имена типов, мест и коллег — по id. [input] — вход расчёта (для периода, 3.7в);
  * [trainings] — тренировки месяца по id, [whom] — за кого тренировка: клиенты или название группы (день графика).
  * [groups] — названия групп по id, [colleagueSchemes] — схема выплат коллеги в этом месяце (вкладка «Коллеги», 3.8).
+ * [duties] — сверка дежурств месяца (раздел «Сверки», 5.14).
  */
 data class SalaryMonthData(
     val view: SalaryMonth,
@@ -67,6 +70,7 @@ data class SalaryMonthData(
     val whom: Map<String, String> = emptyMap(),
     val groups: Map<String, String> = emptyMap(),
     val colleagueSchemes: Map<String, PaySchemeKind> = emptyMap(),
+    val duties: DutyCheck = DutyCheck(emptyList(), null, canCheck = false),
 )
 
 /** «Период» (5.12, 3.7в): расчёт [view] и месяцы, которые он задевает, — для имён, доплат и тренировок. */
@@ -247,6 +251,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
             colleagueSchemes = m.colleagueSchemes.mapNotNull { (id, list) ->
                 Versions.activeIn(list, month) { it.validFrom }?.let { id to it.kind }
             }.toMap(),
+            duties = DutyCheckRules.build(input, view.pay, today, records[month]?.dutiesCheckedMin),
         )
     }
 
@@ -269,6 +274,9 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     /** «Месяц сверен» (5.12): [closed] — закрыть месяц, правки его тренировок спросят подтверждение (4.1). */
     suspend fun setClosed(month: YearMonth, closed: Boolean) = updateRecord(month) { it.copy(closed = closed) }
+
+    /** «Дежурства сверены» (5.14): [minutes] — часы проведённых дежурств, на которых сверили; `null` — снять. */
+    suspend fun setDutiesChecked(month: YearMonth, minutes: Int?) = updateRecord(month) { it.copy(dutiesCheckedMin = minutes) }
 
     private suspend fun updateRecord(month: YearMonth, change: (MonthRecordEntity) -> MonthRecordEntity) {
         val coach = coaches.currentCoach() ?: return

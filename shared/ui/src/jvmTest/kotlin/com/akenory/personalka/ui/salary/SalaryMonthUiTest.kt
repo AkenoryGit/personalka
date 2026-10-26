@@ -7,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsSelected
@@ -21,7 +20,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -151,16 +149,12 @@ class SalaryMonthUiTest {
         onNodeWithTag(SALARY_CHART_TAG).performScrollTo().assertExists()
         onNode(hasContentDescription(SalaryFormat.chartDescription(rub(1840), LocalDate(2026, 10, 20), rub(2760), null))).assertExists()
 
-        onNodeWithTag(SALARY_CLOSE_TAG).performScrollTo().performClick()
+        // Кнопки «Месяц сверен» здесь нет — она в «Сверках» (3.9а); у сверенного видна только отметка.
+        onNodeWithText(SalaryFormat.CLOSE_MONTH).assertDoesNotExist()
+        runBlocking { settings.months.setClosed(october, true) }
         awaitNode(hasTestTag(SALARY_CLOSED_TAG))
-        onNodeWithText(SalaryFormat.closedNote(october)).assertExists()
-        assertEquals(true, runBlocking { db.moneyDao().monthRecord(october) }?.closed)
-
-        // Сообщение «Октябрь сверен» ещё стоит внизу поверх кнопки — нажатие действием, а не касанием.
-        onNodeWithTag(SALARY_CLOSE_TAG).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
-        waitUntil(timeoutMillis = 5_000) { runBlocking { db.moneyDao().monthRecord(october) }?.closed == false }
-        awaitNode(hasText(SalaryFormat.closeNote(october)))
-        assertEquals(false, runBlocking { db.moneyDao().monthRecord(october) }?.closed)
+        onNodeWithText(SalaryFormat.closedNote(october)).performScrollTo().assertExists()
+        onNodeWithText(SalaryFormat.CLOSED_WHERE).assertExists()
     }
 
     @Test

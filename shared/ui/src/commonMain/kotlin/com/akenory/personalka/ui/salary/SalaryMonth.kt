@@ -117,7 +117,6 @@ internal const val SALARY_ADVANCE_TAG = "salary-advance"
 internal const val ADVANCE_FIELD_TAG = "advance-field"
 internal const val SALARY_TOTAL_TAG = "salary-total"
 internal const val SALARY_CHART_TAG = "salary-chart"
-internal const val SALARY_CLOSE_TAG = "salary-close"
 internal const val SALARY_CLOSED_TAG = "salary-closed"
 internal fun salaryTabTag(tab: SalaryTab) = "salary-tab-${tab.name}"
 
@@ -245,12 +244,6 @@ internal fun SalaryMonthScreen(
                         },
                         onPlan = { planOpen = true },
                         onAdjust = { adjusting = it },
-                        onClosed = { closed ->
-                            scope.launch {
-                                repo.setClosed(month, closed)
-                                messages.show(if (closed) SalaryFormat.closedMessage(month) else SalaryFormat.REOPENED)
-                            }
-                        },
                     )
                     SalaryTab.PAYOUTS -> PayoutsTab(loaded, today, onAdvance = { advanceOpen = true })
                     SalaryTab.COLLEAGUES -> ColleaguesTab(
@@ -499,14 +492,13 @@ private fun MonthTab(
     onPeriod: () -> Unit,
     onPlan: () -> Unit,
     onAdjust: (String) -> Unit,
-    onClosed: (Boolean) -> Unit,
 ) {
     val view = data.view
     EarnedCard(view, onPlan)
     view.tiers?.let { TierCard(it, view.period, data) }
     ChartCard(data, day, onDay, onPeriod)
     BreakdownCard(data, onAdjust)
-    if (view.canClose) CloseMonth(view, onClosed)
+    if (view.closed) ClosedMark(view)
 }
 
 /**
@@ -618,26 +610,19 @@ private fun LineLegend(color: Color, text: String, dashed: Boolean = false) {
 }
 
 /**
- * «Месяц сверен» (5.12, 4.1): кнопка и подсказка под ней; у сверенного — отметка «Сверен» и «Снять сверку».
- * Одна кнопка — бюджет экрана 10.7.
+ * Отметка «Сверен» под разбивкой (5.12, 4.1). Сверяют и снимают сверку в «Ещё → Сверки» (5.14, шаг 3.9а): здесь
+ * только видно, что правки месяца спросят подтверждение.
  */
 @Composable
-private fun CloseMonth(view: SalaryMonth, onClosed: (Boolean) -> Unit) {
+private fun ClosedMark(view: SalaryMonth) {
     val colors = PersonalkaTheme.colors
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-        if (view.closed) {
-            Row(Modifier.testTag(SALARY_CLOSED_TAG), verticalAlignment = Alignment.CenterVertically) {
-                Icon(PIcons.CheckCircle, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
-                Text(SalaryFormat.MONTH_CLOSED, Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.titleMedium, color = colors.text)
-            }
-            Muted(SalaryFormat.closedNote(view.month))
-            TextButton(onClick = { onClosed(false) }, modifier = Modifier.heightIn(min = Dimens.button).testTag(SALARY_CLOSE_TAG)) {
-                Text(SalaryFormat.REOPEN_MONTH, style = MaterialTheme.typography.labelLarge, color = colors.text)
-            }
-        } else {
-            OutlineButton(SalaryFormat.CLOSE_MONTH, { onClosed(true) }, Modifier.fillMaxWidth().testTag(SALARY_CLOSE_TAG), icon = PIcons.CheckCircle)
-            Muted(SalaryFormat.closeNote(view.month))
+        Row(Modifier.testTag(SALARY_CLOSED_TAG), verticalAlignment = Alignment.CenterVertically) {
+            Icon(PIcons.CheckCircle, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
+            Text(SalaryFormat.MONTH_CLOSED, Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.titleMedium, color = colors.text)
         }
+        Muted(SalaryFormat.closedNote(view.month))
+        Muted(SalaryFormat.CLOSED_WHERE)
     }
 }
 

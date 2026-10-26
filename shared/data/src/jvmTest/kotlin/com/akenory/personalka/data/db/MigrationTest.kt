@@ -211,8 +211,39 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion6() {
-        assertEquals(6, PersonalkaDatabase.VERSION)
-        assertTrue((1..5).all { schemaFile(it).exists() }, "Схемы версий 1–5 хранятся: по ним строятся переходы")
+    fun version6KeepsMonthAndGetsDutyCheck(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v6", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.8–3.9: октябрь сверен, план задан.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 6)
+                raw.exec(
+                    "INSERT INTO month_record (id, month, planAmount, advanceActual, closed, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('m1', '2026-10', 21000000, NULL, 1, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val money = db.moneyDao()
+                val record = money.monthRecord(YearMonth(2026, 10))!!
+                assertEquals(21000000L to true, record.planAmount to record.closed, "План и «Месяц сверен» не тронуты")
+                assertNull(record.dutiesCheckedMin, "Дежурства прежних месяцев не сверены")
+                money.upsertMonthRecord(record.copy(dutiesCheckedMin = 1440))
+                assertEquals(1440, money.monthRecord(YearMonth(2026, 10))!!.dutiesCheckedMin)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion7() {
+        assertEquals(7, PersonalkaDatabase.VERSION)
+        assertTrue((1..6).all { schemaFile(it).exists() }, "Схемы версий 1–6 хранятся: по ним строятся переходы")
     }
 }

@@ -59,6 +59,7 @@ import com.akenory.personalka.ui.home.HomeMoney
 import com.akenory.personalka.ui.home.HomeScreen
 import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.reconcile.ReconcileScreen
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.settings.BackupTools
@@ -239,6 +240,7 @@ fun SectionScreen(
             when {
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
+                route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }
         }
@@ -256,7 +258,8 @@ enum class MoreItem(
     // У «Групп» с шага 1.8 свой экран (ui/groups), заготовка не показывается.
     GROUPS("groups", "Группы", PIcons.Groups, "Группы", "Состав с датами."),
     SLOTS("slots", "Свободные слоты", PIcons.EventAvailable, "Здесь будут свободные окна", "Поиск окон за период — шаг 4.3."),
-    RECONCILE("reconcile", "Сверка с 1С", PIcons.FactCheck, "Здесь будет сверка с 1С", "Отчёт клуба против календаря — шаги 4.1 и 4.2."),
+    // «Сверки» (5.14, шаг 3.9а) — свой экран (ui/reconcile): месяц зарплаты, дежурства, с шага 4.2 — отчёт 1С.
+    RECONCILE("reconcile", "Сверки", PIcons.FactCheck, "Сверки", "Месяц зарплаты, дежурства, отчёт 1С."),
     // У «Настроек» с шага 1.6 свой экран (ui/settings), заготовка не показывается.
     SETTINGS("settings", "Настройки", PIcons.Settings, "Настройки", "Профиль, места и типы, календарь."),
     // «Клуб» — только администратору (ТЗ 5.1). Администратор бывает только с сервером (этап 2),
