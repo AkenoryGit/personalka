@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.domain.format.ReconcileFormat
+import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.components.MessageState
@@ -142,5 +143,55 @@ class Report1cUiTest {
         files.sent.value = SharedFile("photo.pdf", "%PDF-1.4 пусто".encodeToByteArray())
         waitUntil(timeoutMillis = 5_000) { messages.current?.text == ReconcileFormat.NOT_A_REPORT }
         assertNull(files.sent.value, "Присланный файл забран")
+    }
+
+    @Test
+    fun mappingsCanBeChanged() = runComposeUiTest {
+        // Шаг 4.2г: указанные при загрузке услуга и имя открываются из карточки и меняются; неверная пара убирается.
+        client("kira", "Ганиева", "Кира")
+        client("kira2", "Ганеева", "Кира")
+        val repo = settings.report1c
+        val places = runBlocking { settings.places.first() }.filter { !it.archived }
+        val type = runBlocking { settings.types.first() }.first { !it.archived && it.kind != TrainingKind.DUTY }
+        runBlocking {
+            repo.saveService("Сплит. ББ", type.id, places[0].id)
+            repo.saveAlias("Ганеева Кира Олеговна", "kira")
+        }
+        show(Files(SharedFile(name, pdf)))
+        awaitNode(hasTestTag(REPORT1C_MAPPINGS_TAG))
+        onNodeWithTag(REPORT1C_MAPPINGS_TAG).assertTextContains(ReconcileFormat.mappingsNote(1, 1))
+        onNodeWithTag(REPORT1C_MAPPINGS_TAG).press()
+
+        // Услуга: другое место.
+        awaitNode(hasTestTag(report1cServiceTag("Сплит. ББ")))
+        onNodeWithTag(report1cServiceTag("Сплит. ББ")).press()
+        awaitNode(hasText(ReconcileFormat.SERVICE_EDIT))
+        onNodeWithTag(report1cPlaceTag(places[1].id)).performClick()
+        onNodeWithText(ReconcileFormat.SAVE).performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.report1cDao().services() }.single().locationId == places[1].id }
+        waitUntil(timeoutMillis = 5_000) { messages.current?.text == ReconcileFormat.MAPPING_SAVED }
+
+        // Имя: была «Ганиева Кира» — на самом деле «Ганеева Кира».
+        awaitNode(hasTestTag(report1cAliasTag("ганеева кира")))
+        onNodeWithTag(report1cAliasTag("ганеева кира")).assertTextContains(ReconcileFormat.aliasNote("Ганиева Кира"))
+        onNodeWithTag(report1cAliasTag("ганеева кира")).assertTextContains("Ганеева Кира Олеговна")
+        onNodeWithTag(report1cAliasTag("ганеева кира")).press()
+        awaitNode(hasTestTag(report1cClientTag("kira2")))
+        onNodeWithText(ReconcileFormat.CURRENT).assertExists()
+        onNodeWithTag(report1cClientTag("kira2")).press()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.report1cDao().aliases() }.single().clientId == "kira2" }
+
+        // «Нет такого клиента» — пара убрана, в списке осталась услуга.
+        awaitNode(hasTestTag(report1cAliasTag("ганеева кира")))
+        onNodeWithTag(report1cAliasTag("ганеева кира")).press()
+        awaitNode(hasTestTag(REPORT1C_SKIP_TAG))
+        onNodeWithTag(REPORT1C_SKIP_TAG).press()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.report1cDao().aliases() }.isEmpty() }
+        awaitNode(hasTestTag(report1cServiceTag("Сплит. ББ")))
+        onNodeWithTag(report1cAliasTag("ганеева кира")).assertDoesNotExist()
+        onNodeWithText(ReconcileFormat.DONE).performClick()
+        waitForIdle()
+        onNodeWithTag(PANEL_TAG).assertDoesNotExist()
+        onNodeWithTag(REPORT1C_MAPPINGS_TAG).assertTextContains(ReconcileFormat.mappingsNote(1, 0))
     }
 }

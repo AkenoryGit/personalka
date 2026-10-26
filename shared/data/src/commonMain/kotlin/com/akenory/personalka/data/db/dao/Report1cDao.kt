@@ -21,11 +21,18 @@ interface Report1cDao {
     @Query("SELECT * FROM service_mapping_1c WHERE deletedAt IS NULL ORDER BY updatedAt, id")
     suspend fun services(): List<ServiceMapping1cEntity>
 
+    /** Те же услуги для списка «Услуги и имена из 1С» (шаг 4.2г). */
+    @Query("SELECT * FROM service_mapping_1c WHERE deletedAt IS NULL ORDER BY updatedAt, id")
+    fun observeServices(): Flow<List<ServiceMapping1cEntity>>
+
     @Upsert
     suspend fun upsertAlias(item: ClientAlias1cEntity)
 
     @Query("SELECT * FROM client_alias_1c WHERE deletedAt IS NULL ORDER BY updatedAt, id")
     suspend fun aliases(): List<ClientAlias1cEntity>
+
+    @Query("SELECT * FROM client_alias_1c WHERE deletedAt IS NULL ORDER BY updatedAt, id")
+    fun observeAliases(): Flow<List<ClientAlias1cEntity>>
 
     @Upsert
     suspend fun upsertReconciliation(item: ReconciliationEntity)

@@ -97,6 +97,7 @@ internal fun ReconcileScreen(
     val clipboard = LocalClipboardManager.current
     val colors = PersonalkaTheme.colors
     val load = remember(settings, messages, scope) { Report1cLoad(settings.report1c, messages, scope, onOpen) }
+    val mappings = remember(settings, messages, scope) { Report1cMappings(settings.report1c, messages, scope) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -150,10 +151,11 @@ internal fun ReconcileScreen(
                         },
                     )
                 }
-                if (loaded.view.canClose) Report1cCard(settings.report1c, month, files, load::start, onOpen)
+                if (loaded.view.canClose) Report1cCard(settings.report1c, month, files, load::start, onOpen, mappings::show)
             }
         }
         Report1cSteps(load, settings, today)
+        Report1cMappingsPanel(mappings, settings.report1c, settings, today)
     }
 }
 

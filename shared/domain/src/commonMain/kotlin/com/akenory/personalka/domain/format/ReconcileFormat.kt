@@ -126,6 +126,33 @@ object ReconcileFormat {
     /** Сводка истории: «Совпало 200 · Расхождений 3», где расхождения — ещё не решённые. */
     fun summary(matched: Int, open: Int): String = "Совпало $matched${DOT}Расхождений $open"
 
+    // --- Услуги и имена из 1С (шаг 4.2г) ---
+
+    const val MAPPINGS_TITLE = "Услуги и имена из 1С"
+    const val SERVICES = "Услуги"
+    const val NAMES = "Имена"
+    const val SERVICE_EDIT = "Услуга из 1С"
+    const val NAME_EDIT = "Имя из 1С"
+    const val SAVE = "Сохранить"
+    const val DONE = "Готово"
+    const val CURRENT = "выбрано сейчас"
+    const val MAPPING_SAVED = "Сохранено — загрузите отчёт ещё раз, и сверка пересчитается"
+    const val ALIAS_DELETED = "Связь убрана — при следующей загрузке имя сверится заново"
+    const val MAPPINGS_NOTE = "Нажмите, чтобы поменять. Имена, которые совпали с клиентом сами, здесь не показываются."
+    const val ALIAS_EDIT_NOTE = "«Нет такого клиента» уберёт связь — строки этого имени уйдут в «Только в 1С» или спросятся снова"
+
+    /** Под строкой в карточке: «6 услуг · 2 имени». */
+    fun mappingsNote(services: Int, names: Int): String = listOfNotNull(
+        services.takeIf { it > 0 }?.let { RuText.count(it, "услуга", "услуги", "услуг") },
+        names.takeIf { it > 0 }?.let { RuText.count(it, "имя", "имени", "имён") },
+    ).joinToString(DOT)
+
+    /** Пара имени: «это Ганиева Кира». */
+    fun aliasNote(client: String): String = "это $client"
+
+    /** Ключ имени 1С («ганеева кира») — с заглавных: «Ганеева Кира». */
+    fun name1c(key: String): String = key.split(' ').joinToString(" ") { w -> w.split('-').joinToString("-") { it.replaceFirstChar(Char::uppercaseChar) } }
+
     // --- Расхождения (шаг 4.2в) ---
 
     const val ADD = "Добавить в приложение"

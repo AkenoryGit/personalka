@@ -16,6 +16,7 @@ import com.akenory.personalka.data.money.reconcileSpt
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ClientName
+import com.akenory.personalka.domain.format.ReconcileFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.ReconcileItemKind
@@ -55,6 +56,20 @@ data class Name1cQuestion(val name1c: String, val match: NameMatch)
  * приложение». Пусто и там, и там — можно сверять сразу.
  */
 data class Report1cQuestions(val services: List<String>, val names: List<Name1cQuestion>) {
+    val none: Boolean get() = services.isEmpty() && names.isEmpty()
+}
+
+/** Услуга из 1С для списка «Услуги и имена из 1С» (шаг 4.2г): [app] — «ПТ · ББ». */
+data class Service1cView(val name1c: String, val typeId: String, val locationId: String, val app: String)
+
+/**
+ * Подтверждённая пара «имя из 1С — клиент» (шаг 4.2г): [name1c] — как имя написано в 1С (у клиента запомнено «ФИО как в
+ * 1С») или фамилия и имя с заглавных, [client] — «Ганиева Кира» из приложения.
+ */
+data class Alias1cView(val nameKey: String, val name1c: String, val clientId: String, val client: String)
+
+/** Всё, что тренер указал для 1С; пусто — строки «Услуги и имена из 1С» нет (10.7). */
+data class Mappings1c(val services: List<Service1cView>, val names: List<Alias1cView>) {
     val none: Boolean get() = services.isEmpty() && names.isEmpty()
 }
 
@@ -133,6 +148,48 @@ class Report1cRepository(private val db: PersonalkaDatabase, private val clock: 
             )
             clients.client(clientId)?.takeIf { it.name1c == null }?.let { clients.upsertClient(it.copy(name1c = name1c, sync = it.sync.touched(now))) }
         }
+    }
+
+    /**
+     * Сохранённые услуги и имена (шаг 4.2г): одно название или имя дважды (два телефона) — последняя запись; пары с
+     * удалёнными клиентами не показываются — они и так не действуют.
+     */
+    fun mappings(): Flow<Mappings1c> = combine(
+        dao.observeServices(),
+        dao.observeAliases(),
+        clients.observeAllClients(),
+        reference.observeTrainingTypes(),
+        reference.observeLocations(),
+    ) { services, aliases, people, types, places ->
+        val byId = people.associateBy { it.id }
+        val typeOf = types.associateBy { it.id }
+        val placeOf = places.associateBy { it.id }
+        Mappings1c(
+            services = services.associateBy { it.name1c }.values.sortedBy { it.name1c }.map {
+                Service1cView(it.name1c, it.typeId, it.locationId, listOfNotNull(typeOf[it.typeId]?.shortName, placeOf[it.locationId]?.shortName).joinToString(" · "))
+            },
+            names = aliases.associateBy { it.nameKey }.values.mapNotNull { a ->
+                val c = byId[a.clientId]?.takeIf { it.sync.deletedAt == null } ?: return@mapNotNull null
+                val name1c = c.name1c?.takeIf { Names1c.key(it) == a.nameKey } ?: ReconcileFormat.name1c(a.nameKey)
+                Alias1cView(a.nameKey, name1c, c.id, ClientName(c.lastName, c.firstName).short)
+            }.sortedBy { it.nameKey },
+        )
+    }
+
+    /** Кого предложить вместо клиента пары [alias]: он сам первым, затем похожие и тёзки, как в вопросе «Кто это». */
+    suspend fun aliasChoices(alias: Alias1cView): List<ClientEntity> {
+        val others = when (val m = Reconcile1cRules.match(alias.name1c, emptyMap(), clientList())) {
+            is NameMatch.Found -> listOf(m.clientId)
+            is NameMatch.Ask -> m.clientIds
+            NameMatch.Unknown -> emptyList()
+        }
+        return clients((listOf(alias.clientId) + others).distinct())
+    }
+
+    /** «Нет такого клиента» у сохранённой пары: пара удаляется, при следующей загрузке имя сверяется заново. */
+    suspend fun deleteAlias(nameKey: String) {
+        val now = clock()
+        dao.aliases().filter { it.nameKey == nameKey }.forEach { dao.upsertAlias(it.copy(sync = it.sync.deleted(now))) }
     }
 
     /**

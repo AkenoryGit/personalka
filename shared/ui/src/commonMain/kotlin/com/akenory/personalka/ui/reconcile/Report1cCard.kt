@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.reconcile.Name1cQuestion
@@ -64,6 +65,7 @@ internal const val REPORT1C_LOAD_TAG = "reconcile-1c-load"
 internal const val REPORT1C_NEXT_TAG = "reconcile-1c-next"
 internal const val REPORT1C_SKIP_TAG = "reconcile-1c-skip"
 internal const val REPORT1C_MINE_TAG = "reconcile-1c-mine"
+internal const val REPORT1C_MAPPINGS_TAG = "reconcile-1c-mappings"
 internal fun report1cRowTag(id: String) = "reconcile-1c-row-$id"
 internal fun report1cTypeTag(id: String) = "reconcile-1c-type-$id"
 internal fun report1cPlaceTag(id: String) = "reconcile-1c-place-$id"
@@ -168,10 +170,10 @@ internal class Report1cLoad(
 
 /**
  * Карточка «Отчёт 1С» (5.14): сверки, чей период задевает месяц, — период, выгрузка и «Совпало · Расхождений» (нажатие —
- * экран сверки), и кнопка «Загрузить отчёт». Без выбора файлов и без сверок карточки нет (10.7).
+ * экран сверки), «Услуги и имена из 1С» (шаг 4.2г, если что-то уже указано) и кнопка «Загрузить отчёт». Без выбора файлов и без сверок карточки нет (10.7).
  */
 @Composable
-internal fun Report1cCard(repo: Report1cRepository, month: YearMonth, files: PlatformFiles?, onLoad: (SharedFile) -> Unit, onOpen: (String) -> Unit = {}) {
+internal fun Report1cCard(repo: Report1cRepository, month: YearMonth, files: PlatformFiles?, onLoad: (SharedFile) -> Unit, onOpen: (String) -> Unit = {}, onMappings: (() -> Unit)? = null) {
     val history by remember(repo) { repo.history() }.collectAsState(initial = emptyList())
     val open by remember(repo) { repo.unresolved() }.collectAsState(initial = emptyList())
     val rows = history.filter { it.periodFrom <= month.lastDay && it.periodTo >= month.firstDay }
@@ -184,6 +186,16 @@ internal fun Report1cCard(repo: Report1cRepository, month: YearMonth, files: Pla
                 amount = "",
                 modifier = Modifier.clickable { onOpen(rec.id) }.heightIn(min = Dimens.touch).testTag(report1cRowTag(rec.id)),
                 note = ReconcileFormat.summary(rec.matched, open.count { it.reconciliationId == rec.id }),
+            )
+        }
+        val mappings by remember(repo) { repo.mappings() }.collectAsState(initial = null)
+        mappings?.takeIf { !it.none && onMappings != null }?.let { m ->
+            MoneyRow(
+                title = ReconcileFormat.MAPPINGS_TITLE,
+                amount = "",
+                modifier = Modifier.testTag(REPORT1C_MAPPINGS_TAG),
+                note = ReconcileFormat.mappingsNote(m.services.size, m.names.size),
+                onClick = onMappings,
             )
         }
         if (files != null) {
@@ -218,34 +230,51 @@ internal fun Report1cSteps(load: Report1cLoad, settings: SettingsRepository, tod
         val name = load.services[step]
         val types by remember(settings) { settings.types }.collectAsState(initial = emptyList())
         val places by remember(settings) { settings.places }.collectAsState(initial = emptyList())
-        ServiceStep(title, name, report, types, places, load)
+        val service = report.rows.first { it.serviceName == name }.service
+        ServiceStep(
+            title, name, types, places,
+            typeHint = { ts -> Reconcile1cRules.guessType(name, service, ts, { it.kind }, { it.name })?.id },
+            placeHint = { ps -> Reconcile1cRules.guessPlace(name, ps, { it.shortName }, { it.name })?.id },
+            primary = ReconcileFormat.NEXT,
+            onSave = { typeId, placeId -> load.saveService(name, typeId, placeId) },
+            onCancel = load::cancel,
+        )
     } else {
-        NameStep(title, load.names[step - load.services.size], load, today)
+        val question = load.names[step - load.services.size]
+        val ids = (question.match as? NameMatch.Ask)?.clientIds.orEmpty()
+        val candidates by produceState(emptyList(), ids) { value = load.clients(ids) }
+        NameStep(
+            title, question.name1c, candidates, today,
+            note = ReconcileFormat.NAME_NOTE,
+            onChoose = { load.chooseClient(question.name1c, it) },
+            onCancel = load::cancel,
+        )
     }
 }
 
+/**
+ * Окно «Укажите тип и место для «…»» (8.3): при загрузке — с подсказкой по названию услуги, в «Услугах и именах из 1С»
+ * (шаг 4.2г) — с тем, что выбрано сейчас.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ServiceStep(
+internal fun ServiceStep(
     title: String,
     name: String,
-    report: Report1c,
     allTypes: List<TrainingTypeEntity>,
     allPlaces: List<LocationEntity>,
-    load: Report1cLoad,
+    typeHint: (List<TrainingTypeEntity>) -> String?,
+    placeHint: (List<LocationEntity>) -> String?,
+    primary: String,
+    onSave: (typeId: String, placeId: String) -> Unit,
+    onCancel: () -> Unit,
 ) {
     val types = allTypes.filter { !it.archived && it.kind != TrainingKind.DUTY }
     val places = allPlaces.filter { !it.archived }
     if (types.isEmpty() || places.isEmpty()) return
-    val service = report.rows.first { it.serviceName == name }.service
-    // Подсказка — по названию услуги; тренер меняет, если не так.
-    var typeId by remember(name, types.size) {
-        mutableStateOf(Reconcile1cRules.guessType(name, service, types, { it.kind }, { it.name })?.id)
-    }
-    var placeId by remember(name, places.size) {
-        mutableStateOf(Reconcile1cRules.guessPlace(name, places, { it.shortName }, { it.name })?.id)
-    }
-    Panel(title, onDismiss = load::cancel) {
+    var typeId by remember(name, types.size) { mutableStateOf(typeHint(types)) }
+    var placeId by remember(name, places.size) { mutableStateOf(placeHint(places)) }
+    Panel(title, onDismiss = onCancel) {
         Text(ReconcileFormat.serviceQuestion(name), style = MaterialTheme.typography.titleMedium, color = PersonalkaTheme.colors.text)
         SectionLabel(ReconcileFormat.TYPE)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
@@ -262,38 +291,51 @@ private fun ServiceStep(
         Muted(ReconcileFormat.SERVICE_NOTE)
         Column(Modifier.testTag(REPORT1C_NEXT_TAG)) {
             PanelActions(
-                ReconcileFormat.NEXT,
-                { load.saveService(name, typeId ?: return@PanelActions, placeId ?: return@PanelActions) },
+                primary,
+                { onSave(typeId ?: return@PanelActions, placeId ?: return@PanelActions) },
                 ReconcileFormat.CANCEL,
-                load::cancel,
+                onCancel,
                 primaryEnabled = typeId != null && placeId != null,
             )
         }
     }
 }
 
+/**
+ * Окно «Кто это — «…»?» (8.3): клиенты на выбор с датой рождения и телефоном и «Нет такого клиента» (`null`). [current] —
+ * клиент сохранённой пары, он помечен «выбрано сейчас» (шаг 4.2г).
+ */
 @Composable
-private fun NameStep(title: String, question: Name1cQuestion, load: Report1cLoad, today: LocalDate) {
-    val ids = (question.match as? NameMatch.Ask)?.clientIds.orEmpty()
-    val candidates by produceState(emptyList(), ids) { value = load.clients(ids) }
+internal fun NameStep(
+    title: String,
+    name1c: String,
+    candidates: List<ClientEntity>,
+    today: LocalDate,
+    note: String,
+    onChoose: (String?) -> Unit,
+    onCancel: () -> Unit,
+    current: String? = null,
+) {
     val colors = PersonalkaTheme.colors
-    Panel(title, onDismiss = load::cancel) {
-        Text(ReconcileFormat.nameQuestion(question.name1c), style = MaterialTheme.typography.titleMedium, color = colors.text)
+    Panel(title, onDismiss = onCancel) {
+        Text(ReconcileFormat.nameQuestion(name1c), style = MaterialTheme.typography.titleMedium, color = colors.text)
         candidates.forEach { c ->
             TextButton(
-                onClick = { load.chooseClient(question.name1c, c.id) },
+                onClick = { onChoose(c.id) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(report1cClientTag(c.id)),
             ) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
                     Text(ClientName(c.lastName, c.firstName, c.middleName).full, style = MaterialTheme.typography.bodyLarge, color = colors.text)
-                    ClientFormat.similarDetail(c.birthDate, c.contactPhone, c.status == ClientStatus.ARCHIVED, today)
-                        ?.let { Muted(it) }
+                    listOfNotNull(
+                        ReconcileFormat.CURRENT.takeIf { c.id == current },
+                        ClientFormat.similarDetail(c.birthDate, c.contactPhone, c.status == ClientStatus.ARCHIVED, today),
+                    ).forEach { Muted(it) }
                 }
             }
         }
-        Muted(ReconcileFormat.NAME_NOTE)
+        Muted(note)
         TextButton(
-            onClick = { load.chooseClient(question.name1c, null) },
+            onClick = { onChoose(null) },
             modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(REPORT1C_SKIP_TAG),
         ) {
             Text(ReconcileFormat.NO_SUCH_CLIENT, style = MaterialTheme.typography.labelLarge, color = colors.text)
