@@ -277,8 +277,40 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion8() {
-        assertEquals(8, PersonalkaDatabase.VERSION)
-        assertTrue((1..7).all { schemaFile(it).exists() }, "Схемы версий 1–7 хранятся: по ним строятся переходы")
+    fun version8KeepsTypesAndGetsDutyColor(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v8", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.9в–3.9д: дежурство красится цветом места.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 8)
+                raw.exec(
+                    "INSERT INTO training_type (id, name, shortName, kind, shade, defaultDurationMin, maxClients, payUnit, countsTowardPt, " +
+                        "tierDependent, diaryPlan, diaryFact, diaryBehavior, splitFallbackTypeId, archived, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('t1', 'Дежурство', 'Деж', 'DUTY', 1, 240, 0, 'PER_HOUR', 0, 0, 0, 0, 0, NULL, 0, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val reference = db.referenceDao()
+                val duty = reference.trainingType("t1")!!
+                assertEquals("Дежурство" to 240, duty.name to duty.defaultDurationMin, "Тип не тронут")
+                assertNull(duty.dutyColor, "У прежнего дежурства своего цвета нет — цвет места")
+                reference.upsertTrainingType(duty.copy(dutyColor = "slate"))
+                assertEquals("slate", reference.trainingType("t1")!!.dutyColor)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion9() {
+        assertEquals(9, PersonalkaDatabase.VERSION)
+        assertTrue((1..8).all { schemaFile(it).exists() }, "Схемы версий 1–8 хранятся: по ним строятся переходы")
     }
 }

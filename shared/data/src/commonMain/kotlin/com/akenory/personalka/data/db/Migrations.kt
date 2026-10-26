@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -163,6 +163,13 @@ internal object Migration6To7 : Migration(6, 7) {
 internal object Migration7To8 : Migration(7, 8) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `month_record` ADD COLUMN `dutiesCheckedMin` INTEGER")
+    }
+}
+
+/** Версия 9 (шаг 3.9е): свой цвет дежурства у типа (ТЗ 3.3, 5.3); у прежних типов его нет — цвет места. */
+internal object Migration8To9 : Migration(8, 9) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `training_type` ADD COLUMN `dutyColor` TEXT")
     }
 }
 

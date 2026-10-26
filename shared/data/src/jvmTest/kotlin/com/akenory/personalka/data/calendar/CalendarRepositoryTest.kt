@@ -245,6 +245,12 @@ class CalendarRepositoryTest {
         assertEquals("ББ 11:00–15:00 — дежурство", duty.text)
         assertEquals("Дежурство · ББ", duty.label)
         assertEquals("blue", duty.color, "Дежурство — цвета своего места")
+        // Шаг 3.9е: свой цвет дежурства — у всех дежурств, в любом месте; снятый — снова цвет места.
+        val dutyType = db.referenceDao().trainingType(typeId("Деж"))!!
+        db.referenceDao().upsertTrainingType(dutyType.copy(dutyColor = "slate"))
+        assertEquals("slate", zones().first().color)
+        db.referenceDao().upsertTrainingType(dutyType)
+        assertEquals("blue", zones().first().color)
         // Место зоны — для фильтра мест в шапке (шаг 1.12).
         assertEquals(placeId("ББ"), duty.placeId)
         assertNull(duty.coverFor)

@@ -457,8 +457,9 @@ private fun PlacesAndTypes(
                         onClick = { shell.open(SettingsRoute.type(type.id)) },
                         modifier = Modifier.testTag(typeRowTag(type.name)),
                         leading = if (type.kind == TrainingKind.DUTY) {
-                            // Дежурство в календаре — заливка цвета места, оттенка у него нет.
-                            { ShadeDot(Shade(dutyFill(firstPlace, colors), firstPlace.tone(colors.isDark).stripe)) }
+                            // Дежурство в календаре — заливка своего цвета или цвета места, оттенка у него нет.
+                            val duty = type.dutyColor?.let { PlaceColor.of(it) } ?: firstPlace
+                            { ShadeDot(Shade(dutyFill(duty, colors), duty.tone(colors.isDark).stripe)) }
                         } else {
                             { ShadeDot(firstPlace.shade(colors.isDark, type.shade)) }
                         },

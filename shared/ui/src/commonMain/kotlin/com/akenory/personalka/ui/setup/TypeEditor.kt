@@ -2,12 +2,14 @@ package com.akenory.personalka.ui.setup
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -63,6 +66,7 @@ import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.theme.dutyFill
 
 const val TYPE_NAME_TAG = "type-name"
 const val TYPE_SHORT_TAG = "type-short"
@@ -178,6 +182,23 @@ fun TypeEditor(
 
                 SectionLabel("Так будет в календаре")
                 BlockPreview(draft, places)
+            }
+
+            if (draft.kind == TrainingKind.DUTY) {
+                // Шаг 3.9е: своя заливка дежурства, чтобы оно не сливалось с тренировками того же места.
+                SectionLabel(DUTY_COLOR)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    ChoiceChip(
+                        text = DUTY_COLOR_PLACE,
+                        selected = draft.dutyColor == null,
+                        onClick = { draft = draft.copy(dutyColor = null) },
+                        modifier = Modifier.testTag(DUTY_COLOR_PLACE_TAG),
+                    )
+                }
+                Spacer(Modifier.height(Dimens.space2))
+                ColorPalette(selected = draft.dutyColor.orEmpty(), onSelect = { draft = draft.copy(dutyColor = it) })
+                SectionLabel("Так будет в календаре")
+                DutyPreview(draft, places)
             }
 
             SectionLabel("Длительность, мин")
@@ -349,6 +370,45 @@ private fun BlockPreview(draft: TypeDraft, places: List<PlaceDraft>) {
 
 private const val MAX_SAMPLES = 3
 
+internal const val DUTY_COLOR = "Цвет дежурства"
+internal const val DUTY_COLOR_PLACE = "Как у помещения"
+internal const val DUTY_COLOR_PLACE_TAG = "duty-color-place"
+
+/**
+ * Образцы дежурства (шаг 3.9е): заливка его цвета на фоне сетки с полосой и поверх — блок ПТ этого места, чтобы было
+ * видно, сливаются ли они. Без своего цвета заливка — цвета места.
+ */
+@Composable
+private fun DutyPreview(draft: TypeDraft, places: List<PlaceDraft>) {
+    val colors = PersonalkaTheme.colors
+    val shown = places.take(MAX_SAMPLES).ifEmpty { listOf(null) }
+    SampleCard {
+        shown.forEach { place ->
+            val placeColor = PlaceColor.of(place?.color)
+            val duty = draft.dutyColor?.let { PlaceColor.of(it) } ?: placeColor
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(72.dp)
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .background(dutyFill(duty, colors)),
+            ) {
+                Box(Modifier.width(Dimens.zoneStrip).fillMaxHeight().background(duty.tone(colors.isDark).stripe))
+                Column(Modifier.weight(1f).padding(start = Dimens.space1, top = Dimens.space1, end = Dimens.space2)) {
+                    Text(
+                        text = listOfNotNull(draft.name.trim().ifEmpty { null }, place?.shortName).joinToString(" · "),
+                        modifier = Modifier.align(Alignment.End),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.text,
+                        maxLines = 1,
+                    )
+                    BlockSample(placeColor, ReferenceRules.SHADE_LIGHT, "Тренировка", listOfNotNull("12:00", "ПТ", place?.shortName).joinToString(" · "), Modifier.fillMaxWidth().padding(top = 2.dp).height(40.dp))
+                }
+            }
+        }
+    }
+}
+
 /** Тип в состоянии экрана — одной строкой: форма переживает пересоздание окна и выгрузку из памяти. */
 internal val TypeDraftSaver: Saver<TypeDraft, String> = Saver(save = { encodeType(it) }, restore = { decodeType(it) })
 
@@ -356,7 +416,7 @@ private const val FIELD = "\u001F"
 
 internal fun encodeType(t: TypeDraft): String = listOf(
     t.name, t.shortName, t.kind.name, t.shade, t.durationMin, t.maxClients ?: "", t.payUnit.name,
-    t.countsTowardPt, t.tierDependent, t.diaryPlan, t.diaryFact, t.diaryBehavior,
+    t.countsTowardPt, t.tierDependent, t.diaryPlan, t.diaryFact, t.diaryBehavior, t.dutyColor.orEmpty(),
 ).joinToString(FIELD)
 
 internal fun decodeType(s: String): TypeDraft {
@@ -374,5 +434,6 @@ internal fun decodeType(s: String): TypeDraft {
         diaryPlan = p[9].toBoolean(),
         diaryFact = p[10].toBoolean(),
         diaryBehavior = p[11].toBoolean(),
+        dutyColor = p.getOrNull(12)?.ifEmpty { null },
     )
 }

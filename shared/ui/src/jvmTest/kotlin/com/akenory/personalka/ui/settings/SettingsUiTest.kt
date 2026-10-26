@@ -10,10 +10,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onChildAt
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -27,6 +29,8 @@ import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
+import com.akenory.personalka.ui.setup.DUTY_COLOR
+import com.akenory.personalka.ui.setup.DUTY_COLOR_PLACE_TAG
 import com.akenory.personalka.ui.setup.TYPE_NAME_TAG
 import com.akenory.personalka.ui.setup.TYPE_SHORT_TAG
 import com.akenory.personalka.ui.setup.colorTag
@@ -87,6 +91,34 @@ class SettingsUiTest {
         awaitNode(hasText(s("Персональная · 60_мин · как ПТ")))
         onNodeWithTag(navTag(Section.HOME)).assertIsDisplayed()
         runBlocking { assertEquals(60, settings.types.first().single { it.name == "ПТ" }.defaultDurationMin) }
+    }
+
+    @Test
+    fun dutyOwnColor() = runComposeUiTest {
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), TestData.calendarOf(settings), clock = TestData.clock) } }
+        openPlacesAndTypes()
+        fun dutyColor() = runBlocking { settings.types.first().single { it.name == "Дежурство" }.dutyColor }
+
+        // Шаг 3.9е: по умолчанию — «Как у помещения», выбор цвета палитры запоминается у типа.
+        onNodeWithTag(typeRowTag("Дежурство")).performScrollTo().performClick()
+        onNodeWithText(DUTY_COLOR).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(DUTY_COLOR_PLACE_TAG).onChildAt(0).assertIsSelected()
+        onNodeWithTag(colorTag("slate")).performScrollTo().performClick()
+        onNodeWithText("Сохранить").performClick()
+        awaitNode(hasTestTag(typeRowTag("ПТ")))
+        assertEquals("slate", dutyColor())
+
+        // Вернуть цвет помещения.
+        onNodeWithTag(typeRowTag("Дежурство")).performScrollTo().performClick()
+        onNodeWithTag(colorTag("slate")).performScrollTo().assertIsSelected()
+        onNodeWithTag(DUTY_COLOR_PLACE_TAG).performScrollTo().performClick()
+        onNodeWithText("Сохранить").performClick()
+        awaitNode(hasTestTag(typeRowTag("ПТ")))
+        assertEquals(null, dutyColor())
+
+        // У ПТ выбора цвета нет: тренировки красятся цветом места.
+        onNodeWithTag(typeRowTag("ПТ")).performScrollTo().performClick()
+        onNodeWithText(DUTY_COLOR).assertDoesNotExist()
     }
 
     @Test

@@ -45,6 +45,8 @@ data class TypeDraft(
     val diaryPlan: Boolean,
     val diaryFact: Boolean,
     val diaryBehavior: Boolean,
+    /** Только дежурство: свой цвет в календаре (ключ палитры); `null` — цвет места (шаг 3.9е). */
+    val dutyColor: String? = null,
 ) {
     /**
      * Другой вид — длительность, клиенты, оплата, «как ПТ», ступени и дневник заполняются как у этого вида

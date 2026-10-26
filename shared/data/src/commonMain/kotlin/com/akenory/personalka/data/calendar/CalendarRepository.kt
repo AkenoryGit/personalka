@@ -352,7 +352,9 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                 val type = typeById[t.typeId]?.takeIf { it.kind == TrainingKind.DUTY } ?: return@mapNotNull null
                 if (t.status == TrainingStatus.CANCELLED) return@mapNotNull null
                 val place = placeById[t.locationId]
-                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), place?.color.orEmpty(), t.coverFor)
+                // Свой цвет дежурства (шаг 3.9е) — чтобы заливка не сливалась с тренировками того же места.
+                val color = type.dutyColor ?: place?.color.orEmpty()
+                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), color, t.coverFor)
             }
             val restrictions = blocks.map { it.toRestriction() }
             val own = blocks.filter { it.scope == Scope.COACH }.map { it.id }.toSet()

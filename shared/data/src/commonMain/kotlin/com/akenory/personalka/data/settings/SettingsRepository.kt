@@ -215,6 +215,7 @@ fun TrainingTypeEntity.draft(): TypeDraft = TypeDraft(
     diaryPlan = diaryPlan,
     diaryFact = diaryFact,
     diaryBehavior = diaryBehavior,
+    dutyColor = dutyColor,
 )
 
 /** Место из базы — в форму места. */
@@ -236,4 +237,5 @@ private fun TypeDraft.toEntity(id: String, sync: SyncFields, fallback: String?) 
     diaryFact = diaryFact,
     diaryBehavior = diaryBehavior,
     splitFallbackTypeId = fallback,
+    dutyColor = dutyColor?.takeIf { kind == TrainingKind.DUTY },
 )

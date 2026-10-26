@@ -59,6 +59,8 @@ data class TrainingTypeEntity(
     /** Только SPLIT: в какой тип превращается при одном клиенте. */
     val splitFallbackTypeId: String? = null,
     val archived: Boolean = false,
+    /** Только DUTY: свой цвет дежурства в календаре — ключ палитры, как у места; пусто — цвет места (шаг 3.9е). */
+    val dutyColor: String? = null,
 )
 
 /** Ставка тренера, версия с даты. Пустое место — для любого места (дежурство). */
