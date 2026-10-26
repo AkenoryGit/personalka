@@ -149,7 +149,7 @@ class SalaryMonthUiTest {
         onNodeWithTag(SALARY_CHART_TAG).performScrollTo().assertExists()
         onNode(hasContentDescription(SalaryFormat.chartDescription(rub(1840), LocalDate(2026, 10, 20), rub(2760), null))).assertExists()
 
-        // Кнопки «Месяц сверен» здесь нет — она в «Сверках» (3.9б); у сверенного видна только отметка.
+        // Кнопки «Месяц сверен» здесь нет — она в «Сверках» (3.9в); у сверенного видна только отметка.
         onNodeWithText(SalaryFormat.CLOSE_MONTH).assertDoesNotExist()
         runBlocking { settings.months.setClosed(october, true) }
         awaitNode(hasTestTag(SALARY_CLOSED_TAG))

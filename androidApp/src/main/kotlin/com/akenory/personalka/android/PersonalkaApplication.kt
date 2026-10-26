@@ -67,10 +67,10 @@ class PersonalkaApplication : Application() {
     }
 
     /**
-     * Синхронизация (шаг 2.10а): адрес сервера — из базы, токен — тот же, что у [account]. Обмен, пока процесс жив, —
+     * Синхронизация (шаг 2.10а): адрес сервера — из базы, токен и аккаунт — те же, что у [account]. Обмен, пока процесс жив, —
      * [syncRunner]; при закрытом приложении — [SyncJob].
      */
-    val sync: SyncRepository by lazy { androidSync(this, database, prefs) { settings.coach.first()?.serverUrl } }
+    val sync: SyncRepository by lazy { androidSync(this, database, prefs, owner = { account.account.value?.email }) { settings.coach.first()?.serverUrl } }
     val syncRunner: SyncRunner by lazy { SyncRunner(sync) }
 
     /** Ссылки кабинетов (шаг 2.13): тот же сервер и токен, что у [account]; токены ссылок — в Android Keystore. */

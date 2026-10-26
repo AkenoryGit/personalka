@@ -34,7 +34,8 @@ class SyncRepositoryTest {
         val db = inMemoryPersonalkaDatabase().also { opened += it }
         val prefs = MemoryPrefs()
         val tokens = MemoryTokens(token)
-        val sync = SyncRepository(db, SyncApi(server.client) { "https://trener.example.ru" }, tokens, prefs) { now }
+        var email: String? = EMAIL
+        val sync = SyncRepository(db, SyncApi(server.client) { "https://trener.example.ru" }, tokens, prefs, owner = { email }) { now }
         val clients get() = db.clientDao()
 
         suspend fun live() = db.clientDao().observeAllClients().first()
@@ -315,6 +316,58 @@ class SyncRepositoryTest {
     }
 
     @Test
+    fun otherAccountOnThePhoneDoesNotMixData(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        assertTrue(a.sync.connect())
+
+        // Выход и вход в другой аккаунт, у которого на сервере свой клиент.
+        val other = server.signedUp(OTHER, "пароль-другого")
+        server.serverCopy += OTHER
+        server.sessions += FakeServer.Session(200, other, "Телефон", "t-c")
+        val c = Phone("t-c").apply { email = OTHER }
+        c.clients.upsertClient(Samples.client("Чужая", "Запись"))
+        assertTrue(c.sync.connect())
+
+        a.tokens.write("t-c")
+        a.email = OTHER
+        a.clients.upsertClient(Samples.client("Новая", "Правка"))
+        val before = server.requests.size
+        assertFalse(a.sync.sync(), "В чужом аккаунте обмена нет")
+        assertEquals(before, server.requests.size)
+        assertEquals(SyncProblem.OTHER_ACCOUNT, a.sync.state.value.problem)
+        assertFalse(a.sync.disconnect(), "«Отключиться» не стирает чужие данные")
+        assertEquals(before, server.requests.size)
+        assertEquals(listOf("Ксения", "Правка"), a.live().map { it.firstName }.sorted(), "Данные телефона на месте, чужих нет")
+        assertEquals(1, server.liveRows(EMAIL, "client").size, "Первый аккаунт на сервере не тронут")
+        assertEquals(1, server.liveRows(OTHER, "client").size, "Во второй аккаунт ничего не ушло")
+
+        // Вернулись в свой аккаунт — обмен идёт дальше без нового подключения.
+        a.tokens.write("t-a")
+        a.email = EMAIL
+        assertTrue(a.sync.sync())
+        assertTrue(a.sync.state.value.connected)
+        assertEquals(2, server.liveRows(EMAIL, "client").size, "Правка, сделанная под чужим входом, ушла в свой аккаунт")
+        assertEquals(1, server.liveRows(OTHER, "client").size)
+    }
+
+    @Test
+    fun sameAccountAfterSignOutKeepsSyncing(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        assertTrue(a.sync.connect())
+        a.tokens.write(null)
+        a.email = null
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        assertFalse(a.sync.sync())
+        assertTrue(a.sync.state.value.connected, "Выход сервер не отключает")
+
+        a.tokens.write("t-a")
+        a.email = EMAIL.uppercase()
+        assertTrue(a.sync.sync(), "Вошли в тот же аккаунт — обмен идёт дальше")
+        assertEquals(1, server.liveRows(EMAIL, "client").size, "Правка без входа ушла")
+    }
+
+    @Test
     fun deviceIdIsMadeOnce() {
         val (a, _) = twoPhones()
         val id = a.sync.device
@@ -325,6 +378,7 @@ class SyncRepositoryTest {
 
     private companion object {
         const val EMAIL = "trener@example.ru"
+        const val OTHER = "drugoy@example.ru"
     }
     @Test
     fun checkServerTellsCoachDataFromClubData(): Unit = runBlocking {
