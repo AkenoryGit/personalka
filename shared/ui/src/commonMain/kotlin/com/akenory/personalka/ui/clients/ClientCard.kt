@@ -809,6 +809,7 @@ private fun InfoTab(
 ) {
     val colors = PersonalkaTheme.colors
     val uri = LocalUriHandler.current
+    val max = LocalMaxMessenger.current
     Column(Modifier.padding(horizontal = Dimens.space4).padding(top = Dimens.space4), verticalArrangement = Arrangement.spacedBy(Dimens.space3)) {
         val birth = client.birthDate
         val sex = client.sex
@@ -860,8 +861,19 @@ private fun InfoTab(
                     value = phone?.let { ClientFormat.phone(it) } ?: "Телефона нет",
                     action = if (phone != null) {
                         {
-                            IconButton(onClick = { runCatching { uri.openUri("tel:" + phone.filter { it.isDigit() || it == '+' }) } }) {
-                                Icon(PIcons.Call, contentDescription = "Позвонить", tint = colors.text)
+                            val dial = phone.filter { it.isDigit() || it == '+' }
+                            Row {
+                                if (max != null && max.installed()) {
+                                    IconButton(
+                                        onClick = { if (max.open(dial)) messages.show(MAX_COPIED) },
+                                        modifier = Modifier.testTag(MAX_TAG),
+                                    ) {
+                                        Icon(PIcons.Chat, contentDescription = "Написать в Макс", tint = colors.text)
+                                    }
+                                }
+                                IconButton(onClick = { runCatching { uri.openUri("tel:$dial") } }) {
+                                    Icon(PIcons.Call, contentDescription = "Позвонить", tint = colors.text)
+                                }
                             }
                         }
                     } else {

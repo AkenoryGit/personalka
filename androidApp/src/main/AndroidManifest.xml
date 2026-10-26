@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Голосовой ввод в дневнике (шаг 2.1): с Android 11 приложение видит службу распознавания речи
-         и её окно, только если назовёт их здесь. -->
+         и её окно, только если назовёт их здесь; так же — Макс (шаг 3.9ж). -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
@@ -19,6 +19,8 @@
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
+        <!-- «Написать в Макс» в карточке клиента (шаг 3.9ж): кнопка видна, только если Макс установлен. -->
+        <package android:name="ru.oneme.app" />
     </queries>
 
     <!-- Данные клиентов не уходят в облачную копию Google: копии — только свои, зашифрованные (ТЗ 7.6, 10.3).
