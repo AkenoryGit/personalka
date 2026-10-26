@@ -149,4 +149,54 @@ class Report1cRepositoryTest {
         val (_, third) = repo.check(r, "Отчет по тренировкам report-20261019T090000.pdf")
         assertEquals(LocalDateTime(2026, 10, 18, 11, 0), third.onlyInApp.last().visit!!.start)
     }
+
+    @Test
+    fun addAndFixInApp() = runBlocking {
+        val egor = client("Пестов", "Егор")
+        val vera = client("Чернова", "Вера")
+        repo.saveService(groupName, group, db1)
+        repo.saveService(ptName, pt, bb)
+        val groupAt = LocalDateTime(2026, 10, 10, 9, 0)
+        val g = visit(vera, groupAt, ParticipationStatus.ATTENDED, group, db1)
+        val wrong = visit(egor, LocalDateTime(2026, 10, 8, 9, 0), ParticipationStatus.ATTENDED, group, db1)
+        val extra = visit(vera, LocalDateTime(2026, 10, 12, 18, 0), ParticipationStatus.ATTENDED)
+        val service = visit(egor, LocalDateTime(2026, 10, 13, 18, 0), ParticipationStatus.ATTENDED, group, db1)
+        val r = report(
+            row(LocalDateTime(2026, 10, 8, 9, 0), "Пестов Егор", Status1c.CANCELLED, groupName),
+            row(groupAt, "Чернова Вера", service = groupName),
+            row(groupAt, "Пестов Егор", service = groupName),
+            row(LocalDateTime(2026, 10, 11, 10, 0), "Орехова Ева Игоревна"),
+            row(LocalDateTime(2026, 10, 13, 18, 0), "Пестов Егор"),
+        )
+        val (id, _) = repo.check(r, file)
+        val view = repo.view(id).first()
+        val byKind = view.groupBy { it.item.kind }
+        assertEquals(2, byKind.getValue(ReconcileItemKind.STATUS_DIFF).size)
+        assertEquals("Орехова Ева", byKind.getValue(ReconcileItemKind.UNKNOWN_CLIENT).single().name)
+        val onlyApp = byKind.getValue(ReconcileItemKind.ONLY_APP).single()
+        assertEquals("ПТ · ББ" to "ПТ", onlyApp.app to onlyApp.what)
+
+        // Егор был в группе 10.10 по 1С, а в приложении его нет — добавляется в ту же группу.
+        val egorInGroup = byKind.getValue(ReconcileItemKind.ONLY_1C).single()
+        assertTrue(repo.addFromReport(egorInGroup.item.id))
+        assertEquals(ParticipationStatus.ATTENDED, db.trainingDao().participationRow(g, egor)!!.status)
+        // Неизвестная Ева — новый клиент и новая тренировка, имя запомнено.
+        assertTrue(repo.addFromReport(byKind.getValue(ReconcileItemKind.UNKNOWN_CLIENT).single().item.id))
+        val eva = db.clientDao().observeAllClients().first().single { it.lastName == "Орехова" }
+        assertEquals("Орехова Ева Игоревна", eva.name1c)
+        val evaTraining = db.trainingDao().trainingsOfClient(eva.id).single()
+        assertEquals(LocalDateTime(2026, 10, 11, 10, 0) to TrainingStatus.DONE, evaTraining.start to evaTraining.status)
+
+        // «Исправить в приложении»: статус как в 1С, лишняя — отмена, услуга — тип и место из 1С.
+        byKind.getValue(ReconcileItemKind.STATUS_DIFF).forEach { assertTrue(repo.fixInApp(it.item.id)) }
+        assertTrue(repo.fixInApp(onlyApp.item.id))
+        assertEquals(ParticipationStatus.CANCELLED, db.trainingDao().participationRow(wrong, egor)!!.status)
+        assertEquals(ParticipationStatus.CANCELLED, db.trainingDao().participationRow(extra, vera)!!.status)
+        assertEquals(pt to bb, db.trainingDao().training(service)!!.let { it.typeId to it.locationId })
+        assertTrue(repo.unresolved().first().isEmpty())
+
+        // Повторная сверка того же отчёта — всё совпало.
+        val (_, again) = repo.check(r, file)
+        assertEquals(emptyList(), again.diffs)
+    }
 }

@@ -87,6 +87,7 @@ internal fun ReconcileScreen(
     onBack: (() -> Unit)?,
     shareText: ((String) -> Unit)? = null,
     files: PlatformFiles? = null,
+    onOpen: (String) -> Unit = {},
 ) {
     var monthText by rememberSaveable { mutableStateOf(today.yearMonth.toString()) }
     val month = YearMonth.parse(monthText)
@@ -95,7 +96,7 @@ internal fun ReconcileScreen(
     val data by remember(repo, month, today) { repo.month(month, today) }.collectAsState(initial = null)
     val clipboard = LocalClipboardManager.current
     val colors = PersonalkaTheme.colors
-    val load = remember(settings, messages, scope) { Report1cLoad(settings.report1c, messages, scope) {} }
+    val load = remember(settings, messages, scope) { Report1cLoad(settings.report1c, messages, scope, onOpen) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -149,7 +150,7 @@ internal fun ReconcileScreen(
                         },
                     )
                 }
-                if (loaded.view.canClose) Report1cCard(settings.report1c, month, files, load::start)
+                if (loaded.view.canClose) Report1cCard(settings.report1c, month, files, load::start, onOpen)
             }
         }
         Report1cSteps(load, settings, today)

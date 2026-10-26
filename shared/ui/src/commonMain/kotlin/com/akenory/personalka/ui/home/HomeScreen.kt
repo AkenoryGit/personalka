@@ -53,9 +53,11 @@ import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.NoticeRow
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
+import com.akenory.personalka.data.db.entity.ReconciliationItemEntity
 import com.akenory.personalka.data.money.SptWaiting
 import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.data.training.TrainingCard
+import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CabinetLinkFormat
@@ -65,6 +67,7 @@ import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.domain.format.MoneyFormat
+import com.akenory.personalka.domain.format.ReconcileFormat
 import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.SyncFormat
@@ -74,9 +77,11 @@ import com.akenory.personalka.domain.home.HomeRules
 import com.akenory.personalka.domain.home.HomeSlot
 import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.ReconcileResolution
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.money.AdvanceState
 import com.akenory.personalka.domain.money.SalaryMonth
+import com.akenory.personalka.domain.report1c.Reconcile1cRules
 import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.StatusRules
@@ -175,6 +180,7 @@ fun homeTodos(
     spt: List<SptWaiting> = emptyList(),
     advance: AdvanceState? = null,
     notices: List<NoticeRow> = emptyList(),
+    report1c: List<ReconciliationItemEntity> = emptyList(),
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -216,6 +222,12 @@ fun homeTodos(
     spt.firstOrNull()?.let { nearest ->
         // СПТ ждут покупки (4.9): ближайший срок и его клиент; нажатие — «Инфо» клиента с «Купил блок со скидкой».
         add(HomeTodo(TodoKind.SPT_PURCHASE, SptFormat.TODO, SptFormat.todoNote(nearest.case.windowUntil, nearest.name), count = spt.size, clientId = nearest.case.clientId))
+    }
+    // Расхождения с 1С (8.4, шаг 4.2в): открытые и «Написал администратору» старше 3 дней; нажатие — «Сверки».
+    val open1c = report1c.count { it.resolution == ReconcileResolution.OPEN }
+    val late1c = report1c.count { it.resolution == ReconcileResolution.ASKED_ADMIN && Reconcile1cRules.remind(it.resolvedAt, ClubTime.toMillis(now)) }
+    if (open1c + late1c > 0) {
+        add(HomeTodo(TodoKind.RECONCILE, ReconcileFormat.TODO_TITLE, ReconcileFormat.todoNote(open1c, late1c), count = open1c + late1c))
     }
     if (advance != null && advance.ask(now.date)) {
         // Аванс (4.11): нажатие — «Зарплата» → «Выплаты» с открытым окном суммы.
@@ -276,6 +288,7 @@ fun HomeScreen(
     onDay: (LocalDate) -> Unit,
     onBackup: () -> Unit,
     onNoBooking: () -> Unit = {},
+    onReconcile: () -> Unit = {},
     onEdit: (String) -> Unit,
     onClient: (String) -> Unit,
     onGroup: (String) -> Unit,
@@ -310,6 +323,7 @@ fun HomeScreen(
         when {
             todo.kind == TodoKind.NOT_BOOKED || todo.kind == TodoKind.FREED_TIME -> onNoBooking()
             todo.kind == TodoKind.ADVANCE -> onAdvance()
+            todo.kind == TodoKind.RECONCILE -> onReconcile()
             todo.kind == TodoKind.VACATION_NOTICE -> noticesOpen = true
             client != null && todo.kind == TodoKind.SPT_PURCHASE -> onClientInfo(client)
             client != null -> onClient(client)
@@ -608,6 +622,7 @@ private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.SPT_PURCHASE -> PIcons.ShoppingBag
     TodoKind.ADVANCE -> PIcons.Payments
     TodoKind.VACATION_NOTICE -> PIcons.Call
+    TodoKind.RECONCILE -> PIcons.FactCheck
     else -> PIcons.Info
 }
 

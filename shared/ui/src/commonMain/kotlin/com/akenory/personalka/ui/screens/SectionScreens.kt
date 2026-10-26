@@ -60,6 +60,8 @@ import com.akenory.personalka.ui.home.HomeScreen
 import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reconcile.ReconcileScreen
+import com.akenory.personalka.ui.reconcile.Report1cResultScreen
+import com.akenory.personalka.ui.reconcile.Report1cRoute
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.salary.SalaryScreen
@@ -183,6 +185,10 @@ fun SectionScreen(
                 clientList.filter = ClientFilter.NO_BOOKING
                 shell.selectRoot(Section.CLIENTS)
             },
+            onReconcile = {
+                shell.select(Section.MORE)
+                shell.reset(MoreItem.RECONCILE.route)
+            },
             onEdit = { id -> onForm(TrainingFormKey.edit(id)) },
             onClient = { id ->
                 onHomeCard(null)
@@ -243,7 +249,10 @@ fun SectionScreen(
             when {
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
-                route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText, backup?.files)
+                route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText, backup?.files) { id ->
+                    shell.open(Report1cRoute.of(id))
+                }
+                Report1cRoute.idOf(route) != null -> Report1cResultScreen(settings.report1c, Report1cRoute.idOf(route)!!, messages, scope, onBack, shareText)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }
         }

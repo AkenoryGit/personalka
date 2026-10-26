@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.reconcile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -166,11 +167,11 @@ internal class Report1cLoad(
 }
 
 /**
- * Карточка «Отчёт 1С» (5.14): сверки, чей период задевает месяц, — период, выгрузка и «Совпало · Расхождений», и кнопка
- * «Загрузить отчёт». Без выбора файлов и без сверок карточки нет (10.7).
+ * Карточка «Отчёт 1С» (5.14): сверки, чей период задевает месяц, — период, выгрузка и «Совпало · Расхождений» (нажатие —
+ * экран сверки), и кнопка «Загрузить отчёт». Без выбора файлов и без сверок карточки нет (10.7).
  */
 @Composable
-internal fun Report1cCard(repo: Report1cRepository, month: YearMonth, files: PlatformFiles?, onLoad: (SharedFile) -> Unit) {
+internal fun Report1cCard(repo: Report1cRepository, month: YearMonth, files: PlatformFiles?, onLoad: (SharedFile) -> Unit, onOpen: (String) -> Unit = {}) {
     val history by remember(repo) { repo.history() }.collectAsState(initial = emptyList())
     val open by remember(repo) { repo.unresolved() }.collectAsState(initial = emptyList())
     val rows = history.filter { it.periodFrom <= month.lastDay && it.periodTo >= month.firstDay }
@@ -181,7 +182,7 @@ internal fun Report1cCard(repo: Report1cRepository, month: YearMonth, files: Pla
             MoneyRow(
                 title = ReconcileFormat.period(rec.periodFrom, rec.periodTo, rec.generatedAt),
                 amount = "",
-                modifier = Modifier.testTag(report1cRowTag(rec.id)),
+                modifier = Modifier.clickable { onOpen(rec.id) }.heightIn(min = Dimens.touch).testTag(report1cRowTag(rec.id)),
                 note = ReconcileFormat.summary(rec.matched, open.count { it.reconciliationId == rec.id }),
             )
         }

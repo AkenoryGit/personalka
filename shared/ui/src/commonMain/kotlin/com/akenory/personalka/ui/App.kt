@@ -167,8 +167,12 @@ fun App(
         LaunchedEffect(cabinets, cabinetsOpen, syncState?.lastSync) {
             if (cabinetsOpen) cabinets?.repository?.refresh()
         }
-        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices) {
-            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices)
+        // Расхождения с 1С (8.4, шаг 4.2в): пункт «Нужно сделать».
+        val report1c by remember(settings, hasCoach) {
+            if (hasCoach == true) settings.report1c.unresolved() else flowOf(emptyList())
+        }.collectAsState(initial = emptyList())
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c)
         }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()
