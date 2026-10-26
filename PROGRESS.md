@@ -267,6 +267,7 @@
   - Второе окно с числом — потому что удаление массовое; «Отменить» в сообщении возвращает тренировки и серию.
   - Работает у ПТ, сплитов, групп и дежурств; раньше у групп и дежурств закончить серию было негде.
 - **Тесты:** `SeriesRulesTest.deleteFollowingEndsSeriesTheDayBefore`, `deleteFollowingOnlyFromFuture`; `TrainingCardsTest.deleteFollowingEndsSeriesAndKeepsPast` (прошедшая остаётся, продление не возвращает, «Отменить» возвращает все); `TrainingCardUiTest.deleteSeriesTrainingAndFollowing`.
+- **Сборки:** здесь тесты `shared:domain`, `shared:data`, `TrainingCardUiTest` — с зеркалом Maven Central (`-I`); в Actions зелёные сборки ветки `claude/project-thread-2b72c6` 269, 272, 275, 276, 277 (после двух перебазирований на свежий main; номер 3.9и заняли «Отмены на главной», шаг стал 3.9к) и 279 (`main`), APK 0.1.279. Добавлены тесты `PlanAnchorTest.deleteFollowingSendsCarriedPlanToPendingOnce` и `TrainingCardsTest.deleteFollowingWorksForGroupSeries`.
 - **Проверить на телефоне (Дмитрий)** — после установки APK из релиза «Последняя сборка». Лучше на тестовом клиенте, чтобы не трогать настоящее расписание:
   1. Создать тестовому клиенту тренировку с повтором (например, каждый пн и чт).
   2. Открыть его тренировку через неделю → «…» → «Удалить»: три кнопки — «Только эту — дата», «Эту и все следующие», «Не удалять».
