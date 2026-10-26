@@ -56,32 +56,34 @@ import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.RelativeRow
 import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.clients.adultOn
+import com.akenory.personalka.data.clients.avatar
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.money.SptCaseView
 import com.akenory.personalka.data.training.SaveResult
 import com.akenory.personalka.data.training.TrainingRepository
+import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
-import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.ResultFormat
-import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.SptCaseStatus
-import com.akenory.personalka.domain.money.SptRules
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.money.SptRules
 import com.akenory.personalka.domain.series.ClientScheduleRules
 import com.akenory.personalka.domain.series.ScheduleSeries
 import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.ui.components.ChoiceChip
+import com.akenory.personalka.ui.components.EditableAvatar
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
@@ -485,12 +487,16 @@ private fun CardHeader(row: ClientRow, today: LocalDate, noBooking: Boolean, wai
     val colors = PersonalkaTheme.colors
     val client = row.client
     Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space4)) {
-        Text(
-            "${client.lastName} ${client.firstName}",
-            modifier = Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineSmall,
-            color = colors.text,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            EditableAvatar(client.avatar(today), client.id, 64.dp)
+            Spacer(Modifier.width(Dimens.space4))
+            Text(
+                "${client.lastName} ${client.firstName}",
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.text,
+            )
+        }
         Spacer(Modifier.height(Dimens.space2))
         val line = listOfNotNull(client.birthDate?.let { ClientFormat.age(it, today) }, ClientFormat.schedule(row.schedule))
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalAlignment = Alignment.CenterVertically) {

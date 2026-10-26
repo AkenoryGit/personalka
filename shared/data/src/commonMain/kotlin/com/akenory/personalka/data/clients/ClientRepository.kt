@@ -23,7 +23,10 @@ import com.akenory.personalka.data.series.toSeries
 import com.akenory.personalka.data.series.write
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
+import com.akenory.personalka.domain.client.AvatarLook
+import com.akenory.personalka.domain.client.AvatarRules
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.RelationRole
 import com.akenory.personalka.domain.client.Relations
@@ -43,6 +46,7 @@ import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.DiaryRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -101,6 +105,9 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     /** СПТ клиента в «Инфо» (5.9) и «Купил блок со скидкой» (4.9, шаг 3.7а). */
     val spt = SptRepository(db, clock)
+
+    /** id всех клиентов, и в архиве: фото удалённых и объединённых стираются (шаг 3.13). */
+    val ids: Flow<Set<String>> = clients.observeAllClients().map { list -> list.mapTo(HashSet()) { it.id } }
 
     /** Все клиенты, и в архиве, со строкой списка. [now] — «сейчас» клуба: от него ближайшая тренировка. */
     fun rows(now: LocalDateTime): Flow<List<ClientRow>> = combine(
@@ -518,6 +525,10 @@ fun ClientEntity.draft(): ClientDraft = ClientDraft(
 
 /** Взрослый ли сегодня: с датой рождения — по возрасту, иначе как отмечено (3.5). */
 fun ClientEntity.adultOn(today: LocalDate): Boolean = ClientRules.isAdult(birthDate, isAdult, today)
+
+/** Аватарка без фото (шаг 3.13): инициалы, цвет, возраст и пол клиента. */
+fun ClientEntity.avatar(today: LocalDate): AvatarLook =
+    AvatarRules.client(ClientName(lastName, firstName, middleName), sex, birthDate, isAdult, today)
 
 /** Новый клиент из черновика — из формы клиента и из «Добавить на раз» (5.4). */
 internal fun newClientEntity(coachId: String, now: Long, draft: ClientDraft): ClientEntity {

@@ -16,6 +16,7 @@ import com.akenory.personalka.BuildConfig
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.clients.CabinetTools
+import com.akenory.personalka.ui.components.ProvideAvatarPhotos
 import com.akenory.personalka.ui.reminders.AppLink
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SyncTools
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
         val sync = SyncTools(app.sync, app.syncRunner::now)
         val cabinets = CabinetTools(app.cabinets, ::share, ::copy, app.sync) { url, onClose, modifier -> AndroidBrowser(url, onClose, modifier) }
         val voice = if (AndroidVoice.availableOn(this)) AndroidVoice(this) else null
+        val photos = AndroidPhotos(this)
         val notifications = AndroidNotifications(this, app.prefs, app::remindersChanged)
         // Пересоздание окна при смене темы не открывает уведомление второй раз.
         if (savedInstanceState == null) link = linkOf(intent)
@@ -48,25 +50,27 @@ class MainActivity : ComponentActivity() {
                 app.settings.coach.first { it != null }
                 notifications.askOnce()
             }
-            App(
-                versionName = BuildConfig.VERSION_NAME,
-                settings = app.settings,
-                clients = app.clients,
-                groups = app.groups,
-                calendar = app.calendar,
-                prefs = app.prefs,
-                backup = backup,
-                account = app.account,
-                sync = sync,
-                cabinets = cabinets,
-                shareText = ::share,
-                voice = voice,
-                reminders = app.reminders,
-                notifications = notifications,
-                link = link,
-                onLink = { link = null },
-                backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
-            )
+            ProvideAvatarPhotos(photos, app.clients.ids, app.cabinets.consents) {
+                App(
+                    versionName = BuildConfig.VERSION_NAME,
+                    settings = app.settings,
+                    clients = app.clients,
+                    groups = app.groups,
+                    calendar = app.calendar,
+                    prefs = app.prefs,
+                    backup = backup,
+                    account = app.account,
+                    sync = sync,
+                    cabinets = cabinets,
+                    shareText = ::share,
+                    voice = voice,
+                    reminders = app.reminders,
+                    notifications = notifications,
+                    link = link,
+                    onLink = { link = null },
+                    backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
+                )
+            }
         }
     }
 

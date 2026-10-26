@@ -1,6 +1,8 @@
 package com.akenory.personalka.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import com.akenory.personalka.domain.client.AvatarRules
+import com.akenory.personalka.ui.components.avatarCap
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -89,6 +91,12 @@ class ThemeContrastTest {
         val blue = PlaceColor.BLUE.light
         assertEquals(blue.shades[0], blue.block(0), "оттенок меньше 1 — первый")
         assertEquals(blue.shades[3], blue.block(9), "оттенок больше 4 — четвёртый")
+    }
+
+    @Test
+    fun avatarInitialsReadOnEveryCap() {
+        // Белые инициалы на шапочке аватарки (шаг 3.13) — в любом из её цветов.
+        for (tone in 0 until AvatarRules.TONES) assertAtLeast(4.5, Color.White, avatarCap(tone), "аватарка, цвет $tone")
     }
 
     private fun assertAtLeast(min: Double, fg: Color, bg: Color, what: String) {

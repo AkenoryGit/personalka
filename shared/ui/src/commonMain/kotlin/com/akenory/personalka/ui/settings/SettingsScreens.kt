@@ -52,10 +52,11 @@ import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.settings.draft
 import com.akenory.personalka.domain.account.Feature
+import com.akenory.personalka.domain.client.AvatarRules
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.CabinetLinkFormat
-import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.RateFormat
 import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.format.TypeFormat
@@ -63,6 +64,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.ui.components.BottomAction
+import com.akenory.personalka.ui.components.EditableAvatar
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
@@ -379,6 +381,13 @@ private fun ProfileScreen(settings: SettingsRepository, open: Set<Feature>, toda
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4),
             verticalArrangement = Arrangement.spacedBy(Dimens.space4),
         ) {
+            // Аватарка тренера (шаг 3.13): фото или пловец со свистком и инициалами из полей ниже.
+            EditableAvatar(
+                AvatarRules.coach(last, first, middle),
+                AvatarRules.COACH_KEY,
+                72.dp,
+                Modifier.align(Alignment.CenterHorizontally).padding(top = Dimens.space2),
+            )
             Field("Фамилия", last, { last = it }, keyboardOptions = words)
             Field("Имя", first, { first = it }, keyboardOptions = words)
             Field("Отчество · если есть", middle, { middle = it }, keyboardOptions = words.copy(imeAction = ImeAction.Done))

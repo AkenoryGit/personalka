@@ -54,9 +54,11 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.clients.ClientRow
+import com.akenory.personalka.data.clients.avatar
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.ui.components.Avatar
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.SecondaryButton
@@ -195,6 +197,7 @@ fun ClientList(
                         selected = row.client.id == selectedId,
                         onClick = { onOpen(row.client.id) },
                         modifier = Modifier.testTag(clientRowTag("${row.client.lastName} ${row.client.firstName}")),
+                        avatar = { Avatar(row.client.avatar(today), row.client.id, 40.dp) },
                         trailing = if (next != null) {
                             {
                                 Text(
@@ -369,6 +372,7 @@ internal fun PersonRow(
     label: String? = null,
     leading: ImageVector? = null,
     trailing: (@Composable () -> Unit)? = null,
+    avatar: (@Composable () -> Unit)? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val bar = colors.primary
@@ -386,6 +390,10 @@ internal fun PersonRow(
         if (leading != null) {
             Icon(leading, contentDescription = null, tint = if (muted) colors.textMuted else colors.text)
             Spacer(Modifier.width(Dimens.space4))
+        }
+        if (avatar != null) {
+            avatar()
+            Spacer(Modifier.width(Dimens.space3))
         }
         Column(Modifier.weight(1f)) {
             if (label != null) Text(label, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
