@@ -2,6 +2,7 @@ package com.akenory.personalka.ui.clients
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -118,6 +119,37 @@ class ClientsUiTest {
         awaitNode(hasTestTag(clientRowTag("Ковалёв Артём")))
         onNodeWithTag(clientRowTag("Ковалёв Артём")).assertTextContains(s("10_лет · без расписания"))
         assertEquals("+79199224108", all().single().client.contactPhone)
+    }
+
+    /** Макс у телефона «Для связи» (шаг 3.9ж): есть Макс — кнопка рядом со звонком, номер уходит в Макс. */
+    @Test
+    fun maxButtonNextToCall() = runComposeUiTest {
+        runBlocking { clients.create(ClientDraft("Ковалёв", "Артём", contactPhone = "+79199224108")) }
+        var installed by mutableStateOf(false)
+        val opened = mutableListOf<String>()
+        val max = object : MaxMessenger {
+            override fun installed() = installed
+            override fun open(phone: String): Boolean = opened.add(phone)
+        }
+        setContent {
+            CompositionLocalProvider(LocalMaxMessenger provides max) {
+                Box(Modifier.size(folded, height)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), TestData.calendarOf(settings), clock = TestData.clock) }
+            }
+        }
+        awaitNode(hasTestTag(navTag(Section.CLIENTS)))
+        onNodeWithTag(navTag(Section.CLIENTS)).performClick()
+        openCard("Ковалёв Артём")
+
+        // Макса на телефоне нет — только звонок.
+        onNodeWithContentDescription("Позвонить").assertIsDisplayed()
+        onNodeWithTag(MAX_TAG).assertDoesNotExist()
+
+        // Макс поставили — кнопка появилась.
+        installed = true
+        awaitNode(hasTestTag(MAX_TAG))
+        onNodeWithTag(MAX_TAG).performClick()
+        assertEquals(listOf("+79199224108"), opened)
+        awaitNode(hasText(MAX_COPIED))
     }
 
     @Test
