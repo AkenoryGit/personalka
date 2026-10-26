@@ -134,6 +134,11 @@ class HomeMoneyUiTest {
                 val p = if (status == TrainingStatus.DONE) ParticipationStatus.ATTENDED else ParticipationStatus.EXPECTED
                 db.trainingDao().upsertParticipation(ParticipationEntity("dp$i", SyncFields.new(coach, now), "d$i", "client", p))
             }
+            // Отменены: сегодня в 12:00 и 10-го — в колонках «1 отмена» и «2 отмены», деньги не меняются.
+            listOf(LocalDateTime(2026, 10, 20, 12, 0), LocalDateTime(2026, 10, 10, 9, 0)).forEachIndexed { i, start ->
+                db.trainingDao().upsertTraining(TrainingEntity("c$i", SyncFields.new(coach, now), pt, bb, start, 50, status = TrainingStatus.CANCELLED))
+                db.trainingDao().upsertParticipation(ParticipationEntity("cp$i", SyncFields.new(coach, now), "c$i", "client", ParticipationStatus.CANCELLED))
+            }
         }
         openHome()
         awaitIn(MONEY_TODAY_TAG, MoneyFormat.rub(rub(920)))
@@ -142,6 +147,8 @@ class HomeMoneyUiTest {
         awaitIn(MONEY_MONTH_TAG, MoneyFormat.rub(rub(2760)))
         awaitIn(MONEY_MONTH_TAG, HomeFormat.willBe(rub(2760), rub(4600)))
         awaitIn(MONEY_MONTH_TAG, s("3_ПТ · будет 5"))
+        awaitIn(MONEY_TODAY_TAG, s("1_отмена"))
+        awaitIn(MONEY_MONTH_TAG, s("2_отмены"))
     }
 
     /** Строка внутри колонки «Денег»: карточка — одна кнопка, поэтому ищем в несклеенном дереве. */

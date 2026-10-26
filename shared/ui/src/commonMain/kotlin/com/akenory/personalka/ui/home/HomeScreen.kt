@@ -646,7 +646,7 @@ private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: ()
 
 /**
  * «Деньги» (5.2) — первый блок «Главной»: две колонки «Сегодня» и «За месяц» — заработано, «будет ≈ …» по расписанию
- * и ПТ «2 ПТ · будет 5». Ниже полоса плана — проведено основным цветом, прогноз цветом рамок, конец полосы — план;
+ * и ПТ «2 ПТ · будет 5», под ней отмены «2 отмены», если были. Ниже полоса плана — проведено основным цветом, прогноз цветом рамок, конец полосы — план;
  * под ней «60 % плана» и «прогноз 97 %», затем строка ступени. Плана нет — полосы нет. Нажатие — «Зарплата».
  * Зарплата не настроена — приглашение и «Настроить зарплату» (5.18).
  */
@@ -682,6 +682,7 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                             earned = earnedToday,
                             forecast = earnedToday + (view.todayAhead ?: 0),
                             pt = HomeFormat.ptLine(donePt, donePt + (view.todayPtAhead ?: 0)),
+                            cancelled = HomeFormat.cancelledLine(view.todayCancelled ?: 0),
                             modifier = Modifier.weight(1f).testTag(MONEY_TODAY_TAG),
                         )
                         MoneyColumn(
@@ -689,6 +690,7 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                             earned = view.pay.earned,
                             forecast = view.pay.forecast,
                             pt = HomeFormat.ptLine(view.pay.ptCount, view.pay.forecastPtCount),
+                            cancelled = HomeFormat.cancelledLine(view.monthCancelled),
                             modifier = Modifier.weight(1f).testTag(MONEY_MONTH_TAG),
                         )
                     }
@@ -717,15 +719,16 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
     }
 }
 
-/** Колонка «Денег»: заголовок, заработано, «будет ≈ …» и строка ПТ. */
+/** Колонка «Денег»: заголовок, заработано, «будет ≈ …», строка ПТ и отмены, если они есть. */
 @Composable
-private fun MoneyColumn(title: String, earned: Long, forecast: Long, pt: String, modifier: Modifier = Modifier) {
+private fun MoneyColumn(title: String, earned: Long, forecast: Long, pt: String, cancelled: String?, modifier: Modifier = Modifier) {
     val colors = PersonalkaTheme.colors
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Dimens.space1)) {
         Text(title, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
         Text(MoneyFormat.rub(earned), style = MaterialTheme.typography.titleLarge.tabular(), color = colors.text, maxLines = 1)
         Text(HomeFormat.willBe(earned, forecast), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1)
         Text(pt, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text, maxLines = 1)
+        cancelled?.let { Text(it, style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1) }
     }
 }
 

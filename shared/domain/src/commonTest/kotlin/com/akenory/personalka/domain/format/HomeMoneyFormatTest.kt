@@ -42,6 +42,11 @@ class HomeMoneyFormatTest {
         assertEquals(s("94_ПТ · будет 131"), HomeFormat.ptLine(94, 131))
         assertEquals(s("4_ПТ"), HomeFormat.ptLine(4, 4))
         assertEquals("без ПТ", HomeFormat.ptLine(0, 0))
+        // Отмены (просьба Дмитрия 26.10.2026): нет — строки нет.
+        assertEquals(s("1_отмена"), HomeFormat.cancelledLine(1))
+        assertEquals(s("3_отмены"), HomeFormat.cancelledLine(3))
+        assertEquals(s("5_отмен"), HomeFormat.cancelledLine(5))
+        assertNull(HomeFormat.cancelledLine(0))
     }
 
     @Test

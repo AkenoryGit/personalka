@@ -120,6 +120,21 @@ class SalaryMonthTest {
     }
 
     @Test
+    fun cancelledTodayAndMonth() {
+        // Сегодня отменены ПТ и группа, 12-го — ПТ; отменённое дежурство и прошлый месяц не считаются.
+        val c = TrainingStatus.CANCELLED
+        val september = PayTraining("old", "pt", "bb", LocalDateTime(2026, 9, 30, 10, 0), 50, c, listOf(EXPECTED))
+        val list = listOf(t(status = c, day = 20), t(type = "group", status = c, day = 20), t(status = c, day = 12), t(type = "duty", status = c, day = 20), t(day = 20), september)
+        val view = build(input(list))
+        assertEquals(2, view.todayCancelled)
+        assertEquals(3, view.monthCancelled)
+        // Прошлый месяц: «сегодня» нет, месяц считается.
+        val past = build(input(list), on = LocalDate(2026, 11, 3))
+        assertNull(past.todayCancelled)
+        assertEquals(3, past.monthCancelled)
+    }
+
+    @Test
     fun breakdownLinesAddUpToEarned() {
         val list = pts(61) + pts(12, place = "db") +
             listOf(t("split", clients = 2), t("split", clients = 1)) +

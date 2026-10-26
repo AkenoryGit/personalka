@@ -78,7 +78,8 @@ data class TierProgress(
  * расписанию. [advanceActual] — введённый аванс. [chart] — график накопления по дням, [closed] — «Месяц сверен»
  * (правки его тренировок спрашивают подтверждение, 4.1). [days] — заработанное по дням (3.7в): нажатие на день графика.
  * [colleagues] — взаиморасчёт по каждому коллеге для вкладки «Коллеги» (3.8). [todayPt] и [todayPtAhead] — ПТ
- * сегодня: проведено и ещё запланировано (счёт как у ступени, 4.6), для «Денег» на «Главной».
+ * сегодня: проведено и ещё запланировано (счёт как у ступени, 4.6), для «Денег» на «Главной». [todayCancelled] и
+ * [monthCancelled] — отменённые тренировки сегодня и за месяц без дежурств (просьба Дмитрия 26.10.2026), там же.
  */
 data class SalaryMonth(
     val month: YearMonth,
@@ -101,6 +102,8 @@ data class SalaryMonth(
     val colleagues: List<ColleagueSettlement> = emptyList(),
     val todayPt: Int? = null,
     val todayPtAhead: Int? = null,
+    val todayCancelled: Int? = null,
+    val monthCancelled: Int = 0,
 ) {
     /** «Месяц сверен» — у прошедшего и текущего: сверять будущий не с чем. */
     val canClose: Boolean get() = period != MonthPeriod.FUTURE
@@ -176,6 +179,8 @@ object SalaryMonthRules {
         val todayIds = ofToday?.map { it.id }?.toSet()
         val plannedToday = ofToday?.filter { it.status == TrainingStatus.PLANNED }?.map { it.id }?.toSet()
         val ptIds = PayRules.ptTypeIds(Versions.activeIn(input.schemes, month) { it.validFrom }, input.types)
+        val duty = input.types.filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
+        val cancelled = PayRules.inMonth(input.trainings, month).filter { it.status == TrainingStatus.CANCELLED && it.typeId !in duty }
         return SalaryMonth(
             month = month,
             period = period,
@@ -197,6 +202,8 @@ object SalaryMonthRules {
             colleagues = SettlementRules.colleagues(input, pay, settled),
             todayPt = ofToday?.let { PayRules.ptCount(it, ptIds) },
             todayPtAhead = ofToday?.let { list -> PayRules.ptCount(list.filter { it.status == TrainingStatus.PLANNED }, ptIds, forecast = true) },
+            todayCancelled = ofToday?.let { cancelled.count { it.start.date == today } },
+            monthCancelled = cancelled.size,
         )
     }
 
