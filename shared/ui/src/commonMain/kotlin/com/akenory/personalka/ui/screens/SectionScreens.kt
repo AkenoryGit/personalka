@@ -32,7 +32,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.account.Account
 import com.akenory.personalka.data.account.AccountRepository
+import com.akenory.personalka.ui.club.ClubScreen
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.NoticeRow
@@ -149,6 +152,9 @@ fun SectionScreen(
 ) {
     // «Кабинет» в карточке — только при включённых кабинетах (5.9); раздел «Кабинеты» в настройках — чтобы их включить.
     val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
+    // «Клуб» — у вошедшего администратора (шаг 5.2).
+    val signedIn by remember(account) { account?.account ?: MutableStateFlow<Account?>(null) }.collectAsState()
+    val admin = signedIn?.admin == true
     val openClient: (String) -> Unit = { id ->
         shell.select(Section.CLIENTS)
         shell.open(ClientRoute.card(id))
@@ -254,7 +260,7 @@ fun SectionScreen(
             shell.reset(SettingsRoute.HOME)
             shell.open(SettingsRoute.RATES)
         }
-        Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
+        Section.MORE -> MoreScreen(shell, versionName, admin) { route, onBack ->
             when {
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
@@ -262,6 +268,7 @@ fun SectionScreen(
                     shell.open(Report1cRoute.of(id))
                 }
                 SlotsRoute.isSlots(route) -> SlotsScreen(calendar, prefs, now, messages, onBack, onForm, shareText, SlotsRoute.waitOf(route))
+                route == MoreItem.CLUB.route && account != null -> ClubScreen(account, now.date, messages, scope, onBack)
                 Report1cRoute.idOf(route) != null -> Report1cResultScreen(settings.report1c, Report1cRoute.idOf(route)!!, messages, scope, onBack, shareText)
                 else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }
@@ -285,8 +292,8 @@ enum class MoreItem(
     RECONCILE("reconcile", "Сверки", PIcons.FactCheck, "Сверки", "Месяц зарплаты, дежурства, отчёт 1С."),
     // У «Настроек» с шага 1.6 свой экран (ui/settings), заготовка не показывается.
     SETTINGS("settings", "Настройки", PIcons.Settings, "Настройки", "Профиль, места и типы, календарь."),
-    // «Клуб» — только администратору (ТЗ 5.1). Администратор бывает только с сервером (этап 2),
-    // а выключенное не показывается (10.7), поэтому пункта пока нет.
+    // «Клуб» — только администратору (ТЗ 5.1, 5.17; шаг 5.2): у остальных пункта нет (10.7). Свой экран (ui/club).
+    CLUB("club", "Клуб", PIcons.Groups, "Клуб", "Тренеры сервера."),
 }
 
 internal fun moreRowTag(item: MoreItem) = "more-${item.route}"
@@ -304,6 +311,7 @@ internal fun moreRowTag(item: MoreItem) = "more-${item.route}"
 private fun MoreScreen(
     shell: ShellState,
     versionName: String,
+    admin: Boolean,
     detail: @Composable (route: String, onBack: (() -> Unit)?) -> Unit,
 ) {
     val wide = LocalWide.current
@@ -316,6 +324,7 @@ private fun MoreScreen(
     Row(Modifier.fillMaxSize()) {
         if (wide || top == null) {
             MoreList(
+                items = MoreItem.entries.filter { admin || it != MoreItem.CLUB },
                 selected = root,
                 scroll = listScroll,
                 versionName = versionName,
@@ -335,6 +344,7 @@ private fun MoreScreen(
 
 @Composable
 private fun MoreList(
+    items: List<MoreItem>,
     selected: MoreItem?,
     scroll: ScrollState,
     versionName: String,
@@ -344,7 +354,7 @@ private fun MoreList(
     val colors = PersonalkaTheme.colors
     Column(modifier.verticalScroll(scroll)) {
         TopBar("Ещё")
-        MoreItem.entries.forEach { item ->
+        items.forEach { item ->
             val isSelected = item == selected
             Row(
                 modifier = Modifier

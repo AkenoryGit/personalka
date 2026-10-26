@@ -135,6 +135,27 @@ class Accounts(
     fun closeSession(c: Connection, coachId: String, sessionId: Long): Boolean =
         c.update("DELETE FROM coach_session WHERE id = ? AND coach_id = ?", sessionId, coachId) > 0
 
+    /** Все тренеры сервера для «Тренеров» (5.17): администраторы первыми, дальше по имени. */
+    fun summaries(c: Connection): List<CoachSummary> = c.query(
+        """
+        SELECT $columns, synced_at, created_at,
+               (SELECT count(*) FROM cabinet_access a WHERE a.coach_id = coach.id AND a.revoked_at IS NULL)
+        FROM coach
+        """.trimIndent(),
+    ) { rs ->
+        CoachSummary(
+            coach = coach(rs),
+            syncedAt = rs.getObject(6, OffsetDateTime::class.java),
+            createdAt = rs.getObject(7, OffsetDateTime::class.java),
+            cabinets = rs.getInt(8),
+        )
+    }.sortedWith(compareBy<CoachSummary>({ !it.coach.admin }, { it.coach.displayName.lowercase() }, { it.coach.email }))
+
+    /** Приостановить или возобновить доступ (1.5): меняется только статус — записи, сессии и ссылки остаются. */
+    fun setSuspended(c: Connection, id: String, suspended: Boolean) {
+        c.update("UPDATE coach SET status = ? WHERE id = ?", if (suspended) "SUSPENDED" else "ACTIVE", id)
+    }
+
     /** Открытые возможности: у администратора — всё без срока, у остальных — строки «тренер — возможность — до». */
     fun grants(c: Connection, coach: Coach): List<FeatureGrant> = if (coach.admin) {
         AccountRules.admin()

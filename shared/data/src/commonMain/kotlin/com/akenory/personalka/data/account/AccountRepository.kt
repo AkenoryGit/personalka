@@ -51,7 +51,28 @@ data class Account(
     val admin: Boolean,
     val features: List<FeatureGrant>,
     val sessions: List<DeviceSession>,
+    /** Администратор приостановил доступ (1.5): синхронизация и кабинеты стоят, данные в телефоне целы. */
+    val suspended: Boolean = false,
 )
+
+/** Тренер в «Клуб → Тренеры» (шаг 5.2, ТЗ 5.17): только аккаунт — данных тренера администратор не видит. */
+data class ClubCoach(
+    val id: String,
+    val name: String,
+    val email: String,
+    val admin: Boolean,
+    val suspended: Boolean,
+    val confirmed: Boolean,
+    val syncedAt: Instant?,
+    val cabinets: Int,
+)
+
+/** Ответ «Тренеров»: список или текст ошибки для показа. */
+sealed interface CoachesResult {
+    data class Loaded(val coaches: List<ClubCoach>) : CoachesResult
+
+    data class Failed(val message: String) : CoachesResult
+}
 
 /** Ответ на действие экрана входа. */
 sealed interface AccountResult {
@@ -158,6 +179,29 @@ class AccountRepository(
         return AccountResult.Done
     }
 
+    /** Тренеры сервера — только администратору (5.17). */
+    suspend fun coaches(): CoachesResult = club { token ->
+        (api.coaches(token)["coaches"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::coach) }
+    }
+
+    /** «Приостановить» / «Возобновить»: ответ — свежий список. */
+    suspend fun setSuspended(coach: ClubCoach, suspended: Boolean): CoachesResult = club { token ->
+        api.setSuspended(token, coach.id, suspended)
+        (api.coaches(token)["coaches"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::coach) }
+    }
+
+    private suspend fun club(block: suspend (String) -> List<ClubCoach>): CoachesResult {
+        val token = tokens.read() ?: return CoachesResult.Failed(AccountFormat.EXPIRED)
+        return try {
+            CoachesResult.Loaded(block(token))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AccountException) {
+            if (e.code == AccountException.UNAUTHORIZED && tokens.read() != null) signOut()
+            CoachesResult.Failed(e.message)
+        }
+    }
+
     private fun failed(message: String, code: String = "form") = AccountResult.Failed(code, message)
 
     private suspend fun answer(block: suspend () -> Any?): AccountResult = try {
@@ -239,7 +283,19 @@ class AccountRepository(
                 admin = json.string("role") == "ADMIN",
                 features = features,
                 sessions = sessions,
+                suspended = json.string("status") == "SUSPENDED",
             )
         }
+
+        internal fun coach(json: JsonObject): ClubCoach? = ClubCoach(
+            id = json.string("id") ?: return null,
+            name = json.string("display_name").orEmpty(),
+            email = json.string("email").orEmpty(),
+            admin = json.string("role") == "ADMIN",
+            suspended = json.string("status") == "SUSPENDED",
+            confirmed = (json["confirmed"] as? JsonPrimitive)?.booleanOrNull != false,
+            syncedAt = json.string("synced_at")?.let { runCatching { Instant.parse(it) }.getOrNull() },
+            cabinets = (json["cabinets"] as? JsonPrimitive)?.longOrNull?.toInt() ?: 0,
+        )
     }
 }

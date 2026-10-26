@@ -31,7 +31,7 @@ import java.io.IOException
 /**
  * Сервер входа и синхронизации в памяти — те же адреса, ответы и коды ошибок, что `server/.../AuthRoutes.kt`
  * и `SyncRoutes.kt` (ТЗ 7.1, 7.2). Код в письме всегда [CODE]; [offline] — нет связи; [loseAnswers] — запрос
- * доходит и выполняется, а ответ теряется (обрыв сети посреди обмена).
+ * доходит и выполняется, а ответ теряется (обрыв сети посреди обмена). С шага 5.2 — и `AdminRoutes.kt`.
  */
 class FakeServer {
     class Coach(val id: String, val email: String, var password: String, val name: String, var confirmed: Boolean)
@@ -46,6 +46,9 @@ class FakeServer {
     var loseAnswers = false
     var admin: String? = null
     private var next = 1L
+
+    /** Почты приостановленных тренеров (шаг 5.2): обмен — 403 `suspended`, `/me` — статус SUSPENDED. */
+    val suspended = mutableSetOf<String>()
 
     /** Почты, у которых открыта «Копия на сервере» (у администратора открыто всё). */
     val serverCopy = mutableSetOf<String>()
@@ -217,6 +220,32 @@ class FakeServer {
                     else -> respond("Not found", HttpStatusCode.NotFound)
                 }
             }
+            path.startsWith("/admin/coaches") -> {
+                val session = sessions.firstOrNull { it.token == token } ?: return unauthorized()
+                if (session.coach.email != admin) return error(HttpStatusCode.Forbidden, "admin_only", "Только для администратора")
+                val parts = path.removePrefix("/admin/coaches").trim('/').split('/').filter { it.isNotEmpty() }
+                if (parts.size == 2) {
+                    val coach = coaches.values.firstOrNull { it.id == parts[0] }
+                        ?: return error(HttpStatusCode.NotFound, "coach_not_found", "Такого тренера на сервере нет")
+                    if (parts[1] == "suspend") suspended += coach.email else suspended -= coach.email
+                }
+                respondJson(buildJsonObject {
+                    putJsonArray("coaches") {
+                        coaches.values.sortedWith(compareBy({ it.email != admin }, { it.name })).forEach { coach ->
+                            addJsonObject {
+                                put("id", coach.id)
+                                put("display_name", coach.name)
+                                put("email", coach.email)
+                                put("role", if (coach.email == admin) "ADMIN" else "COACH")
+                                put("status", if (coach.email in suspended) "SUSPENDED" else "ACTIVE")
+                                put("confirmed", coach.confirmed)
+                                put("synced_at", null as String?)
+                                put("cabinets", 0)
+                            }
+                        }
+                    }
+                })
+            }
             path.startsWith("/sync/") || path == "/account/data" -> {
                 val session = sessions.firstOrNull { it.token == token } ?: return unauthorized()
                 val coach = session.coach
@@ -231,6 +260,9 @@ class FakeServer {
                     SchemaProblem.TOO_OLD -> return error(HttpStatusCode.UpgradeRequired, "update_required", "Обновите приложение")
                     SchemaProblem.TOO_NEW -> return error(HttpStatusCode.ServiceUnavailable, "server_outdated", "Сервер обновляется")
                     null -> Unit
+                }
+                if (coach.email in suspended) {
+                    return error(HttpStatusCode.Forbidden, "suspended", "Доступ к серверу приостановлен — напишите администратору")
                 }
                 if (coach.email != admin && coach.email !in serverCopy) {
                     return error(HttpStatusCode.Forbidden, "feature_closed", "Копия на сервере не открыта")
@@ -339,7 +371,7 @@ class FakeServer {
         put("email", coach.email)
         put("display_name", coach.name)
         put("role", if (coach.email == admin) "ADMIN" else "COACH")
-        put("status", "ACTIVE")
+        put("status", if (coach.email in suspended) "SUSPENDED" else "ACTIVE")
         putJsonArray("features") {
             if (coach.email != admin && (coach.email in serverCopy || coach.email in cabinetAccess)) addJsonObject {
                 put("code", "server_copy")

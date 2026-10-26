@@ -42,6 +42,8 @@ object Errors {
     fun wrongPassword() = ApiException(HttpStatusCode.Unauthorized, "wrong_password", "Неверная почта или пароль")
     fun notConfirmed() = ApiException(HttpStatusCode.Forbidden, "email_not_confirmed", "Подтвердите почту: мы отправили код в письме")
     fun suspended() = ApiException(HttpStatusCode.Forbidden, "suspended", "Доступ к серверу приостановлен — напишите администратору")
+    fun adminOnly() = ApiException(HttpStatusCode.Forbidden, "admin_only", "Только для администратора")
+    fun coachNotFound() = ApiException(HttpStatusCode.NotFound, "coach_not_found", "Такого тренера на сервере нет")
     fun sessionNotFound() = ApiException(HttpStatusCode.NotFound, "session_not_found", "Это устройство уже вышло")
     fun tooMany(seconds: Int) = ApiException(
         HttpStatusCode.TooManyRequests, "too_many", "Слишком часто — попробуйте через ${waitText(seconds)}", retryAfter = seconds,

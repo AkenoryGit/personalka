@@ -43,6 +43,7 @@ import com.akenory.personalka.data.sync.SignOutCheck
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.format.AccountFormat
+import com.akenory.personalka.domain.format.ClubFormat
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
@@ -181,6 +182,10 @@ private fun SignedIn(
     val grants = account.features
     Text(account.name, style = MaterialTheme.typography.titleMedium, color = colors.text, modifier = Modifier.padding(top = Dimens.space3))
     Text(account.email, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+    // Приостановка администратором (1.5, шаг 5.2): вход остаётся, обмен и кабинеты стоят.
+    if (account.suspended) {
+        Text(ClubFormat.YOU_SUSPENDED, style = MaterialTheme.typography.bodyMedium, color = colors.text, modifier = Modifier.padding(top = Dimens.space3))
+    }
     AccountFormat.open(AccountRules.effective(grants), AccountRules.endingSoon(grants, now.date).keys)?.let {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.text, modifier = Modifier.padding(top = Dimens.space3))
     }
