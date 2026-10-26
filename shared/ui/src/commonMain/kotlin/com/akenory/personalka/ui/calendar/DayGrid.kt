@@ -108,6 +108,7 @@ import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.calendar.ZonePlace
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.WhoKind
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
@@ -115,6 +116,8 @@ import com.akenory.personalka.ui.theme.Motion
 import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.theme.WhoTone
+import com.akenory.personalka.ui.theme.whoTone
 import com.akenory.personalka.ui.theme.dutyFill
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.datetime.DateTimeUnit
@@ -149,8 +152,8 @@ internal val PAGE_COUNT: Int = pageOf(LocalDate(2100, 1, 1))
  *
  * @param time «12:00–13:00»; [start] — только начало, «12:00», для низких и узких блоков.
  * @param type «ПТ», «СПТ», «Груд»; [place] — «ББ», «ДБ»: плашки на блоке; пустые не рисуются.
- * @param who кто ведёт группу — «Вдвоём · Лена», [whoShort] — «Вдвоём» для узкого блока; пусто — своя группа,
- *   которую тренер ведёт один, или совместное ведение выключено (шаг 3.9л).
+ * @param who кто ведёт группу — «Вдвоём · Лена», [whoShort] — «Вдвоём» для узкого блока, [whoKind] — цвет плашки;
+ *   пусто — не группа или совместное ведение выключено (шаги 3.9л, 3.9п).
  */
 @Immutable
 data class BlockInfo(
@@ -169,6 +172,7 @@ data class BlockInfo(
     val badges: List<CalendarBadge> = emptyList(),
     val who: String = "",
     val whoShort: String = who,
+    val whoKind: WhoKind? = null,
 ) {
     /** Блок словами — для TalkBack и тестов: имя, кто ведёт, время, «тип · место». */
     val lines: List<String>
@@ -1069,6 +1073,7 @@ internal fun dayBlocks(
             badges = CalendarBadges.visible(training.badges, rows),
             who = training.who?.full.orEmpty(),
             whoShort = training.who?.short.orEmpty(),
+            whoKind = training.who?.kind,
         )
     }
     val more = layout.more.map { m ->
@@ -1125,7 +1130,7 @@ private fun DrawScope.blockLines(block: BlockInfo, measurer: TextMeasurer, style
  * строки, а всё в одну не входит, — время и плашки в двух строках. В блоке в одну строку время и плашки идут
  * за именем, только если имя рядом с ними помещается целиком.
  *
- * Плашка «кто ведёт» (шаг 3.9л) важнее всего, кроме имени: своей строкой сразу под ним, полная («Вдвоём · Лена»),
+ * Плашка «кто ведёт» (шаги 3.9л, 3.9п) важнее всего, кроме имени: своей строкой сразу под ним, полная («Вдвоём · Лена»),
  * короткая («Вдвоём») или короткая с многоточием; в блоке в две строки рядом с ней — место, если входит, в блоке
  * в одну — она за именем вместо времени и типа.
  */
@@ -1357,6 +1362,7 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
     val fill = if (training.cancelled) colors.surfaceAlt else tone.block(training.shade)
     val stripe = if (training.cancelled) colors.outline else tone.stripe
     val ink = if (training.cancelled) colors.textMuted else tone.text
+    val whoTone = block.whoKind?.let { whoTone(it, colors.isDark) }
     val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = CornerRadius(BLOCK_RADIUS.toPx()))) }
     clipPath(shape) {
         drawRect(fill, rect.topLeft, rect.size)
@@ -1369,10 +1375,10 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
             y += line
         }
         if (text.inline) {
-            text.meta.forEach { drawMeta(it, left + text.name.first().size.width + TAG_GAP.toPx(), rect.top + TEXT_TOP.toPx(), line, ink, fill, colors) }
+            text.meta.forEach { drawMeta(it, left + text.name.first().size.width + TAG_GAP.toPx(), rect.top + TEXT_TOP.toPx(), line, ink, whoTone, colors) }
         } else {
             text.meta.forEach {
-                drawMeta(it, left, y, line, ink, fill, colors)
+                drawMeta(it, left, y, line, ink, whoTone, colors)
                 y += line
             }
         }
@@ -1382,18 +1388,19 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
 
 /**
  * Строка «время и плашки» с левым краем [x] и верхом строки [y] высотой [line]: плашки — по середине строки.
- * Плашка «кто ведёт» — наоборот: цвет текста блока подложкой, цвет блока [fill] текстом (шаг 3.9л). Пара та же, что
- * у самого блока, поэтому контраст не ниже, а плашка заметна среди светлых «ПТ» и «ББ».
+ * Плашка «кто ведёт» — сплошная, своим цветом на каждый случай [who] (шаг 3.9п): своя один, своя вдвоём, группа
+ * коллеги, ведёт коллега.
  */
-private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, ink: Color, fill: Color, colors: PersonalkaColors) {
+private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, ink: Color, who: WhoTone?, colors: PersonalkaColors) {
     var left = x
     val gap = TAG_GAP.toPx()
-    meta.who?.let { who ->
-        val width = who.size.width + TAG_PAD_X.toPx() * 2
-        val height = who.size.height + TAG_PAD_Y.toPx() * 2
+    if (meta.who != null && who != null) {
+        val tag = meta.who
+        val width = tag.size.width + TAG_PAD_X.toPx() * 2
+        val height = tag.size.height + TAG_PAD_Y.toPx() * 2
         val top = y + (line - height) / 2
-        drawRoundRect(color = ink, topLeft = Offset(left, top), size = Size(width, height), cornerRadius = CornerRadius(TAG_RADIUS.toPx()))
-        drawText(who, color = fill, topLeft = Offset(left + TAG_PAD_X.toPx(), top + TAG_PAD_Y.toPx()))
+        drawRoundRect(color = who.fill, topLeft = Offset(left, top), size = Size(width, height), cornerRadius = CornerRadius(TAG_RADIUS.toPx()))
+        drawText(tag, color = who.text, topLeft = Offset(left + TAG_PAD_X.toPx(), top + TAG_PAD_Y.toPx()))
         left += width + gap
     }
     meta.time?.let {

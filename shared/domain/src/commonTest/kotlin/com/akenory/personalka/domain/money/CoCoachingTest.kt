@@ -2,6 +2,7 @@ package com.akenory.personalka.domain.money
 
 import com.akenory.personalka.domain.format.BlockWho
 import com.akenory.personalka.domain.format.CoCoachingFormat
+import com.akenory.personalka.domain.format.WhoKind
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.model.ConductedBy
 import com.akenory.personalka.domain.model.Owner
@@ -83,15 +84,15 @@ class CoCoachingTest {
 
     @Test
     fun blockShowsWhoLeadsTheGroup() {
-        // Своя группа, веду один, — как без совместного ведения: плашки нет (шаг 3.9л).
-        assertNull(CoCoachingFormat.blockWho(Sharing.SELF, names))
+        // Своя группа, веду один, — тоже плашка, своим цветом (шаг 3.9п): видно, что группа стоит правильно.
+        assertEquals(BlockWho("Один", "Один", WhoKind.MINE_ALONE), CoCoachingFormat.blockWho(Sharing.SELF, names))
         fun who(o: Owner, c: ConductedBy) = CoCoachingFormat.blockWho(Sharing(o, lena.takeIf { o == Owner.COLLEAGUE }, c, lena), names)
-        assertEquals(BlockWho("Вдвоём · Лена", "Вдвоём"), who(Owner.SELF, ConductedBy.SELF_AND_COLLEAGUE))
-        assertEquals(BlockWho("Ведёт Лена", "Ведёт Лена"), who(Owner.SELF, ConductedBy.COLLEAGUE))
-        assertEquals(BlockWho("Один · числится Лена", "Один"), who(Owner.COLLEAGUE, ConductedBy.SELF))
-        assertEquals(BlockWho("Вдвоём · числится Лена", "Вдвоём"), who(Owner.COLLEAGUE, ConductedBy.SELF_AND_COLLEAGUE))
-        assertEquals(BlockWho("Ведёт Лена · числится Лена", "Ведёт Лена"), who(Owner.COLLEAGUE, ConductedBy.COLLEAGUE))
+        assertEquals(BlockWho("Вдвоём · Лена", "Вдвоём", WhoKind.MINE_TOGETHER), who(Owner.SELF, ConductedBy.SELF_AND_COLLEAGUE))
+        assertEquals(BlockWho("Ведёт Лена", "Ведёт Лена", WhoKind.NOT_ME), who(Owner.SELF, ConductedBy.COLLEAGUE))
+        assertEquals(BlockWho("Один · числится Лена", "Один", WhoKind.THEIRS), who(Owner.COLLEAGUE, ConductedBy.SELF))
+        assertEquals(BlockWho("Вдвоём · числится Лена", "Вдвоём", WhoKind.THEIRS), who(Owner.COLLEAGUE, ConductedBy.SELF_AND_COLLEAGUE))
+        assertEquals(BlockWho("Ведёт Лена · числится Лена", "Ведёт Лена", WhoKind.NOT_ME), who(Owner.COLLEAGUE, ConductedBy.COLLEAGUE))
         // «Веду один» в своей группе с оставшимся коллегой — всё равно своя без коллеги.
-        assertNull(CoCoachingFormat.blockWho(Sharing(conductedBy = ConductedBy.SELF, colleagueId = lena), names))
+        assertEquals(WhoKind.MINE_ALONE, CoCoachingFormat.blockWho(Sharing(conductedBy = ConductedBy.SELF, colleagueId = lena), names).kind)
     }
 }

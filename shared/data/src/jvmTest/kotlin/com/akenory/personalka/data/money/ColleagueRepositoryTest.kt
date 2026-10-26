@@ -171,7 +171,7 @@ class ColleagueRepositoryTest {
         assertTrue(who().values.all { it == null })
         settings.salary.saveCoCoaching(true)
         val on = who()
-        assertNull(on[mine])
+        assertEquals("Один", on[mine])
         assertEquals("Вдвоём · Лена", on[together])
         assertEquals("Один · числится Лена", on[hers])
         assertNull(on[cancelled])

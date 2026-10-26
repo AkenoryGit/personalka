@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.theme
 
+import com.akenory.personalka.domain.format.WhoKind
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -198,3 +199,19 @@ fun PlaceColor.shade(dark: Boolean, shade: Int): Shade = tone(dark).let { Shade(
 /** Заливка дежурства: полоса цвета его места на 20 % поверх фона сетки (ТЗ 5.3). */
 fun dutyFill(place: PlaceColor, colors: PersonalkaColors): Color =
     lerp(colors.surface, place.tone(colors.isDark).stripe, 0.20f)
+
+/** Плашка «кто ведёт» на блоке группы: заливка и текст. */
+@Immutable
+data class WhoTone(val fill: Color, val text: Color)
+
+/**
+ * Цвета плашки «кто ведёт» (шаг 3.9п, просьба Дмитрия): своя один — зелёная, своя вдвоём — янтарная, группа
+ * коллеги — пурпурная, ведёт коллега — сланцевая. В светлой теме тёмная заливка и белый текст, в тёмной — светлая
+ * заливка и тёмный текст; контраст 5,4–6,9 : 1 и 8–8,7 : 1 (ТЗ 10.4). Оранжевого нет (10.5).
+ */
+fun whoTone(kind: WhoKind, dark: Boolean): WhoTone = when (kind) {
+    WhoKind.MINE_ALONE -> if (dark) WhoTone(Color(0xFF7FD49A), Color(0xFF0F2A17)) else WhoTone(Color(0xFF1B7A3A), Color.White)
+    WhoKind.MINE_TOGETHER -> if (dark) WhoTone(Color(0xFFE8B85C), Color(0xFF2E1F00)) else WhoTone(Color(0xFF8A5A00), Color.White)
+    WhoKind.THEIRS -> if (dark) WhoTone(Color(0xFFE3A0E8), Color(0xFF33153A)) else WhoTone(Color(0xFF8E3A94), Color.White)
+    WhoKind.NOT_ME -> if (dark) WhoTone(Color(0xFFB4C0CC), Color(0xFF1F262D)) else WhoTone(Color(0xFF4F5B67), Color.White)
+}

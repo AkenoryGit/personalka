@@ -63,6 +63,7 @@ import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.format.WhoKind
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ConductedBy
 import com.akenory.personalka.domain.model.Owner
@@ -325,9 +326,12 @@ class CalendarUiTest {
         assertTrue(day().blocks.all { it.who.isEmpty() })
 
         runBlocking { settings.salary.saveCoCoaching(true) }
-        waitUntil(timeoutMillis = 5_000) { day().blocks.any { it.who.isNotEmpty() } }
+        waitUntil(timeoutMillis = 5_000) { day().blocks.all { it.who.isNotEmpty() } }
         val byId = day().blocks.associateBy { it.id }
-        assertEquals(listOf("Группа", "09:00–10:00", "Группа · ББ"), byId.getValue(mine).lines)
+        assertEquals(listOf("Группа", "Один", "09:00–10:00", "Группа · ББ"), byId.getValue(mine).lines)
+        assertEquals(WhoKind.MINE_ALONE, byId.getValue(mine).whoKind)
+        assertEquals(WhoKind.MINE_TOGETHER, byId.getValue(together).whoKind)
+        assertEquals(WhoKind.THEIRS, byId.getValue(hers).whoKind)
         assertEquals(listOf("Группа", "Вдвоём · Лена", "12:00–13:00", "Группа · ББ"), byId.getValue(together).lines)
         assertEquals("Один", byId.getValue(hers).whoShort)
         assertEquals("Один · числится Лена", byId.getValue(hers).who)

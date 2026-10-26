@@ -5,8 +5,14 @@ import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.money.Sharing
 
-/** Плашка «кто ведёт» на блоке группы: полная и короткая, для узкого блока (шаг 3.9л). */
-data class BlockWho(val full: String, val short: String)
+/**
+ * Цвет плашки «кто ведёт» (шаг 3.9п, просьба Дмитрия): своя группа один, своя вдвоём, группа коллеги (вдвоём или
+ * тренер заменяет), ведёт коллега — тренера на ней нет.
+ */
+enum class WhoKind { MINE_ALONE, MINE_TOGETHER, THEIRS, NOT_ME }
+
+/** Плашка «кто ведёт» на блоке группы: полная, короткая — для узкого блока, и её цвет (шаги 3.9л, 3.9п). */
+data class BlockWho(val full: String, val short: String, val kind: WhoKind)
 
 /** Слова совместного ведения групп (ТЗ 4.8, 5.4, 5.10, 5.16, шаг 3.7г). */
 object CoCoachingFormat {
@@ -60,19 +66,20 @@ object CoCoachingFormat {
         if (s.owner == Owner.COLLEAGUE) "числится: " + name(s.ownerColleagueId, names) else null
 
     /**
-     * Кто ведёт — плашкой на блоке группы в календаре (шаг 3.9л): своя группа, которую тренер ведёт один, — `null`,
-     * так выглядят все группы без совместного ведения. [BlockWho.full] — «Вдвоём · Лена», «Ведёт Лена»,
-     * «Один · числится Лена»; [BlockWho.short] — для узкого блока: «Вдвоём», «Один».
+     * Кто ведёт — плашкой на блоке группы в календаре (шаги 3.9л, 3.9п): [BlockWho.full] — «Один», «Вдвоём · Лена»,
+     * «Ведёт Лена», «Один · числится Лена»; [BlockWho.short] — для узкого блока: «Вдвоём»; [BlockWho.kind] — цвет
+     * плашки: по нему видно, так ли стоит группа.
      */
-    fun blockWho(s: Sharing, names: Map<String, String>): BlockWho? {
+    fun blockWho(s: Sharing, names: Map<String, String>): BlockWho {
         val n = CoCoachingRules.normalize(s)
         val who = name(n.colleague, names)
         val mine = n.owner == Owner.SELF
         val owner = if (mine) null else "числится $who"
         return when (n.conductedBy) {
-            ConductedBy.SELF -> if (mine) null else BlockWho(listOfNotNull(ALONE, owner).joinToString(DOT), ALONE)
-            ConductedBy.SELF_AND_COLLEAGUE -> BlockWho(listOf(TOGETHER, owner ?: who).joinToString(DOT), TOGETHER)
-            ConductedBy.COLLEAGUE -> "Ведёт $who".let { BlockWho(listOfNotNull(it, owner).joinToString(DOT), it) }
+            ConductedBy.SELF -> BlockWho(listOfNotNull(ALONE, owner).joinToString(DOT), ALONE, if (mine) WhoKind.MINE_ALONE else WhoKind.THEIRS)
+            ConductedBy.SELF_AND_COLLEAGUE ->
+                BlockWho(listOf(TOGETHER, owner ?: who).joinToString(DOT), TOGETHER, if (mine) WhoKind.MINE_TOGETHER else WhoKind.THEIRS)
+            ConductedBy.COLLEAGUE -> "Ведёт $who".let { BlockWho(listOfNotNull(it, owner).joinToString(DOT), it, WhoKind.NOT_ME) }
         }
     }
 
