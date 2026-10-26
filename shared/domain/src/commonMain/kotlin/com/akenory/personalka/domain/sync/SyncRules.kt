@@ -15,7 +15,7 @@ enum class SyncOrder { OLDER, SAME, NEWER }
  */
 object SyncRules {
     /** Версия схемы базы телефона, с которой работает этот код; совпадает с `PersonalkaDatabase.VERSION` (тест). */
-    const val SCHEMA_VERSION = 10
+    const val SCHEMA_VERSION = 11
 
     /** Изменений в одной отправке, не больше. */
     const val PUSH_MAX = 500
@@ -59,6 +59,8 @@ object SyncRules {
         "colleague_settlement",
         // 3.4, шаг 3.12
         "vacation_notice",
+        // 3.7, шаг 4.2а
+        "service_mapping_1c", "client_alias_1c", "reconciliation", "reconciliation_item",
     )
 
     /** Таблицы, где все записи — данные клуба (ТЗ 3.3); у остальных область — поле `scope` записи. */

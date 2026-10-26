@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -177,6 +177,39 @@ internal object Migration8To9 : Migration(8, 9) {
 internal object Migration9To10 : Migration(9, 10) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `client` ADD COLUMN `followupDismissedAt` INTEGER")
+    }
+}
+
+/**
+ * Версия 11 (шаг 4.2а): сверка с 1С (ТЗ 3.7, 8) — услуги, имена, сверки и их пункты. Новые таблицы пустые, прежние
+ * записи не меняются. Таблицы — точно такие, какие строит Room (схема `11.json`).
+ */
+internal object Migration10To11 : Migration(10, 11) {
+    private const val SYNC = "`coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+        "`version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))"
+
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `service_mapping_1c` (`id` TEXT NOT NULL, `name1c` TEXT NOT NULL, `typeId` TEXT NOT NULL, " +
+                "`locationId` TEXT NOT NULL, $SYNC",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_service_mapping_1c_name1c` ON `service_mapping_1c` (`name1c`)")
+        connection.exec("CREATE TABLE IF NOT EXISTS `client_alias_1c` (`id` TEXT NOT NULL, `nameKey` TEXT NOT NULL, `clientId` TEXT NOT NULL, $SYNC")
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_client_alias_1c_nameKey` ON `client_alias_1c` (`nameKey`)")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `reconciliation` (`id` TEXT NOT NULL, `fileName` TEXT NOT NULL, `periodFrom` TEXT NOT NULL, " +
+                "`periodTo` TEXT NOT NULL, `generatedAt` TEXT, `coachName1c` TEXT, `rowsTotal` INTEGER NOT NULL, `matched` INTEGER NOT NULL, " +
+                "`checkedUntil` TEXT NOT NULL, $SYNC",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_reconciliation_periodFrom_periodTo` ON `reconciliation` (`periodFrom`, `periodTo`)")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `reconciliation_item` (`id` TEXT NOT NULL, `reconciliationId` TEXT NOT NULL, `kind` TEXT NOT NULL, " +
+                "`itemKey` TEXT NOT NULL, `at` TEXT NOT NULL, `trainingId` TEXT, `clientId` TEXT, `statusDiffers` INTEGER NOT NULL, " +
+                "`serviceDiffers` INTEGER NOT NULL, `rowAt` TEXT, `rowServiceName` TEXT, `rowClient` TEXT, `rowStatus` TEXT, " +
+                "`resolution` TEXT NOT NULL, `resolvedAt` INTEGER, $SYNC",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_reconciliation_item_reconciliationId` ON `reconciliation_item` (`reconciliationId`)")
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_reconciliation_item_resolution` ON `reconciliation_item` (`resolution`)")
     }
 }
 

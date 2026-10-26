@@ -1,6 +1,7 @@
 package com.akenory.personalka.data.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.akenory.personalka.data.db.entity.ClientAlias1cEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
@@ -343,8 +344,41 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion10() {
-        assertEquals(10, PersonalkaDatabase.VERSION)
-        assertTrue((1..9).all { schemaFile(it).exists() }, "Схемы версий 1–9 хранятся: по ним строятся переходы")
+    fun version10KeepsClientsAndGetsReport1c(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v10", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.9н–4.2: сверки с 1С ещё нет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 10)
+                raw.exec(
+                    "INSERT INTO client (id, lastName, firstName, middleName, birthDate, isAdult, sex, contactName, contactPhone, mediaUrl, " +
+                        "privateNote, name1c, cabinetEnabled, consentAt, consentSource, followupContactedAt, followupPausedUntil, followupPauseNote, " +
+                        "pendingPlan, status, source, followupDismissedAt, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('k1', 'Белова', 'Аня', NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, " +
+                        "NULL, NULL, NULL, NULL, 'ACTIVE', 'MANUAL', NULL, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                assertEquals("Белова", db.clientDao().client("k1")!!.lastName, "Клиент не тронут")
+                val report = db.report1cDao()
+                assertTrue(report.services().isEmpty() && report.aliases().isEmpty(), "Услуг и имён 1С ещё нет")
+                report.upsertAlias(ClientAlias1cEntity("a1", SyncFields.new("c1", 1), "белова аня", "k1"))
+                assertEquals("k1", report.aliases().single().clientId)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion11() {
+        assertEquals(11, PersonalkaDatabase.VERSION)
+        assertTrue((1..10).all { schemaFile(it).exists() }, "Схемы версий 1–10 хранятся: по ним строятся переходы")
     }
 }

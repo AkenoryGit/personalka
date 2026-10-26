@@ -11,11 +11,13 @@ import com.akenory.personalka.data.db.dao.ClientDao
 import com.akenory.personalka.data.db.dao.CoachDao
 import com.akenory.personalka.data.db.dao.MoneyDao
 import com.akenory.personalka.data.db.dao.ReferenceDao
+import com.akenory.personalka.data.db.dao.Report1cDao
 import com.akenory.personalka.data.db.dao.ScheduleDao
 import com.akenory.personalka.data.db.dao.SyncDao
 import com.akenory.personalka.data.db.dao.TrainingDao
 import com.akenory.personalka.data.db.entity.ArchivedMonthEntity
 import com.akenory.personalka.data.db.entity.CategoryVersionEntity
+import com.akenory.personalka.data.db.entity.ClientAlias1cEntity
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.ClientRelationEntity
 import com.akenory.personalka.data.db.entity.ClubRateGridEntity
@@ -32,10 +34,13 @@ import com.akenory.personalka.data.db.entity.MonthRecordEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.PaySchemeVersionEntity
 import com.akenory.personalka.data.db.entity.RateVersionEntity
+import com.akenory.personalka.data.db.entity.ReconciliationEntity
+import com.akenory.personalka.data.db.entity.ReconciliationItemEntity
 import com.akenory.personalka.data.db.entity.ResultEntity
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.SeriesClientEntity
 import com.akenory.personalka.data.db.entity.SeriesEntity
+import com.akenory.personalka.data.db.entity.ServiceMapping1cEntity
 import com.akenory.personalka.data.db.entity.SptCaseEntity
 import com.akenory.personalka.data.db.entity.SyncOutboxEntity
 import com.akenory.personalka.data.db.entity.TierSchemeVersionEntity
@@ -93,12 +98,17 @@ import kotlin.coroutines.CoroutineContext
         MonthAdjustmentEntity::class,
         ArchivedMonthEntity::class,
         ColleagueSettlementEntity::class,
+        // 3.7, шаг 4.2а
+        ServiceMapping1cEntity::class,
+        ClientAlias1cEntity::class,
+        ReconciliationEntity::class,
+        ReconciliationItemEntity::class,
         // 3.8 — только для телефона
         SyncOutboxEntity::class,
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -111,6 +121,7 @@ abstract class PersonalkaDatabase : RoomDatabase() {
     abstract fun trainingDao(): TrainingDao
     abstract fun syncDao(): SyncDao
     abstract fun moneyDao(): MoneyDao
+    abstract fun report1cDao(): Report1cDao
 
     companion object {
         /**
@@ -118,10 +129,11 @@ abstract class PersonalkaDatabase : RoomDatabase() {
          * ([Migration2To3]); 4 — очередь изменений для синхронизации ([Migration3To4], шаг 2.10); 5 — деньги: коллеги,
          * месяцы, доплаты, итоги прошлых месяцев и услуга сетки у ставки ([Migration4To5], шаг 3.1); 6 — отметки
          * «Рассчитались» с коллегами ([Migration5To6], шаг 3.8); 7 — «Предупредить об отпуске» ([Migration6To7], шаг 3.12); 8 — «Дежурства сверены» ([Migration7To8], шаг 3.9в);
-         * 9 — свой цвет дежурства ([Migration8To9], шаг 3.9е); 10 — «Убрать из списка» «Без записи» ([Migration9To10], шаг 3.9н).
+         * 9 — свой цвет дежурства ([Migration8To9], шаг 3.9е); 10 — «Убрать из списка» «Без записи» ([Migration9To10], шаг 3.9н);
+         * 11 — сверка с 1С: услуги, имена, сверки и пункты ([Migration10To11], шаг 4.2а).
          * Перед переходом на новую версию — копия ([BeforeMigration], шаг 2.7б).
          */
-        const val VERSION = 10
+        const val VERSION = 11
         const val FILE_NAME = "personalka.db"
     }
 }
