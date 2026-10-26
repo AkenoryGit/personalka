@@ -113,6 +113,8 @@ internal const val PAST_TAG = "home-past"
 internal const val TOMORROW_TAG = "home-tomorrow"
 internal const val MONEY_TAG = "home-money"
 internal const val MONEY_SETUP_TAG = "home-money-setup"
+internal const val MONEY_TODAY_TAG = "home-money-today"
+internal const val MONEY_MONTH_TAG = "home-money-month"
 internal fun todoTag(kind: TodoKind) = "home-todo-${kind.name.lowercase()}"
 internal fun dayRowTag(id: String) = "home-day-$id"
 
@@ -307,6 +309,8 @@ fun HomeScreen(
 
     @Composable
     fun Blocks(laterRow: Boolean) {
+        // «Деньги» — первыми (просьба Дмитрия 26.10.2026): сегодня и месяц видны сразу.
+        money?.let { MoneyBlock(it, today, onSalary) }
         NearestBlock(
             nearest = nearest,
             card = nearestCard?.takeIf { it.id == nearest?.id },
@@ -318,7 +322,6 @@ fun HomeScreen(
             onDay = onDay,
         )
         if (todos.isNotEmpty()) TodoBlock(todos, onTodo)
-        money?.let { MoneyBlock(it, today, onSalary) }
     }
 
     TrainingCardHost(
@@ -614,9 +617,10 @@ private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: ()
 }
 
 /**
- * «Деньги» (5.2): заработано за месяц (28 sp), полоса плана — проведено основным цветом, прогноз цветом рамок, конец
- * полосы — план; под ней «60 % плана» и «прогноз 97 %», затем строка ступени. Плана нет — полосы нет, под суммой
- * «Прогноз ≈ 203 490 ₽». Нажатие — «Зарплата». Зарплата не настроена — приглашение и «Настроить зарплату» (5.18).
+ * «Деньги» (5.2) — первый блок «Главной»: две колонки «Сегодня» и «За месяц» — заработано, «будет ≈ …» по расписанию
+ * и ПТ «2 ПТ · будет 5». Ниже полоса плана — проведено основным цветом, прогноз цветом рамок, конец полосы — план;
+ * под ней «60 % плана» и «прогноз 97 %», затем строка ступени. Плана нет — полосы нет. Нажатие — «Зарплата».
+ * Зарплата не настроена — приглашение и «Настроить зарплату» (5.18).
  */
 @Composable
 private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit) {
@@ -642,11 +646,24 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                         Text(HomeFormat.moneyTitle(today), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
                         Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
                     }
-                    Text(
-                        MoneyFormat.rub(view.pay.earned),
-                        style = MaterialTheme.typography.displaySmall.tabular(),
-                        color = colors.text,
-                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
+                        val earnedToday = view.today ?: 0
+                        val donePt = view.todayPt ?: 0
+                        MoneyColumn(
+                            title = HomeFormat.TODAY,
+                            earned = earnedToday,
+                            forecast = earnedToday + (view.todayAhead ?: 0),
+                            pt = HomeFormat.ptLine(donePt, donePt + (view.todayPtAhead ?: 0)),
+                            modifier = Modifier.weight(1f).testTag(MONEY_TODAY_TAG),
+                        )
+                        MoneyColumn(
+                            title = HomeFormat.MONTH,
+                            earned = view.pay.earned,
+                            forecast = view.pay.forecast,
+                            pt = HomeFormat.ptLine(view.pay.ptCount, view.pay.forecastPtCount),
+                            modifier = Modifier.weight(1f).testTag(MONEY_MONTH_TAG),
+                        )
+                    }
                     val plan = view.plan
                     if (plan != null && plan > 0) {
                         val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
@@ -656,19 +673,31 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                             view.percent?.let { Text(SalaryFormat.ofPlan(it), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted) }
                             view.forecastPercent?.let { Text(HomeFormat.forecastPercent(it), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted) }
                         }
-                    } else {
-                        Text(SalaryFormat.forecast(view.pay.forecast), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
                     }
                 }
-                HorizontalDivider(Modifier.padding(horizontal = Dimens.space4), thickness = 1.dp, color = colors.divider)
-                Text(
-                    HomeFormat.tierLine(view.pay.ptCount, view.tiers),
-                    Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space3),
-                    style = MaterialTheme.typography.bodyLarge.tabular(),
-                    color = colors.text,
-                )
+                HomeFormat.tierLine(view.pay.ptCount, view.tiers)?.let { line ->
+                    HorizontalDivider(Modifier.padding(horizontal = Dimens.space4), thickness = 1.dp, color = colors.divider)
+                    Text(
+                        line,
+                        Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space3),
+                        style = MaterialTheme.typography.bodyLarge.tabular(),
+                        color = colors.text,
+                    )
+                }
             }
         }
+    }
+}
+
+/** Колонка «Денег»: заголовок, заработано, «будет ≈ …» и строка ПТ. */
+@Composable
+private fun MoneyColumn(title: String, earned: Long, forecast: Long, pt: String, modifier: Modifier = Modifier) {
+    val colors = PersonalkaTheme.colors
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Dimens.space1)) {
+        Text(title, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        Text(MoneyFormat.rub(earned), style = MaterialTheme.typography.titleLarge.tabular(), color = colors.text, maxLines = 1)
+        Text(HomeFormat.willBe(earned, forecast), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1)
+        Text(pt, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text, maxLines = 1)
     }
 }
 

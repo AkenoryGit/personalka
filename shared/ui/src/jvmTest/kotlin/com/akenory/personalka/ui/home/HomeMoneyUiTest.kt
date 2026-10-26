@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
@@ -44,7 +45,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.YearMonth
 
-/** «Деньги» и аванс на «Главной» (шаг 3.9, ТЗ 5.2, 5.19). Две ПТ проведены, одна впереди; имена придуманы. */
+/** «Деньги» и аванс на «Главной» (шаги 3.9 и 3.9а, ТЗ 5.2, 5.19). Две ПТ проведены, одна впереди; имена придуманы. */
 @OptIn(ExperimentalTestApi::class)
 class HomeMoneyUiTest {
     private val settings = TestData.ready()
@@ -103,9 +104,13 @@ class HomeMoneyUiTest {
         // Карточка — одна кнопка: её строки собраны в одном узле.
         awaitNode(hasTestTag(MONEY_TAG) and hasText(MoneyFormat.rub(rub(1840))))
         awaitNode(hasText(HomeFormat.moneyTitle(TestData.now.date)))
-        // Плана нет — вместо полосы прогноз суммой.
-        awaitNode(hasText(SalaryFormat.forecast(rub(2760))))
-        awaitNode(hasText(s("2_ПТ · ступень 1 · до_101 ещё 99_ПТ")))
+        // Месяц: проведено 2 ПТ, по расписанию будет 3; плана нет — полосы нет.
+        awaitIn(MONEY_MONTH_TAG, HomeFormat.willBe(rub(1840), rub(2760)))
+        awaitIn(MONEY_MONTH_TAG, s("2_ПТ · будет 3"))
+        // 20.10 тренировок нет.
+        awaitIn(MONEY_TODAY_TAG, HomeFormat.willBe(0, 0))
+        awaitIn(MONEY_TODAY_TAG, "без ПТ")
+        awaitNode(hasText(s("Ступень 1 · до_101 ещё 99_ПТ")))
         // План 3 680 ₽: проведено 50 %, прогноз 75 %.
         runBlocking { settings.months.savePlan(october, rub(3680)) }
         awaitNode(hasTestTag(MONEY_TAG) and hasText(SalaryFormat.ofPlan(50)))
@@ -113,6 +118,36 @@ class HomeMoneyUiTest {
         // Нажатие — «Зарплата».
         onNodeWithTag(MONEY_TAG).performScrollTo().performClick()
         awaitNode(hasTestTag(com.akenory.personalka.ui.salary.SALARY_EARNED_TAG))
+    }
+
+    @Test
+    fun todayColumn() = runComposeUiTest {
+        prepare()
+        // Сегодня (20.10, 15:40) одна ПТ проведена утром, вторая — вечером.
+        runBlocking {
+            val pt = settings.types.first().single { it.shortName == "ПТ" }.id
+            val bb = settings.places.first().single { it.shortName == "ББ" }.id
+            val coach = db.coachDao().currentCoach()!!.id
+            val now = TestData.clock()
+            listOf(9 to TrainingStatus.DONE, 18 to TrainingStatus.PLANNED).forEachIndexed { i, (hour, status) ->
+                db.trainingDao().upsertTraining(TrainingEntity("d$i", SyncFields.new(coach, now), pt, bb, LocalDateTime(2026, 10, 20, hour, 0), 50, status = status))
+                val p = if (status == TrainingStatus.DONE) ParticipationStatus.ATTENDED else ParticipationStatus.EXPECTED
+                db.trainingDao().upsertParticipation(ParticipationEntity("dp$i", SyncFields.new(coach, now), "d$i", "client", p))
+            }
+        }
+        openHome()
+        awaitIn(MONEY_TODAY_TAG, MoneyFormat.rub(rub(920)))
+        awaitIn(MONEY_TODAY_TAG, HomeFormat.willBe(rub(920), rub(1840)))
+        awaitIn(MONEY_TODAY_TAG, s("1_ПТ · будет 2"))
+        awaitIn(MONEY_MONTH_TAG, MoneyFormat.rub(rub(2760)))
+        awaitIn(MONEY_MONTH_TAG, HomeFormat.willBe(rub(2760), rub(4600)))
+        awaitIn(MONEY_MONTH_TAG, s("3_ПТ · будет 5"))
+    }
+
+    /** Строка внутри колонки «Денег»: карточка — одна кнопка, поэтому ищем в несклеенном дереве. */
+    private fun ComposeUiTest.awaitIn(column: String, text: String) {
+        val matcher = hasAnyAncestor(hasTestTag(column)) and hasText(text)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

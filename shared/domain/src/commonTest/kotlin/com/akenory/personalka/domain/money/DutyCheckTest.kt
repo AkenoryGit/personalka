@@ -15,7 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Сверка дежурств месяца (ТЗ 5.14, шаг 3.9а): часы и деньги проведённых — те же, что в «Зарплате». */
+/** Сверка дежурств месяца (ТЗ 5.14, шаг 3.9б): часы и деньги проведённых — те же, что в «Зарплате». */
 class DutyCheckTest {
     private val duty = PayType("duty", TrainingKind.DUTY, PayUnit.PER_HOUR, countsTowardPt = false, tierDependent = false)
     private val pt = PayType("pt", TrainingKind.PERSONAL, PayUnit.PER_SESSION, countsTowardPt = true, tierDependent = true)

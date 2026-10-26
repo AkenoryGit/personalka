@@ -39,7 +39,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.YearMonth
 
-/** «Ещё → Сверки» (шаг 3.9а, ТЗ 5.14): месяц зарплаты и дежурства октября. «Сейчас» — вт 20.10.2026. */
+/** «Ещё → Сверки» (шаг 3.9б, ТЗ 5.14): месяц зарплаты и дежурства октября. «Сейчас» — вт 20.10.2026. */
 @OptIn(ExperimentalTestApi::class)
 class ReconcileUiTest {
     private val settings = TestData.ready()
