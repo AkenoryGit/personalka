@@ -137,7 +137,8 @@ class DiaryRepository internal constructor(private val db: PersonalkaDatabase, p
 
     /**
      * «План на следующую» (5.7): план следующей тренировки (4.3); её нет — отложенный план группы или клиентов,
-     * он подставится в первую новую тренировку с пустым планом.
+     * он подставится в первую новую тренировку с пустым планом. Следующая помнит, что план из дневника [id]: так он
+     * всегда на ближайшей ([alignCarried]).
      */
     suspend fun saveNextPlan(id: String, text: String) = write {
         val t = trainings.training(id) ?: return@write
@@ -145,7 +146,13 @@ class DiaryRepository internal constructor(private val db: PersonalkaDatabase, p
         val now = clock()
         val next = nextOf(t, kind)
         when {
-            next != null -> if (next.plan.orEmpty() != text) trainings.upsertTraining(next.copy(plan = text.orNull(), sync = next.sync.touched(now)))
+            // Откуда план, запоминается: поставят тренировку раньше — он перейдёт на неё (4.3, уточнение 26.10.2026).
+            next != null -> {
+                val from = text.orNull()?.let { t.id }
+                if (next.plan.orEmpty() != text || next.planCarriedFromId != from || next.planCarriedText != text.orNull()) {
+                    trainings.upsertTraining(next.copy(plan = text.orNull(), planCarriedFromId = from, planCarriedText = text.orNull(), sync = next.sync.touched(now)))
+                }
+            }
             t.groupId != null -> clients.group(t.groupId)?.let { g ->
                 if (g.pendingPlan.orEmpty() != text) clients.upsertGroup(g.copy(pendingPlan = text.orNull(), sync = g.sync.touched(now)))
             }

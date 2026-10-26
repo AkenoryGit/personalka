@@ -235,4 +235,57 @@ class PlanAnchorTest {
         assertEquals(brass, t(after).plan)
         assertEquals(holder, t(after).planCarriedFromId)
     }
+
+    @Test
+    fun diaryPlanForNextMovesToEarlierNewTraining(): Unit = runBlocking {
+        // Уточнение 26.10.2026: «План на следующую» в дневнике — на вт 27.10; поставили чт 22.10 — план на чт.
+        val orlov = clients.create(ClientDraft("Орлов", "Максим"))
+        val morning = training(at(tuesday, 10), orlov)
+        val later = training(at(nextTuesday, 17), orlov)
+        calendar.diaries.saveNextPlan(morning, brass)
+        assertEquals(brass, t(later).plan)
+
+        val saved = create(at(thursday, 17), orlov)
+        val nearest = id(at(thursday, 17))
+        assertEquals(brass, t(nearest).plan)
+        assertNull(t(later).plan)
+        // Дневник теперь показывает и правит план ближайшей.
+        calendar.diaries.saveNextPlan(morning, back)
+        assertEquals(back, t(nearest).plan)
+        assertNull(t(later).plan)
+        calendar.diaries.saveNextPlan(morning, brass)
+
+        // «Отменить» создание — план снова на вт 27.10.
+        calendar.forms.undo(saved.undo)
+        assertEquals(brass, t(later).plan)
+    }
+
+    @Test
+    fun plansWrittenBeforeStayInPlace(): Unit = runBlocking {
+        // Уже расписанные планы — свои планы тренировок и «План на следующую», записанный до исправления (без
+        // отметки, откуда он), — новая тренировка раньше не трогает.
+        val orlov = clients.create(ClientDraft("Орлов", "Максим"))
+        val own = training(at(nextTuesday, 17), orlov, plan = back)
+        val old = training(at(nextThursday, 17), orlov)
+        db.trainingDao().upsertTraining(t(old).copy(plan = brass))
+
+        val nearest = training(at(thursday, 17), orlov)
+        assertNull(t(nearest).plan)
+        assertEquals(back, t(own).plan)
+        assertEquals(brass, t(old).plan)
+    }
+
+    @Test
+    fun editedDiaryPlanStays(): Unit = runBlocking {
+        // План ближайшей потом правили в её карточке — правка остаётся на месте.
+        val orlov = clients.create(ClientDraft("Орлов", "Максим"))
+        val morning = training(at(tuesday, 10), orlov)
+        val later = training(at(nextTuesday, 17), orlov)
+        calendar.diaries.saveNextPlan(morning, brass)
+        calendar.diaries.savePlan(later, "$brass Старт с тумбы.")
+
+        val nearest = training(at(thursday, 17), orlov)
+        assertNull(t(nearest).plan)
+        assertEquals("$brass Старт с тумбы.", t(later).plan)
+    }
 }

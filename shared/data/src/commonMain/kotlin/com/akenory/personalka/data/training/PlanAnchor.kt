@@ -20,12 +20,13 @@ internal suspend fun Recorder.alignedUndo(db: PersonalkaDatabase, now: Long): Un
 }
 
 /**
- * План отменённой тренировки стоит на ближайшей будущей тренировке того же клиента, группы или серии сплита
- * (ТЗ 4.3, уточнение 25.10.2026). После записи через этот [Recorder] — новой тренировки, переноса, удаления — план
+ * План отменённой тренировки и «План на следующую» из дневника стоят на ближайшей будущей тренировке того же
+ * клиента, группы или серии сплита (ТЗ 4.3, уточнения 25.10 и 26.10.2026). Откуда план — `planCarriedFromId`;
+ * планы, записанные до этого, его не имеют и не двигаются. После записи через этот [Recorder] — новой тренировки, переноса, удаления — план
  * переходит туда, где он теперь должен быть: на новую ближайшую (с новой строки, если у неё свой план) или, если
  * будущих не осталось, в отложенный план. Перенесённый текст правили — он остаётся, где был: правку не двигаем.
  *
- * Ближайшая — первая `PLANNED` позже и отменённой, и «сейчас». Отменённая тренировка с перенесённым планом сама
+ * Ближайшая — первая `PLANNED` позже и той тренировки, откуда план, и «сейчас». Отменённая тренировка с перенесённым планом сама
  * передаёт его дальше при отмене, здесь её не трогаем.
  */
 internal suspend fun Recorder.alignCarried(db: PersonalkaDatabase, now: Long) {
@@ -50,7 +51,7 @@ internal suspend fun Recorder.alignCarried(db: PersonalkaDatabase, now: Long) {
     if (holders.isEmpty()) return
     val kinds = db.referenceDao().trainingTypes().associate { it.id to it.kind }
     for (h in holders) {
-        val from = trainings.training(h.planCarriedFromId!!)?.takeIf { it.sync.deletedAt == null && it.status == TrainingStatus.CANCELLED } ?: continue
+        val from = trainings.training(h.planCarriedFromId!!)?.takeIf { it.sync.deletedAt == null } ?: continue
         val holder = trainings.training(h.id) ?: continue
         val text = holder.planCarriedText?.takeIf { it.isNotBlank() && holder.planCarriedFromId == from.id } ?: continue
         moveCarried(db, from, holder, text, kinds[from.typeId] ?: TrainingKind.OTHER, clubNow, now)
@@ -67,7 +68,8 @@ private suspend fun Recorder.moveCarried(
     now: Long,
 ) {
     val trainings = db.trainingDao()
-    val people = trainings.participationsOf(from.id).map { it.clientId }
+    // Отменённая — для всех, кто был записан; дневник — для тех, кто не отменён (как «План на следующую»).
+    val people = trainings.participationsOf(from.id).filter { from.status == TrainingStatus.CANCELLED || !it.cancelled }.map { it.clientId }
     val target = db.nextTraining(from, kind, people.toSet(), after = maxOf(from.start, clubNow))
     if (target?.id == holder.id) return
     // Перенесённое другой отменённой у ближайшей не затираем: её «Вернуть» его бы уже не нашло.
