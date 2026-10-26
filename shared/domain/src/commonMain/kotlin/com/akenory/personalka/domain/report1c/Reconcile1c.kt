@@ -82,6 +82,12 @@ object Reconcile1cRules {
     /** Пара ищется у того же клиента в тот же день не дальше полутора часов. */
     const val PAIR_WINDOW_MIN = 90
 
+    /** «Написал администратору» напоминает о себе через 3 дня (8.4). */
+    const val ASK_REMIND_MS = 3 * 24 * 60 * 60 * 1000L
+
+    /** Пора напомнить о пункте «Написал администратору», отмеченном в [askedAt] (миллисекунды UTC). */
+    fun remind(askedAt: Long?, now: Long): Boolean = askedAt != null && now - askedAt >= ASK_REMIND_MS
+
     /** Названия услуг, которым ещё не указаны тип и место, — по порядку первого появления в отчёте. */
     fun unknownServices(report: Report1c, known: Set<String>): List<String> =
         report.rows.map { it.serviceName }.distinct().filter { it !in known }
@@ -200,6 +206,39 @@ object Reconcile1cRules {
     /** Статус участия, с которым строка 1С добавляется в приложение или исправляется «как в 1С». */
     fun appStatus(status: Status1c): ParticipationStatus =
         if (status == Status1c.CAME) ParticipationStatus.ATTENDED else ParticipationStatus.CANCELLED
+
+    /**
+     * Подсказка для шага «Укажите тип и место» (5.14): вид по названию услуги — «Сплит» → сплит, «Стартовая» → СПТ,
+     * групповая услуга 1С → группа, иначе персональная; среди типов этого вида — тот, чьё первое слово есть в названии
+     * («Мини-группа ББ» → «Мини-группа»), иначе первый. Типа такого вида нет — `null`.
+     */
+    fun <T> guessType(serviceName: String, service: Service1c, types: List<T>, kind: (T) -> TrainingKind, name: (T) -> String): T? {
+        val text = serviceName.lowercase().replace('ё', 'е')
+        val wanted = when {
+            "сплит" in text -> TrainingKind.SPLIT
+            "стартов" in text -> TrainingKind.SPT
+            service == Service1c.GROUP || "групп" in text -> TrainingKind.GROUP
+            else -> TrainingKind.PERSONAL
+        }
+        val same = types.filter { kind(it) == wanted }
+        return same.firstOrNull { t ->
+            val first = name(t).lowercase().replace('ё', 'е').split(' ', '-').first()
+            first.length >= 3 && first.take(4) in text
+        } ?: same.firstOrNull()
+    }
+
+    /**
+     * Место по названию услуги: короткое название места отдельным словом («… ББ»), полное название («Детский бассейн»)
+     * или «детск…» в услуге при месте «Детский …». Не нашли — `null`, тренер выберет сам.
+     */
+    fun <T> guessPlace(serviceName: String, places: List<T>, short: (T) -> String, name: (T) -> String): T? {
+        val text = serviceName.lowercase().replace('ё', 'е')
+        val words = text.split(' ', '.', ',', '-').filter { it.isNotEmpty() }
+        fun norm(s: String) = s.lowercase().replace('ё', 'е').trim()
+        return places.firstOrNull { norm(short(it)) in words }
+            ?: places.firstOrNull { norm(name(it)).isNotEmpty() && norm(name(it)) in text }
+            ?: places.firstOrNull { "детск" in text && norm(name(it)).startsWith("детск") }
+    }
 
     /**
      * Повторная сверка того же периода (ТЗ 8.4): решения прошлой сверки [previous] (ключ пункта → решение) переходят к тем

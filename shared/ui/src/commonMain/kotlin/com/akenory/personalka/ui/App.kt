@@ -30,6 +30,7 @@ import com.akenory.personalka.ui.home.homeTodos
 import com.akenory.personalka.ui.reminders.AppLink
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
+import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.SectionScreen
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.SettingsRoute
@@ -209,6 +210,14 @@ fun App(
                     diary = null
                     shell.selectRoot(Section.HOME)
                     homeCard = link.id
+                }
+                AppLink.Report1c -> {
+                    diary = null
+                    homeCard = null
+                    shell.select(Section.MORE)
+                    if (shell.top(Section.MORE) != MoreItem.RECONCILE.route) {
+                        shell.reset(MoreItem.RECONCILE.route)
+                    }
                 }
             }
             onLink()

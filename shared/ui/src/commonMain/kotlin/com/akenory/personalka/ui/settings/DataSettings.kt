@@ -51,6 +51,8 @@ import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
 
@@ -67,7 +69,23 @@ interface PlatformFiles {
 
     /** Отправить файл: мессенджер, почта, облако, календарь. */
     fun share(name: String, mime: String, bytes: ByteArray)
+
+    /** Выбрать PDF-отчёт 1С (шаг 4.2б): ответ — имя файла (в нём время выгрузки, ТЗ 8.1) и содержимое. */
+    fun openReport(onOpened: (SharedFile) -> Unit) = openFile { onOpened(SharedFile("", it)) }
+
+    /**
+     * Отчёт 1С, присланный в приложение через «Поделиться» из почты или мессенджера (5.14): «Сверки» забирают его
+     * и зовут [takeIncoming]. Платформа без такого входа — всегда `null`.
+     */
+    val incoming: StateFlow<SharedFile?> get() = NO_INCOMING
+
+    fun takeIncoming() {}
 }
+
+/** Файл, пришедший в приложение: имя и содержимое. */
+class SharedFile(val name: String, val bytes: ByteArray)
+
+private val NO_INCOMING: StateFlow<SharedFile?> = MutableStateFlow(null)
 
 /** Резервная копия для экранов: копии в базе телефона ([repository]) и системные окна ([files]). */
 class BackupTools(val repository: BackupRepository, val files: PlatformFiles)

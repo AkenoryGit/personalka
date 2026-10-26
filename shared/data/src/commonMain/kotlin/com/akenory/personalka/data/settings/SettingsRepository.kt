@@ -11,6 +11,7 @@ import com.akenory.personalka.data.money.ColleagueRepository
 import com.akenory.personalka.data.money.RatesRepository
 import com.akenory.personalka.data.money.SalaryRepository
 import com.akenory.personalka.data.money.SalarySetupRepository
+import com.akenory.personalka.data.reconcile.Report1cRepository
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.model.Scope
@@ -42,6 +43,9 @@ class SettingsRepository(private val db: PersonalkaDatabase, private val clock: 
 
     /** Месяц и выплаты экрана «Зарплата» (5.12, шаг 3.7). */
     val months: SalaryRepository = SalaryRepository(db, clock)
+
+    /** Сверка с отчётом 1С (5.14, ТЗ 8, шаг 4.2а). */
+    val report1c: Report1cRepository = Report1cRepository(db, clock)
 
     /** Тренер телефона; `null` — первый запуск ещё не пройден. */
     val coach: Flow<CoachEntity?> = coaches.observeCurrentCoach()

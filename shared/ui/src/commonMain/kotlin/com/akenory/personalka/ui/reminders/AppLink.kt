@@ -32,6 +32,11 @@ sealed interface AppLink {
         override val code = "advance"
     }
 
+    /** «Ещё → Сверки»: прислан отчёт 1С (шаг 4.2б), экран сам начнёт загрузку. Не уведомление — кода в нём нет. */
+    data object Report1c : AppLink {
+        override val code = "report1c"
+    }
+
     companion object {
         fun parse(code: String?): AppLink? = when {
             code == null -> null

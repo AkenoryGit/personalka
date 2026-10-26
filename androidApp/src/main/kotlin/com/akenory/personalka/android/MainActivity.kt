@@ -31,6 +31,9 @@ class MainActivity : ComponentActivity() {
     /** Первый показ окна — обмен уже идёт с запуска приложения; дальше каждый возврат — обмен сразу (7.2, п. 4). */
     private var shown = false
 
+    /** Окна файлов: сюда же приходит отчёт 1С, присланный через «Поделиться» (шаг 4.2б). */
+    private var files: AndroidFiles? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Экран во весь размер, значки строки состояния — по теме телефона, как и тема приложения.
         enableEdgeToEdge()
@@ -38,7 +41,9 @@ class MainActivity : ComponentActivity() {
         // Сложение и разложение Fold окно не пересоздаёт (configChanges в манифесте): Compose просто
         // перекладывает экран под новую ширину, открытый раздел и прокрутка остаются на месте.
         val app = application as PersonalkaApplication
-        val backup = BackupTools(app.backup, AndroidFiles(this))
+        val files = AndroidFiles(this)
+        this.files = files
+        val backup = BackupTools(app.backup, files)
         val sync = SyncTools(app.sync, app.syncRunner::now)
         val cabinets = CabinetTools(app.cabinets, ::share, ::copy, app.sync) { url, onClose, modifier -> AndroidBrowser(url, onClose, modifier) }
         val voice = if (AndroidVoice.availableOn(this)) AndroidVoice(this) else null
@@ -102,5 +107,7 @@ class MainActivity : ComponentActivity() {
         clipboard.setPrimaryClip(ClipData.newPlainText(CabinetLinkFormat.BUTTON, text))
     }
 
-    private fun linkOf(intent: Intent?): AppLink? = AppLink.parse(intent?.getStringExtra(AndroidReminders.EXTRA_LINK))
+    /** Уведомление — его экран; присланный PDF — «Сверки» с загрузкой отчёта. */
+    private fun linkOf(intent: Intent?): AppLink? =
+        if (files?.receive(intent) == true) AppLink.Report1c else AppLink.parse(intent?.getStringExtra(AndroidReminders.EXTRA_LINK))
 }

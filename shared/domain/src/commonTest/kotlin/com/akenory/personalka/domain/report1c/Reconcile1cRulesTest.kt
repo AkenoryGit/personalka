@@ -183,3 +183,28 @@ class Reconcile1cRulesTest {
         assertEquals("Пришел", ReconcileFormat.status1c(Status1c.CAME))
     }
 }
+
+class Reconcile1cGuessTest {
+    private data class T(val name: String, val kind: TrainingKind)
+
+    private val types = listOf(
+        T("ПТ", TrainingKind.PERSONAL), T("Сплит", TrainingKind.SPLIT), T("Мини-группа", TrainingKind.GROUP),
+        T("Группа", TrainingKind.GROUP), T("СПТ", TrainingKind.SPT), T("Дежурство", TrainingKind.DUTY),
+    )
+    private val places = listOf("ББ" to "Большой бассейн", "ДБ" to "Детский бассейн", "Зал" to "Тренажёрный зал")
+
+    private fun type(name: String, service: Service1c = Service1c.PERSONAL) =
+        Reconcile1cRules.guessType(name, service, types, { it.kind }, { it.name })?.name
+
+    private fun place(name: String) = Reconcile1cRules.guessPlace(name, places, { it.first }, { it.second })?.first
+
+    @Test
+    fun sixServicesOfOctober() {
+        assertEquals("ПТ" to "ББ", type("Персональная тренировка. ББ") to place("Персональная тренировка. ББ"))
+        assertEquals("ПТ" to "ДБ", type("Персональная тренировка. Детский бассейн 45 минут") to place("Персональная тренировка. Детский бассейн 45 минут"))
+        assertEquals("Мини-группа" to "ББ", type("Мини-группа ББ", Service1c.GROUP) to place("Мини-группа ББ"))
+        assertEquals("Группа" to "ДБ", type("Детская групповая тренировка в бассейне 50 минут", Service1c.GROUP) to place("Детская групповая тренировка в бассейне 50 минут"))
+        assertEquals("Сплит" to "ББ", type("Сплит. ББ") to place("Сплит. ББ"))
+        assertEquals("СПТ" to null, type("Стартовая тренировка бассейн") to place("Стартовая тренировка бассейн"))
+    }
+}

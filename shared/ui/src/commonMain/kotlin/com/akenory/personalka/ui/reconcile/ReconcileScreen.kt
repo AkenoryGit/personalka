@@ -2,6 +2,7 @@ package com.akenory.personalka.ui.reconcile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +47,7 @@ import com.akenory.personalka.ui.salary.CardHeader
 import com.akenory.personalka.ui.salary.MoneyRow
 import com.akenory.personalka.ui.salary.Muted
 import com.akenory.personalka.ui.salary.SalaryCard
+import com.akenory.personalka.ui.settings.PlatformFiles
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -73,8 +75,8 @@ internal const val RECONCILE_DUTY_SHARE_TAG = "reconcile-duty-share"
 /**
  * «Сверки» (ТЗ 5.14, шаг 3.9в) — пункт «Ещё»: месяц со стрелками и сверки этого месяца по типам. «Зарплата за месяц» —
  * «Месяц сверен» (перенесён из «Зарплаты»), «Дежурства» — список с часами, «Поделиться» и «Дежурства сверены».
- * Отчёт 1С появится здесь же на шаге 4.2. Месяц и прокрутка переживают сложение Fold: объявлены над разметкой.
- * [shareText] — системное «Поделиться»; нет его — текст копируется.
+ * «Отчёт 1С» (шаг 4.2б) — история сверок и «Загрузить отчёт» через [files]. Месяц, прокрутка и окна загрузки
+ * переживают сложение Fold: объявлены над разметкой. [shareText] — системное «Поделиться»; нет его — текст копируется.
  */
 @Composable
 internal fun ReconcileScreen(
@@ -84,6 +86,7 @@ internal fun ReconcileScreen(
     scope: CoroutineScope,
     onBack: (() -> Unit)?,
     shareText: ((String) -> Unit)? = null,
+    files: PlatformFiles? = null,
 ) {
     var monthText by rememberSaveable { mutableStateOf(today.yearMonth.toString()) }
     val month = YearMonth.parse(monthText)
@@ -92,59 +95,64 @@ internal fun ReconcileScreen(
     val data by remember(repo, month, today) { repo.month(month, today) }.collectAsState(initial = null)
     val clipboard = LocalClipboardManager.current
     val colors = PersonalkaTheme.colors
+    val load = remember(settings, messages, scope) { Report1cLoad(settings.report1c, messages, scope) {} }
 
-    Column(Modifier.fillMaxSize()) {
-        TopBar(ReconcileFormat.TITLE, onBack = onBack)
-        MonthRow(
-            month,
-            onPrev = { monthText = month.firstDay.minus(1, DateTimeUnit.MONTH).yearMonth.toString() },
-            onNext = { monthText = month.firstDay.plus(1, DateTimeUnit.MONTH).yearMonth.toString() },
-        )
-        val loaded = data?.takeIf { it.view.month == month }
-        Column(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(colors.bg)
-                .verticalScroll(scroll)
-                .padding(Dimens.space4)
-                .padding(bottom = 56.dp),
-            verticalArrangement = Arrangement.spacedBy(Dimens.space3),
-        ) {
-            if (loaded == null) return@Column
-            if (!loaded.view.canClose && !loaded.duties.visible) {
-                Muted(ReconcileFormat.future(month))
-                return@Column
-            }
-            if (loaded.view.canClose) {
-                SalaryCheck(loaded) { closed ->
-                    scope.launch {
-                        repo.setClosed(month, closed)
-                        messages.show(if (closed) SalaryFormat.closedMessage(month) else SalaryFormat.REOPENED)
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            TopBar(ReconcileFormat.TITLE, onBack = onBack)
+            MonthRow(
+                month,
+                onPrev = { monthText = month.firstDay.minus(1, DateTimeUnit.MONTH).yearMonth.toString() },
+                onNext = { monthText = month.firstDay.plus(1, DateTimeUnit.MONTH).yearMonth.toString() },
+            )
+            val loaded = data?.takeIf { it.view.month == month }
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(colors.bg)
+                    .verticalScroll(scroll)
+                    .padding(Dimens.space4)
+                    .padding(bottom = 56.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimens.space3),
+            ) {
+                if (loaded == null) return@Column
+                if (!loaded.view.canClose && !loaded.duties.visible) {
+                    Muted(ReconcileFormat.future(month))
+                    return@Column
+                }
+                if (loaded.view.canClose) {
+                    SalaryCheck(loaded) { closed ->
+                        scope.launch {
+                            repo.setClosed(month, closed)
+                            messages.show(if (closed) SalaryFormat.closedMessage(month) else SalaryFormat.REOPENED)
+                        }
                     }
                 }
-            }
-            if (loaded.duties.visible) {
-                DutyCard(
-                    loaded,
-                    onCheck = { minutes ->
-                        scope.launch {
-                            repo.setDutiesChecked(month, minutes)
-                            messages.show(if (minutes != null) ReconcileFormat.checkedMessage(month) else ReconcileFormat.DUTIES_UNCHECKED)
-                        }
-                    },
-                    onShare = {
-                        val text = ReconcileFormat.shareText(month, loaded.duties) { loaded.places[it]?.shortName }
-                        if (shareText != null) {
-                            shareText(text)
-                        } else {
-                            clipboard.setText(AnnotatedString(text))
-                            messages.show(ReconcileFormat.COPIED)
-                        }
-                    },
-                )
+                if (loaded.duties.visible) {
+                    DutyCard(
+                        loaded,
+                        onCheck = { minutes ->
+                            scope.launch {
+                                repo.setDutiesChecked(month, minutes)
+                                messages.show(if (minutes != null) ReconcileFormat.checkedMessage(month) else ReconcileFormat.DUTIES_UNCHECKED)
+                            }
+                        },
+                        onShare = {
+                            val text = ReconcileFormat.shareText(month, loaded.duties) { loaded.places[it]?.shortName }
+                            if (shareText != null) {
+                                shareText(text)
+                            } else {
+                                clipboard.setText(AnnotatedString(text))
+                                messages.show(ReconcileFormat.COPIED)
+                            }
+                        },
+                    )
+                }
+                if (loaded.view.canClose) Report1cCard(settings.report1c, month, files, load::start)
             }
         }
+        Report1cSteps(load, settings, today)
     }
 }
 

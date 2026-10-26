@@ -4,15 +4,25 @@ import androidx.room3.withWriteTransaction
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ClientAlias1cEntity
+import com.akenory.personalka.data.db.entity.ClientEntity
+import com.akenory.personalka.data.db.entity.LocationEntity
+import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.ReconciliationEntity
 import com.akenory.personalka.data.db.entity.ReconciliationItemEntity
 import com.akenory.personalka.data.db.entity.ServiceMapping1cEntity
+import com.akenory.personalka.data.db.entity.TrainingEntity
+import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.money.reconcileSpt
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.ReconcileItemKind
 import com.akenory.personalka.domain.model.ReconcileResolution
+import com.akenory.personalka.domain.model.Sex
 import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.report1c.AppVisit
 import com.akenory.personalka.domain.report1c.Client1c
 import com.akenory.personalka.domain.report1c.Diff1c
@@ -22,23 +32,46 @@ import com.akenory.personalka.domain.report1c.Reconcile1c
 import com.akenory.personalka.domain.report1c.Reconcile1cRules
 import com.akenory.personalka.domain.report1c.Report1c
 import com.akenory.personalka.domain.report1c.Report1cParser
+import com.akenory.personalka.domain.report1c.Row1c
+import com.akenory.personalka.domain.report1c.Service1c
 import com.akenory.personalka.domain.report1c.ServiceTarget
+import com.akenory.personalka.domain.report1c.Status1c
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 
-/** Имя из отчёта, которое тренер подтверждает сам (ТЗ 8.3): похожие или тёзки на выбор, или неизвестный клиент. */
+/** Имя из отчёта, которое тренер подтверждает сам (ТЗ 8.3): похожие или тёзки на выбор. */
 data class Name1cQuestion(val name1c: String, val match: NameMatch)
 
 /**
- * Что спросить до сверки (ТЗ 5.14): [services] — названия услуг без типа и места, [names] — имена без единственного
- * клиента. Пусто и там, и там — можно сверять сразу.
+ * Что спросить до сверки (ТЗ 5.14): [services] — названия услуг без типа и места, [names] — имена с похожими клиентами
+ * или тёзками на выбор. Совсем неизвестные имена не спрашиваются — их строки идут в «Только в 1С» с «Добавить в
+ * приложение». Пусто и там, и там — можно сверять сразу.
  */
 data class Report1cQuestions(val services: List<String>, val names: List<Name1cQuestion>) {
     val none: Boolean get() = services.isEmpty() && names.isEmpty()
+}
+
+/**
+ * Пункт сверки для экрана (8.4): [name] — «Пестов Егор» (клиент приложения или фамилия и имя из 1С), [app] — «ПТ · ББ»
+ * тренировки приложения, [what] — она же словами для администратора («группа», «ПТ»), [diff] — пункт с нынешним
+ * статусом участия, для строки администратору.
+ */
+data class Report1cItemView(
+    val item: ReconciliationItemEntity,
+    val name: String,
+    val sex: Sex?,
+    val app: String?,
+    val what: String?,
+    val diff: Diff1c,
+) {
+    val status: ParticipationStatus? get() = diff.visit?.status
 }
 
 /**
@@ -58,10 +91,23 @@ class Report1cRepository(private val db: PersonalkaDatabase, private val clock: 
     suspend fun questions(report: Report1c): Report1cQuestions {
         val services = Reconcile1cRules.unknownServices(report, services().keys)
         val names = Reconcile1cRules.names(report, aliases(), clientList()).values
-            .filter { (_, match) -> match !is NameMatch.Found }
+            .filter { (_, match) -> match is NameMatch.Ask }
             .map { (name, match) -> Name1cQuestion(name, match) }
         return Report1cQuestions(services, names)
     }
+
+    /** «ФИО как в 1С» тренера (3.2): с ним сравнивается шапка отчёта (8.2, п. 5). */
+    suspend fun coachName1c(): String? = coaches.currentCoach()?.name1c
+
+    /** Первая сверка запоминает ФИО тренера из шапки отчёта (3.2); уже запомнено — не меняется. */
+    suspend fun rememberCoach(name1c: String?) {
+        if (name1c.isNullOrBlank()) return
+        val coach = coaches.currentCoach() ?: return
+        if (coach.name1c == null) coaches.upsertCoach(coach.copy(name1c = name1c, sync = coach.sync.touched(clock())))
+    }
+
+    /** Клиенты на выбор в вопросе «Кто это» — в порядке [ids]. */
+    suspend fun clients(ids: List<String>): List<ClientEntity> = ids.mapNotNull { clients.client(it) }
 
     /** «Укажите тип и место для «…»» (8.3): запоминается один раз; повтор того же названия правит запись. */
     suspend fun saveService(name1c: String, typeId: String, locationId: String) {
@@ -143,6 +189,42 @@ class Report1cRepository(private val db: PersonalkaDatabase, private val clock: 
 
     fun items(reconciliationId: String): Flow<List<ReconciliationItemEntity>> = dao.observeItems(reconciliationId)
 
+    /** Пункты сверки [id] для экрана; пересчитываются сами после каждой правки. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun view(id: String): Flow<List<Report1cItemView>> = combine(
+        dao.observeItems(id),
+        clients.observeAllClients(),
+        reference.observeTrainingTypes(),
+        reference.observeLocations(),
+    ) { items, people, types, places -> Sources(items, people.associateBy { it.id }, types.associateBy { it.id }, places.associateBy { it.id }) }
+        .mapLatest { src -> src.items.map { view(it, src) } }
+
+    private class Sources(
+        val items: List<ReconciliationItemEntity>,
+        val clients: Map<String, ClientEntity>,
+        val types: Map<String, TrainingTypeEntity>,
+        val places: Map<String, LocationEntity>,
+    )
+
+    private suspend fun view(item: ReconciliationItemEntity, src: Sources): Report1cItemView {
+        val client = item.clientId?.let { src.clients[it] }
+        val t = item.trainingId?.let { trainings.training(it) }?.takeIf { it.sync.deletedAt == null }
+        val p = if (t != null && item.clientId != null) trainings.participationRow(t.id, item.clientId)?.takeIf { it.sync.deletedAt == null } else null
+        val type = t?.let { src.types[it.typeId] }
+        val row = item.rowAt?.let { at -> Row1c(at, Service1c.OTHER, item.rowServiceName.orEmpty(), item.rowClient.orEmpty(), item.rowStatus ?: Status1c.CAME, 1, 1, 0) }
+        val visit = if (t != null && p != null) AppVisit(t.id, p.clientId, t.start, t.typeId, t.locationId, type?.kind ?: TrainingKind.OTHER, t.owner, p.status) else null
+        val name = client?.let { ClientName(it.lastName, it.firstName).short }
+            ?: item.rowClient?.let { Reconcile1cRules.nameOf(it)?.short ?: it }.orEmpty()
+        return Report1cItemView(
+            item = item,
+            name = name,
+            sex = client?.sex,
+            app = t?.let { listOfNotNull(type?.shortName, src.places[it.locationId]?.shortName).joinToString(" · ") },
+            what = type?.let { if (it.name.uppercase() == it.name) it.name else it.name.lowercase() },
+            diff = Diff1c(item.kind, row, visit, item.statusDiffers, item.serviceDiffers),
+        )
+    }
+
     /** Открытые пункты и «Написал администратору» всех сверок — «Нужно сделать» и напоминание (8.4). */
     fun unresolved(): Flow<List<ReconciliationItemEntity>> =
         dao.observeUnresolved(ReconcileResolution.OPEN, ReconcileResolution.ASKED_ADMIN)
@@ -154,6 +236,93 @@ class Report1cRepository(private val db: PersonalkaDatabase, private val clock: 
         if (item.resolution == resolution) return
         val at = if (resolution == ReconcileResolution.OPEN) null else now
         dao.upsertItems(listOf(item.copy(sync = item.sync.touched(now), resolution = resolution, resolvedAt = at)))
+    }
+
+    /**
+     * «Добавить в приложение» (8.4) — строка «Только в 1С» со статусом из 1С: клиент найден — он, нет — заводится по ФИО из
+     * 1С (и пара запоминается); тренировка того же типа, места и начала уже есть (группа) — клиент добавляется в неё,
+     * иначе — новая тренировка тренера. Прошедшая и «Пришел» — проведена. `false` — услуга не сопоставлена или пункт не тот.
+     */
+    suspend fun addFromReport(itemId: String): Boolean {
+        val coach = coaches.currentCoach() ?: return false
+        val now = clock()
+        var done = false
+        db.withWriteTransaction {
+            val item = dao.item(itemId)?.takeIf { it.trainingId == null } ?: return@withWriteTransaction
+            val at = item.rowAt ?: return@withWriteTransaction
+            val status = item.rowStatus ?: return@withWriteTransaction
+            val target = services()[item.rowServiceName] ?: return@withWriteTransaction
+            val type = reference.trainingType(target.typeId) ?: return@withWriteTransaction
+            val clientId = item.clientId ?: newClient(item.rowClient ?: return@withWriteTransaction, coach.id, now)
+            val existing = trainings.trainingsBetween(at, ClubTime.plusMinutes(at, 1))
+                .firstOrNull { it.typeId == target.typeId && it.locationId == target.locationId && it.start == at }
+            val appStatus = Reconcile1cRules.appStatus(status)
+            val training = existing ?: TrainingEntity(
+                id = Ids.newId(now),
+                sync = SyncFields.new(coach.id, now),
+                typeId = target.typeId,
+                locationId = target.locationId,
+                start = at,
+                durationMin = type.defaultDurationMin,
+                status = if (appStatus == ParticipationStatus.ATTENDED) TrainingStatus.DONE else TrainingStatus.CANCELLED,
+                doneAt = if (appStatus == ParticipationStatus.ATTENDED) now else null,
+            )
+            if (existing == null) {
+                trainings.upsertTraining(training)
+            } else if (appStatus == ParticipationStatus.ATTENDED && existing.status != TrainingStatus.DONE) {
+                trainings.upsertTraining(existing.copy(status = TrainingStatus.DONE, doneAt = now, cancelReason = null, sync = existing.sync.touched(now)))
+            }
+            val old = trainings.participationRow(training.id, clientId)
+            trainings.upsertParticipation(
+                old?.copy(status = appStatus, sync = if (old.sync.deletedAt != null) old.sync.restored(now) else old.sync.touched(now))
+                    ?: ParticipationEntity(Ids.newId(now + 1), SyncFields.new(coach.id, now), training.id, clientId, appStatus),
+            )
+            dao.upsertItems(listOf(item.copy(clientId = clientId, sync = item.sync.touched(now), resolution = ReconcileResolution.FIXED_IN_APP, resolvedAt = now)))
+            db.reconcileSpt(now)
+            done = true
+        }
+        return done
+    }
+
+    /**
+     * «Исправить в приложении» (8.4): расходится статус или услуга — как в 1С (статус участия, тип и место тренировки);
+     * «Только в приложении» — участие становится отменой без списания. Пункт закрывается как исправленный.
+     */
+    suspend fun fixInApp(itemId: String): Boolean {
+        val now = clock()
+        var done = false
+        db.withWriteTransaction {
+            val item = dao.item(itemId) ?: return@withWriteTransaction
+            val t = item.trainingId?.let { trainings.training(it) }?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            val p = item.clientId?.let { trainings.participationRow(t.id, it) } ?: return@withWriteTransaction
+            val status = when (item.kind) {
+                ReconcileItemKind.ONLY_APP -> ParticipationStatus.CANCELLED
+                ReconcileItemKind.STATUS_DIFF -> if (item.statusDiffers) Reconcile1cRules.appStatus(item.rowStatus ?: return@withWriteTransaction) else p.status
+                else -> return@withWriteTransaction
+            }
+            if (status != p.status) trainings.upsertParticipation(p.copy(status = status, chargeOverridden = false, sync = p.sync.touched(now)))
+            var changed = t
+            if (item.serviceDiffers) {
+                services()[item.rowServiceName]?.let { changed = changed.copy(typeId = it.typeId, locationId = it.locationId) }
+            }
+            if (status == ParticipationStatus.ATTENDED && changed.status != TrainingStatus.DONE) {
+                changed = changed.copy(status = TrainingStatus.DONE, doneAt = now, cancelReason = null)
+            }
+            if (changed != t) trainings.upsertTraining(changed.copy(sync = t.sync.touched(now)))
+            dao.upsertItems(listOf(item.copy(sync = item.sync.touched(now), resolution = ReconcileResolution.FIXED_IN_APP, resolvedAt = now)))
+            db.reconcileSpt(now)
+            done = true
+        }
+        return done
+    }
+
+    /** Клиент по ФИО из 1С — для «Добавить в приложение» неизвестного; пара «имя — клиент» запоминается. */
+    private suspend fun newClient(name1c: String, coachId: String, now: Long): String {
+        val name = Reconcile1cRules.nameOf(name1c) ?: ClientName(name1c.trim(), "")
+        val id = Ids.newId(now + 2)
+        clients.upsertClient(ClientEntity(id, SyncFields.new(coachId, now), name.lastName, name.firstName, name.middleName, name1c = name1c))
+        dao.upsertAlias(ClientAlias1cEntity(Ids.newId(now + 3), SyncFields.new(coachId, now), Names1c.key(name1c), id))
+        return id
     }
 
     /** Услуги: одно название дважды (два телефона) — последняя изменённая. */
