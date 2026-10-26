@@ -65,3 +65,19 @@ data class SeriesClientEntity(
     val seriesId: String,
     val clientId: String,
 )
+
+/**
+ * Кого предупредить об отпуске (ТЗ 5.16; шаг 3.12, версия 7 базы): строка на клиента, у которого отпуск забрал
+ * тренировки серий, — его дни [dates]. «Предупредил» ставит [notifiedAt] (момент UTC); строка уходит из дела
+ * «Предупредить об отпуске» и после последнего дня отпуска. «Отменить» после отпуска — мягкое удаление.
+ */
+@Entity(tableName = "vacation_notice", indices = [Index("vacationTo")])
+data class VacationNoticeEntity(
+    @PrimaryKey val id: String,
+    @Embedded val sync: SyncFields,
+    val vacationFrom: LocalDate,
+    val vacationTo: LocalDate,
+    val clientId: String,
+    val dates: List<LocalDate>,
+    val notifiedAt: Long? = null,
+)

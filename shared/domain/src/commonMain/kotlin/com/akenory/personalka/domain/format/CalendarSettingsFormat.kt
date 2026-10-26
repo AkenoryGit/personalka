@@ -28,6 +28,15 @@ object CalendarSettingsFormat {
         "Тренировки постоянного расписания и дежурства в эти дни удалятся, планы перейдут на первую тренировку после отпуска. " +
             "Разовые тренировки останутся."
     const val VACATION_SAVE = "Записать отпуск"
+    const val VACATION_WHO = "Кого предупредить"
+    const val VACATION_WHO_NOTE = "После записи список останется на «Главной» — отмечайте, кого предупредили."
+    const val VACATION_NOBODY = "В эти дни тренировок постоянного расписания нет."
+    const val VACATION_DUTIES = "Дежурства"
+    const val NOTICE_TODO = "Предупредить об отпуске"
+    const val NOTICE_DONE = "Предупредил"
+    const val NOTICE_COPY = "Скопировать список"
+    const val NOTICE_COPIED = "Список скопирован"
+    const val NOTICE_CLOSE = "Закрыть"
     const val OWN_RESTRICTIONS = "Мои запреты"
     const val CLUB_RESTRICTIONS = "Запреты клуба"
     const val DUTIES = "Дежурства"
@@ -74,4 +83,26 @@ object CalendarSettingsFormat {
                 RuText.count(deleted, "тренировка", "тренировки", "тренировок")
         }
     }
+
+    /** Главная кнопка окна отпуска: «Удалить 12 тренировок»; удалять нечего — «Записать отпуск». */
+    fun vacationDelete(n: Int): String =
+        if (n == 0) VACATION_SAVE else "Удалить " + RuText.count(n, "тренировку", "тренировки", "тренировок")
+
+    /** Подпись строки «Кого предупредить»: «2 тренировки · пн 02.11, ср 04.11». */
+    fun vacationDays(dates: List<LocalDate>): String =
+        RuText.count(dates.size, "тренировка", "тренировки", "тренировок") + DOT + dates.joinToString(", ") { DateFormat.short(it) }
+
+    /** Заголовок списка «Предупредить об отпуске»: «Отпуск 02.11–08.11». */
+    fun vacationTitle(from: LocalDate, to: LocalDate): String =
+        "Отпуск$NBSP" + DateFormat.dayMonth(from) + DASH + DateFormat.dayMonth(to)
+
+    /** Сообщение после «Предупредил»: «Предупредили: Смирнова А.». */
+    fun noticeDone(name: String): String = "Предупредили: $name"
+
+    /**
+     * Список для мессенджера (кнопка «Скопировать список»): заголовок отпуска и строка на клиента —
+     * «Смирнова А. — пн 02.11, ср 04.11».
+     */
+    fun noticeList(title: String, rows: List<Pair<String, List<LocalDate>>>): String =
+        (listOf(title) + rows.map { (name, dates) -> "$name — " + dates.joinToString(", ") { DateFormat.short(it) } }).joinToString("\n")
 }

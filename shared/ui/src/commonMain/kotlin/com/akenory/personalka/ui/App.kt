@@ -143,6 +143,10 @@ fun App(
         val advance by remember(settings, hasCoach, now.date.yearMonth) {
             if (hasCoach == true) settings.months.advance(now.date.yearMonth) else flowOf(null)
         }.collectAsState(initial = null)
+        // Кого предупредить об отпуске (5.16, шаг 3.12): пункт «Нужно сделать» и окно со списком на «Главной».
+        val notices by remember(calendar, hasCoach, now.date) {
+            if (hasCoach == true) calendar.settings.notices(now.date) else flowOf(emptyList())
+        }.collectAsState(initial = emptyList())
         // Просьба открыть окно аванса в «Зарплате»: пункт «Главной» или уведомление «Аванс».
         var advanceAsk by rememberSaveable { mutableStateOf(false) }
         // «С сервером» (5.2): вместо копии — изменения, не отправленные больше суток.
@@ -162,8 +166,8 @@ fun App(
         LaunchedEffect(cabinets, cabinetsOpen, syncState?.lastSync) {
             if (cabinetsOpen) cabinets?.repository?.refresh()
         }
-        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance) {
-            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance)
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices)
         }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()
@@ -263,6 +267,7 @@ fun App(
                             shareText = shareText,
                             home = home,
                             todos = todos,
+                            notices = notices,
                             homeCard = homeCard,
                             onHomeCard = { homeCard = it },
                             calendarDay = calendarDay?.let(LocalDate::parse),

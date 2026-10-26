@@ -1,9 +1,11 @@
 package com.akenory.personalka.data.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
-import java.io.File
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.YearMonth
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -11,7 +13,8 @@ import kotlin.test.assertTrue
 
 /**
  * Переходы базы со старых версий: файл версии 1 (до шага 1.13в), 2 (до «За кого» у дежурства), 3 (до очереди
- * изменений), 4 (до таблиц денег, шаг 3.1) и 5 (до отметок «Рассчитались», шаг 3.8) — как на телефоне
+ * изменений), 4 (до таблиц денег, шаг 3.1), 5 (до отметок «Рассчитались», шаг 3.8) и 6 (до «Предупредить
+ * об отпуске», шаг 3.12) — как на телефоне
  * до новой сборки — открываются нынешней версией без потерь. Таблицы старой версии строятся по её схеме
  * из `shared/data/schemas`, которую когда-то записал Room ([createVersion]).
  */
@@ -211,8 +214,40 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion6() {
-        assertEquals(6, PersonalkaDatabase.VERSION)
-        assertTrue((1..5).all { schemaFile(it).exists() }, "Схемы версий 1–5 хранятся: по ним строятся переходы")
+    fun version6KeepsSettlementsAndGetsVacationNotices(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v6", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.8–3.9: отметка «Рассчитались».
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 6)
+                raw.exec(
+                    "INSERT INTO colleague_settlement (id, month, colleagueId, amount, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('s1', '2026-10', 'lena', 88358, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                assertEquals(88358L, db.moneyDao().settlement(YearMonth(2026, 10), "lena")!!.amount, "Отметка не тронута")
+                val schedule = db.scheduleDao()
+                val today = LocalDate(2026, 10, 26)
+                assertEquals(emptyList(), schedule.observeOpenVacationNotices(today).first(), "Предупреждать ещё некого")
+                schedule.upsertVacationNotice(Samples.vacationNotice("orlova", LocalDate(2026, 11, 2), LocalDate(2026, 11, 8)))
+                assertEquals(listOf(LocalDate(2026, 11, 3)), schedule.observeOpenVacationNotices(today).first().single().dates)
+                assertEquals(1, db.syncDao().pending(), "Новая таблица пишет в очередь изменений")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion7() {
+        assertEquals(7, PersonalkaDatabase.VERSION)
+        assertTrue((1..6).all { schemaFile(it).exists() }, "Схемы версий 1–6 хранятся: по ним строятся переходы")
     }
 }

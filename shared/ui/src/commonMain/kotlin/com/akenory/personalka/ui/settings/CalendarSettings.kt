@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.calendar.CalendarPrefs
 import com.akenory.personalka.data.calendar.CalendarSettingsRepository
+import com.akenory.personalka.data.calendar.VacationPreview
 import com.akenory.personalka.data.calendar.VacationResult
 import com.akenory.personalka.data.calendar.ZoneRow
 import com.akenory.personalka.domain.calendar.CalendarSettingsRules
@@ -64,6 +66,8 @@ internal const val WORK_END_TAG = "work-end"
 internal const val VACATION_TAG = "vacation"
 internal const val VACATION_FROM_TAG = "vacation-from"
 internal const val VACATION_TO_TAG = "vacation-to"
+internal const val VACATION_WHO_TAG = "vacation-who"
+internal fun vacationRowTag(key: String) = "vacation-row-$key"
 internal fun stepTag(minutes: Int) = "step-$minutes"
 internal fun horizonTag(weeks: Int) = "horizon-$weeks"
 internal fun noticeTag(minutes: Int) = "notice-$minutes"
@@ -197,18 +201,35 @@ internal fun CalendarSettingsScreen(
                 )
                 toProblem?.let { ErrorText(it) }
                 Hint(CalendarSettingsFormat.VACATION_NOTE)
+                // Защита от ошибки (шаг 3.12): до записи видно, у кого пропадут тренировки, а на кнопке — сколько.
+                val preview by produceState<VacationPreview?>(null, from, to) { value = settings.vacationPreview(vacation) }
+                val loadedPreview = preview
+                if (loadedPreview != null && fromProblem == null && toProblem == null) {
+                    if (loadedPreview.rows.isEmpty()) {
+                        Hint(CalendarSettingsFormat.VACATION_NOBODY)
+                    } else {
+                        SectionLabel(CalendarSettingsFormat.VACATION_WHO, Modifier.padding(top = 0.dp))
+                        ListCard(Modifier.testTag(VACATION_WHO_TAG)) {
+                            loadedPreview.rows.forEachIndexed { index, row ->
+                                if (index > 0) RowDivider()
+                                InfoRow(row.title, row.subtitle, Modifier.testTag(vacationRowTag(row.key)))
+                            }
+                        }
+                        Hint(CalendarSettingsFormat.VACATION_WHO_NOTE)
+                    }
+                }
                 PanelActions(
-                    primary = CalendarSettingsFormat.VACATION_SAVE,
+                    primary = CalendarSettingsFormat.vacationDelete(loadedPreview?.trainings ?: 0),
                     onPrimary = {
                         vacationOpen = false
                         scope.launch {
                             val result = settings.vacation(vacation) as? VacationResult.Saved ?: return@launch
-                            messages.showUndo(result.message) { scope.launch { settings.undo(result.undo) } }
+                            messages.showUndo(result.message) { scope.launch { settings.undo(result.undo, result.notices) } }
                         }
                     },
                     secondary = "Отмена",
                     onSecondary = { vacationOpen = false },
-                    primaryEnabled = fromProblem == null && toProblem == null,
+                    primaryEnabled = fromProblem == null && toProblem == null && loadedPreview != null,
                 )
             }
         }
@@ -269,18 +290,23 @@ private fun ZoneList(title: String, rows: List<ZoneRow>, onOpen: ((String) -> Un
             if (onOpen != null && id != null) {
                 NavRow(row.title, { onOpen(id) }, Modifier.testTag(zoneRowTag(row.key)), subtitle = row.subtitle)
             } else {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .testTag(zoneRowTag(row.key))
-                        .padding(horizontal = Dimens.space4, vertical = Dimens.space2),
-                ) {
-                    Text(row.title, style = MaterialTheme.typography.bodyLarge.tabular(), color = PersonalkaTheme.colors.text)
-                    Text(row.subtitle, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
-                }
+                InfoRow(row.title, row.subtitle, Modifier.testTag(zoneRowTag(row.key)))
             }
         }
+    }
+}
+
+/** Строка списка только для просмотра: заголовок и подпись. */
+@Composable
+internal fun InfoRow(title: String, subtitle: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(horizontal = Dimens.space4, vertical = Dimens.space2),
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge.tabular(), color = PersonalkaTheme.colors.text)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
     }
 }
 
