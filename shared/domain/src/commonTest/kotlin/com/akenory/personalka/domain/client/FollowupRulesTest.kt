@@ -47,6 +47,18 @@ class FollowupRulesTest {
         assertNull(list[2].afterSpt)
     }
 
+    /** Шаг 3.9н: «Убрать из списка» — до новой индивидуальной после нажатия; группы её не заменяют. */
+    @Test
+    fun dismissedUntilNewIndividualVisit() {
+        val moved = FollowupInput("moved", true, listOf(visit(12, 10), visit(17, 9, TrainingKind.GROUP)), booked = false,
+            dismissedAt = LocalDateTime(2026, 10, 18, 12, 0))
+        assertNull(FollowupRules.notBooked(moved, today))
+        assertEquals(emptyList(), FollowupRules.list(listOf(moved), today))
+        // Нажали утром, а ПТ была вечером того же дня — это новая ПТ без записи.
+        val again = moved.copy(visits = moved.visits + visit(18, 18))
+        assertEquals(listOf("moved"), FollowupRules.list(listOf(again), today).map { it.clientId })
+    }
+
     @Test
     fun windowIsFourteenDaysIncludingToday() {
         assertEquals(LocalDate(2026, 10, 7), FollowupRules.firstDay(today, 14))

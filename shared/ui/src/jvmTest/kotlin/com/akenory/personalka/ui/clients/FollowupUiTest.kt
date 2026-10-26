@@ -23,6 +23,7 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.home.TodoKind
+import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.Sex
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -153,6 +154,22 @@ class FollowupUiTest {
         waitUntil(timeoutMillis = 5_000) { runBlocking { db.clientDao().client(zakharov)!!.followupPausedUntil } != null }
         assertEquals(LocalDate(2026, 10, 27), runBlocking { db.clientDao().client(zakharov)!!.followupPausedUntil })
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(followupRowTag("Захаров Никита"))).fetchSemanticsNodes().isEmpty() }
+    }
+
+    /** Шаг 3.9н: перешёл с ПТ в группу — «Убрать из списка» без архива, «Отменить» возвращает. */
+    @Test
+    fun dismissLeavesListWithoutArchive() = runComposeUiTest {
+        val zakharov = visited("Захаров", "Никита", LocalDateTime(2026, 10, 16, 8, 0))
+        openNoBooking()
+        awaitNode(hasTestTag(followupMenuTag("Захаров Никита")))
+        onNodeWithTag(followupMenuTag("Захаров Никита")).performClick()
+        onNodeWithText(FollowupFormat.DISMISS).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(followupRowTag("Захаров Никита"))).fetchSemanticsNodes().isEmpty() }
+        awaitNode(hasText(FollowupFormat.dismissedMessage("Захаров Никита")))
+        val client = runBlocking { db.clientDao().client(zakharov)!! }
+        assertEquals(TestData.clock(), client.followupDismissedAt)
+        assertEquals(ClientStatus.ACTIVE, client.status)
+        onNodeWithText(FollowupFormat.EMPTY).assertIsDisplayed()
     }
 
     @Test

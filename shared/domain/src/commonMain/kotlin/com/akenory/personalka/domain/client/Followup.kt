@@ -20,6 +20,7 @@ data class Visit(
  * Что нужно знать о клиенте для «Без записи» (4.15). [visits] — проведённые тренировки, где он был, любого вида;
  * [booked] — есть ли будущая запланированная тренировка индивидуального формата, где его ждут. [contactedOn] —
  * день, когда нажали «Написал»; [pausedUntil] — «Пауза до…». [waiting] — он в листе ожидания (4.16).
+ * [dismissedAt] — когда нажали «Убрать из списка» (шаг 3.9н), время клуба.
  */
 data class FollowupInput(
     val clientId: String,
@@ -29,6 +30,7 @@ data class FollowupInput(
     val contactedOn: LocalDate? = null,
     val pausedUntil: LocalDate? = null,
     val waiting: Boolean = false,
+    val dismissedAt: LocalDateTime? = null,
 )
 
 /**
@@ -64,10 +66,14 @@ object FollowupRules {
     /**
      * Клиент без записи по правилу 4.15, без «Написал» и «Пауза»: активный, был на индивидуальной за последние
      * [days] дней и не записан дальше. Такому в карточке — метка «Нет записи». Клиент из листа ожидания — не здесь.
+     *
+     * «Убрать из списка» (шаг 3.9н) — тренер знает, что всё в порядке (перешёл в группу): клиента нет ни в списке,
+     * ни с меткой, пока не придёт на новую индивидуальную после нажатия, — тогда это новая ПТ без записи.
      */
     fun notBooked(input: FollowupInput, today: LocalDate, days: Int = DEFAULT_DAYS): Visit? {
         if (!input.active || input.booked || input.waiting) return null
         val last = lastVisit(input.visits) ?: return null
+        if (input.dismissedAt != null && last.start <= input.dismissedAt) return null
         return last.takeIf { it.start.date >= firstDay(today, days) }
     }
 

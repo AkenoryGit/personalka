@@ -309,8 +309,42 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion9() {
-        assertEquals(9, PersonalkaDatabase.VERSION)
-        assertTrue((1..8).all { schemaFile(it).exists() }, "Схемы версий 1–8 хранятся: по ним строятся переходы")
+    fun version9KeepsClientsAndGetsDismissed(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v9", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.9е–3.9м: убрать из «Не записаны дальше» можно было только в архив.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 9)
+                raw.exec(
+                    "INSERT INTO client (id, lastName, firstName, middleName, birthDate, isAdult, sex, contactName, contactPhone, mediaUrl, " +
+                        "privateNote, name1c, cabinetEnabled, consentAt, consentSource, followupContactedAt, followupPausedUntil, followupPauseNote, " +
+                        "pendingPlan, status, source, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('k1', 'Белова', 'Аня', NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, " +
+                        "NULL, '2026-11-01', 'отпуск', NULL, 'ACTIVE', 'MANUAL', 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val clients = db.clientDao()
+                val client = clients.client("k1")!!
+                assertEquals("Белова" to "отпуск", client.lastName to client.followupPauseNote, "Клиент не тронут")
+                assertNull(client.followupDismissedAt, "Прежнего клиента из списка не убирали")
+                clients.upsertClient(client.copy(followupDismissedAt = 5L))
+                assertEquals(5L, clients.client("k1")!!.followupDismissedAt)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion10() {
+        assertEquals(10, PersonalkaDatabase.VERSION)
+        assertTrue((1..9).all { schemaFile(it).exists() }, "Схемы версий 1–9 хранятся: по ним строятся переходы")
     }
 }

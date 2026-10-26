@@ -52,10 +52,14 @@ object FollowupFormat {
     const val CONTACTED = "Написал"
     const val PAUSE = "Пауза до…"
     const val GONE = "Больше не ходит"
+    const val DISMISS = "Убрать из списка"
     const val PHONE_COPIED = "Номер скопирован"
 
     /** После «Написал»: клиент скрыт на 3 дня. */
     fun contactedMessage(name: String): String = "$name — скрыт на 3 дня"
+
+    /** После «Убрать из списка»: «Соколова В. — убрали из списка». */
+    fun dismissedMessage(name: String): String = "$name — убрали из списка"
 
     const val PAUSE_TITLE = "Пауза"
     const val PAUSE_UNTIL = "До какого дня"

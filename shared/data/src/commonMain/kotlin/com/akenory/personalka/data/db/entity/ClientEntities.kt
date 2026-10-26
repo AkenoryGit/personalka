@@ -47,6 +47,8 @@ data class ClientEntity(
     val followupContactedAt: Long? = null,
     val followupPausedUntil: LocalDate? = null,
     val followupPauseNote: String? = null,
+    /** «Убрать из списка» «Без записи» (шаг 3.9н), момент UTC: скрыт до новой индивидуальной тренировки. */
+    val followupDismissedAt: Long? = null,
     /** План, которому не нашлось следующей тренировки (4.3). */
     val pendingPlan: String? = null,
     val status: ClientStatus = ClientStatus.ACTIVE,

@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -170,6 +170,13 @@ internal object Migration7To8 : Migration(7, 8) {
 internal object Migration8To9 : Migration(8, 9) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `training_type` ADD COLUMN `dutyColor` TEXT")
+    }
+}
+
+/** Версия 10 (шаг 3.9н): «Убрать из списка» «Без записи» у клиента (ТЗ 4.15); у прежних клиентов — пусто. */
+internal object Migration9To10 : Migration(9, 10) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `client` ADD COLUMN `followupDismissedAt` INTEGER")
     }
 }
 

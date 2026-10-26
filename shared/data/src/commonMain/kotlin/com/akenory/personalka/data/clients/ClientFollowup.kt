@@ -38,7 +38,7 @@ data class Followup(val days: Int, val rows: List<FollowupRow>, val noBooking: S
 
 /**
  * Клиенты без записи (ТЗ 4.15, 5.8): список не хранится, а считается из тренировок при каждом их изменении. В базе —
- * только «Написал» и «Пауза до…» у клиента.
+ * только «Написал», «Пауза до…» и «Убрать из списка» у клиента.
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
@@ -76,6 +76,7 @@ class ClientFollowup internal constructor(private val db: PersonalkaDatabase, pr
                     contactedOn = c.followupContactedAt?.let { ClubTime.today(it) },
                     pausedUntil = c.followupPausedUntil,
                     waiting = c.id in waitingIds,
+                    dismissedAt = c.followupDismissedAt?.let { ClubTime.now(it) },
                 )
             }
         }
@@ -110,7 +111,18 @@ class ClientFollowup internal constructor(private val db: PersonalkaDatabase, pr
         return client
     }
 
-    /** «Отменить» после «Написал» и «Пауза до…»: поля «Без записи» — как были в [before]. */
+    /**
+     * «Убрать из списка» (шаг 3.9н): клиент уходит из «Не записаны дальше» и без метки «Нет записи», пока не придёт
+     * на новую ПТ, сплит или СПТ. Возвращает карточку до правки — для «Отменить».
+     */
+    suspend fun dismiss(clientId: String): ClientEntity? {
+        val client = clients.client(clientId) ?: return null
+        val now = clock()
+        clients.upsertClient(client.copy(followupDismissedAt = now, sync = client.sync.touched(now)))
+        return client
+    }
+
+    /** «Отменить» после «Написал», «Пауза до…» и «Убрать из списка»: поля «Без записи» — как были в [before]. */
     suspend fun undo(before: ClientEntity) {
         val client = clients.client(before.id) ?: return
         val now = clock()
@@ -119,6 +131,7 @@ class ClientFollowup internal constructor(private val db: PersonalkaDatabase, pr
                 followupContactedAt = before.followupContactedAt,
                 followupPausedUntil = before.followupPausedUntil,
                 followupPauseNote = before.followupPauseNote,
+                followupDismissedAt = before.followupDismissedAt,
                 sync = client.sync.touched(now),
             ),
         )

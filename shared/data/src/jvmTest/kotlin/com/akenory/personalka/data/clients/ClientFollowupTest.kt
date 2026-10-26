@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.model.WaitStatus
@@ -125,6 +126,36 @@ class ClientFollowupTest {
         assertTrue(followup().rows.isEmpty())
         assertEquals("отпуск", db.clientDao().client(a)!!.followupPauseNote)
         assertEquals(1, followup(LocalDateTime(2026, 10, 25, 9, 0)).rows.size)
+    }
+
+    /**
+     * Шаг 3.9н: перешёл с ПТ в группу — «Убрать из списка»: нет ни в списке, ни с меткой «Нет записи», клиент не в
+     * архиве; группа впереди его не возвращает, новая ПТ без записи — возвращает; «Отменить» — как было.
+     */
+    @Test
+    fun dismissHidesUntilNextIndividualVisit(): Unit = runBlocking {
+        val a = create("Захаров", "Никита")
+        training(LocalDateTime(2026, 10, 16, 8, 0), ptId, a, done = true)
+        training(LocalDateTime(2026, 10, 24, 9, 0), groupId, a, done = false)
+        assertEquals(1, followup().rows.size)
+
+        val before = repo.followup.dismiss(a)!!
+        assertTrue(followup().rows.isEmpty())
+        assertTrue(followup().noBooking.isEmpty())
+        assertEquals(ClientStatus.ACTIVE, db.clientDao().client(a)!!.status)
+        // Через неделю, после группы, — всё так же нет.
+        training(LocalDateTime(2026, 10, 24, 9, 0), groupId, a, done = true)
+        assertTrue(followup(LocalDateTime(2026, 10, 25, 9, 0)).rows.isEmpty())
+
+        repo.followup.undo(before)
+        assertEquals(1, followup().rows.size)
+
+        // Убрали снова, а он пришёл на новую ПТ и дальше не записан — снова в списке.
+        repo.followup.dismiss(a)
+        training(LocalDateTime(2026, 10, 27, 8, 0), ptId, a, done = true)
+        val later = followup(LocalDateTime(2026, 10, 27, 12, 0))
+        assertEquals(LocalDateTime(2026, 10, 27, 8, 0), later.rows.single().item.last.start)
+        assertEquals(setOf(a), later.noBooking)
     }
 
     @Test

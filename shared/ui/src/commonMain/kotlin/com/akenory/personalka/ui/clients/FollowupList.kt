@@ -92,7 +92,7 @@ const val PAUSE_NOTE_TAG = "followup-pause-note"
 /**
  * «Без записи» (5.8, 4.15, макет ClNoBooking): раздел «Не записаны дальше» — карточка на клиента: имя, «писали 16.10»
  * справа, пометка «после СПТ 12.10», «была пн 12.10 · СПТ ББ»; «Записать», «Написал», звонок (долгое нажатие
- * копирует номер) и меню с «Пауза до…» и «Больше не ходит». Нажатие на имя открывает карточку клиента.
+ * копирует номер) и меню с «Пауза до…», «Убрать из списка» (шаг 3.9н: перешёл в группу — без архива) и «Больше не ходит». Нажатие на имя открывает карточку клиента.
  *
  * Сверху — раздел «Ждут время» (4.16, шаг 2.4а): виден всегда, пустой — «Никто не ждёт»; над ним — «+ В ожидание».
  *
@@ -253,6 +253,12 @@ internal fun FollowupList(
                         }
                     },
                     onPause = { pausing = row.client.id },
+                    onDismiss = {
+                        scope.launch {
+                            val before = clients.followup.dismiss(row.client.id) ?: return@launch
+                            messages.showUndo(FollowupFormat.dismissedMessage(row.short)) { scope.launch { clients.followup.undo(before) } }
+                        }
+                    },
                     onGone = {
                         scope.launch {
                             val undo = clients.archive(row.client.id) ?: return@launch
@@ -312,6 +318,7 @@ private fun FollowupItem(
     onBook: () -> Unit,
     onContacted: () -> Unit,
     onPause: () -> Unit,
+    onDismiss: () -> Unit,
     onGone: () -> Unit,
     onCopied: () -> Unit,
 ) {
@@ -381,6 +388,10 @@ private fun FollowupItem(
                     MenuAction(FollowupFormat.PAUSE, PIcons.PauseCircle, {
                         menu = false
                         onPause()
+                    })
+                    MenuAction(FollowupFormat.DISMISS, PIcons.Close, {
+                        menu = false
+                        onDismiss()
                     })
                     MenuAction(FollowupFormat.GONE, PIcons.Archive, {
                         menu = false

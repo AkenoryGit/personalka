@@ -15,7 +15,7 @@ enum class SyncOrder { OLDER, SAME, NEWER }
  */
 object SyncRules {
     /** Версия схемы базы телефона, с которой работает этот код; совпадает с `PersonalkaDatabase.VERSION` (тест). */
-    const val SCHEMA_VERSION = 9
+    const val SCHEMA_VERSION = 10
 
     /** Изменений в одной отправке, не больше. */
     const val PUSH_MAX = 500
