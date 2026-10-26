@@ -64,7 +64,10 @@ import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.App
@@ -303,6 +306,31 @@ class CalendarUiTest {
         assertEquals(setOf("Белова Ева", "Гусев Борис", "Ильин Глеб"), blocks.map { it.lines.first() }.toSet())
         // 50 минут при часе 64 dp — 53 dp; на блоке — полное имя, время и плашки типа и места (шаг 3.9д).
         assertTrue(blocks.all { it.rows == BlockRows.TWO && it.lines.drop(1) == listOf("16:00–16:50", "ПТ · ББ") })
+    }
+
+    @Test
+    fun groupBlocksShowWhoLeads() = runComposeUiTest {
+        val mine = training("09:00", 60, type = "Группа")
+        val together = training("12:00", 60, type = "Группа")
+        val hers = training("17:00", 30, type = "Группа")
+        val lena = runBlocking { settings.colleagues.add("Лена", PaySchemeKind.NONE, today) }
+        runBlocking {
+            val dao = db.trainingDao()
+            dao.upsertTraining(dao.training(together)!!.copy(conductedBy = ConductedBy.SELF_AND_COLLEAGUE, colleagueId = lena))
+            dao.upsertTraining(dao.training(hers)!!.copy(owner = Owner.COLLEAGUE, ownerColleagueId = lena, colleagueId = lena))
+        }
+        openCalendar()
+        awaitBlocks(3)
+        // Совместное ведение выключено — блоки как раньше (шаг 3.9л).
+        assertTrue(day().blocks.all { it.who.isEmpty() })
+
+        runBlocking { settings.salary.saveCoCoaching(true) }
+        waitUntil(timeoutMillis = 5_000) { day().blocks.any { it.who.isNotEmpty() } }
+        val byId = day().blocks.associateBy { it.id }
+        assertEquals(listOf("Группа", "09:00–10:00", "Группа · ББ"), byId.getValue(mine).lines)
+        assertEquals(listOf("Группа", "Вдвоём · Лена", "12:00–13:00", "Группа · ББ"), byId.getValue(together).lines)
+        assertEquals("Один", byId.getValue(hers).whoShort)
+        assertEquals("Один · числится Лена", byId.getValue(hers).who)
     }
 
     @Test

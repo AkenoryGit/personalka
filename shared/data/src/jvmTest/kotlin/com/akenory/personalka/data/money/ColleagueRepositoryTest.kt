@@ -156,4 +156,24 @@ class ColleagueRepositoryTest {
         assertEquals(Sharing.SELF, sharingOf(id))
         assertEquals(emptyList(), assertNotNull(cards.card(id).first()!!.sharing).choices)
     }
+
+    @Test
+    fun calendarShowsWhoLeadsOnlyWithCoCoaching(): Unit = runBlocking {
+        val lena = settings.colleagues.add("Лена", PaySchemeKind.NONE, today)
+        val group = groups.create(GroupDraft("Сб 9:00 ББ", groupTypeId, bbId))
+        val mine = groupTraining(group, LocalDate(2026, 10, 27))
+        val together = groupTraining(group, LocalDate(2026, 10, 28), Sharing(Owner.SELF, null, ConductedBy.SELF_AND_COLLEAGUE, lena))
+        val hers = groupTraining(group, LocalDate(2026, 10, 29), Sharing(Owner.COLLEAGUE, lena, ConductedBy.SELF, lena))
+        val cancelled = groupTraining(group, LocalDate(2026, 10, 30), Sharing(Owner.SELF, null, ConductedBy.COLLEAGUE, lena), TrainingStatus.CANCELLED)
+        suspend fun who() = calendar.trainings(today, LocalDate(2026, 11, 1)).first().associate { it.id to it.who?.full }
+
+        // Выключено — на блоках ничего нового (шаг 3.9л).
+        assertTrue(who().values.all { it == null })
+        settings.salary.saveCoCoaching(true)
+        val on = who()
+        assertNull(on[mine])
+        assertEquals("Вдвоём · Лена", on[together])
+        assertEquals("Один · числится Лена", on[hers])
+        assertNull(on[cancelled])
+    }
 }

@@ -7,6 +7,7 @@ import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
+import com.akenory.personalka.data.groups.sharing
 import com.akenory.personalka.data.reminders.ReminderSettingsRepository
 import com.akenory.personalka.data.restrictions.RestrictionRepository
 import com.akenory.personalka.data.results.ResultRepository
@@ -30,7 +31,9 @@ import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.calendar.ZoneSpan
 import com.akenory.personalka.domain.client.ClientName
+import com.akenory.personalka.domain.format.BlockWho
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.Scope
@@ -68,6 +71,8 @@ import kotlinx.datetime.plus
  * @param badges значки по важности (`CalendarBadges`); сколько из них видно, решает высота блока.
  * @param marked проведена или в ней отмечены пришедшие: в будущее её не перенести (`CalendarDrag.problem`).
  * @param done проведена; [group] — групповая (тип GROUP): для «Главной» (5.2).
+ * @param who кто ведёт группу — плашка на блоке и строка «Месяца» и «Списка» (шаг 3.9л): только с совместным
+ *   ведением, у неотменённой групповой, которую тренер ведёт не один или которая числится на коллеге.
  */
 data class CalendarTraining(
     val id: String,
@@ -86,6 +91,7 @@ data class CalendarTraining(
     val done: Boolean = false,
     val group: Boolean = false,
     val name: String = title,
+    val who: BlockWho? = null,
 )
 
 /** Что вышло из переноса тренировки (5.3). */
@@ -278,7 +284,16 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
             reference.observeLocations(),
             clients.observeGroups(),
             clients.observeAllClients(),
-        ) { types, places, groups, people -> Names(types.associateBy { it.id }, places.associateBy { it.id }, groups.associateBy { it.id }, people.associateBy { it.id }) }
+            db.moneyDao().observeColleagues(),
+        ) { types, places, groups, people, colleagues ->
+            Names(
+                types.associateBy { it.id },
+                places.associateBy { it.id },
+                groups.associateBy { it.id },
+                people.associateBy { it.id },
+                colleagues.associate { it.id to it.name },
+            )
+        }
         return combine(
             trainings.observeTrainingsBetween(start, end),
             trainings.observeParticipationsBetween(start, end),
@@ -287,6 +302,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
         ) { list, participations, n, settings ->
             val byTraining = participations.groupBy { it.trainingId }
             val diaryEnabled = settings?.diaryEnabled ?: false
+            val coCoaching = settings?.coCoachingEnabled == true
             // Дежурства — не блоки, но по ним видно, какая тренировка стоит поверх дежурства.
             val duties = list.filter { n.types[it.typeId]?.kind == TrainingKind.DUTY }.map { it.placed(isDuty = true) }
             list.mapNotNull { t ->
@@ -317,6 +333,8 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                     place = n.places[t.locationId],
                     badges = badges,
                     marked = marked,
+                    // Как строка «Проводим» карточки (5.4): выключено или отменена — не видно.
+                    who = if (coCoaching && !cancelled && type?.kind == TrainingKind.GROUP) CoCoachingFormat.blockWho(t.sharing(), n.colleagues) else null,
                 )
             }
         }
@@ -442,6 +460,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
         val places: Map<String, LocationEntity>,
         val groups: Map<String, GroupEntity>,
         val clients: Map<String, ClientEntity>,
+        val colleagues: Map<String, String>,
     )
 }
 
@@ -454,6 +473,7 @@ private fun TrainingEntity.toCalendar(
     place: LocationEntity?,
     badges: List<CalendarBadge>,
     marked: Boolean,
+    who: BlockWho?,
 ) = CalendarTraining(
     id = id,
     start = start,
@@ -471,4 +491,5 @@ private fun TrainingEntity.toCalendar(
     marked = marked,
     done = status == TrainingStatus.DONE,
     group = type?.kind == TrainingKind.GROUP,
+    who = who,
 )

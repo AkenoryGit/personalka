@@ -89,12 +89,14 @@ object CalendarFormat {
      * длительность — если она не обычные 50 минут: «Грудничковое · ДБ · 30 мин»; у отменённой со списанием —
      * «ПТ · ББ · со списанием»: время строки показывает только начало, а списание — деньги клиента.
      */
-    fun listLine(typeName: String, place: String, durationMin: Int, charged: Boolean): String = buildString {
+    fun listLine(typeName: String, place: String, durationMin: Int, charged: Boolean, who: String? = null): String = buildString {
         append(typeName)
         append(DOT)
         append(place)
         if (durationMin != TypePresets.DEFAULT_DURATION) append(DOT).append(DurationFormat.minutes(durationMin))
         if (charged) append(DOT).append(CHARGED)
+        // Кто ведёт группу (шаг 3.9л): «Группа · ББ · вдвоём · Лена».
+        if (who != null) append(DOT).append(who.replaceFirstChar { it.lowercaseChar() })
     }
 
     private const val CHARGED = "со списанием"

@@ -173,7 +173,7 @@ private fun TrainingRow(training: CalendarTraining, onClick: () -> Unit) {
         time = DateFormat.time(training.start.time),
         stripe = if (cancelled) colors.outline else PlaceColor.of(training.color).tone(colors.isDark).stripe,
         title = training.name,
-        line = CalendarFormat.listLine(training.typeName, training.placeShort, training.durationMin, charged = cancelled && CalendarBadge.CHARGED in training.badges),
+        line = CalendarFormat.listLine(training.typeName, training.placeShort, training.durationMin, charged = cancelled && CalendarBadge.CHARGED in training.badges, who = training.who?.full),
         crossed = cancelled,
         badges = training.badges,
         tag = calendarRowTag(training.id),

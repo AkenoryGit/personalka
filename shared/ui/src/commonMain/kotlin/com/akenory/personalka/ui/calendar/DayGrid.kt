@@ -149,6 +149,8 @@ internal val PAGE_COUNT: Int = pageOf(LocalDate(2100, 1, 1))
  *
  * @param time «12:00–13:00»; [start] — только начало, «12:00», для низких и узких блоков.
  * @param type «ПТ», «СПТ», «Груд»; [place] — «ББ», «ДБ»: плашки на блоке; пустые не рисуются.
+ * @param who кто ведёт группу — «Вдвоём · Лена», [whoShort] — «Вдвоём» для узкого блока; пусто — своя группа,
+ *   которую тренер ведёт один, или совместное ведение выключено (шаг 3.9л).
  */
 @Immutable
 data class BlockInfo(
@@ -165,10 +167,12 @@ data class BlockInfo(
     val height: Float,
     val cancelled: Boolean,
     val badges: List<CalendarBadge> = emptyList(),
+    val who: String = "",
+    val whoShort: String = who,
 ) {
-    /** Блок словами — для TalkBack и тестов: имя, время, «тип · место». */
+    /** Блок словами — для TalkBack и тестов: имя, кто ведёт, время, «тип · место». */
     val lines: List<String>
-        get() = listOfNotNull(name, time, listOf(type, place).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null })
+        get() = listOfNotNull(name, who.ifEmpty { null }, time, listOf(type, place).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null })
 }
 
 /** Метка «+N», как её видит тест: подпись и скрытые тренировки. */
@@ -1063,6 +1067,8 @@ internal fun dayBlocks(
             height = height,
             cancelled = training.cancelled,
             badges = CalendarBadges.visible(training.badges, rows),
+            who = training.who?.full.orEmpty(),
+            whoShort = training.who?.short.orEmpty(),
         )
     }
     val more = layout.more.map { m ->
@@ -1095,8 +1101,11 @@ internal fun CalendarTraining.span(): DaySpan {
 /** Время на блоке: «12:00–13:00». */
 private fun CalendarTraining.timeText(): String = DateFormat.timeRange(start, TrainingTime.end(start, durationMin))
 
-/** Строка «время и плашки» блока: время (его может не быть) и плашки типа и места; пустая — ничего не рисует. */
-private class MetaLine(val time: TextLayoutResult?, val tags: List<TextLayoutResult>)
+/**
+ * Строка «время и плашки» блока: плашка «кто ведёт» [who] (шаг 3.9л), время (его может не быть) и плашки типа
+ * и места; пустая — ничего не рисует.
+ */
+private class MetaLine(val time: TextLayoutResult?, val tags: List<TextLayoutResult>, val who: TextLayoutResult? = null)
 
 /** Измеренный текст блока: строки имени и строки «время и плашки»; [inline] — всё в одной строке. */
 private class BlockText(val name: List<TextLayoutResult>, val meta: List<MetaLine>, val inline: Boolean)
@@ -1115,6 +1124,10 @@ private fun DrawScope.blockLines(block: BlockInfo, measurer: TextMeasurer, style
  * «12:00–13:00»), затем время, затем плашка типа: место видно дольше всего (ТЗ 5.3). Если под именем осталось две
  * строки, а всё в одну не входит, — время и плашки в двух строках. В блоке в одну строку время и плашки идут
  * за именем, только если имя рядом с ними помещается целиком.
+ *
+ * Плашка «кто ведёт» (шаг 3.9л) важнее всего, кроме имени: своей строкой сразу под ним, полная («Вдвоём · Лена»),
+ * короткая («Вдвоём») или короткая с многоточием; в блоке в две строки рядом с ней — место, если входит, в блоке
+ * в одну — она за именем вместо времени и типа.
  */
 private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lines: Int, styles: BlockStyles): BlockText {
     val width = (block.width.dp - BLOCK_GAP * 2 - TEXT_START - TEXT_END).toPx().coerceAtLeast(0f)
@@ -1159,21 +1172,47 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
     val start = time(block.start)
     val none = MetaLine(null, emptyList())
     fun MetaLine.width(): Float {
-        val parts = listOfNotNull(time?.size?.width?.toFloat()) + tags.map { it.size.width + pad * 2 }
+        val parts = listOfNotNull(who?.size?.width?.plus(pad * 2), time?.size?.width?.toFloat()) + tags.map { it.size.width + pad * 2 }
         return parts.sum() + gap * (parts.size - 1).coerceAtLeast(0)
     }
+    val whoFull = tag(block.who)
+    val whoShort = tag(block.whoShort)
     if (lines <= 1) {
         val free = width - room - wide(block.name) - gap
-        val meta = listOf(MetaLine(start, both), MetaLine(start, placeOnly), MetaLine(null, placeOnly))
-            .firstOrNull { it.width() <= free } ?: none
+        val candidates = if (whoFull != null) {
+            listOfNotNull(whoFull, whoShort).flatMap { listOf(MetaLine(null, placeOnly, it), MetaLine(null, emptyList(), it)) }
+        } else {
+            listOf(MetaLine(start, both), MetaLine(start, placeOnly), MetaLine(null, placeOnly))
+        }
+        val meta = candidates.firstOrNull { it.width() <= free } ?: none
         val used = meta.width().let { if (it > 0f) it + gap else 0f }
         return BlockText(name(width - room - used, 1), listOf(meta), inline = true)
     }
-    val title = name(width - room, lines - 1)
-    val range = time(block.time)
     fun MetaLine.fits() = width() <= width
+    val who = whoFull?.let {
+        listOfNotNull(whoFull, whoShort).map { MetaLine(null, emptyList(), it) }.firstOrNull { it.fits() }
+            ?: MetaLine(
+                null,
+                emptyList(),
+                measurer.measure(
+                    text = block.whoShort,
+                    style = styles.tag,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                    maxLines = 1,
+                    constraints = Constraints(maxWidth = (width - pad * 2).toInt().coerceAtLeast(0)),
+                ),
+            )
+    }
+    if (who != null && lines == 2) {
+        val withPlace = MetaLine(null, placeOnly, who.who)
+        return BlockText(name(width - room, 1), listOf(if (withPlace.fits()) withPlace else who), inline = false)
+    }
+    val title = name(width - room, lines - if (who != null) 2 else 1)
+    val rows = lines - title.size - if (who != null) 1 else 0
+    val range = time(block.time)
     val whole = MetaLine(range, both)
-    val meta = if (lines - title.size >= 2 && !whole.fits()) {
+    val meta = if (rows >= 2 && !whole.fits()) {
         listOf(
             listOf(MetaLine(range, emptyList()), MetaLine(start, emptyList())).firstOrNull { it.fits() } ?: none,
             listOf(MetaLine(null, both), MetaLine(null, placeOnly)).firstOrNull { it.fits() } ?: none,
@@ -1184,7 +1223,7 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
                 .firstOrNull { it.fits() } ?: none,
         )
     }
-    return BlockText(title, meta, inline = false)
+    return BlockText(title, listOfNotNull(who) + meta, inline = false)
 }
 
 /** Подпись зоны в одну строку: у дежурства — справа, у запрета — слева, на плашке. */
@@ -1330,10 +1369,10 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
             y += line
         }
         if (text.inline) {
-            text.meta.forEach { drawMeta(it, left + text.name.first().size.width + TAG_GAP.toPx(), rect.top + TEXT_TOP.toPx(), line, ink, colors) }
+            text.meta.forEach { drawMeta(it, left + text.name.first().size.width + TAG_GAP.toPx(), rect.top + TEXT_TOP.toPx(), line, ink, fill, colors) }
         } else {
             text.meta.forEach {
-                drawMeta(it, left, y, line, ink, colors)
+                drawMeta(it, left, y, line, ink, fill, colors)
                 y += line
             }
         }
@@ -1341,10 +1380,22 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
     }
 }
 
-/** Строка «время и плашки» с левым краем [x] и верхом строки [y] высотой [line]: плашки — по середине строки. */
-private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, ink: Color, colors: PersonalkaColors) {
+/**
+ * Строка «время и плашки» с левым краем [x] и верхом строки [y] высотой [line]: плашки — по середине строки.
+ * Плашка «кто ведёт» — наоборот: цвет текста блока подложкой, цвет блока [fill] текстом (шаг 3.9л). Пара та же, что
+ * у самого блока, поэтому контраст не ниже, а плашка заметна среди светлых «ПТ» и «ББ».
+ */
+private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, ink: Color, fill: Color, colors: PersonalkaColors) {
     var left = x
     val gap = TAG_GAP.toPx()
+    meta.who?.let { who ->
+        val width = who.size.width + TAG_PAD_X.toPx() * 2
+        val height = who.size.height + TAG_PAD_Y.toPx() * 2
+        val top = y + (line - height) / 2
+        drawRoundRect(color = ink, topLeft = Offset(left, top), size = Size(width, height), cornerRadius = CornerRadius(TAG_RADIUS.toPx()))
+        drawText(who, color = fill, topLeft = Offset(left + TAG_PAD_X.toPx(), top + TAG_PAD_Y.toPx()))
+        left += width + gap
+    }
     meta.time?.let {
         drawText(it, color = ink, topLeft = Offset(left, y + (line - it.size.height) / 2))
         left += it.size.width + gap
