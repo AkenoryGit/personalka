@@ -77,7 +77,8 @@ data class TierProgress(
  * сегодня (только у текущего месяца). [payout] — выплаты по проведённым, [forecastPayout] — если всё пройдёт по
  * расписанию. [advanceActual] — введённый аванс. [chart] — график накопления по дням, [closed] — «Месяц сверен»
  * (правки его тренировок спрашивают подтверждение, 4.1). [days] — заработанное по дням (3.7в): нажатие на день графика.
- * [colleagues] — взаиморасчёт по каждому коллеге для вкладки «Коллеги» (3.8).
+ * [colleagues] — взаиморасчёт по каждому коллеге для вкладки «Коллеги» (3.8). [todayPt] и [todayPtAhead] — ПТ
+ * сегодня: проведено и ещё запланировано (счёт как у ступени, 4.6), для «Денег» на «Главной».
  */
 data class SalaryMonth(
     val month: YearMonth,
@@ -98,6 +99,8 @@ data class SalaryMonth(
     val closed: Boolean = false,
     val days: List<DayItem> = emptyList(),
     val colleagues: List<ColleagueSettlement> = emptyList(),
+    val todayPt: Int? = null,
+    val todayPtAhead: Int? = null,
 ) {
     /** «Месяц сверен» — у прошедшего и текущего: сверять будущий не с чем. */
     val canClose: Boolean get() = period != MonthPeriod.FUTURE
@@ -172,6 +175,7 @@ object SalaryMonthRules {
         val days = SalaryDaysRules.items(input, pay, SalaryDaysRules.lastDay(month, today))
         val todayIds = ofToday?.map { it.id }?.toSet()
         val plannedToday = ofToday?.filter { it.status == TrainingStatus.PLANNED }?.map { it.id }?.toSet()
+        val ptIds = PayRules.ptTypeIds(Versions.activeIn(input.schemes, month) { it.validFrom }, input.types)
         return SalaryMonth(
             month = month,
             period = period,
@@ -191,6 +195,8 @@ object SalaryMonthRules {
             closed = closed,
             days = days,
             colleagues = SettlementRules.colleagues(input, pay, settled),
+            todayPt = ofToday?.let { PayRules.ptCount(it, ptIds) },
+            todayPtAhead = ofToday?.let { list -> PayRules.ptCount(list.filter { it.status == TrainingStatus.PLANNED }, ptIds, forecast = true) },
         )
     }
 

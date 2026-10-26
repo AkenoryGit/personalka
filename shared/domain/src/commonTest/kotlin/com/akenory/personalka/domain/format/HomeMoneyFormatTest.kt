@@ -23,13 +23,25 @@ class HomeMoneyFormatTest {
     @Test
     fun tierLine() {
         // Прогноз меняет ступень — «по расписанию будет 2» (макет HomeDay).
-        assertEquals(s("94_ПТ · ступень 1 · по расписанию будет 2"), HomeFormat.tierLine(94, tiers(94, 145, 1, 2)))
+        assertEquals("Ступень 1 · по расписанию будет 2", HomeFormat.tierLine(94, tiers(94, 145, 1, 2)))
         // Не меняет — сколько до следующего порога по проведённым.
-        assertEquals(s("102_ПТ · ступень 2 · до_151 ещё 49_ПТ"), HomeFormat.tierLine(102, tiers(102, 130, 2, 2)))
-        assertEquals(s("60_ПТ · ступень 1 · до_101 ещё 41_ПТ"), HomeFormat.tierLine(60, tiers(60, 90, 1, 1)))
-        // Ступень 3 — выше некуда; ступени выключены — только число.
-        assertEquals(s("160_ПТ · ступень 3"), HomeFormat.tierLine(160, tiers(160, 170, 3, 3)))
-        assertEquals(s("94_ПТ"), HomeFormat.tierLine(94, null))
+        assertEquals(s("Ступень 2 · до_151 ещё 49_ПТ"), HomeFormat.tierLine(102, tiers(102, 130, 2, 2)))
+        assertEquals(s("Ступень 1 · до_101 ещё 41_ПТ"), HomeFormat.tierLine(60, tiers(60, 90, 1, 1)))
+        // Ступень 3 — выше некуда; ступени выключены — строки нет.
+        assertEquals("Ступень 3", HomeFormat.tierLine(160, tiers(160, 170, 3, 3)))
+        assertNull(HomeFormat.tierLine(94, null))
+    }
+
+    @Test
+    fun todayAndMonthColumns() {
+        // Сегодня 3 680 ₽ проведено, по расписанию к вечеру 6 440 ₽.
+        assertEquals("будет " + MoneyFormat.approxRub(644_000), HomeFormat.willBe(368_000, 644_000))
+        assertEquals("всё проведено", HomeFormat.willBe(644_000, 644_000))
+        assertEquals("тренировок нет", HomeFormat.willBe(0, 0))
+        assertEquals(s("2_ПТ · будет 5"), HomeFormat.ptLine(2, 5))
+        assertEquals(s("94_ПТ · будет 131"), HomeFormat.ptLine(94, 131))
+        assertEquals(s("4_ПТ"), HomeFormat.ptLine(4, 4))
+        assertEquals("без ПТ", HomeFormat.ptLine(0, 0))
     }
 
     @Test

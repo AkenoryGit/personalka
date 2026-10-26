@@ -146,15 +146,35 @@ object HomeFormat {
     /** Под полосой плана справа: «прогноз 97 %». */
     fun forecastPercent(percent: Int): String = "прогноз $percent$NBSP%"
 
+    /** Колонки «Денег» (5.2, просьба Дмитрия 26.10.2026): сегодня и месяц. */
+    const val TODAY = "Сегодня"
+    const val MONTH = "За месяц"
+
     /**
-     * Строка ступени (5.2): прогноз меняет ступень — «94 ПТ · ступень 1 · по расписанию будет 2»; не меняет —
-     * «102 ПТ · ступень 2 · до 151 ещё 49 ПТ»; ступень 3 — «160 ПТ · ступень 3»; ступени выключены ([tiers] `null`) —
-     * «94 ПТ».
+     * Под суммой колонки: сколько будет по расписанию — «будет ≈ 6 440 ₽»; всё уже проведено — «всё проведено»;
+     * в расписании ничего (сумма и прогноз нули) — «тренировок нет».
      */
-    fun tierLine(ptCount: Int, tiers: TierProgress?): String {
-        val pts = RuText.digits(ptCount.toLong()) + NBSP + "ПТ"
-        if (tiers == null) return pts
-        val head = pts + DOT + "ступень " + tiers.tier
+    fun willBe(earned: Long, forecast: Long): String = when {
+        earned == 0L && forecast == 0L -> "тренировок нет"
+        forecast == earned -> "всё проведено"
+        else -> "будет " + MoneyFormat.approxRub(forecast)
+    }
+
+    /** ПТ колонки: «2 ПТ · будет 5»; всё проведено — «4 ПТ»; ПТ в расписании нет — «без ПТ». */
+    fun ptLine(done: Int, total: Int): String = when {
+        total <= 0 && done == 0 -> "без ПТ"
+        total <= done -> RuText.digits(done.toLong()) + NBSP + "ПТ"
+        else -> RuText.digits(done.toLong()) + NBSP + "ПТ" + DOT + "будет " + RuText.digits(total.toLong())
+    }
+
+    /**
+     * Строка ступени (5.2): прогноз меняет ступень — «Ступень 1 · по расписанию будет 2»; не меняет —
+     * «Ступень 2 · до 151 ещё 49 ПТ» (по проведённым [ptCount]); ступень 3 — «Ступень 3»; ступени выключены
+     * ([tiers] `null`) — строки нет. Число ПТ — в колонках над ней.
+     */
+    fun tierLine(ptCount: Int, tiers: TierProgress?): String? {
+        if (tiers == null) return null
+        val head = "Ступень " + tiers.tier
         if (tiers.forecastTier > tiers.tier) return head + DOT + "по расписанию будет " + tiers.forecastTier
         val next = when (tiers.tier) {
             1 -> tiers.t2From
