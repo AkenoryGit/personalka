@@ -368,6 +368,99 @@ class SyncRepositoryTest {
     }
 
     @Test
+    fun signInOnAnEmptyPhoneTakesTheServerData(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        a.db.coachDao().upsertCoach(Samples.coach())
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        assertEquals(Attach.Done, a.sync.attach(), "Свои данные, на сервере пусто — первая выгрузка")
+        assertEquals(1, server.liveRows(EMAIL, "client").size)
+
+        assertEquals(Attach.Done, b.sync.attach(), "Пустой телефон — данные с сервера")
+        assertEquals(listOf("Ксения"), b.live().map { it.firstName })
+        assertTrue(b.sync.state.value.connected)
+    }
+
+    @Test
+    fun ownDataOnlyOnThePhoneIsNotMergedWithTheServer(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        a.db.coachDao().upsertCoach(Samples.coach())
+        assertEquals(Attach.Done, a.sync.attach())
+        // Второй телефон начинал сам — его тренер другой, слить нельзя: двойные типы и места.
+        b.db.coachDao().upsertCoach(Samples.coach().copy(id = "coach-b"))
+        val before = server.requests.count { it.first.contains("push") }
+        assertEquals(Attach.ServerHasData, b.sync.attach())
+        assertFalse(b.sync.state.value.connected)
+        assertEquals(before, server.requests.count { it.first.contains("push") }, "Ничего не отправлено")
+    }
+
+    @Test
+    fun signInAgainRebuildsACopyDeletedFromAnotherPhone(): Unit = runBlocking {
+        // Ограничение 2.10а: копию удалили с одного телефона, второй дальше слал только новые правки.
+        val (a, b) = twoPhones()
+        a.db.coachDao().upsertCoach(Samples.coach())
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        assertEquals(Attach.Done, a.sync.attach())
+        assertEquals(Attach.Done, b.sync.attach())
+
+        assertTrue(a.sync.disconnect())
+        assertTrue(server.rows.isEmpty())
+        // Сервер закрыл все входы: второй телефон больше не шлёт, его правка ждёт в очереди.
+        b.clients.upsertClient(Samples.client("Новая", "Правка"))
+        assertFalse(b.sync.sync())
+        assertEquals(SyncProblem.SIGNED_OUT, b.sync.state.value.problem)
+
+        // Вошли снова на втором — на сервер уходит вся его база, а не только новая правка.
+        val coach = server.coaches.getValue(EMAIL)
+        server.sessions += FakeServer.Session(102, coach, "Планшет", "t-b2")
+        b.tokens.write("t-b2")
+        assertEquals(Attach.Done, b.sync.attach())
+        assertEquals(listOf("Ксения", "Правка"), server.liveRows(EMAIL, "client").map { it.data["firstName"].toString().trim('"') }.sorted())
+
+        // Первый телефон помнит, что данные его аккаунта, — после входа сливается, а не спрашивает «заменить?».
+        server.sessions += FakeServer.Session(103, coach, "Телефон", "t-a2")
+        a.tokens.write("t-a2")
+        assertEquals(Attach.Done, a.sync.attach())
+        assertEquals(listOf("Ксения", "Правка"), a.live().map { it.firstName }.sorted())
+    }
+
+    @Test
+    fun signOutSendsEverythingAndOnlyThenThePhoneCanBeWiped(): Unit = runBlocking {
+        val (a, _) = twoPhones()
+        a.db.coachDao().upsertCoach(Samples.coach())
+        assertEquals(Attach.Done, a.sync.attach())
+
+        // Без связи не всё ушло — стирать нельзя.
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        server.offline = true
+        assertEquals(SignOutCheck.NOT_SENT, a.sync.beforeSignOut())
+        assertFalse(a.sync.wipePhone())
+        assertEquals(1, a.live().size)
+
+        // В другой аккаунт: данные первого не все на сервере — убрать их нельзя.
+        server.offline = false
+        a.email = OTHER
+        assertEquals(Attach.OtherAccount(EMAIL, complete = false), a.sync.attach())
+
+        // Вернулись, вышли со связью — всё ушло, теперь данные первого можно убрать.
+        a.email = EMAIL
+        assertEquals(SignOutCheck.SENT, a.sync.beforeSignOut())
+        assertEquals(1, server.liveRows(EMAIL, "client").size)
+        a.email = OTHER
+        assertEquals(Attach.OtherAccount(EMAIL, complete = true), a.sync.attach())
+        // Правка после выхода — снова не полная.
+        a.clients.upsertClient(Samples.client("Новая", "Правка"))
+        assertEquals(Attach.OtherAccount(EMAIL, complete = false), a.sync.attach())
+
+        a.email = EMAIL
+        assertEquals(SignOutCheck.SENT, a.sync.beforeSignOut())
+        assertTrue(a.sync.wipePhone())
+        assertTrue(a.live().isEmpty())
+        assertNull(a.db.coachDao().currentCoach())
+        assertFalse(a.sync.state.value.connected)
+        assertEquals(2, server.liveRows(EMAIL, "client").size, "На сервере всё осталось")
+    }
+
+    @Test
     fun deviceIdIsMadeOnce() {
         val (a, _) = twoPhones()
         val id = a.sync.device

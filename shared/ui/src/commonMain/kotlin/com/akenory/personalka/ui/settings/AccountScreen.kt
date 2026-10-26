@@ -39,6 +39,7 @@ import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.account.AccountResult
 import com.akenory.personalka.data.account.DeviceSession
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.data.sync.SignOutCheck
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.format.AccountFormat
@@ -82,6 +83,9 @@ internal enum class AccountStep { SIGN_IN, REGISTER, CODE, FORGOT, RESET }
  * (имя, почта, пароль → код из письма), «Забыли пароль?» (почта → код и новый пароль). После входа — имя, почта,
  * открытые возможности (закрытые не видны, 10.7), устройства с «Выйти на этом устройстве» и «Выйти».
  * Ответы сервера показываются как есть: тексты ошибок он пишет по-русски для тренера.
+ *
+ * С [sync] (шаг 5.1а) вход сам включает копию на сервере, если она открыта у аккаунта, а «Выйти» сначала отправляет
+ * все правки и спрашивает, убрать ли данные с телефона ([SyncPanels]).
  */
 @Composable
 internal fun AccountScreen(
@@ -91,19 +95,44 @@ internal fun AccountScreen(
     messages: MessageState,
     scope: CoroutineScope,
     onBack: () -> Unit,
+    sync: SyncTools? = null,
 ) {
     val signedIn by account.account.collectAsState()
-    // Окно «Выйти на этом устройстве» — поверх экрана, вне прокрутки.
+    // Окна — поверх экрана, вне прокрутки.
     var closing by remember { mutableStateOf<DeviceSession?>(null) }
+    var leaving by remember { mutableStateOf(false) }
+
+    fun signOut() {
+        if (leaving) return
+        leaving = true
+        scope.launch {
+            try {
+                when (val check = sync?.repository?.beforeSignOut() ?: SignOutCheck.NO_COPY) {
+                    SignOutCheck.NO_COPY -> {
+                        account.logout()
+                        messages.show(AccountFormat.SIGNED_OUT_HERE)
+                    }
+                    else -> sync?.panel = SyncPanel.SignOut(check)
+                }
+            } finally {
+                leaving = false
+            }
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             TopBar(AccountFormat.TITLE, onBack = onBack)
             Column(Modifier.padding(horizontal = Dimens.space4)) {
                 val current = signedIn
                 if (current != null) {
-                    SignedIn(current, account, now, messages, scope) { closing = it }
+                    SignedIn(current, account, now, messages, leaving, ::signOut) { closing = it }
                 } else {
-                    SignInForm(account, settings, messages, scope)
+                    SignInForm(account, settings, messages, scope) {
+                        if (sync != null && copyOpen(account.account.value, now)) {
+                            scope.launch { turnOnCopy(sync.repository, messages) { sync.panel = it } }
+                        }
+                    }
                 }
                 Spacer(Modifier.height(Dimens.space6))
             }
@@ -127,6 +156,8 @@ internal fun AccountScreen(
                 )
             }
         }
+
+        if (sync != null) SyncPanels(sync.repository, account, messages, scope, sync.panel) { sync.panel = it }
     }
 }
 
@@ -137,7 +168,8 @@ private fun SignedIn(
     repository: AccountRepository,
     now: LocalDateTime,
     messages: MessageState,
-    scope: CoroutineScope,
+    leaving: Boolean,
+    onSignOut: () -> Unit,
     onClose: (DeviceSession) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
@@ -178,13 +210,8 @@ private fun SignedIn(
     }
 
     OutlineButton(
-        AccountFormat.SIGN_OUT,
-        {
-            scope.launch {
-                repository.logout()
-                messages.show(AccountFormat.SIGNED_OUT_HERE)
-            }
-        },
+        if (leaving) AccountFormat.SENDING else AccountFormat.SIGN_OUT,
+        onSignOut,
         Modifier.fillMaxWidth().padding(top = Dimens.space5).testTag(ACCOUNT_SIGN_OUT_TAG),
     )
     Text(AccountFormat.SIGN_OUT_NOTE, style = MaterialTheme.typography.bodySmall, color = colors.textMuted, modifier = Modifier.padding(top = Dimens.space2))
@@ -192,10 +219,16 @@ private fun SignedIn(
 
 /**
  * Форма входа по шагам. Шаг и почта переживают смену темы; пароль и код — только в памяти экрана, в сохраняемое
- * состояние не кладутся.
+ * состояние не кладутся. [onSignedIn] — вход состоялся (паролем, кодом из письма или новым паролем).
  */
 @Composable
-internal fun SignInForm(account: AccountRepository, settings: SettingsRepository, messages: MessageState, scope: CoroutineScope) {
+internal fun SignInForm(
+    account: AccountRepository,
+    settings: SettingsRepository,
+    messages: MessageState,
+    scope: CoroutineScope,
+    onSignedIn: () -> Unit = {},
+) {
     val colors = PersonalkaTheme.colors
     var step by rememberSaveable { mutableStateOf(AccountStep.SIGN_IN) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -325,15 +358,18 @@ internal fun SignInForm(account: AccountRepository, settings: SettingsRepository
                 when (step) {
                     AccountStep.SIGN_IN -> {
                         fromRegister = false
-                        work({ account.login(email, password) })
+                        work({ account.login(email, password) }, onDone = onSignedIn)
                     }
                     AccountStep.REGISTER -> {
                         fromRegister = true
                         work({ account.register(name, email, password) })
                     }
-                    AccountStep.CODE -> work({ account.confirm(email, password, code) })
+                    AccountStep.CODE -> work({ account.confirm(email, password, code) }, onDone = onSignedIn)
                     AccountStep.FORGOT -> work({ account.requestReset(email) }, onCode = AccountStep.RESET)
-                    AccountStep.RESET -> work({ account.reset(email, code, password) }) { messages.show(AccountFormat.PASSWORD_SAVED) }
+                    AccountStep.RESET -> work({ account.reset(email, code, password) }) {
+                        messages.show(AccountFormat.PASSWORD_SAVED)
+                        onSignedIn()
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth().testTag(ACCOUNT_SUBMIT_TAG),

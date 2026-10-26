@@ -34,6 +34,28 @@ import kotlinx.serialization.json.longOrNull
 /** Что на сервере перед подключением: данных тренера нет, они есть (с другого телефона) или сервер не ответил. */
 enum class ServerData { EMPTY, HAS_DATA, FAILED }
 
+/**
+ * Что вышло, когда после входа включалась копия на сервере (шаг 5.1а, ТЗ 1.5): [Done] — копия включена;
+ * [ServerHasData] — на телефоне свои данные, ещё не бывавшие на сервере, а у аккаунта на сервере уже есть данные —
+ * слить их нельзя (двойные типы и места), можно только заменить данные телефона; [OtherAccount] — на телефоне данные
+ * другого аккаунта, [OtherAccount.complete] — все они на сервере, и их можно убрать; [Failed] — причина в [SyncState].
+ */
+sealed interface Attach {
+    data object Done : Attach
+
+    data object ServerHasData : Attach
+
+    data class OtherAccount(val email: String, val complete: Boolean) : Attach
+
+    data object Failed : Attach
+}
+
+/**
+ * Перед «Выйти» (шаг 5.1а): [NO_COPY] — копии этого аккаунта на телефоне нет, выход как раньше; [SENT] — все правки
+ * на сервере, данные с телефона можно убрать; [NOT_SENT] — не всё ушло (нет связи, сервер отказал), стирать нельзя.
+ */
+enum class SignOutCheck { NO_COPY, SENT, NOT_SENT }
+
 /** Первая выгрузка (7.2, п. 5): отправлено [sent] записей из [total] — для полосы прогресса. */
 data class SyncProgress(val sent: Int, val total: Int)
 
@@ -111,6 +133,7 @@ class SyncRepository(
             }
             setConnected(true)
             rememberOwner()
+            prefs.putString(SENT, "")
             prefs.pullFromStart()
             db.useWriterConnection { connection ->
                 connection.immediateTransaction {
@@ -126,11 +149,79 @@ class SyncRepository(
         prefs.pullFromStart()
         setConnected(true)
         rememberOwner()
+        prefs.putString(SENT, "")
         val total = db.syncDao().pending()
         _state.update { it.copy(progress = SyncProgress(0, total)) }
         val ok = exchange(token, push = true)
         if (!ok && _state.value.problem in REFUSED) setConnected(false)
         ok
+    }
+
+    /**
+     * Вход = копия на сервере (шаг 5.1а, ТЗ 1.5): после входа в аккаунт с открытой копией. Телефон пустой — данные
+     * приходят с сервера. Данные телефона — этого аккаунта (сервер подключали для него) — вся база снова уходит на
+     * сервер, сервер оставляет новее: так копия на сервере снова полная, даже если её стирали с другого телефона
+     * (ограничение 2.10а). Данные ничьи (сервер не подключали) — первая выгрузка, если на сервере пусто, иначе
+     * [Attach.ServerHasData]. Данные другого аккаунта — [Attach.OtherAccount], ничего не трогается.
+     */
+    suspend fun attach(): Attach {
+        val was = phoneOwner()
+        val me = owner()
+        if (!hasCoach()) return if (connect(takeFromServer = true)) Attach.Done else Attach.Failed
+        if (was != null && me != null && !was.equals(me, ignoreCase = true)) return Attach.OtherAccount(was, complete())
+        if (was != null) return if (connect()) Attach.Done else Attach.Failed
+        return when (checkServer()) {
+            ServerData.EMPTY -> if (connect()) Attach.Done else Attach.Failed
+            ServerData.HAS_DATA -> Attach.ServerHasData
+            ServerData.FAILED -> Attach.Failed
+        }
+    }
+
+    /** Для какого аккаунта на телефоне данные: подключали сервер — его почта; подключённые до шага 3.9б — нынешний. */
+    private fun phoneOwner(): String? =
+        prefs.string(OWNER)?.takeIf { it.isNotEmpty() } ?: if (_state.value.connected) owner() else null
+
+    /**
+     * Все данные телефона — на сервере: при последнем «Выйти» всё ушло ([SENT]), сервер с тех пор подключён и новых
+     * правок нет. Вышли без связи или сервер отказал (копию стёрли с другого телефона) — не полная.
+     */
+    private suspend fun complete(): Boolean = _state.value.connected && prefs.string(SENT) == "1" && pendingNow() == 0
+
+    /** Есть ли на телефоне тренер — без него телефон пустой (первый запуск). */
+    private suspend fun hasCoach(): Boolean = db.useReaderConnection { connection ->
+        connection.usePrepared("SELECT 1 FROM coach LIMIT 1") { it.step() }
+    }
+
+    /**
+     * Перед «Выйти» (шаг 5.1а): копия этого аккаунта на телефоне — обмен сейчас, чтобы на сервер ушли все правки.
+     * Ушло всё — [SignOutCheck.SENT], и телефон запоминает, что его данные на сервере полные (вход в другой аккаунт
+     * сможет их убрать).
+     */
+    suspend fun beforeSignOut(): SignOutCheck {
+        if (!_state.value.connected) return SignOutCheck.NO_COPY
+        val was = phoneOwner()
+        val me = owner()
+        if (was != null && me != null && !was.equals(me, ignoreCase = true)) return SignOutCheck.NO_COPY
+        sync()
+        val sent = pendingNow() == 0 && _state.value.problem !in REFUSED
+        prefs.putString(SENT, if (sent) "1" else "")
+        return if (sent) SignOutCheck.SENT else SignOutCheck.NOT_SENT
+    }
+
+    /**
+     * «Убрать данные с телефона» (шаг 5.1а): все записи стираются, телефон — как после установки. Только когда
+     * ничего не ждёт отправки, иначе `false` и всё остаётся: правки, которых нет на сервере, не стираются.
+     */
+    suspend fun wipePhone(): Boolean = busy.withLock {
+        if (db.syncDao().pending() > 0) return@withLock false
+        db.useWriterConnection { connection -> connection.immediateTransaction { SyncOutbox.clearAll(this) } }
+        setConnected(false)
+        prefs.putString(OWNER, "")
+        prefs.putString(SENT, "")
+        prefs.putString(LAST, "")
+        prefs.pullFromStart()
+        _state.update { SyncState() }
+        true
     }
 
     /**
@@ -185,8 +276,10 @@ class SyncRepository(
     private fun rememberOwner() = prefs.putString(OWNER, owner().orEmpty())
 
     /**
-     * «Отключиться от сервера» (1.5): данные тренера на сервере стираются, на телефоне всё остаётся, обмен больше
-     * не идёт. Без связи или под чужим аккаунтом — `false`, сервер остаётся подключённым.
+     * «Удалить копию с сервера» (1.5, шаг 5.1а): данные тренера на сервере стираются, сервер закрывает все его входы,
+     * на телефоне всё остаётся, обмен больше не идёт. Телефон помнит, чьи у него данные: вход в этот же аккаунт
+     * соберёт копию заново, вход в другой — их не уберёт (их больше нигде нет). Без связи или под чужим аккаунтом —
+     * `false`, сервер остаётся подключённым.
      */
     suspend fun disconnect(): Boolean = busy.withLock {
         val token = tokens.read() ?: return@withLock fail(SyncProblem.SIGNED_OUT)
@@ -198,7 +291,7 @@ class SyncRepository(
             return@withLock failed(e)
         }
         setConnected(false)
-        prefs.putString(OWNER, "")
+        prefs.putString(SENT, "")
         prefs.pullFromStart()
         _state.update { it.copy(problem = null, failures = 0, progress = null) }
         true
@@ -365,6 +458,9 @@ class SyncRepository(
 
         /** Почта аккаунта, для которого подключён сервер. */
         const val OWNER = "sync.owner"
+
+        /** «1» — при последнем «Выйти» все правки ушли на сервер (шаг 5.1а). */
+        const val SENT = "sync.sent"
 
         /** Id этого устройства для сервера. */
         const val DEVICE = "sync.device"

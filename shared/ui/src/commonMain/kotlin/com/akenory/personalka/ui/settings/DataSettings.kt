@@ -112,8 +112,8 @@ private enum class AfterPassword { NOTHING, SAVE, SHARE }
  * «Настройки → Данные» (ТЗ 5.16, 7.6, шаг 1.15): папка для копий, частота автокопии, шифрование паролем,
  * «Создать копию сейчас», «Поделиться копией», «Восстановить из копии» и выгрузка в календарь (.ics).
  * Сверху — «Аккаунт» (шаг 2.8а), если платформа дала [account]: строка открывает экран входа ([onAccount]).
- * Под ним — «Сервер» (шаг 2.10а, [SyncSection]), если платформа дала [sync]: виден после входа с открытой
- * «Копией на сервере» или когда сервер уже подключён (10.7).
+ * Под ним — «Сервер» (шаг 2.10а, [SyncSection]), если платформа дала [sync]: виден только после входа — с открытой
+ * «Копией на сервере» или когда она уже подключена (10.7, шаг 5.1а).
  */
 @Composable
 internal fun DataSettingsScreen(
@@ -135,7 +135,6 @@ internal fun DataSettingsScreen(
     var wrongPassword by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<BackupRead.Ready?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var syncPanel by remember { mutableStateOf<SyncPanel?>(null) }
 
     fun work(block: suspend () -> Unit) {
         if (busy) return
@@ -203,7 +202,7 @@ internal fun DataSettingsScreen(
                     }
                     val syncState = sync?.repository?.state?.collectAsState()?.value
                     if (sync != null && now != null && syncState != null && syncVisible(syncState.connected, signedIn, now)) {
-                        SyncSection(sync.repository, now, onPanel = { syncPanel = it }, onSyncNow = sync.now)
+                        SyncSection(sync.repository, now, messages, scope, onPanel = { sync.panel = it }, onSyncNow = sync.now)
                     }
                 }
                 SectionLabel(BackupFormat.BACKUP)
@@ -328,7 +327,7 @@ internal fun DataSettingsScreen(
             }
         }
 
-        if (sync != null) SyncPanels(sync.repository, messages, scope, syncPanel) { syncPanel = it }
+        if (sync != null && account != null) SyncPanels(sync.repository, account, messages, scope, sync.panel) { sync.panel = it }
 
         passwordFor?.let { after ->
             NewPasswordPanel(

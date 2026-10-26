@@ -35,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.data.sync.Attach
 import com.akenory.personalka.data.sync.SyncRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.AccountRules
@@ -326,8 +328,8 @@ private fun WelcomePage(onStart: () -> Unit, onSignIn: (() -> Unit)?) {
 }
 
 /**
- * «Войти» на первом запуске (ТЗ 5.18, шаг 2.10а): форма входа как в «Аккаунте»; после входа с открытой «Копией
- * на сервере» — «Загрузить данные». Данные пришли — в базе появился тренер, и приложение открывается само. Копия
+ * «Войти» на первом запуске (ТЗ 5.18, шаги 2.10а, 5.1а): форма входа как в «Аккаунте»; после входа с открытой «Копией
+ * на сервере» данные загружаются сами, «Загрузить данные» — повтор, если не вышло. Данные пришли — в базе появился тренер, и приложение открывается само. Копия
  * не открыта или на сервере пусто — «Начать на телефоне»: сервер при пустом уже подключён, внесённое уйдёт само.
  */
 @Composable
@@ -361,6 +363,28 @@ private fun SignInPage(
                 Text(current.name, style = MaterialTheme.typography.titleMedium, color = colors.text)
                 Text(current.email, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
                 val open = Feature.SERVER_COPY in AccountRules.open(current.features, ClubTime.today(clock()))
+
+                fun load() {
+                    if (loading) return
+                    loading = true
+                    problem = null
+                    scope.launch {
+                        try {
+                            // Телефон пустой — данные приходят с сервера (шаг 5.1а).
+                            if (sync.attach() == Attach.Done) {
+                                // Тренер пришёл — приложение уже открывается; не пришёл — на сервере пусто.
+                                if (settings.coach.first() == null) empty = true
+                            } else {
+                                problem = sync.state.value.problem?.let(SyncFormat::problem)
+                            }
+                        } finally {
+                            loading = false
+                        }
+                    }
+                }
+
+                // Вход = копия на сервере: данные загружаются сами, кнопка — только для повтора.
+                LaunchedEffect(current.email, open) { if (open) load() }
                 when {
                     !open || empty -> {
                         Text(if (empty) SyncFormat.FIRST_EMPTY else SyncFormat.FIRST_CLOSED, style = MaterialTheme.typography.bodyMedium, color = colors.text)
@@ -370,22 +394,7 @@ private fun SignInPage(
                         problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.error) }
                         PrimaryButton(
                             text = if (loading) SyncFormat.LOADING else SyncFormat.LOAD,
-                            onClick = {
-                                loading = true
-                                problem = null
-                                scope.launch {
-                                    try {
-                                        if (sync.connect(takeFromServer = true)) {
-                                            // Тренер пришёл — приложение уже открывается; не пришёл — на сервере пусто.
-                                            if (settings.coach.first() == null) empty = true
-                                        } else {
-                                            problem = sync.state.value.problem?.let(SyncFormat::problem)
-                                        }
-                                    } finally {
-                                        loading = false
-                                    }
-                                }
-                            },
+                            onClick = ::load,
                             modifier = Modifier.fillMaxWidth().testTag(FIRST_LOAD_TAG),
                             enabled = !loading,
                         )

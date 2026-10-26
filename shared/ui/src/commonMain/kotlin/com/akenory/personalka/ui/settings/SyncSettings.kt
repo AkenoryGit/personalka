@@ -24,18 +24,22 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.account.Account
-import com.akenory.personalka.data.sync.ServerData
+import com.akenory.personalka.data.account.AccountRepository
+import com.akenory.personalka.data.sync.Attach
+import com.akenory.personalka.data.sync.SignOutCheck
 import com.akenory.personalka.data.sync.SyncProgress
 import com.akenory.personalka.data.sync.SyncRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
+import com.akenory.personalka.domain.format.AccountFormat
 import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.ui.components.CheckBox
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -44,35 +48,64 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
 
 internal const val SYNC_CONNECT_TAG = "sync-connect"
-internal const val SYNC_AGREE_TAG = "sync-agree"
 internal const val SYNC_STATUS_TAG = "sync-status"
 internal const val SYNC_PROBLEM_TAG = "sync-problem"
 internal const val SYNC_PROGRESS_TAG = "sync-progress"
 internal const val SYNC_NOW_TAG = "sync-now"
 internal const val SYNC_DISCONNECT_TAG = "sync-disconnect"
+internal const val SYNC_WIPE_TAG = "sync-wipe"
 
 /**
  * Синхронизация для экранов (шаг 2.10а): состояние и подключение ([repository]), «обменяться сейчас» ([now]) —
- * обмен идёт в приложении (`SyncRunner`), экраны только смотрят на состояние.
+ * обмен идёт в приложении (`SyncRunner`), экраны только смотрят на состояние. Открытое окно копии ([panel], шаг 5.1а)
+ * живёт здесь, а не в экране: после входа экран аккаунта собирается заново, а вопрос должен остаться.
  */
-class SyncTools(val repository: SyncRepository, val now: () -> Unit)
-
-/** Окно раздела «Сервер»: условия при подключении, выбор при данных на сервере, подтверждение отключения. */
-internal enum class SyncPanel { TERMS, SERVER_HAS_DATA, DISCONNECT }
+class SyncTools(val repository: SyncRepository, val now: () -> Unit) {
+    internal var panel by mutableStateOf<SyncPanel?>(null)
+}
 
 /**
- * Виден ли раздел «Сервер» в «Данных» (10.7): сервер уже подключён на этом телефоне — всегда (отключиться можно и
- * после конца срока, 1.5); иначе — только после входа в аккаунт с открытой «Копией на сервере».
+ * Окно копии на сервере (шаг 5.1а): после входа — данные на сервере ([ServerHasData]) или на телефоне данные другого
+ * аккаунта ([OtherAccount]); подтверждение «Удалить копию с сервера» ([Disconnect]); «Выйти» ([SignOut]).
+ */
+internal sealed interface SyncPanel {
+    data object ServerHasData : SyncPanel
+
+    data class OtherAccount(val email: String, val complete: Boolean) : SyncPanel
+
+    data object Disconnect : SyncPanel
+
+    data class SignOut(val check: SignOutCheck) : SyncPanel
+}
+
+/**
+ * Виден ли раздел «Сервер» в «Данных» (10.7, шаг 5.1а): только после входа — копия подключена на этом телефоне
+ * (удалить её можно и после конца срока, 1.5) или открыта у аккаунта.
  */
 internal fun syncVisible(connected: Boolean, account: Account?, now: LocalDateTime): Boolean =
-    connected || account != null && Feature.SERVER_COPY in AccountRules.open(account.features, now.date)
+    account != null && (connected || Feature.SERVER_COPY in AccountRules.open(account.features, now.date))
+
+/** Открыта ли у аккаунта «Копия на сервере» сегодня: тогда вход сам её включает (шаг 5.1а). */
+internal fun copyOpen(account: Account?, now: LocalDateTime): Boolean =
+    account != null && Feature.SERVER_COPY in AccountRules.open(account.features, now.date)
 
 /**
- * Раздел «Сервер» в «Настройки → Данные» (ТЗ 5.16, 1.5, 7.2; шаг 2.10а). Не подключён — «Подключить сервер»
- * с условиями и галочкой; если на сервере уже есть данные тренера — только «Взять данные с сервера» (слияние двух
- * разных первых запусков дало бы двойные типы и места). Подключён — время последней синхронизации, сколько ждёт
- * отправки и почему обмен не идёт, «Синхронизировать» и «Отключиться от сервера» с подтверждением. Первая выгрузка —
- * полосой «Выгружено N из M».
+ * Вход = копия на сервере (шаг 5.1а, ТЗ 1.5): включить копию и, если нужен выбор, открыть окно ([SyncPanels]).
+ */
+internal suspend fun turnOnCopy(sync: SyncRepository, messages: MessageState, onPanel: (SyncPanel?) -> Unit) {
+    when (val result = sync.attach()) {
+        Attach.Done -> messages.show(SyncFormat.CONNECTED)
+        Attach.ServerHasData -> onPanel(SyncPanel.ServerHasData)
+        is Attach.OtherAccount -> onPanel(SyncPanel.OtherAccount(result.email, result.complete))
+        Attach.Failed -> sync.state.value.problem?.let { messages.show(SyncFormat.problem(it)) }
+    }
+}
+
+/**
+ * Раздел «Сервер» в «Настройки → Данные» (ТЗ 5.16, 1.5, 7.2; шаги 2.10а, 5.1а). «Подключить сервер» нет: копию
+ * включает вход. Подключена — время последней синхронизации, сколько ждёт отправки и почему обмен не идёт,
+ * «Синхронизировать» и «Удалить копию с сервера» с подтверждением. Вошли раньше, а копия не включена (её открыли
+ * позже или вход был до шага 5.1а) — «Включить копию». Первая выгрузка — полосой «Выгружено N из M».
  *
  * @param onSyncNow «Синхронизировать»: обмен идёт в приложении ([com.akenory.personalka.data.sync.SyncRunner.now]),
  *   экран только смотрит на [SyncRepository.state].
@@ -81,21 +114,35 @@ internal fun syncVisible(connected: Boolean, account: Account?, now: LocalDateTi
 internal fun SyncSection(
     sync: SyncRepository,
     now: LocalDateTime,
-    onPanel: (SyncPanel) -> Unit,
+    messages: MessageState,
+    scope: CoroutineScope,
+    onPanel: (SyncPanel?) -> Unit,
     onSyncNow: () -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val state by sync.state.collectAsState()
     val pending by sync.pending.collectAsState(initial = 0)
+    var working by remember { mutableStateOf(false) }
     SectionLabel(SyncFormat.SECTION)
     val progress = state.progress
     when {
         progress != null -> UploadProgress(progress)
         !state.connected -> {
-            Text(SyncFormat.CONNECT_NOTE, style = MaterialTheme.typography.bodyMedium, color = colors.text)
+            Text(SyncFormat.COPY_OFF, style = MaterialTheme.typography.bodyMedium, color = colors.text)
             OutlineButton(
-                SyncFormat.CONNECT,
-                { onPanel(SyncPanel.TERMS) },
+                if (working) SyncFormat.WORKING else SyncFormat.TURN_ON,
+                {
+                    if (!working) {
+                        working = true
+                        scope.launch {
+                            try {
+                                turnOnCopy(sync, messages, onPanel)
+                            } finally {
+                                working = false
+                            }
+                        }
+                    }
+                },
                 Modifier.fillMaxWidth().padding(top = Dimens.space3).testTag(SYNC_CONNECT_TAG),
             )
         }
@@ -117,28 +164,38 @@ internal fun SyncSection(
             }
             Column(Modifier.padding(top = Dimens.space3), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                 OutlineButton(SyncFormat.SYNC_NOW, onSyncNow, Modifier.fillMaxWidth().testTag(SYNC_NOW_TAG))
-                OutlineButton(SyncFormat.DISCONNECT, { onPanel(SyncPanel.DISCONNECT) }, Modifier.fillMaxWidth().testTag(SYNC_DISCONNECT_TAG))
+                OutlineButton(SyncFormat.DISCONNECT, { onPanel(SyncPanel.Disconnect) }, Modifier.fillMaxWidth().testTag(SYNC_DISCONNECT_TAG))
             }
         }
     }
 }
 
-/** Окна раздела «Сервер» — поверх экрана «Данных», вне прокрутки. */
+/**
+ * Окна копии на сервере — поверх экрана, вне прокрутки (шаг 5.1а). Отказ от выбора после входа («Не входить», смахнуть
+ * окно) — выход из аккаунта: аккаунт = копия, а копию с таким телефоном не включить.
+ */
 @Composable
 internal fun SyncPanels(
     sync: SyncRepository,
+    account: AccountRepository,
     messages: MessageState,
     scope: CoroutineScope,
     panel: SyncPanel?,
     onPanel: (SyncPanel?) -> Unit,
 ) {
-    var agreed by remember { mutableStateOf(false) }
-    var checking by remember { mutableStateOf(false) }
+    val text = PersonalkaTheme.colors.text
+    var wipe by remember { mutableStateOf(false) }
+    val pending by sync.pending.collectAsState(initial = 0)
 
-    fun connect(takeFromServer: Boolean) {
+    fun dontSignIn() {
+        onPanel(null)
+        scope.launch { account.logout() }
+    }
+
+    fun takeFromServer() {
         onPanel(null)
         scope.launch {
-            if (sync.connect(takeFromServer)) {
+            if (sync.connect(takeFromServer = true)) {
                 messages.show(SyncFormat.CONNECTED)
             } else {
                 sync.state.value.problem?.let { messages.show(SyncFormat.problem(it)) }
@@ -147,63 +204,67 @@ internal fun SyncPanels(
     }
 
     when (panel) {
-        null -> agreed = false
-        SyncPanel.TERMS -> Panel(SyncFormat.CONNECT, onDismiss = { onPanel(null) }) {
-            Text(SyncFormat.TERMS_NO_WARRANTY, style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
-            Text(SyncFormat.TERMS_CONSENTS, style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .toggleable(value = agreed, role = Role.Checkbox, onValueChange = { agreed = it })
-                    .testTag(SYNC_AGREE_TAG),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CheckBox(agreed)
-                Spacer(Modifier.width(Dimens.space3))
-                Text(SyncFormat.AGREE, style = MaterialTheme.typography.bodyLarge, color = PersonalkaTheme.colors.text)
-            }
-            PanelActions(
-                primary = if (checking) SyncFormat.CHECKING else SyncFormat.DO_CONNECT,
-                onPrimary = {
-                    checking = true
-                    scope.launch {
-                        try {
-                            when (sync.checkServer()) {
-                                ServerData.EMPTY -> connect(takeFromServer = false)
-                                ServerData.HAS_DATA -> onPanel(SyncPanel.SERVER_HAS_DATA)
-                                ServerData.FAILED -> {
-                                    onPanel(null)
-                                    sync.state.value.problem?.let { messages.show(SyncFormat.problem(it)) }
-                                }
-                            }
-                        } finally {
-                            checking = false
-                        }
-                    }
-                },
-                secondary = "Отмена",
-                onSecondary = { onPanel(null) },
-                primaryEnabled = agreed && !checking,
-            )
-        }
-        SyncPanel.SERVER_HAS_DATA -> Panel(SyncFormat.CONNECT, onDismiss = { onPanel(null) }) {
-            Text(SyncFormat.SERVER_HAS_DATA, style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
+        null -> wipe = false
+        SyncPanel.ServerHasData -> Panel(AccountFormat.TITLE, onDismiss = ::dontSignIn) {
+            Text(SyncFormat.SERVER_HAS_DATA, style = MaterialTheme.typography.bodyMedium, color = text)
             Text(SyncFormat.SERVER_HAS_DATA_NOTE, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
-            PanelActions(SyncFormat.TAKE, { connect(takeFromServer = true) }, "Отмена", { onPanel(null) })
+            PanelActions(SyncFormat.TAKE, ::takeFromServer, SyncFormat.DONT_SIGN_IN, ::dontSignIn)
         }
-        SyncPanel.DISCONNECT -> Panel(SyncFormat.DISCONNECT, onDismiss = { onPanel(null) }) {
-            Text(SyncFormat.DISCONNECT_TEXT, style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
+        is SyncPanel.OtherAccount -> Panel(AccountFormat.TITLE, onDismiss = ::dontSignIn) {
+            Text(SyncFormat.otherAccount(panel.email, panel.complete), style = MaterialTheme.typography.bodyMedium, color = text)
+            if (panel.complete) {
+                PanelActions(SyncFormat.REPLACE, ::takeFromServer, SyncFormat.DONT_SIGN_IN, ::dontSignIn)
+            } else {
+                PrimaryButton(SyncFormat.GOT_IT, ::dontSignIn, Modifier.fillMaxWidth().padding(top = Dimens.space2))
+            }
+        }
+        SyncPanel.Disconnect -> Panel(SyncFormat.DISCONNECT, onDismiss = { onPanel(null) }) {
+            Text(SyncFormat.DISCONNECT_TEXT, style = MaterialTheme.typography.bodyMedium, color = text)
             PanelActions(
                 primary = SyncFormat.DISCONNECT_CONFIRM,
                 onPrimary = {
                     onPanel(null)
                     scope.launch {
                         if (sync.disconnect()) {
+                            // Сервер закрыл все входы аккаунта, и этот тоже.
+                            account.logout()
                             messages.show(SyncFormat.DISCONNECTED)
                         } else {
                             sync.state.value.problem?.let { messages.show(SyncFormat.problem(it)) }
                         }
+                    }
+                },
+                secondary = "Отмена",
+                onSecondary = { onPanel(null) },
+            )
+        }
+        is SyncPanel.SignOut -> Panel(AccountFormat.SIGN_OUT, onDismiss = { onPanel(null) }) {
+            val sent = panel.check == SignOutCheck.SENT
+            Text(if (sent) SyncFormat.SIGN_OUT_SENT else SyncFormat.notSent(pending), style = MaterialTheme.typography.bodyMedium, color = text)
+            if (sent) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .toggleable(value = wipe, role = Role.Checkbox, onValueChange = { wipe = it })
+                        .testTag(SYNC_WIPE_TAG),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CheckBox(wipe)
+                    Spacer(Modifier.width(Dimens.space3))
+                    Text(SyncFormat.WIPE, style = MaterialTheme.typography.bodyLarge, color = text)
+                }
+                if (wipe) Text(SyncFormat.WIPE_NOTE, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+            }
+            PanelActions(
+                primary = SyncFormat.SIGN_OUT_DO,
+                onPrimary = {
+                    val clear = sent && wipe
+                    onPanel(null)
+                    scope.launch {
+                        account.logout()
+                        // Правка, сделанная, пока окно было открыто, не даст стереть — данные останутся.
+                        if (clear && sync.wipePhone()) messages.show(SyncFormat.WIPED) else messages.show(AccountFormat.SIGNED_OUT_HERE)
                     }
                 },
                 secondary = "Отмена",

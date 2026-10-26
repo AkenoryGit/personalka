@@ -190,7 +190,7 @@ fun SettingsScreen(
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
         route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
-        route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close) }
+        route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close, sync) }
         route == SettingsRoute.PROFILE -> ProfileScreen(settings, openFeatures(account, now.date), now.date, shell, scope, messages, close)
         route == SettingsRoute.CATEGORY -> CategoryEditor(settings, now.date, messages, scope, close)
         route == SettingsRoute.SCHEME -> SchemeEditor(settings, openFeatures(account, now.date), now.date, messages, scope, close)
