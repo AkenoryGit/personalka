@@ -70,7 +70,7 @@ class PlanCarryUiTest {
 
     private fun inPanel(text: String): SemanticsMatcher = hasText(text) and hasAnyAncestor(hasTestTag(CARRY_PANEL_TAG))
 
-    /** Открыть календарь и нажать на блок «Орлов М.». */
+    /** Открыть календарь и нажать на блок «Орлов Максим». */
     private fun ComposeUiTest.openOrlov() {
         setContent {
             Box(Modifier.size(412.dp, 960.dp)) {
@@ -80,7 +80,7 @@ class PlanCarryUiTest {
         awaitNode(hasTestTag(navTag(Section.CALENDAR)))
         onNodeWithTag(navTag(Section.CALENDAR)).performClick()
         awaitNode(hasTestTag(CALENDAR_GRID_TAG))
-        val name = s("Орлов_М.")
+        val name = "Орлов Максим"
         waitUntil(timeoutMillis = 5_000) {
             onAllNodes(hasTestTag(calendarDayTag(today))).fetchSemanticsNodes().isNotEmpty() &&
                 onNodeWithTag(calendarDayTag(today)).fetchSemanticsNode().config[CalendarBlocks].blocks.any { it.lines.first() == name }

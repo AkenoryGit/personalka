@@ -32,6 +32,16 @@ object CalendarFormat {
         else -> typeName
     }
 
+    /**
+     * Имя на блоке, в «Месяце» и «Списке» (шаг 3.9д): клиенты полностью — «Морозов Даниил», двое и больше —
+     * через косую черту: «Ковалёв Илья / Ковалёва Мира». Пробел между фамилией и именем обычный: в узкой колонке
+     * имя переносится на вторую строку. Группа и тренировка без клиентов — как в [title].
+     */
+    fun blockName(clients: List<ClientName>, groupName: String?, groupSize: Int, typeName: String): String = when {
+        groupName != null || clients.isEmpty() -> title(clients, groupName, groupSize, typeName)
+        else -> clients.joinToString(" / ") { it.short }
+    }
+
     /** Вторая строка блока 40–56 dp: «08:00 · ББ». */
     fun startPlace(start: LocalDateTime, place: String): String = DateFormat.time(start.time) + DOT + place
 

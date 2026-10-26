@@ -31,6 +31,15 @@ class CalendarFormatTest {
     }
 
     @Test
+    fun blockNamesInFull() {
+        // Шаг 3.9д: на блоке — фамилия и имя без сокращений, у сплита — оба клиента.
+        assertEquals("Морозов Даниил", CalendarFormat.blockName(listOf(ClientName(" Морозов ", "Даниил ", "Ильич")), null, 0, "ПТ"))
+        assertEquals("Ковалёв Илья / Ковалёва Мира", CalendarFormat.blockName(listOf(ClientName("Ковалёв", "Илья"), ClientName("Ковалёва", "Мира")), null, 0, "Сплит"))
+        assertEquals("Вт, Чт 18:00 ДБ (10)", CalendarFormat.blockName(listOf(ClientName("Ильин", "Глеб")), "Вт, Чт 18:00 ДБ", 10, "Группа"))
+        assertEquals("Гидрореабилитация", CalendarFormat.blockName(emptyList(), null, 0, "Гидрореабилитация"))
+    }
+
+    @Test
     fun linesByHeight() {
         assertEquals("08:00 · ББ", CalendarFormat.startPlace(LocalDateTime(2026, 10, 20, 8, 0), "ББ"))
         assertEquals(s("Белова_Е., 10:00"), CalendarFormat.oneLine(s("Белова_Е."), at10))

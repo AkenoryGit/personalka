@@ -144,13 +144,20 @@ private val EPOCH = LocalDate(1970, 1, 1)
 internal val PAGE_COUNT: Int = pageOf(LocalDate(2100, 1, 1))
 
 /**
- * Блок, как его видит тест и TalkBack: строки текста, видимые значки и место в колонке дня, dp от её левого
- * и верхнего края.
+ * Блок, как его видит тест и TalkBack: имя, время, короткие тип и место, видимые значки и место в колонке дня,
+ * dp от её левого и верхнего края. Что из этого поместится на экране, решается при рисовании (шаг 3.9д).
+ *
+ * @param time «12:00–13:00»; [start] — только начало, «12:00», для низких и узких блоков.
+ * @param type «ПТ», «СПТ», «Груд»; [place] — «ББ», «ДБ»: плашки на блоке; пустые не рисуются.
  */
 @Immutable
 data class BlockInfo(
     val id: String,
-    val lines: List<String>,
+    val name: String,
+    val time: String,
+    val start: String,
+    val type: String,
+    val place: String,
     val rows: BlockRows,
     val x: Float,
     val y: Float,
@@ -158,7 +165,11 @@ data class BlockInfo(
     val height: Float,
     val cancelled: Boolean,
     val badges: List<CalendarBadge> = emptyList(),
-)
+) {
+    /** Блок словами — для TalkBack и тестов: имя, время, «тип · место». */
+    val lines: List<String>
+        get() = listOfNotNull(name, time, listOf(type, place).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null })
+}
 
 /** Метка «+N», как её видит тест: подпись и скрытые тренировки. */
 @Immutable
@@ -692,7 +703,7 @@ private fun DragLayer(
     val icons = badgeIcons()
     val start = target.start
     val moved = training.copy(start = start)
-    val lifted = block.copy(x = 0f, y = 0f, lines = moved.lines(block.rows))
+    val lifted = block.copy(x = 0f, y = 0f, time = moved.timeText(), start = DateFormat.time(start.time))
     val shadow = if (colors.isDark) Color.Black else colors.text
     val creating = drag.creating
     Layout(
@@ -714,7 +725,7 @@ private fun DragLayer(
                             spotShadowColor = shadow
                         },
                 ) {
-                    drawBlock(lifted, moved, measureLines(measurer, lifted, training.cancelled, styles), icons, colors)
+                    drawBlock(lifted, moved, measureBlock(measurer, lifted, blockLines(lifted, measurer, styles), styles), icons, colors)
                 }
             }
             Text(
@@ -873,7 +884,7 @@ private fun DayColumn(
         val byId = remember(items) { items.associateBy { it.id } }
         val zoneById = remember(zones) { zones.associateBy { it.kind to it.id } }
         // Строки блоков и подписи зон измеряются один раз: щипок меняет высоту блоков, а ширину и строки — редко.
-        val texts = remember(items, widthDp, colors, styles) { HashMap<String, List<TextLayoutResult>>() }
+        val texts = remember(items, widthDp, colors, styles) { HashMap<String, BlockText>() }
         val labels = remember(zones, widthDp, colors, styles) { HashMap<String, TextLayoutResult>() }
         val currentDay by rememberUpdatedState(day)
         val currentById by rememberUpdatedState(byId)
@@ -933,8 +944,9 @@ private fun DayColumn(
                     drawGhost(block, colors)
                     return@forEach
                 }
-                val lines = texts.getOrPut("${block.id}/${block.rows}") { measureLines(measurer, block, training.cancelled, styles) }
-                drawBlock(block, training, lines, icons, colors)
+                val lines = blockLines(block, measurer, styles)
+                val text = texts.getOrPut("${block.id}/$lines/${block.badges.size}") { measureBlock(measurer, block, lines, styles) }
+                drawBlock(block, training, text, icons, colors)
                 if (block.id == selectedId) drawSelected(block, colors)
             }
             day.more.forEach { drawMore(it, measurer, styles.more, colors) }
@@ -944,13 +956,14 @@ private fun DayColumn(
 }
 
 @Immutable
-private data class BlockStyles(val name: TextStyle, val meta: TextStyle, val more: TextStyle)
+private data class BlockStyles(val name: TextStyle, val meta: TextStyle, val tag: TextStyle, val more: TextStyle)
 
-/** Строки блока: имя — 13/16, время и место — цифрами одной ширины; метка «+N». */
+/** Строки блока: имя — 13/16, время — цифрами одной ширины; плашки типа и места — 11/13; метка «+N». */
 @Composable
 private fun blockStyles(): BlockStyles = BlockStyles(
     name = MaterialTheme.typography.labelMedium.copy(lineHeight = 16.sp),
     meta = MaterialTheme.typography.bodySmall.copy(lineHeight = 16.sp).tabular(),
+    tag = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp, lineHeight = 13.sp),
     more = MaterialTheme.typography.labelMedium.tabular(),
 )
 
@@ -972,13 +985,25 @@ private val GHOST_DASH = 4.dp
 private val NEW_DASH = 6.dp
 private val SELECTED_STROKE = 2.dp
 
-/** Отступы блока от рамки цвета (1 dp зазора уже вычтен): слева за полосой 9 dp, сверху 4 dp, у одной строки — 3. */
+/**
+ * Отступы блока от рамки цвета (1 dp зазора уже вычтен): слева за полосой 9 dp, сверху 3 dp — так в блок на 50 минут
+ * при часе 64 dp входят три строки по 16 (шаг 3.9д).
+ */
 private val BLOCK_GAP = 1.dp
 private val BLOCK_RADIUS = 5.dp
 private val TEXT_START = 9.dp
 private val TEXT_END = 6.dp
-private val TEXT_TOP = 4.dp
-private val TEXT_TOP_ONE = 3.dp
+private val TEXT_TOP = 3.dp
+
+/**
+ * Плашки типа и места (шаг 3.9д): текст цвета блока на полупрозрачной подложке цвета фона — светлее блока в светлой
+ * теме и темнее в тёмной, так контраст текста только растёт; поля 3 dp, между плашками и временем 3 dp.
+ */
+private val TAG_PAD_X = 3.dp
+private val TAG_PAD_Y = 1.dp
+private val TAG_GAP = 3.dp
+private val TAG_RADIUS = 4.dp
+private const val TAG_ALPHA = 0.6f
 
 /** Значки (макет «Блоки, значки, наложения»): кружок 16 dp в 3 dp от угла, через 2 dp; имени — на 18 dp меньше за каждый. */
 private val BADGE_EDGE = 3.dp
@@ -1026,7 +1051,11 @@ internal fun dayBlocks(
         val rows = CalendarGrid.rows(height)
         BlockInfo(
             id = place.id,
-            lines = training.lines(rows),
+            name = training.name,
+            time = training.timeText(),
+            start = DateFormat.time(training.start.time),
+            type = training.typeShort,
+            place = training.placeShort,
             rows = rows,
             x = inset + place.column * column,
             y = y(span.start),
@@ -1063,33 +1092,99 @@ internal fun CalendarTraining.span(): DaySpan {
     return DaySpan(id, from, minOf(from + durationMin, ClubTime.MINUTES_PER_DAY))
 }
 
-/** Строки блока по его высоте (ТЗ 5.3): имя, время, тип · место; имя и «начало · место»; имя и начало одной строкой. */
-private fun CalendarTraining.lines(rows: BlockRows): List<String> = when (rows) {
-    BlockRows.THREE -> listOf(
-        title,
-        DateFormat.timeRange(start, TrainingTime.end(start, durationMin)),
-        CalendarFormat.typePlace(typeShort, placeShort),
-    )
-    BlockRows.TWO -> listOf(title, CalendarFormat.startPlace(start, placeShort))
-    BlockRows.ONE -> listOf(CalendarFormat.oneLine(title, start))
+/** Время на блоке: «12:00–13:00». */
+private fun CalendarTraining.timeText(): String = DateFormat.timeRange(start, TrainingTime.end(start, durationMin))
+
+/** Строка «время и плашки» блока: время (его может не быть) и плашки типа и места; пустая — ничего не рисует. */
+private class MetaLine(val time: TextLayoutResult?, val tags: List<TextLayoutResult>)
+
+/** Измеренный текст блока: строки имени и строки «время и плашки»; [inline] — всё в одной строке. */
+private class BlockText(val name: List<TextLayoutResult>, val meta: List<MetaLine>, val inline: Boolean)
+
+/** Сколько строк по 16 входит в блок по высоте, не меньше одной. */
+private fun DrawScope.blockLines(block: BlockInfo, measurer: TextMeasurer, styles: BlockStyles): Int {
+    val line = measurer.measure("Ая", styles.name, maxLines = 1).size.height
+    val room = (block.height.dp - BLOCK_GAP * 2 - TEXT_TOP).toPx()
+    return floor(room / line).toInt().coerceAtLeast(1)
 }
 
-/** Строки блока; первой — имени — справа оставлено место под значки. */
-private fun DrawScope.measureLines(measurer: TextMeasurer, block: BlockInfo, cancelled: Boolean, styles: BlockStyles): List<TextLayoutResult> {
-    val width = (block.width.dp - BLOCK_GAP * 2 - TEXT_START - TEXT_END).toPx()
-    val decoration = if (cancelled) TextDecoration.LineThrough else null
-    return block.lines.mapIndexed { i, line ->
-        val style = if (i == 0) styles.name else styles.meta
-        val room = if (i == 0) BADGE_ROOM.toPx() * block.badges.size else 0f
-        measurer.measure(
-            text = line,
-            style = style.copy(textDecoration = decoration),
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false,
-            maxLines = 1,
-            constraints = Constraints(maxWidth = (width - room).toInt().coerceAtLeast(0)),
+/**
+ * Что из блока поместится (шаг 3.9д). Имя — фамилия и имя полностью, переносится только между словами на все
+ * строки, кроме последней; слово шире строки — с многоточием; справа от имени место под значки. В последней
+ * строке — время и плашки «ПТ» и «ББ»; если места мало, первым уходит конец времени («12:00» вместо
+ * «12:00–13:00»), затем время, затем плашка типа: место видно дольше всего (ТЗ 5.3). Если под именем осталось две
+ * строки, а всё в одну не входит, — время и плашки в двух строках. В блоке в одну строку время и плашки идут
+ * за именем, только если имя рядом с ними помещается целиком.
+ */
+private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lines: Int, styles: BlockStyles): BlockText {
+    val width = (block.width.dp - BLOCK_GAP * 2 - TEXT_START - TEXT_END).toPx().coerceAtLeast(0f)
+    val room = BADGE_ROOM.toPx() * block.badges.size
+    val decoration = if (block.cancelled) TextDecoration.LineThrough else null
+    val gap = TAG_GAP.toPx()
+    val pad = TAG_PAD_X.toPx()
+    val nameStyle = styles.name.copy(textDecoration = decoration)
+    fun wide(text: String) = measurer.measure(text, nameStyle, softWrap = false, maxLines = 1).size.width.toFloat()
+    fun name(max: Float, maxLines: Int): List<TextLayoutResult> {
+        // «/» между клиентами остаётся в конце строки, а не переносится в начало следующей.
+        val words = block.name.split(' ').filter { it.isNotEmpty() }
+            .fold(mutableListOf<String>()) { acc, w -> acc.apply { if (w == "/" && isNotEmpty()) this[lastIndex] += " /" else add(w) } }
+        val rows = mutableListOf<String>()
+        var i = 0
+        while (i < words.size && rows.size < maxLines) {
+            if (rows.size == maxLines - 1) {
+                rows += words.drop(i).joinToString(" ")
+                break
+            }
+            var row = words[i++]
+            while (i < words.size && wide("$row ${words[i]}") <= max) row += " " + words[i++]
+            rows += row
+        }
+        return rows.ifEmpty { listOf("") }.map {
+            measurer.measure(
+                text = it,
+                style = nameStyle,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                maxLines = 1,
+                constraints = Constraints(maxWidth = max.toInt().coerceAtLeast(0)),
+            )
+        }
+    }
+    fun time(text: String) = measurer.measure(text, styles.meta.copy(textDecoration = decoration), softWrap = false, maxLines = 1)
+    fun tag(text: String) = text.takeIf { it.isNotEmpty() }?.let { measurer.measure(it, styles.tag, softWrap = false, maxLines = 1) }
+    val type = tag(block.type)
+    val place = tag(block.place)
+    val both = listOfNotNull(type, place)
+    val placeOnly = listOfNotNull(place)
+    val start = time(block.start)
+    val none = MetaLine(null, emptyList())
+    fun MetaLine.width(): Float {
+        val parts = listOfNotNull(time?.size?.width?.toFloat()) + tags.map { it.size.width + pad * 2 }
+        return parts.sum() + gap * (parts.size - 1).coerceAtLeast(0)
+    }
+    if (lines <= 1) {
+        val free = width - room - wide(block.name) - gap
+        val meta = listOf(MetaLine(start, both), MetaLine(start, placeOnly), MetaLine(null, placeOnly))
+            .firstOrNull { it.width() <= free } ?: none
+        val used = meta.width().let { if (it > 0f) it + gap else 0f }
+        return BlockText(name(width - room - used, 1), listOf(meta), inline = true)
+    }
+    val title = name(width - room, lines - 1)
+    val range = time(block.time)
+    fun MetaLine.fits() = width() <= width
+    val whole = MetaLine(range, both)
+    val meta = if (lines - title.size >= 2 && !whole.fits()) {
+        listOf(
+            listOf(MetaLine(range, emptyList()), MetaLine(start, emptyList())).firstOrNull { it.fits() } ?: none,
+            listOf(MetaLine(null, both), MetaLine(null, placeOnly)).firstOrNull { it.fits() } ?: none,
+        )
+    } else {
+        listOf(
+            listOf(whole, MetaLine(start, both), MetaLine(null, both), MetaLine(start, placeOnly), MetaLine(null, placeOnly), MetaLine(start, emptyList()))
+                .firstOrNull { it.fits() } ?: none,
         )
     }
+    return BlockText(title, meta, inline = false)
 }
 
 /** Подпись зоны в одну строку: у дежурства — справа, у запрета — слева, на плашке. */
@@ -1210,7 +1305,7 @@ private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: Persona
  * тёмным тоном того же цвета (в тёмной теме — светлым); вокруг — зазор 1 dp цвета фона. Отменённая — серая
  * и зачёркнутая, текст без прозрачности.
  */
-private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, lines: List<TextLayoutResult>, icons: BadgeIcons, colors: PersonalkaColors) {
+private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, text: BlockText, icons: BadgeIcons, colors: PersonalkaColors) {
     val gap = BLOCK_GAP.toPx()
     val rect = Rect(
         left = block.x.dp.toPx() + gap,
@@ -1222,17 +1317,52 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, li
     val tone = PlaceColor.of(training.color).tone(colors.isDark)
     val fill = if (training.cancelled) colors.surfaceAlt else tone.block(training.shade)
     val stripe = if (training.cancelled) colors.outline else tone.stripe
-    val text = if (training.cancelled) colors.textMuted else tone.text
+    val ink = if (training.cancelled) colors.textMuted else tone.text
     val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = CornerRadius(BLOCK_RADIUS.toPx()))) }
     clipPath(shape) {
         drawRect(fill, rect.topLeft, rect.size)
         drawRect(stripe, rect.topLeft, Size(Dimens.blockStripe.toPx(), rect.height))
-        var y = rect.top + (if (block.rows == BlockRows.ONE) TEXT_TOP_ONE else TEXT_TOP).toPx()
-        lines.forEach { line ->
-            drawText(line, color = text, topLeft = Offset(rect.left + TEXT_START.toPx(), y))
-            y += line.size.height
+        val left = rect.left + TEXT_START.toPx()
+        var y = rect.top + TEXT_TOP.toPx()
+        val line = text.name.first().size.height.toFloat()
+        text.name.forEach {
+            drawText(it, color = ink, topLeft = Offset(left, y))
+            y += line
+        }
+        if (text.inline) {
+            text.meta.forEach { drawMeta(it, left + text.name.first().size.width + TAG_GAP.toPx(), rect.top + TEXT_TOP.toPx(), line, ink, colors) }
+        } else {
+            text.meta.forEach {
+                drawMeta(it, left, y, line, ink, colors)
+                y += line
+            }
         }
         drawBadges(block.badges, rect, icons, colors)
+    }
+}
+
+/** Строка «время и плашки» с левым краем [x] и верхом строки [y] высотой [line]: плашки — по середине строки. */
+private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, ink: Color, colors: PersonalkaColors) {
+    var left = x
+    val gap = TAG_GAP.toPx()
+    meta.time?.let {
+        drawText(it, color = ink, topLeft = Offset(left, y + (line - it.size.height) / 2))
+        left += it.size.width + gap
+    }
+    val padX = TAG_PAD_X.toPx()
+    val padY = TAG_PAD_Y.toPx()
+    meta.tags.forEach { tag ->
+        val width = tag.size.width + padX * 2
+        val height = tag.size.height + padY * 2
+        val top = y + (line - height) / 2
+        drawRoundRect(
+            color = colors.surface.copy(alpha = TAG_ALPHA),
+            topLeft = Offset(left, top),
+            size = Size(width, height),
+            cornerRadius = CornerRadius(TAG_RADIUS.toPx()),
+        )
+        drawText(tag, color = ink, topLeft = Offset(left + padX, top + padY))
+        left += width + gap
     }
 }
 

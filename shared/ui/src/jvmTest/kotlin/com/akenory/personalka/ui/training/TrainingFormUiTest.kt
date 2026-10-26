@@ -174,7 +174,7 @@ class TrainingFormUiTest {
         awaitNode(hasText(s("Создано: вт_20.10, 17:15")))
         onNodeWithTag(TRAINING_FORM_TAG).assertDoesNotExist()
         awaitBlocks(1)
-        assertEquals(s("Белова_Е."), day().blocks.single().lines.first())
+        assertEquals("Белова Ева", day().blocks.single().lines.first())
 
         // «Отменить» — тренировки нет.
         onNodeWithText(MessageState.UNDO_LABEL).performClick()

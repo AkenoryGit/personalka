@@ -59,7 +59,8 @@ import kotlinx.datetime.plus
 /**
  * Тренировка в календаре (5.3) — всё, что нужно блоку. [start] — время клуба.
  *
- * @param title «Иванов И.», «Петров / Сидоров», «Сб 9:00 ББ (12)».
+ * @param title «Иванов И.», «Петров / Сидоров», «Сб 9:00 ББ (12)» — в строках «Главной».
+ * @param name имя в календаре — на блоке, в «Месяце» и «Списке»: «Иванов Иван», «Петров Пётр / Сидоров Олег».
  * @param typeShort короткое название типа — на блоке: «ПТ», «Груд».
  * @param typeName полное название типа — в строках «Месяца» и «Списка»: «Грудничковое · ДБ · 30 мин».
  * @param color ключ цвета места (`Location.color`): у каждой темы свои тона.
@@ -84,6 +85,7 @@ data class CalendarTraining(
     val typeName: String = typeShort,
     val done: Boolean = false,
     val group: Boolean = false,
+    val name: String = title,
 )
 
 /** Что вышло из переноса тренировки (5.3). */
@@ -306,13 +308,11 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                     ),
                 )
                 val marked = t.status == TrainingStatus.DONE || people.any { it.status == ParticipationStatus.ATTENDED }
+                val names = people.mapNotNull { n.clients[it.clientId]?.name() }
+                val groupName = t.groupId?.let { n.groups[it]?.name }
                 t.toCalendar(
-                    title = CalendarFormat.title(
-                        clients = people.mapNotNull { n.clients[it.clientId]?.name() },
-                        groupName = t.groupId?.let { n.groups[it]?.name },
-                        groupSize = waiting,
-                        typeName = type?.name.orEmpty(),
-                    ),
+                    title = CalendarFormat.title(names, groupName, waiting, type?.name.orEmpty()),
+                    name = CalendarFormat.blockName(names, groupName, waiting, type?.name.orEmpty()),
                     type = type,
                     place = n.places[t.locationId],
                     badges = badges,
@@ -447,6 +447,7 @@ private fun ClientEntity.name() = ClientName(lastName, firstName, middleName)
 
 private fun TrainingEntity.toCalendar(
     title: String,
+    name: String,
     type: TrainingTypeEntity?,
     place: LocationEntity?,
     badges: List<CalendarBadge>,
@@ -456,6 +457,7 @@ private fun TrainingEntity.toCalendar(
     start = start,
     durationMin = durationMin,
     title = title,
+    name = name,
     typeShort = type?.shortName.orEmpty(),
     typeName = type?.name.orEmpty(),
     placeId = locationId,

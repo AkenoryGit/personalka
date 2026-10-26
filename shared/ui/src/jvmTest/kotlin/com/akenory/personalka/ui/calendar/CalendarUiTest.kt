@@ -300,9 +300,9 @@ class CalendarUiTest {
         val blocks = day().blocks.sortedBy { it.x }
         blocks.forEach { near(116f, it.width, "Ширина блока") }
         assertEquals(listOf(8f, 124f, 240f), blocks.map { it.x })
-        assertEquals(setOf(s("Белова_Е."), s("Гусев_Б."), s("Ильин_Г.")), blocks.map { it.lines.first() }.toSet())
-        // 50 минут при часе 64 dp — 53 dp: имя и «начало · место».
-        assertTrue(blocks.all { it.rows == BlockRows.TWO && it.lines[1] == "16:00 · ББ" })
+        assertEquals(setOf("Белова Ева", "Гусев Борис", "Ильин Глеб"), blocks.map { it.lines.first() }.toSet())
+        // 50 минут при часе 64 dp — 53 dp; на блоке — полное имя, время и плашки типа и места (шаг 3.9д).
+        assertTrue(blocks.all { it.rows == BlockRows.TWO && it.lines.drop(1) == listOf("16:00–16:50", "ПТ · ББ") })
     }
 
     @Test
@@ -314,11 +314,11 @@ class CalendarUiTest {
         awaitBlocks(3)
 
         val (hour, half, cancelled) = day().blocks.sortedBy { it.y }
-        assertEquals(listOf(s("Морозов_Д."), "12:00–13:00", "ПТ · ББ"), hour.lines)
-        assertEquals(listOf(s("Белова_Е., 14:00")), half.lines)
+        assertEquals(listOf("Морозов Даниил", "12:00–13:00", "ПТ · ББ"), hour.lines)
+        assertEquals(listOf("Белова Ева", "14:00–14:30", "Груд · ББ"), half.lines)
         assertEquals(BlockRows.ONE, half.rows)
         assertTrue(cancelled.cancelled)
-        assertEquals(listOf(s("Зайцева_М."), "16:00 · ББ"), cancelled.lines)
+        assertEquals(listOf("Зайцева Мария", "16:00–16:50", "ПТ · ББ"), cancelled.lines)
         // Во всю ширину: наложений нет.
         assertTrue(day().blocks.all { it.x == 8f && abs(it.width - 348f) < 0.5f })
     }
@@ -340,8 +340,8 @@ class CalendarUiTest {
         onNodeWithText(s("Ещё 2_тренировки")).assertIsDisplayed()
         // Скрыты последние две: те же начало и длительность — порядок записи.
         onAllNodesWithText("16:00–16:50 · ББ").assertCountEquals(2)
-        onNodeWithText(s("Лаптева_А.")).assertIsDisplayed()
-        onNodeWithText(s("Егорова_Л.")).performClick()
+        onNodeWithText("Лаптева Алина").assertIsDisplayed()
+        onNodeWithText("Егорова Лиза").performClick()
         onNodeWithTag(PANEL_TAG).assertDoesNotExist()
         awaitNode(hasTestTag(TRAINING_CARD_TAG))
         onNodeWithText(s("Егорова_Л.")).assertIsDisplayed()
@@ -583,7 +583,7 @@ class CalendarUiTest {
         onNodeWithTag(CALENDAR_PLACE_TAG).performClick()
         onNodeWithText("Детский бассейн").performClick()
         awaitBlocks(1)
-        assertEquals(listOf(s("Орлов_М.")), names())
+        assertEquals(listOf("Орлов Максим"), names())
         assertEquals(1, day().zones.size)
         onNodeWithTag(CALENDAR_PLACE_TAG).assertTextEquals("ДБ")
 
@@ -591,7 +591,7 @@ class CalendarUiTest {
         onNodeWithTag(CALENDAR_PLACE_TAG).performClick()
         onNodeWithText("Большой бассейн").performClick()
         awaitBlocks(1)
-        assertEquals(listOf(s("Белова_Е.")), names())
+        assertEquals(listOf("Белова Ева"), names())
         awaitZones(0)
 
         // Разложили: фильтр тот же, теперь чипами; «Все» возвращает всё.
@@ -617,7 +617,7 @@ class CalendarUiTest {
         onNodeWithText(SHOW_CANCELLED).assertIsOn()
         onNodeWithText(SHOW_CANCELLED).performClick()
         awaitBlocks(1)
-        assertEquals(listOf(s("Белова_Е.")), day().blocks.map { it.lines.first() })
+        assertEquals(listOf("Белова Ева"), day().blocks.map { it.lines.first() })
         assertEquals(false, prefs.boolean(DevicePrefs.CALENDAR_SHOW_CANCELLED))
 
         onNodeWithTag(CALENDAR_VIEW_TAG).performClick()
@@ -925,7 +925,7 @@ class CalendarUiTest {
 
         // Под сеткой — список выбранного дня: заголовок с числом, строки по времени, длинная на одно время — выше.
         onNodeWithTag(dayTitleTag(today)).assert(hasText(DateFormat.header(today))).assert(hasText(s("3_тренировки")))
-        onNodeWithTag(calendarRowTag(split)).assert(hasText("Ковалёв / Ковалёва")).assert(hasText("Сплит · ББ"))
+        onNodeWithTag(calendarRowTag(split)).assert(hasText("Ковалёв Илья / Ковалёва Мира")).assert(hasText("Сплит · ББ"))
         onNodeWithTag(calendarRowTag(zaitseva)).assert(hasText("ПТ · ББ · со списанием"))
         onNodeWithTag(calendarRowTag(belova)).assert(hasText(s("Грудничковое · ДБ · 30_мин")))
         onNodeWithTag(calendarRowTag(duty)).assert(hasText("Дежурство")).assert(hasText(s("ББ · до_15:00")))
@@ -937,7 +937,7 @@ class CalendarUiTest {
         waitForIdle()
         onNodeWithTag(monthDayTag(thursday)).assertIsSelected()
         onNodeWithTag(dayTitleTag(thursday)).assert(hasText(s("1_тренировка")))
-        onNodeWithTag(calendarRowTag(orlov)).assert(hasText(s("Орлов_М.")))
+        onNodeWithTag(calendarRowTag(orlov)).assert(hasText("Орлов Максим"))
         onNodeWithTag(calendarRowTag(morozov)).assertDoesNotExist()
 
         // Нажатие на заголовок дня — этот день в виде «День».

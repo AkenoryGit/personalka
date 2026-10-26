@@ -683,7 +683,7 @@ private fun MorePanel(hidden: List<CalendarTraining>, onDismiss: () -> Unit, onO
                 verticalArrangement = Arrangement.Center,
             ) {
                 Text(
-                    text = training.title,
+                    text = training.name,
                     style = MaterialTheme.typography.labelLarge,
                     color = colors.text,
                     textDecoration = decoration,

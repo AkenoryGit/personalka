@@ -139,7 +139,7 @@ class TrainingCardUiTest {
         training("16:20", client("Орлов", "Максим"))
         runBlocking { settings.months.setClosed(YearMonth(2026, 10), true) }
         openCalendar()
-        tapBlock("Орлов_М.")
+        tapBlock("Орлов Максим")
         awaitNode(inCard(TrainingCardFormat.action(CardAction.EDIT)))
 
         // Октябрь сверен (шаг 3.7б, ТЗ 4.1): «Изменить» сначала спрашивает; «Не менять» — карточка остаётся.
@@ -164,7 +164,7 @@ class TrainingCardUiTest {
         openCalendar()
 
         // Карточка: время, статус, кнопки «Отменить» и «Изменить» (макет «Позже сегодня»).
-        tapBlock("Орлов_М.")
+        tapBlock("Орлов Максим")
         awaitNode(hasTestTag(TRAINING_CARD_TAG))
         // Панель появляется раньше данных карточки — ждём саму строку, а не только панель.
         awaitNode(hasText(s("вт_20.10 · 16:20–17:10 · 50_мин")))
@@ -197,7 +197,7 @@ class TrainingCardUiTest {
         val orlov = client("Орлов", "Максим")
         val id = training("16:41", orlov)
         openCalendar()
-        tapBlock("Орлов_М.")
+        tapBlock("Орлов Максим")
         cardButton(CardAction.CANCEL).performClick()
         awaitNode(hasTestTag(CANCEL_PANEL_TAG))
         onNode(inCard(s("предупредили за_1_ч 1_мин"))).assertIsDisplayed()
@@ -222,7 +222,7 @@ class TrainingCardUiTest {
         val id = training("15:30", nikitin)
         var width by mutableStateOf(folded)
         openCalendar { width }
-        tapBlock("Никитин_А.")
+        tapBlock("Никитин Артём")
         awaitNode(hasTestTag(CARD_SCRIM_TAG))
         // Разложили — та же карточка справа (она хранится выше ветки по ширине).
         width = unfolded
@@ -341,7 +341,7 @@ class TrainingCardUiTest {
         val nosova = client("Носова", "Елена")
         val id = training("16:00", ilin, nosova, type = "Сплит")
         openCalendar()
-        tapBlock("Ильин / Носова")
+        tapBlock("Ильин Глеб / Носова Елена")
 
         // Значок отмены у клиента — панель с этим клиентом, кнопка «Отменить: Носова Е.», без переноса.
         awaitNode(hasTestTag(cardClientActionTag(nosova)))
@@ -364,7 +364,7 @@ class TrainingCardUiTest {
         val orlov = client("Орлов", "Максим")
         val id = training("17:00", orlov)
         openCalendar()
-        tapBlock("Орлов_М.")
+        tapBlock("Орлов Максим")
         awaitNode(hasTestTag(CARD_MENU_TAG))
         onNodeWithTag(CARD_MENU_TAG).performClick()
         onNodeWithText(TrainingCardFormat.menu(CardMenu.DELETE)).performClick()
@@ -383,7 +383,7 @@ class TrainingCardUiTest {
         val orlov = client("Орлов", "Максим")
         training("17:00", orlov)
         openCalendar()
-        tapBlock("Орлов_М.", hold = true)
+        tapBlock("Орлов Максим", hold = true)
         onNodeWithText(CANCEL_TRAINING).performClick()
         awaitNode(hasTestTag(CANCEL_PANEL_TAG))
         onNode(inCard(s("предупредили за_1_ч 20_мин"))).assertIsDisplayed()
