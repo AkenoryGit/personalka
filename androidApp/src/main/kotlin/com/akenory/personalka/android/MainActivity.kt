@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,6 +22,7 @@ import com.akenory.personalka.ui.clients.LocalMaxMessenger
 import com.akenory.personalka.ui.components.ProvideAvatarPhotos
 import com.akenory.personalka.ui.reminders.AppLink
 import com.akenory.personalka.ui.settings.BackupTools
+import com.akenory.personalka.ui.settings.CrashReport
 import com.akenory.personalka.ui.settings.SyncTools
 import kotlinx.coroutines.flow.first
 
@@ -30,6 +32,9 @@ class MainActivity : ComponentActivity() {
 
     /** Первый показ окна — обмен уже идёт с запуска приложения; дальше каждый возврат — обмен сразу (7.2, п. 4). */
     private var shown = false
+
+    /** Текст ошибки, на которой закрылся прошлый запуск: сначала он, потом приложение. */
+    private var crash by mutableStateOf<String?>(null)
 
     /** Окна файлов: сюда же приходит отчёт 1С, присланный через «Поделиться» (шаг 4.2б). */
     private var files: AndroidFiles? = null
@@ -52,34 +57,58 @@ class MainActivity : ComponentActivity() {
         val notifications = AndroidNotifications(this, app.prefs, app::remindersChanged)
         // Пересоздание окна при смене темы не открывает уведомление второй раз.
         if (savedInstanceState == null) link = linkOf(intent)
+        crash = runCatching { app.crashFile.takeIf { it.exists() }?.readText() }.getOrNull()
         setContent {
-            // Разрешение на уведомления (Android 13+) — один раз, когда первый запуск пройден: сводка включена сразу.
-            LaunchedEffect(Unit) {
-                app.settings.coach.first { it != null }
-                notifications.askOnce()
-            }
-            ProvideAvatarPhotos(photos, app.clients.ids, app.cabinets.consents) {
-                CompositionLocalProvider(LocalMaxMessenger provides max) {
-                    App(
-                        versionName = BuildConfig.VERSION_NAME,
-                        settings = app.settings,
-                        clients = app.clients,
-                        groups = app.groups,
-                        calendar = app.calendar,
-                        prefs = app.prefs,
-                        backup = backup,
-                        account = app.account,
-                        sync = sync,
-                        cabinets = cabinets,
-                        shareText = ::share,
-                        voice = voice,
-                        reminders = app.reminders,
-                        notifications = notifications,
-                        link = link,
-                        onLink = { link = null },
-                        backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
-                    )
+            val report = crash
+            if (report != null) {
+                CrashReport(report, ::copy) {
+                    app.crashFile.delete()
+                    crash = null
                 }
+            } else {
+                Main(app, backup, sync, cabinets, voice, photos, max, notifications)
+            }
+        }
+    }
+
+    /** Само приложение: окно ошибки прошлого запуска закрыто или его не было. */
+    @Composable
+    private fun Main(
+        app: PersonalkaApplication,
+        backup: BackupTools,
+        sync: SyncTools,
+        cabinets: CabinetTools,
+        voice: AndroidVoice?,
+        photos: AndroidPhotos,
+        max: AndroidMax,
+        notifications: AndroidNotifications,
+    ) {
+        // Разрешение на уведомления (Android 13+) — один раз, когда первый запуск пройден: сводка включена сразу.
+        LaunchedEffect(Unit) {
+            app.settings.coach.first { it != null }
+            notifications.askOnce()
+        }
+        ProvideAvatarPhotos(photos, app.clients.ids, app.cabinets.consents) {
+            CompositionLocalProvider(LocalMaxMessenger provides max) {
+                App(
+                    versionName = BuildConfig.VERSION_NAME,
+                    settings = app.settings,
+                    clients = app.clients,
+                    groups = app.groups,
+                    calendar = app.calendar,
+                    prefs = app.prefs,
+                    backup = backup,
+                    account = app.account,
+                    sync = sync,
+                    cabinets = cabinets,
+                    shareText = ::share,
+                    voice = voice,
+                    reminders = app.reminders,
+                    notifications = notifications,
+                    link = link,
+                    onLink = { link = null },
+                    backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
+                )
             }
         }
     }

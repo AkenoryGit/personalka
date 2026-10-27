@@ -1,6 +1,7 @@
 package com.akenory.personalka.android
 
 import android.app.Application
+import com.akenory.personalka.BuildConfig
 import com.akenory.personalka.data.account.AccountRepository
 import com.akenory.personalka.data.account.androidAccount
 import com.akenory.personalka.data.backup.BackupRepository
@@ -21,6 +22,7 @@ import com.akenory.personalka.data.sync.SyncRepository
 import com.akenory.personalka.data.sync.SyncRunner
 import com.akenory.personalka.data.sync.androidSync
 import com.akenory.personalka.ui.reminders.Reminders
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -79,10 +81,28 @@ class PersonalkaApplication : Application() {
     /** Напоминания (шаг 2.5): проверка по будильнику ([ReminderReceiver]) и время следующей. */
     val reminders: Reminders by lazy { Reminders(calendar, clients, backup, prefs, System::currentTimeMillis, settings.months) }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * Текст последней ошибки, на которой приложение закрылось: окно при следующем запуске показывает его, чтобы тренер
+     * прислал разработчику (на телефоне журнала не достать).
+     */
+    val crashFile: File get() = File(filesDir, "last-crash.txt")
+
+    /** Сбой фоновой работы (обмен, будильник) записывается и не роняет приложение — иначе оно падало бы при каждом запуске. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> saveCrash(e) })
+
+    private fun saveCrash(e: Throwable) {
+        runCatching {
+            crashFile.writeText("Версия ${BuildConfig.VERSION_NAME} · ${java.util.Date()}\n\n${e.stackTraceToString()}".take(CRASH_MAX))
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
+        val system = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            saveCrash(e)
+            system?.uncaughtException(thread, e)
+        }
         AndroidReminders.createChannels(this)
         // Пока процесс жив, будильник следует за настройками и тренировками: новая тренировка сразу получает
         // своё «Дневник сразу», выключенная сводка снимает будильник.
@@ -95,6 +115,10 @@ class PersonalkaApplication : Application() {
         scope.launch {
             sync.state.map { it.connected }.distinctUntilChanged().collect { SyncJob.schedule(this@PersonalkaApplication, it) }
         }
+    }
+
+    private companion object {
+        const val CRASH_MAX = 20_000
     }
 
     /** «План на день» и разрешение не видны в базе — будильник переставляется по просьбе экрана. */

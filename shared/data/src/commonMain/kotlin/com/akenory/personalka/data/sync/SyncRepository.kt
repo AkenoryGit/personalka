@@ -61,7 +61,8 @@ data class SyncProgress(val sent: Int, val total: Int)
 
 /**
  * Что знает о синхронизации этот телефон: [connected] — сервер подключён на этом телефоне; [lastSync] — момент
- * последнего полного обмена (миллисекунды UTC); [failures] — ошибок связи подряд, по ним пауза повтора.
+ * последнего полного обмена (миллисекунды UTC); [failures] — ошибок связи подряд, по ним пауза повтора; [error] — текст
+ * сбоя при [SyncProblem.FAILED].
  */
 data class SyncState(
     val connected: Boolean = false,
@@ -70,6 +71,8 @@ data class SyncState(
     val lastSync: Long? = null,
     val problem: SyncProblem? = null,
     val failures: Int = 0,
+    /** Текст ошибки при [SyncProblem.FAILED] — чтобы тренер мог его прислать. */
+    val error: String? = null,
 )
 
 /**
@@ -131,16 +134,23 @@ class SyncRepository(
             } catch (e: AccountException) {
                 return@withLock failed(e)
             }
+            // Страница не легла в базу — транзакция откатилась, телефон не стёрт и сервер не подключён.
+            try {
+                db.useWriterConnection<Unit> { connection ->
+                    connection.immediateTransaction {
+                        SyncOutbox.clearAll(this)
+                        apply(this, first)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@withLock broken(e)
+            }
             setConnected(true)
             rememberOwner()
             prefs.putString(SENT, "")
             prefs.pullFromStart()
-            db.useWriterConnection { connection ->
-                connection.immediateTransaction {
-                    SyncOutbox.clearAll(this)
-                    apply(this, first)
-                }
-            }
             prefs.putString(SINCE, lastSeq(first, 0).toString())
             if (first.flag("has_more")) return@withLock exchange(token, push = false)
             return@withLock done()
@@ -306,6 +316,10 @@ class SyncRepository(
             throw e
         } catch (e: AccountException) {
             return failed(e)
+        } catch (e: Exception) {
+            // Сбой в телефоне (база, разбор ответа) не должен ронять приложение: при каждом запуске обмен шёл бы снова
+            // и снова ронял его. Страница откатывается целиком, номер получения не сдвигается — данные целы.
+            return broken(e)
         } finally {
             _state.update { it.copy(running = false) }
         }
@@ -424,7 +438,7 @@ class SyncRepository(
     private fun done(): Boolean {
         val now = clock()
         prefs.putString(LAST, now.toString())
-        _state.update { it.copy(lastSync = now, problem = null, failures = 0, progress = null) }
+        _state.update { it.copy(lastSync = now, problem = null, failures = 0, progress = null, error = null) }
         return true
     }
 
@@ -438,6 +452,13 @@ class SyncRepository(
             else -> SyncProblem.OFFLINE
         },
     )
+
+    /** Сбой в телефоне: обмен стоит до следующего раза, текст — для тренера ([SyncState.error]). */
+    private fun broken(e: Exception): Boolean {
+        val text = (e::class.simpleName ?: "Exception") + (e.message?.let { ": $it" } ?: "")
+        _state.update { it.copy(problem = SyncProblem.FAILED, error = text.take(ERROR_MAX), progress = null) }
+        return false
+    }
 
     private fun fail(problem: SyncProblem): Boolean {
         _state.update {
@@ -464,6 +485,9 @@ class SyncRepository(
 
         /** Id этого устройства для сервера. */
         const val DEVICE = "sync.device"
+
+        /** Длина текста ошибки, не больше. */
+        private const val ERROR_MAX = 600
 
         /** Ответы сервера, после которых запись уходит из очереди. */
         private val DONE_STATUSES = setOf("accepted", "stale", "club_only")

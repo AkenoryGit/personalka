@@ -34,6 +34,7 @@ import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.format.AccountFormat
 import com.akenory.personalka.domain.format.SyncFormat
+import com.akenory.personalka.domain.sync.SyncProblem
 import com.akenory.personalka.ui.components.CheckBox
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.OutlineButton
@@ -161,6 +162,9 @@ internal fun SyncSection(
                     color = colors.error,
                     modifier = Modifier.padding(top = Dimens.space1).testTag(SYNC_PROBLEM_TAG),
                 )
+            }
+            state.error?.takeIf { state.problem == SyncProblem.FAILED }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = colors.textMuted, modifier = Modifier.padding(top = Dimens.space1))
             }
             Column(Modifier.padding(top = Dimens.space3), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                 OutlineButton(SyncFormat.SYNC_NOW, onSyncNow, Modifier.fillMaxWidth().testTag(SYNC_NOW_TAG))

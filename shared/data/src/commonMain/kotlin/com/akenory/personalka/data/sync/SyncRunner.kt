@@ -1,6 +1,7 @@
 package com.akenory.personalka.data.sync
 
 import com.akenory.personalka.domain.sync.SyncRules
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -33,7 +34,14 @@ class SyncRunner(private val sync: SyncRepository) {
             }
         }
         while (true) {
-            sync.sync()
+            try {
+                sync.sync()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Обмен сам превращает сбои в SyncProblem; что всё же вылетело (ключи телефона) — не повод ронять
+                // приложение при каждом запуске: попробуем в следующий раз.
+            }
             val s = sync.state.value
             val refused = s.problem != null && s.problem !in SyncRepository.RETRIED
             val pause = if (!s.connected) SyncRules.PERIOD_MS else SyncRules.nextPause(s.failures, sync.pendingNow(), refused)

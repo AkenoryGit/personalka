@@ -11,6 +11,7 @@ import com.akenory.personalka.domain.sync.SyncProblem
 import com.akenory.personalka.domain.sync.SyncRules
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.AfterTest
@@ -89,6 +90,27 @@ class SyncRepositoryTest {
         assertEquals("Ксюша", a.clients.client(client.id)!!.firstName)
         assertEquals(0, a.db.syncDao().pending())
         assertNotNull(a.sync.state.value.lastSync)
+    }
+
+    @Test
+    fun rowThatDoesNotFitTheBaseStopsTheExchangeInsteadOfCrashing(): Unit = runBlocking {
+        val (a, b) = twoPhones()
+        val client = Samples.client("Лебедева", "Ксения")
+        a.clients.upsertClient(client)
+        assertTrue(a.sync.connect())
+        assertTrue(b.sync.connect(takeFromServer = true))
+
+        // На сервере запись, которую база телефона не примет (пустая фамилия при NOT NULL): раньше исключение
+        // роняло приложение при каждом запуске — обмен шёл сразу на старте.
+        val key = server.rows.keys.single { it.second == "client" }
+        val row = server.rows.getValue(key)
+        server.rows[key] = row.copy(updatedAt = now + 60_000, seq = 1_000, data = JsonObject(row.data + ("lastName" to JsonNull)))
+
+        assertFalse(b.sync.sync())
+        assertEquals(SyncProblem.FAILED, b.sync.state.value.problem)
+        assertNotNull(b.sync.state.value.error)
+        assertEquals("Лебедева", b.clients.client(client.id)!!.lastName, "Страница откатилась — данные телефона целы")
+        assertFalse(b.sync.state.value.running)
     }
 
     @Test
