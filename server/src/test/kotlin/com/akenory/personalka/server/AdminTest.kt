@@ -54,7 +54,7 @@ class AdminTest {
         val response = client.send("/api/v1/auth/confirm", "email" to email, "password" to password, "code" to mailer.lastCode(), "device_name" to "Телефон")
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         if (email != admin) {
-            database.tx { c -> c.update("INSERT INTO coach_feature (coach_id, feature) SELECT id, 'server_copy' FROM coach WHERE email = ?", email) }
+            database.tx { c -> c.update("INSERT INTO coach_feature (coach_id, feature) SELECT id, 'server_copy' FROM coach WHERE email = ? ON CONFLICT DO NOTHING", email) }
         }
         return response.obj()["token"]!!.jsonPrimitive.content
     }

@@ -1,5 +1,7 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.account.Feature
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
 /**
@@ -27,10 +29,44 @@ object AdminFormat {
     const val MAIL_FAILED = "Не удалось отправить письмо — попробуйте позже"
     const val FORM_EXPIRED = "Страница устарела — обновите её и повторите"
 
+    const val ALL_COACHES = "Все тренеры"
+    const val FEATURES = "Возможности"
+    const val UNTIL = "Открыто до"
+    const val UNTIL_HINT = "Пусто — без срока. За 7 дней до конца тренер увидит напоминание; по окончании данные не удаляются."
+    const val SAVE = "Сохранить"
+    const val DEFAULTS = "Новым тренерам по умолчанию"
+    const val DEFAULTS_NOTE = "Зарплата «Вся сумма» есть у всех всегда. Уже зарегистрированных это не меняет."
+    const val NOTHING_OPEN = "Ничего не открыто"
+    const val APPLIES = "Телефон тренера увидит изменения при следующем обмене с сервером. Без сети всё работает, как раньше."
+    const val BAD_DATE = "Проверьте дату — например, 31.12.2026"
+    const val NO_COACH = "Такого тренера на сервере нет"
+
     const val SIGNED_IN = "Вход в админку"
     const val SIGNED_OUT = "Выход из админки"
     const val SUSPENDED = "приостановлен"
     const val RESUMED = "возобновлён"
+    const val CLOSED_ALL = "всё закрыто"
+
+    /** Пояснение под возможностью на странице тренера. */
+    fun note(feature: Feature): String = when (feature) {
+        Feature.SERVER_COPY -> "Синхронизация, второй телефон, восстановление"
+        Feature.CABINETS -> "Ссылки для родителей; открывают и копию на сервере"
+        Feature.HALF_OFFICIAL -> "Второй вариант оплаты Академии — выбор в «Зарплате»"
+    }
+
+    /**
+     * Что открыто — для журнала и строки тренера: «Копия на сервере, Кабинеты родителей до 31.12.2026»;
+     * ничего — [CLOSED_ALL].
+     */
+    fun features(open: Map<Feature, LocalDate?>): String =
+        if (open.isEmpty()) {
+            CLOSED_ALL
+        } else {
+            open.entries.joinToString(", ") { (f, until) -> if (until == null) f.title else f.title + " до " + DateFormat.full(until) }
+        }
+
+    /** Журнал: «Новым тренерам: Копия на сервере». */
+    fun defaults(features: Set<Feature>): String = "Новым тренерам: " + features(features.associateWith { null })
 
     /** «Отправили код на d…@gmail.com — действует 15 минут». Почта скрыта: страницу могут увидеть через плечо. */
     fun codeSent(email: String, minutes: Int): String =

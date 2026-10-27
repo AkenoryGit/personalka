@@ -17,6 +17,7 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -188,5 +189,65 @@ class AdminSiteTest {
         // Почту убрали из TRENER_ADMIN_EMAIL и перезапустили сервер — прежняя cookie больше не пускает.
         val stillAdmin = database.tx { c -> AdminSessions(Accounts(emptySet())).find(c, cookie.substringAfter('=')) }
         assertEquals(null, stillAdmin)
+    }
+
+    private suspend fun HttpClient.me(token: String): List<Pair<String, String>> {
+        val body = get("/api/v1/me") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText()
+        return Json.parseToJsonElement(body).jsonObject["features"]!!.jsonArray.map {
+            it.jsonObject["code"]!!.jsonPrimitive.content to it.jsonObject["until"]!!.toString().trim('"')
+        }
+    }
+
+    private suspend fun HttpClient.save(cookie: String, path: String, csrf: String, vararg fields: Pair<String, String>) = submitForm(
+        path,
+        parameters {
+            append("csrf", csrf)
+            fields.forEach { (k, v) -> append(k, v) }
+        },
+    ) { header(HttpHeaders.Cookie, cookie) }
+
+    @Test
+    fun featuresAreSwitchedInAdmin() = withServer { database, client ->
+        val adminToken = client.signUp(database, admin, "Дмитрий")
+        val lena = client.signUp(database, coachEmail, "Лена")
+        // Решение 27.10.2026: новому тренеру копия открыта сразу, остальное закрыто; у администратора — всё.
+        assertEquals(listOf("server_copy" to "null"), client.me(lena))
+        assertEquals(listOf("half_official", "cabinets", "server_copy"), client.me(adminToken).map { it.first })
+
+        val cookie = client.signIn(database)
+        val list = client.page(cookie).html()
+        val csrf = csrf(list)
+        assertTrue("Открыто: Копия на сервере" in list, list)
+        val id = database.tx { c -> c.queryOne("SELECT id FROM coach WHERE email = ?", coachEmail) { it.getString(1) } }!!
+        val page = client.get("/admin/coaches/$id") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.OK, page.status)
+        assertTrue("Официально с налогом 6,5" in page.html())
+
+        // Кабинеты до 31.12.2026 и «с налогом 6,5 %» без срока; копию сняли — её откроют кабинеты.
+        val saved = client.save(cookie, "/admin/coaches/$id/features", csrf, "f" to "cabinets", "until_cabinets" to "31.12.2026", "f" to "half_official")
+        assertEquals(HttpStatusCode.SeeOther, saved.status)
+        assertEquals(listOf("half_official" to "null", "cabinets" to "2026-12-31", "server_copy" to "2026-12-31"), client.me(lena))
+        assertTrue("Лена · Официально с налогом 6,5\u00A0%, Кабинеты родителей до 31.12.2026" in client.page(cookie).html())
+
+        // Неверная дата — ничего не сохранено, страница с ошибкой.
+        val bad = client.save(cookie, "/admin/coaches/$id/features", csrf, "f" to "cabinets", "until_cabinets" to "32.13.2026")
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+        assertTrue("Проверьте дату" in bad.html())
+        assertEquals(3, client.me(lena).size)
+
+        // Без поля формы — ничего не меняется.
+        assertEquals(HttpStatusCode.Forbidden, client.save(cookie, "/admin/coaches/$id/features", "чужое").status)
+        assertEquals(3, client.me(lena).size)
+
+        // Себе администратор тоже выключает: оставил только копию.
+        val adminId = database.tx { c -> c.queryOne("SELECT id FROM coach WHERE email = ?", admin) { it.getString(1) } }!!
+        client.save(cookie, "/admin/coaches/$adminId/features", csrf, "f" to "server_copy")
+        assertEquals(listOf("server_copy" to "null"), client.me(adminToken))
+
+        // Новым тренерам по умолчанию — ничего: следующий регистрируется без копии.
+        assertEquals(HttpStatusCode.SeeOther, client.save(cookie, "/admin/defaults", csrf).status)
+        val ivan = client.signUp(database, "ivan@example.ru", "Иван")
+        assertEquals(emptyList(), client.me(ivan))
+        assertTrue("Новым тренерам: всё закрыто" in client.page(cookie).html())
     }
 }

@@ -2,15 +2,10 @@ package com.akenory.personalka.domain.format
 
 import kotlinx.datetime.LocalDate
 
-/** Строки «Ещё → Клуб» у администратора (ТЗ 5.17, 1.5; шаг 5.2): тренеры сервера и приостановка доступа. */
+/** Тренеры сервера и приостановка доступа (ТЗ 5.17, 1.5): с шага 5.2в — в админке на сайте, а не в приложении. */
 object ClubFormat {
     private const val DOT = " · "
 
-    const val TITLE = "Клуб"
-    const val COACHES = "Тренеры"
-    const val YOU = "вы"
-    const val LOADING = "Загружаю список…"
-    const val EMPTY = "Коллег пока нет. Коллега сам ставит «Персоналку» и регистрируется — тогда он появится здесь."
     const val PRIVATE = "Здесь только аккаунты: клиентов и тренировок коллег вы не видите."
 
     const val SUSPEND = "Приостановить"
@@ -19,14 +14,12 @@ object ClubFormat {
         "Синхронизация остановится, кабинеты его клиентов закроются, войти с нового телефона не выйдет. " +
             "Данные в телефоне тренера и на сервере останутся."
     const val RESUME_NOTE = "Синхронизация и кабинеты заработают снова."
-    const val SUSPENDED_DONE = "Доступ приостановлен"
-    const val RESUMED_DONE = "Доступ возобновлён"
 
     /** Приостановленный аккаунт видит это в «Аккаунте». */
     const val YOU_SUSPENDED = "Доступ к серверу приостановлен администратором — данные в телефоне целы"
 
     /** Имя в списке: своя строка — «Дмитрий · вы». */
-    fun name(name: String, self: Boolean): String = if (self) name + DOT + YOU else name
+    fun name(name: String, self: Boolean): String = if (self) "$name · вы" else name
 
     /**
      * Строка под почтой: «Приостановлен», «Почта не подтверждена» или последний обмен — «Обмен сегодня»,

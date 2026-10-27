@@ -61,12 +61,6 @@ class AccountApi(private val client: HttpClient, private val baseUrl: suspend ()
         call { client.delete(url("/me/sessions/$id")) { bearerAuth(token) } }
     }
 
-    /** «Клуб → Тренеры» (шаг 5.2): только администратору, иначе 403 `admin_only`. */
-    suspend fun coaches(token: String): JsonObject = call { client.get(url("/admin/coaches")) { bearerAuth(token) } }
-
-    suspend fun setSuspended(token: String, coachId: String, suspended: Boolean): JsonObject =
-        call { client.post(url("/admin/coaches/$coachId/" + if (suspended) "suspend" else "resume")) { bearerAuth(token) } }
-
     private suspend fun url(path: String) = baseUrl().trimEnd('/') + "/api/v1" + path
 
     private suspend fun post(path: String, vararg fields: Pair<String, String?>): JsonObject {

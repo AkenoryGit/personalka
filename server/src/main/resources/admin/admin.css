@@ -7,3 +7,11 @@
 .adm-who{display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere}
 .btn.adm-small{width:auto;height:44px;padding:0 16px;white-space:nowrap}
 @media (max-width:420px){.adm-row{flex-direction:column;align-items:stretch}.adm-row .btn.adm-small{width:100%}}
+/* Шаг 5.2в: возможности тренера и умолчания. */
+.lnk-row{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.adm-form{padding:8px 16px 16px;display:flex;flex-direction:column;gap:4px}
+.adm-form .btn{align-self:flex-start;margin-top:8px}
+.adm-feat{gap:8px}
+.adm-feat .chk{padding:4px 0}
+.adm-until{display:flex;flex-direction:column;gap:4px;margin-left:38px}
+.adm-until .inp{height:48px;max-width:220px}

@@ -72,10 +72,12 @@ class SyncTest {
         val response = send("/api/v1/auth/confirm", "email" to email, "password" to password, "code" to mailer.lastCode(), "device_name" to "Телефон")
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         val token = response.obj()["token"]!!.jsonPrimitive.content
-        if (copy && email != admin) {
+        if (email != admin) {
+            // Копия открыта новым тренерам по умолчанию (шаг 5.2в) — здесь её срок и наличие задаёт тест.
             database.tx { c ->
                 val id = c.queryOne("SELECT id FROM coach WHERE email = ?", email) { it.getString(1) }
-                c.update("INSERT INTO coach_feature (coach_id, feature, until) VALUES (?, 'server_copy', ?::date)", id, until)
+                c.update("DELETE FROM coach_feature WHERE coach_id = ?", id)
+                if (copy) c.update("INSERT INTO coach_feature (coach_id, feature, until) VALUES (?, 'server_copy', ?::date)", id, until)
             }
         }
         return token

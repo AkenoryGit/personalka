@@ -99,7 +99,8 @@ class AuthTest {
         val body = me.obj()
         assertEquals("Иван Петров", body["display_name"]!!.jsonPrimitive.content)
         assertEquals("COACH", body["role"]!!.jsonPrimitive.content)
-        assertEquals(0, body["features"]!!.jsonArray.size, "у нового аккаунта всё закрыто")
+        // Новому тренеру сразу открыта только «Копия на сервере» (решение Дмитрия 27.10.2026, шаг 5.2в).
+        assertEquals(listOf("server_copy"), body["features"]!!.jsonArray.map { it.jsonObject["code"]!!.jsonPrimitive.content })
         val session = body["sessions"]!!.jsonArray.single().jsonObject
         assertEquals("Galaxy Z Fold", session["device_name"]!!.jsonPrimitive.content)
         assertEquals("true", session["current"]!!.jsonPrimitive.content)
@@ -320,6 +321,7 @@ class AuthTest {
     fun featuresWithDatesComeFromTable() = withServer { database ->
         val token = client.signUp()
         database.dataSource.connection.use {
+            it.createStatement().execute("DELETE FROM coach_feature")
             it.createStatement().execute("INSERT INTO coach_feature (coach_id, feature, until) SELECT id, 'cabinets', DATE '2026-12-31' FROM coach")
         }
         val features = client.me(token).obj()["features"]!!.jsonArray.map { it.jsonObject }

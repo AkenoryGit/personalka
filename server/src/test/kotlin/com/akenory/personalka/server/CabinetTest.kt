@@ -78,7 +78,11 @@ class CabinetTest {
         val response = send("/api/v1/auth/confirm", "email" to email, "password" to password, "code" to mailer.lastCode(), "device_name" to "Телефон")
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         val id = database.tx { c -> c.queryOne("SELECT id FROM coach WHERE email = ?", email) { it.getString(1) }!! }
-        database.tx { c -> features.forEach { c.update("INSERT INTO coach_feature (coach_id, feature) VALUES (?, ?)", id, it) } }
+        database.tx { c ->
+            // Только [features] — без «Копии на сервере», открытой новым тренерам по умолчанию (шаг 5.2в).
+            c.update("DELETE FROM coach_feature WHERE coach_id = ?", id)
+            features.forEach { c.update("INSERT INTO coach_feature (coach_id, feature) VALUES (?, ?)", id, it) }
+        }
         return response.obj()["token"]!!.jsonPrimitive.content to id
     }
 

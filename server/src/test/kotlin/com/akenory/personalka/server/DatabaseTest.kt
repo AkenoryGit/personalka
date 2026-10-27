@@ -12,13 +12,13 @@ class DatabaseTest {
     fun firstStartMigratesAndSecondChangesNothing() {
         val config = TestDb.fresh()
         val created = Database.connect(config).use { database ->
-            assertEquals("6", database.schemaVersion)
+            assertEquals("7", database.schemaVersion)
             database.value("created_at")
         }
         Database.connect(config).use { database ->
-            assertEquals("6", database.schemaVersion)
+            assertEquals("7", database.schemaVersion)
             assertEquals(created, database.value("created_at"))
-            assertEquals(6, database.count("flyway_schema_history"))
+            assertEquals(7, database.count("flyway_schema_history"))
         }
     }
 

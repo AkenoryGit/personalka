@@ -65,6 +65,8 @@ class Accounts(
         val free = wantedId?.takeIf { isUuid(it) && c.queryOne("SELECT 1 FROM coach WHERE id = ?", it) { true } == null }
         val id = free ?: UUID.randomUUID().toString()
         c.update("INSERT INTO coach (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)", id, email, name, hash)
+        // Что открыто новым тренерам по умолчанию (админка, шаг 5.2в): с 27.10.2026 — «Копия на сервере».
+        c.update("INSERT INTO coach_feature (coach_id, feature) SELECT ?, feature FROM feature_default", id)
         return byId(c, id)!!
     }
 
@@ -156,13 +158,35 @@ class Accounts(
         c.update("UPDATE coach SET status = ? WHERE id = ?", if (suspended) "SUSPENDED" else "ACTIVE", id)
     }
 
-    /** Открытые возможности: у администратора — всё без срока, у остальных — строки «тренер — возможность — до». */
-    fun grants(c: Connection, coach: Coach): List<FeatureGrant> = if (coach.admin) {
-        AccountRules.admin()
-    } else {
-        c.query("SELECT feature, until FROM coach_feature WHERE coach_id = ?", coach.id) { rs ->
+    /**
+     * Открытые возможности — строки «тренер — возможность — до». У администратора, пока он ни разу не сохранил свои
+     * возможности в админке, — всё без срока (так было до шага 5.2в).
+     */
+    fun grants(c: Connection, coach: Coach): List<FeatureGrant> {
+        if (coach.admin && c.queryOne("SELECT features_set FROM coach WHERE id = ?", coach.id) { it.getBoolean(1) } != true) {
+            return AccountRules.admin()
+        }
+        return c.query("SELECT feature, until FROM coach_feature WHERE coach_id = ?", coach.id) { rs ->
             Feature.of(rs.getString(1))?.let { FeatureGrant(it, rs.getString(2)?.let(LocalDate::parse)) }
         }.filterNotNull()
+    }
+
+    /** Возможности тренера из админки: прежние строки заменяются целиком. */
+    fun setGrants(c: Connection, coachId: String, grants: List<FeatureGrant>) {
+        c.update("DELETE FROM coach_feature WHERE coach_id = ?", coachId)
+        for (g in grants) {
+            c.update("INSERT INTO coach_feature (coach_id, feature, until) VALUES (?, ?, ?)", coachId, g.feature.code, g.until?.let { java.sql.Date.valueOf(it.toString()) })
+        }
+        c.update("UPDATE coach SET features_set = true WHERE id = ?", coachId)
+    }
+
+    /** Что открыто новым тренерам. */
+    fun defaults(c: Connection): Set<Feature> =
+        c.query("SELECT feature FROM feature_default") { Feature.of(it.getString(1)) }.filterNotNull().toSet()
+
+    fun setDefaults(c: Connection, features: Set<Feature>) {
+        c.update("DELETE FROM feature_default")
+        features.forEach { c.update("INSERT INTO feature_default (feature) VALUES (?)", it.code) }
     }
 
     companion object {

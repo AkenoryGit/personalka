@@ -2,6 +2,9 @@ package com.akenory.personalka.server
 
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.AccountRules
+import com.akenory.personalka.domain.account.Feature
+import com.akenory.personalka.domain.account.FeatureGrant
+import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.AdminFormat
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -89,6 +92,8 @@ class AdminSessions(private val accounts: Accounts, private val random: SecureRa
         const val SIGN_OUT = "sign_out"
         const val SUSPEND = "suspend"
         const val RESUME = "resume"
+        const val FEATURES = "features"
+        const val DEFAULTS = "defaults"
     }
 }
 
@@ -100,7 +105,9 @@ class AdminSessions(private val accounts: Accounts, private val random: SecureRa
  *   почта, неверный пароль или неподтверждённая почта — одинаковое «Неверная почта или пароль»;
  * - `POST /admin/code` `email, code` — код верен → сессия на 12 часов в cookie `adm` (`HttpOnly; Secure;
  *   SameSite=Strict; Path=/admin`) и переход на `/admin`;
- * - `POST /admin/logout`, `POST /admin/coaches/{id}/suspend` и `/resume` — с полем `csrf` из страницы.
+ * - `POST /admin/logout`, `POST /admin/coaches/{id}/suspend` и `/resume` — с полем `csrf` из страницы;
+ * - `GET /admin/coaches/{id}` — возможности тренера; `POST /admin/coaches/{id}/features` `csrf, f=код…, until_код` —
+ *   сохранить (шаг 5.2в); `POST /admin/defaults` `csrf, f=код…` — что открыто новым тренерам.
  *
  * Администратор — только почта из `TRENER_ADMIN_EMAIL` (отметка в базе её не заменит). Пароль и код считаются
  * попытками входа (5 в минуту на почту и на IP), у кода — 5 попыток. Каждый вход и действие пишутся в журнал.
@@ -120,7 +127,8 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
         if (!call.adminLimit(limit)) return@get
         val page = database.tx { c ->
             val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
-            AdminPage(session, accounts.summaries(c), sessions.recent(c))
+            val coaches = accounts.summaries(c)
+            AdminPage(session, coaches, sessions.recent(c), coaches.associate { it.coach.id to accounts.grants(c, it.coach) }, accounts.defaults(c))
         }
         if (page == null) call.adminHtml { AdminHtml.login(this, null) } else call.adminHtml { AdminHtml.coaches(this, page, ClubTime.today(System.currentTimeMillis())) }
     }
@@ -225,10 +233,83 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
             }
         }
     }
+
+    get("/admin/coaches/{id}") {
+        if (!call.adminLimit(limit)) return@get
+        val id = call.parameters["id"].orEmpty()
+        val page = database.tx { c ->
+            val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
+            val summary = accounts.summaries(c).firstOrNull { it.coach.id == id }
+            summary?.let { AdminCoachPage(session, it, accounts.grants(c, it.coach)) } ?: false
+        }
+        when (page) {
+            null -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, null) }
+            is AdminCoachPage -> call.adminHtml { AdminHtml.coach(this, page) }
+            else -> call.adminRedirect()
+        }
+    }
+
+    post("/admin/coaches/{id}/features") {
+        if (!call.adminLimit(limit)) return@post
+        val form = call.form()
+        val id = call.parameters["id"].orEmpty()
+        val picked = form.getAll("f").orEmpty().mapNotNull(Feature::of).toSet()
+        val dates = Feature.entries.associateWith { f -> form["until_${f.code}"].orEmpty().trim() }
+        val parsed = dates.mapValues { (_, text) -> if (text.isEmpty()) null else parseDate(text) }
+        val badDate = picked.any { dates[it]!!.isNotEmpty() && parsed[it] == null }
+        val grants = picked.map { FeatureGrant(it, parsed[it]) }
+        val answer = database.tx { c ->
+            val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
+            if (!sameText(session.csrf, form["csrf"])) return@tx false
+            val summary = accounts.summaries(c).firstOrNull { it.coach.id == id } ?: return@tx true
+            if (badDate) return@tx AdminCoachPage(session, summary, grants, AdminFormat.BAD_DATE)
+            accounts.setGrants(c, id, grants)
+            val open = Feature.entries.filter { it in picked }.associateWith { parsed[it] }
+            sessions.log(c, session.coach, AdminSessions.FEATURES, summary.coach.displayName + " · " + AdminFormat.features(open), call.clientIp())
+            true
+        }
+        when (answer) {
+            null -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, null) }
+            false -> call.adminHtml(HttpStatusCode.Forbidden) { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
+            is AdminCoachPage -> call.adminHtml(HttpStatusCode.BadRequest) { AdminHtml.coach(this, answer) }
+            else -> call.adminRedirect()
+        }
+    }
+
+    post("/admin/defaults") {
+        if (!call.adminLimit(limit)) return@post
+        val form = call.form()
+        val picked = form.getAll("f").orEmpty().mapNotNull(Feature::of).toSet()
+        val ok = database.tx { c ->
+            val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
+            if (!sameText(session.csrf, form["csrf"])) return@tx false
+            accounts.setDefaults(c, picked)
+            sessions.log(c, session.coach, AdminSessions.DEFAULTS, AdminFormat.defaults(Feature.entries.filter { it in picked }.toSet()), call.clientIp())
+            true
+        }
+        when (ok) {
+            null -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, null) }
+            false -> call.adminHtml(HttpStatusCode.Forbidden) { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
+            true -> call.adminRedirect()
+        }
+    }
 }
 
-/** Что показать на `/admin` после входа. */
-data class AdminPage(val session: AdminSession, val coaches: List<CoachSummary>, val log: List<AdminLogRow>)
+/** Дата из поля: календарь браузера шлёт 2026-12-31, руками пишут 31.12.2026. */
+private fun parseDate(text: String): kotlinx.datetime.LocalDate? =
+    runCatching { kotlinx.datetime.LocalDate.parse(text) }.getOrNull() ?: DateFormat.parseFull(text)
+
+/** Что показать на `/admin` после входа: [grants] — возможности каждого тренера, [defaults] — новым тренерам. */
+data class AdminPage(
+    val session: AdminSession,
+    val coaches: List<CoachSummary>,
+    val log: List<AdminLogRow>,
+    val grants: Map<String, List<FeatureGrant>>,
+    val defaults: Set<Feature>,
+)
+
+/** Страница тренера: его возможности; [error] — что не так с формой. */
+data class AdminCoachPage(val session: AdminSession, val coach: CoachSummary, val grants: List<FeatureGrant>, val error: String? = null)
 
 private sealed interface AdminCode {
     data class Ok(val token: String) : AdminCode
