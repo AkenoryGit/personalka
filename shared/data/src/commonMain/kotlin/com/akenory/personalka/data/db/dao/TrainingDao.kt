@@ -137,6 +137,20 @@ interface TrainingDao {
     )
     fun observeParticipationsOfGroup(groupId: String): Flow<List<ParticipationEntity>>
 
+    /** Тренировки всех групп: кто давно не ходит (шаг 3.9у). */
+    @Query("SELECT * FROM training WHERE groupId IS NOT NULL AND deletedAt IS NULL")
+    fun observeGroupTrainings(): Flow<List<TrainingEntity>>
+
+    /** Участие детей в тренировках всех групп (шаг 3.9у). */
+    @Query(
+        """
+        SELECT p.* FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        WHERE t.groupId IS NOT NULL AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        """
+    )
+    fun observeGroupParticipations(): Flow<List<ParticipationEntity>>
+
     @Upsert
     suspend fun upsertParticipation(item: ParticipationEntity)
 

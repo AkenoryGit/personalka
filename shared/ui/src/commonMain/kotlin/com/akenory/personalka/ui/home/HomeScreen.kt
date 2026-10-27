@@ -1,6 +1,8 @@
 package com.akenory.personalka.ui.home
 
 import androidx.compose.foundation.background
+import com.akenory.personalka.data.groups.AbsentMember
+import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.money.SalaryPlan
 import com.akenory.personalka.domain.money.PlanPace
 import androidx.compose.ui.graphics.Color
@@ -148,6 +150,8 @@ data class HomeTodo(
     val count: Int?,
     val trainingId: String? = null,
     val clientId: String? = null,
+    /** Карточка группы: «Не ходят в группу» (шаг 3.9у) — группа первого ребёнка. */
+    val groupId: String? = null,
 )
 
 internal fun CalendarTraining.slot() = HomeSlot(id, start, durationMin, group, cancelled, marked)
@@ -172,7 +176,8 @@ data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
  * копии «Изменения не отправлены больше суток»; с шага 2.13а — отозванные согласия ([consents] —
  * `CabinetRepository.due`); с шага 3.7а — СПТ, ждущие покупки ([spt] — `SptRepository.waiting`); с шага 3.9 — аванс
  * ([advance] — `SalaryRepository.advance`): с дня аванса, пока сумма не введена; с шага 3.12 — кого предупредить
- * об отпуске ([notices] — `CalendarSettingsRepository.notices`). [backup] `null` — раздела копии нет
+ * об отпуске ([notices] — `CalendarSettingsRepository.notices`); с шага 3.9у — кто не ходит в группу 30 дней
+ * ([absent] — `GroupRepository.absent`). [backup] `null` — раздела копии нет
  * (тесты). Их число —
  * счётчик дел на значке «Главной».
  */
@@ -189,6 +194,7 @@ fun homeTodos(
     advance: AdvanceState? = null,
     notices: List<NoticeRow> = emptyList(),
     report1c: List<ReconciliationItemEntity> = emptyList(),
+    absent: List<AbsentMember> = emptyList(),
 ): List<HomeTodo> = buildList {
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
@@ -226,6 +232,11 @@ fun homeTodos(
     if (followup.rows.isNotEmpty()) {
         val names = followup.rows.map { ClientName(it.client.lastName, it.client.firstName) }
         add(HomeTodo(TodoKind.NOT_BOOKED, FollowupFormat.todo(names.size), FollowupFormat.todoNote(names), count = names.size))
+    }
+    if (absent.isNotEmpty()) {
+        // Не ходят в группу 30 дней (5.10, шаг 3.9у): нажатие — карточка группы первого, там «В архив», «Убрать», «Оставить».
+        val names = absent.map { "${it.client.lastName} ${it.client.firstName}" }
+        add(HomeTodo(TodoKind.GROUP_ABSENT, GroupFormat.ABSENT_TODO, GroupFormat.absentNote(names), count = absent.size, groupId = absent.first().group.id))
     }
     spt.firstOrNull()?.let { nearest ->
         // СПТ ждут покупки (4.9): ближайший срок и его клиент; нажатие — «Инфо» клиента с «Купил блок со скидкой».
@@ -335,6 +346,7 @@ fun HomeScreen(
             todo.kind == TodoKind.ADVANCE -> onAdvance()
             todo.kind == TodoKind.RECONCILE -> onReconcile()
             todo.kind == TodoKind.VACATION_NOTICE -> noticesOpen = true
+            todo.groupId != null -> onGroup(todo.groupId)
             client != null && todo.kind == TodoKind.SPT_PURCHASE -> onClientInfo(client)
             client != null -> onClient(client)
             id == null -> onBackup()
@@ -661,6 +673,7 @@ private fun TodoBlock(todos: List<HomeTodo>, onClick: (HomeTodo) -> Unit) {
 private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
     TodoKind.UNMARKED_GROUPS -> PIcons.Groups
     TodoKind.NOT_BOOKED -> PIcons.EventBusy
+    TodoKind.GROUP_ABSENT -> PIcons.Groups
     TodoKind.FREED_TIME -> PIcons.EventAvailable
     TodoKind.BACKUP -> PIcons.FolderOpen
     TodoKind.NO_DIARY -> PIcons.EditNote

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -48,6 +49,7 @@ import com.akenory.personalka.data.clients.ClientRow
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
+import com.akenory.personalka.data.groups.AbsentMember
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.groups.GroupRow
 import com.akenory.personalka.data.groups.GroupTrainingRow
@@ -98,6 +100,7 @@ const val NEW_MEMBER_LAST_TAG = "member-new-last"
 const val NEW_MEMBER_FIRST_TAG = "member-new-first"
 fun memberRowTag(name: String) = "member-$name"
 fun memberPickTag(name: String) = "member-pick-$name"
+fun absentRowTag(name: String) = "absent-$name"
 
 /** Сколько ближайших тренировок группы видно в карточке. */
 private const val UPCOMING = 4
@@ -111,7 +114,8 @@ private fun ClientRow?.nameOrGone(): String = this?.let { "${it.client.lastName}
 
 /**
  * Карточка группы (5.10): тип, место и расписание; состав — просто список (шаг 3.9т): «+ В состав» добавляет ребёнка,
- * нажатие на ребёнка — «Убрать из группы» с «Отменить»; ближайшие и прошедшие тренировки с числом пришедших
+ * нажатие на ребёнка — «Убрать из группы» с «Отменить»; кто не ходит 30 дней — «В архив», «Убрать из группы» или
+ * «Оставить» (шаг 3.9у); ближайшие и прошедшие тренировки с числом пришедших
  * и детьми «на раз», средняя посещаемость. «Числится на» и «Кто обычно ведёт» — с совместным ведением ([colleagues] —
  * имена коллег, `null` — выключено; шаг 3.7г).
  */
@@ -121,6 +125,7 @@ fun GroupCard(
     rows: List<GroupRow>,
     kids: List<ClientRow>,
     groups: GroupRepository,
+    clients: ClientRepository,
     shell: ShellState,
     messages: MessageState,
     scope: CoroutineScope,
@@ -136,6 +141,7 @@ fun GroupCard(
     var confirmDelete by rememberSaveable(groupId) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var leaving by rememberSaveable(groupId) { mutableStateOf<String?>(null) }
+    val allAbsent by remember(groups, now.date) { groups.absent(now.date) }.collectAsState(initial = emptyList())
 
     if (row == null) {
         TopBar("", onBack = onBack)
@@ -212,6 +218,12 @@ fun GroupCard(
                             }
                         }
                     }
+                }
+
+                val absent = allAbsent.filter { it.group.id == groupId }
+                if (absent.isNotEmpty()) {
+                    FormLabelSpaced("${GroupFormat.ABSENT_TITLE} · ${absent.size}")
+                    AbsentList(absent, groupId, groups, clients, messages, scope)
                 }
 
                 Row(Modifier.fillMaxWidth().padding(top = Dimens.space5, bottom = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
@@ -305,6 +317,57 @@ private fun MemberList(list: List<GroupMemberEntity>, byId: Map<String, ClientRo
                 onClick = { onOpen(m) },
                 modifier = Modifier.testTag(memberRowTag(name)),
             )
+        }
+    }
+}
+
+/**
+ * Кто не ходит в группу 30 дней и больше (шаг 3.9у): имя, «не была с 19.09» и три кнопки. «В архив» — клиент уходит
+ * из всех групп (4.4), «Убрать из группы» — только из этой, «Оставить» — спросить ещё раз через 30 дней, после второго
+ * раза — больше не спрашивать. У каждой — «Отменить».
+ */
+@Composable
+private fun AbsentList(
+    list: List<AbsentMember>,
+    groupId: String,
+    groups: GroupRepository,
+    clients: ClientRepository,
+    messages: MessageState,
+    scope: CoroutineScope,
+) {
+    val colors = PersonalkaTheme.colors
+    ListCard {
+        list.forEachIndexed { index, a ->
+            if (index > 0) RowDivider()
+            val name = "${a.client.lastName} ${a.client.firstName}"
+            Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space4, vertical = Dimens.space3).testTag(absentRowTag(name))) {
+                Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                Text(GroupFormat.absentSince(a.absence, a.client.sex), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+                FlowRow(
+                    Modifier.padding(top = Dimens.space2),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.space2),
+                ) {
+                    SecondaryButton(GroupFormat.ARCHIVE, {
+                        scope.launch {
+                            val undo = clients.archive(a.clientId) ?: return@launch
+                            messages.showUndo("$name в архиве") { scope.launch { clients.undoArchive(undo) } }
+                        }
+                    })
+                    SecondaryButton(GroupFormat.LEAVE, {
+                        scope.launch {
+                            val before = groups.leave(groupId, a.clientId)
+                            messages.showUndo(GroupFormat.left(name, a.client.sex)) { scope.launch { groups.undoLeave(groupId, before) } }
+                        }
+                    })
+                    SecondaryButton(GroupFormat.KEEP, {
+                        scope.launch {
+                            val (before, keeps) = groups.keep(groupId, a.clientId)
+                            messages.showUndo(GroupFormat.kept(keeps)) { scope.launch { groups.undoKeep(before) } }
+                        }
+                    })
+                }
+            }
         }
     }
 }

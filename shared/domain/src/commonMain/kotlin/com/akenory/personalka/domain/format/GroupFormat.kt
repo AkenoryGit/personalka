@@ -1,6 +1,8 @@
 package com.akenory.personalka.domain.format
 
 import com.akenory.personalka.domain.client.ScheduleLine
+import com.akenory.personalka.domain.group.Absence
+import com.akenory.personalka.domain.group.GroupAbsence
 import com.akenory.personalka.domain.model.Sex
 
 /** Строки о группах: список, карточка, состав (5.10). */
@@ -30,6 +32,27 @@ object GroupFormat {
 
     /** Сообщение с «Отменить»: «Белова Ева убрана из группы». */
     fun left(name: String, sex: Sex?): String = RuText.bySex(sex, "$name убран из группы", "$name убрана из группы", "$name — не в группе")
+
+    /** Блок карточки группы и пункт «Нужно сделать» (шаг 3.9у): дети, которые давно не ходят. */
+    const val ABSENT_TITLE = "Не ходят 30 дней"
+    const val ABSENT_TODO = "Не ходят в группу"
+    const val ARCHIVE = "В архив"
+    const val KEEP = "Оставить"
+
+    /** «не была с 19.09», «ни разу не был». */
+    fun absentSince(absence: Absence, sex: Sex?): String {
+        val verb = RuText.bySex(sex, "не был", "не была", "не был(а)")
+        return if (absence.attendedEver) "$verb с ${DateFormat.dayMonth(absence.since)}" else "ни разу $verb"
+    }
+
+    /** После «Оставить»: [keeps] — сколько раз уже оставили (с этим нажатием). */
+    fun kept(keeps: Int): String = if (keeps >= GroupAbsence.KEEPS) "Оставили. Больше не спрошу" else "Оставили. Спрошу ещё раз через ${GroupAbsence.DAYS} дней"
+
+    /** Подпись пункта «Нужно сделать»: «Белова Ева (Сб 9:00 ББ), Гусев Борис (Вт 18:00 ДБ) и ещё 1». */
+    fun absentNote(names: List<String>): String = when {
+        names.size <= 2 -> names.joinToString(", ")
+        else -> names.take(2).joinToString(", ") + " и ещё ${names.size - 2}"
+    }
 
     /** Посещаемость проведённой: «пришли 5 из 12». */
     fun attended(attended: Int, total: Int): String = "пришли $attended из $total"

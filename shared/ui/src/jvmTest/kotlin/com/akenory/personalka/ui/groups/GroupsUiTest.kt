@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -21,24 +22,34 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.db.SyncFields
+import com.akenory.personalka.data.db.entity.ParticipationEntity
+import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupDraft
+import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.Sex
+import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.home.homeTodos
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 
 /** «Ещё → Группы» (шаг 1.8, ТЗ 5.10): группа, состав — просто список (шаг 3.9т). «Сейчас» — вт 20.10.2026. */
 @OptIn(ExperimentalTestApi::class)
@@ -195,6 +206,78 @@ class GroupsUiTest {
         waitUntil(timeoutMillis = 5_000) { runBlocking { groups.rows(today).first().single().members.isEmpty() } }
         onNodeWithText("Отменить").performClick()
         awaitNode(hasTestTag(memberRowTag("Белова Ева")))
+    }
+
+    /** Ева в группе с 01.09, была на ней 05.09, а группа проходила и после — 30 дней назад и позже (шаг 3.9у). */
+    private fun absentEva(): Pair<String, String> = runBlocking {
+        val eva = kid("Белова", "Ева")
+        val id = group()
+        groups.addMember(id, eva, LocalDate(2026, 9, 1))
+        val db = TestData.dbOf(settings)
+        val coach = db.coachDao().currentCoach()!!.id
+        val type = settings.types.first().first { it.shortName == "Группа" }.id
+        val place = settings.places.first().first { it.shortName == "ББ" }.id
+        listOf(LocalDate(2026, 9, 5), LocalDate(2026, 10, 10)).forEachIndexed { i, date ->
+            val t = TrainingEntity("g$i", SyncFields.new(coach, 1), type, place, LocalDateTime(date, LocalTime(9, 0)), 45, groupId = id, status = TrainingStatus.DONE)
+            db.trainingDao().upsertTraining(t)
+            val status = if (i == 0) ParticipationStatus.ATTENDED else ParticipationStatus.CANCELLED
+            db.trainingDao().upsertParticipation(ParticipationEntity("p$i", SyncFields.new(coach, 1), t.id, eva, status))
+        }
+        id to eva
+    }
+
+    private fun ComposeUiTest.openGroupCard() {
+        openGroups()
+        awaitNode(hasTestTag(groupRowTag("Сб 9:00 ББ")))
+        onNodeWithTag(groupRowTag("Сб 9:00 ББ")).performClick()
+    }
+
+    @Test
+    fun absentChildKeptTwiceThenNeverAsked() = runComposeUiTest {
+        val (id, eva) = absentEva()
+        // На «Главной» — пункт «Не ходят в группу», нажатие ведёт в эту группу.
+        val todo = homeTodos(emptyList(), null, TestData.now, absent = runBlocking { groups.absent(today).first() }).single()
+        assertEquals(Triple(TodoKind.GROUP_ABSENT, "Белова Ева", id), Triple(todo.kind, todo.note, todo.groupId))
+        openGroupCard()
+        awaitNode(hasText("Не ходят 30 дней · 1"))
+        onNodeWithText("не была с 05.09").assertIsDisplayed()
+        onNodeWithText("Оставить").performClick()
+        awaitNode(hasText("Оставили. Спрошу ещё раз через 30 дней"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Не ходят 30 дней", substring = true)).fetchSemanticsNodes().isEmpty() }
+        // Ева осталась в составе.
+        onNodeWithTag(memberRowTag("Белова Ева")).assertIsDisplayed()
+        val kept = runBlocking { groups.rows(today).first().single().members.single { it.clientId == eva } }
+        assertEquals(today to 1, kept.absenceKeptOn to kept.absenceKeeps)
+        // Через 30 дней спросит ещё раз, после второго «Оставить» — никогда.
+        val later = LocalDate(2026, 12, 1)
+        runBlocking {
+            val db = TestData.dbOf(settings)
+            val coach = db.coachDao().currentCoach()!!.id
+            val t = db.trainingDao().training("g1")!!
+            db.trainingDao().upsertTraining(t.copy(id = "g2", sync = SyncFields.new(coach, 2), start = LocalDateTime(2026, 11, 28, 9, 0)))
+            assertEquals(1, groups.absent(later).first().size)
+            db.clientDao().upsertGroupMember(kept.copy(absenceKeptOn = later, absenceKeeps = 2))
+            assertTrue(groups.absent(LocalDate(2027, 6, 1)).first().isEmpty())
+        }
+        assertEquals(id, runBlocking { groups.rows(today).first().single().group.id })
+    }
+
+    @Test
+    fun absentChildRemovedOrArchived() = runComposeUiTest {
+        val (_, eva) = absentEva()
+        openGroupCard()
+        awaitNode(hasTestTag(absentRowTag("Белова Ева")))
+        onNodeWithText("В архив").performClick()
+        awaitNode(hasText("Белова Ева в архиве"))
+        waitUntil(timeoutMillis = 5_000) { runBlocking { clients.rows(TestData.now).first().none { it.client.id == eva && it.client.status == ClientStatus.ACTIVE } } }
+        awaitNode(hasText("В группе пока никого"))
+        onNodeWithText("Отменить").performClick()
+        awaitNode(hasTestTag(absentRowTag("Белова Ева")))
+
+        onAllNodes(hasText("Убрать из группы")).onFirst().performClick()
+        awaitNode(hasText("Белова Ева убрана из группы"))
+        awaitNode(hasText("В группе пока никого"))
+        onNodeWithText("Не ходят 30 дней", substring = true).assertDoesNotExist()
     }
 
     @Test

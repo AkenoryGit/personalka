@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.db.entity
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Embedded
 import androidx.room3.Entity
 import androidx.room3.Index
@@ -81,6 +82,9 @@ data class GroupMemberEntity(
     val fromDate: LocalDate,
     /** Пусто — в группе сейчас. */
     val toDate: LocalDate? = null,
+    /** Вопрос «Не ходит 30 дней» (шаг 3.9у): когда последний раз нажали «Оставить» и сколько раз; после двух — не спрашивать. */
+    val absenceKeptOn: LocalDate? = null,
+    @ColumnInfo(defaultValue = "0") val absenceKeeps: Int = 0,
 )
 
 /**
