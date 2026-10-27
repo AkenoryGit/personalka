@@ -25,3 +25,16 @@
 3. Открыть `iosApp/iosApp.xcodeproj`, выбрать симулятор iPhone, ▶︎. Фаза «Compile Kotlin Framework» сама зовёт `./gradlew :shared:ui:embedAndSignAppleFrameworkForXcode`.
 
 Из Терминала: `xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build`.
+
+## TestFlight (шаг 5.1б)
+
+Приложение в App Store Connect — «Персоналка», Bundle ID `com.akenory.personalka`, SKU `personalka`. Номер сборки — число коммитов, версия — `MARKETING_VERSION` в `Config.xcconfig`.
+
+```
+xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release -destination 'generic/platform=iOS' \
+  -archivePath ~/tools/Personalka.xcarchive -allowProvisioningUpdates archive
+xcodebuild -exportArchive -archivePath ~/tools/Personalka.xcarchive -exportOptionsPlist iosApp/Configuration/ExportOptions.plist \
+  -exportPath ~/tools/export -allowProvisioningUpdates
+```
+
+Release-сборке Kotlin/Native мало 3 ГБ из `gradle.properties` — на Mac в `~/.gradle/gradle.properties` стоит `org.gradle.jvmargs=-Xmx6g`. Архив и выгрузка — 15–20 минут, обработка в App Store Connect — ещё 10–30.
