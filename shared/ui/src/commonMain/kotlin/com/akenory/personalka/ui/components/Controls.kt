@@ -178,6 +178,7 @@ fun Field(
         focused -> colors.primary
         else -> colors.outline
     }
+    val held = rememberHeldText(value, onValueChange)
     Column(modifier) {
         Text(
             text = label,
@@ -186,8 +187,8 @@ fun Field(
             color = colors.textMuted,
         )
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = held.shown,
+            onValueChange = held.onChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = Dimens.field)
@@ -220,7 +221,7 @@ fun Field(
                     // Значок справа (микрофон дневника, 5.7) — у верхнего края: текст под ним переносится, а не заходит.
                     Row(Modifier.fillMaxWidth(), verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top) {
                         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                            if (placeholder != null && value.isEmpty()) {
+                            if (placeholder != null && held.shown.text.isEmpty()) {
                                 Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
                             }
                             inner()

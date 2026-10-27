@@ -58,6 +58,7 @@ import com.akenory.personalka.data.clients.avatar
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.ui.components.rememberHeldText
 import com.akenory.personalka.ui.components.Avatar
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.EmptyState
@@ -324,9 +325,10 @@ private fun RemovableChip(text: String, onRemove: () -> Unit) {
 @Composable
 internal fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
     val colors = PersonalkaTheme.colors
+    val held = rememberHeldText(value, onValueChange)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = held.shown,
+        onValueChange = held.onChange,
         modifier = modifier.fillMaxWidth().heightIn(min = Dimens.button).semantics { contentDescription = placeholder },
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.text),
@@ -344,7 +346,7 @@ internal fun SearchField(value: String, onValueChange: (String) -> Unit, placeho
                 Icon(PIcons.Search, contentDescription = null, tint = colors.textMuted)
                 Spacer(Modifier.width(Dimens.space3))
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
+                    if (held.shown.text.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
                     inner()
                 }
                 if (value.isNotEmpty()) {
