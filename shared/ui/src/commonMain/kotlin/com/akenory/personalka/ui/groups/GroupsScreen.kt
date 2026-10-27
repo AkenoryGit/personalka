@@ -82,7 +82,6 @@ object GroupRoute {
     fun card(id: String) = PREFIX + id
     fun edit(id: String) = "$PREFIX$id/edit"
     fun addMember(id: String) = "$PREFIX$id/add"
-    fun member(id: String, memberId: String) = "$PREFIX$id/member/$memberId"
 
     fun isGroups(route: String): Boolean = route == LIST || route.startsWith(PREFIX)
 
@@ -95,14 +94,13 @@ object GroupRoute {
             parts.size == 1 -> GroupScreen.Card(parts[0])
             parts.size == 2 && parts[1] == "edit" -> GroupScreen.Edit(parts[0])
             parts.size == 2 && parts[1] == "add" -> GroupScreen.AddMember(parts[0])
-            parts.size == 3 && parts[1] == "member" -> GroupScreen.Member(parts[0], parts[2])
             else -> null
         }
     }
 
     /** Форма с «✕» во весь экран: на сложенном Fold нижняя панель прячется. */
     fun isForm(route: String?): Boolean = route != null && parse(route).let {
-        it == GroupScreen.New || it is GroupScreen.Edit || it is GroupScreen.AddMember || it is GroupScreen.Member
+        it == GroupScreen.New || it is GroupScreen.Edit || it is GroupScreen.AddMember
     }
 }
 
@@ -112,7 +110,6 @@ sealed interface GroupScreen {
     data class Card(val groupId: String) : GroupScreen
     data class Edit(val groupId: String) : GroupScreen
     data class AddMember(val groupId: String) : GroupScreen
-    data class Member(val groupId: String, val memberId: String) : GroupScreen
 }
 
 const val GROUP_ADD_TAG = "group-add"
@@ -190,7 +187,6 @@ fun GroupsScreen(
         }
         is GroupScreen.Card -> GroupCard(screen.groupId, loaded, kids, groups, shell, messages, scope, now, onBack, names.takeIf { coCoaching })
         is GroupScreen.AddMember -> AddMemberForm(screen.groupId, loaded, kids, groups, clients, scope, today, close)
-        is GroupScreen.Member -> MemberForm(screen.groupId, screen.memberId, loaded, kids, groups, messages, scope, today, close)
     }
 }
 
@@ -209,7 +205,7 @@ private fun GroupList(rows: List<GroupRow>, today: LocalDate, colleagues: Map<St
                 EmptyState(
                     icon = PIcons.Groups,
                     title = "Групп пока нет",
-                    text = "Добавьте группу — состав с датами ведётся в её карточке.",
+                    text = "Добавьте группу — её состав ведётся в карточке.",
                     actionLabel = "Добавить группу",
                     onAction = onNew,
                 )
@@ -340,7 +336,7 @@ private fun GroupEditor(
                 if (initial != null) Note(CoCoachingFormat.GROUP_NOTE)
             }
             Text(
-                "Расписание группы — серия в календаре; состав с датами — в карточке группы.",
+                "Расписание группы — серия в календаре; состав — в карточке группы.",
                 style = MaterialTheme.typography.bodySmall,
                 color = PersonalkaTheme.colors.textMuted,
             )

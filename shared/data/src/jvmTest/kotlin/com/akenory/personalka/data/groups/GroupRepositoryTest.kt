@@ -132,6 +132,35 @@ class GroupRepositoryTest {
     }
 
     @Test
+    fun leaveEndsYesterdayAndUndoReturns(): Unit = runBlocking {
+        val id = newGroup()
+        val anya = kid("Белова", "Аня")
+        val boris = kid("Гусев", "Борис")
+        groups.addMember(id, anya, day(1, 9))
+        groups.addMember(id, boris, day(20))
+        val sat17 = training(day(17), id, anya, status = TrainingStatus.DONE)
+        val sat24 = training(day(24), id, anya, boris)
+
+        // «Убрать из группы» (шаг 3.9т): Аня была в группе — последний день вчера, прошлое её помнит.
+        val anyaBefore = groups.leave(id, anya)
+        assertEquals(day(19), db.clientDao().membershipsOf(anya).single().toDate)
+        assertEquals(setOf(anya), kidsOn(sat17))
+        assertEquals(setOf(boris), kidsOn(sat24))
+        // Борис добавлен сегодня — его запись убирается совсем.
+        val borisBefore = groups.leave(id, boris)
+        assertTrue(db.clientDao().membershipsOf(boris).isEmpty())
+        assertEquals(emptySet(), kidsOn(sat24))
+        // Убрать того, кого в списке нет, — ничего не меняет.
+        assertTrue(groups.leave(id, boris).isEmpty())
+
+        groups.undoLeave(id, anyaBefore)
+        groups.undoLeave(id, borisBefore)
+        assertNull(db.clientDao().membershipsOf(anya).single().toDate)
+        assertEquals(day(20), db.clientDao().membershipsOf(boris).single().fromDate)
+        assertEquals(setOf(anya, boris), kidsOn(sat24))
+    }
+
+    @Test
     fun newMemberAppearsInGroupThatIsGoing(): Unit = runBlocking {
         val id = newGroup()
         val anya = kid("Белова", "Аня")

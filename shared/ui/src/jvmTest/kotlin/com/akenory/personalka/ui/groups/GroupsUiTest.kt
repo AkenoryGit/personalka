@@ -17,7 +17,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Dp
@@ -41,7 +40,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** «Ещё → Группы» (шаг 1.8, ТЗ 5.10): группа, состав с датами, «исключить с даты». «Сейчас» — вт 20.10.2026. */
+/** «Ещё → Группы» (шаг 1.8, ТЗ 5.10): группа, состав — просто список (шаг 3.9т). «Сейчас» — вт 20.10.2026. */
 @OptIn(ExperimentalTestApi::class)
 class GroupsUiTest {
     private val folded = 412.dp
@@ -93,12 +92,13 @@ class GroupsUiTest {
         onNodeWithText("Группа · Большой бассейн · без расписания").assertIsDisplayed()
 
         onNodeWithTag(MEMBER_ADD_TAG).performClick()
-        onNodeWithTag(MEMBER_DATE_TAG).assertTextContains("20.10.2026")
+        // Даты нет (шаг 3.9т): ребёнок просто в группе.
+        onNodeWithText("С какого дня в группе").assertDoesNotExist()
         onNodeWithTag(memberPickTag("Белова Ева")).performClick()
         onNodeWithText("Сохранить").performClick()
 
         awaitNode(hasTestTag(memberRowTag("Белова Ева")))
-        onNodeWithTag(memberRowTag("Белова Ева")).assertTextContains("с 20.10.2026", substring = true)
+        assertEquals(today, runBlocking { groups.rows(today).first().single().members.single().fromDate })
         onNodeWithText("Состав · 1").assertIsDisplayed()
 
         onNodeWithContentDescription("Назад").performClick()
@@ -107,7 +107,7 @@ class GroupsUiTest {
     }
 
     @Test
-    fun excludeFromDateMovesChildToLeft() = runComposeUiTest {
+    fun removedFromGroupWithUndo() = runComposeUiTest {
         val eva = kid("Белова", "Ева")
         val id = group()
         val member = runBlocking { groups.addMember(id, eva, LocalDate(2026, 9, 1)) }
@@ -115,38 +115,23 @@ class GroupsUiTest {
         awaitNode(hasTestTag(groupRowTag("Сб 9:00 ББ")))
         onNodeWithTag(groupRowTag("Сб 9:00 ББ")).performClick()
         awaitNode(hasTestTag(memberRowTag("Белова Ева")))
+        // В строке — без дат.
+        onNodeWithText("с 01.09.2026", substring = true).assertDoesNotExist()
         onNodeWithTag(memberRowTag("Белова Ева")).performClick()
 
-        onNodeWithTag(MEMBER_FROM_TAG).assertTextContains("01.09.2026")
-        onNodeWithText("Не ходит с сегодня").performClick()
-        onNodeWithTag(MEMBER_NOT_FROM_TAG).assertTextContains("20.10.2026")
-        onNodeWithText("Сохранить").performClick()
-
-        // Последний день — вчера: Ева среди ушедших, состав пуст.
-        awaitNode(hasText("Ушли · 1"))
-        onNodeWithTag(memberRowTag("Белова Ева")).assertTextContains("01.09–19.10.2026", substring = true)
-        onNodeWithText("Состав · 0").assertIsDisplayed()
+        onNodeWithText("Убрать из группы").performClick()
+        awaitNode(hasText("Белова Ева убрана из группы"))
+        // «Ушли» больше нет: ребёнка просто нет в списке; прошлое помнит последний день — вчера.
+        awaitNode(hasText("В группе пока никого"))
+        onNodeWithText("Ушли", substring = true).assertDoesNotExist()
         waitUntil(timeoutMillis = 5_000) {
             runBlocking { groups.rows(today).first().single().members.single { it.id == member }.toDate } == LocalDate(2026, 10, 19)
         }
-    }
-
-    @Test
-    fun wrongDatesAreExplained() = runComposeUiTest {
-        val eva = kid("Белова", "Ева")
-        val id = group()
-        runBlocking { groups.addMember(id, eva, LocalDate(2026, 9, 1)) }
-        openGroups()
-        awaitNode(hasTestTag(groupRowTag("Сб 9:00 ББ")))
-        onNodeWithTag(groupRowTag("Сб 9:00 ББ")).performClick()
+        onNodeWithText("Отменить").performClick()
         awaitNode(hasTestTag(memberRowTag("Белова Ева")))
-        onNodeWithTag(memberRowTag("Белова Ева")).performClick()
-
-        onNodeWithTag(MEMBER_NOT_FROM_TAG).performTextInput("01.09.2026")
-        onNodeWithText("Сохранить").performClick()
-        onNodeWithText("Позже, чем «В группе с»").assertIsDisplayed()
-        onNodeWithTag(MEMBER_FROM_TAG).performTextClearance()
-        onNodeWithText("Укажите дату").assertIsDisplayed()
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { groups.rows(today).first().single().members.single { it.id == member }.toDate } == null
+        }
     }
 
     @Test
@@ -195,7 +180,7 @@ class GroupsUiTest {
     }
 
     @Test
-    fun addedByMistakeRemovedWithUndo() = runComposeUiTest {
+    fun addedTodayRemovedLeavesNoRecord() = runComposeUiTest {
         val eva = kid("Белова", "Ева")
         val id = group()
         runBlocking { groups.addMember(id, eva, today) }
@@ -205,9 +190,9 @@ class GroupsUiTest {
         awaitNode(hasTestTag(memberRowTag("Белова Ева")))
         onNodeWithTag(memberRowTag("Белова Ева")).performClick()
 
-        onNodeWithText("Добавлен по ошибке — убрать из состава").performClick()
-        onNodeWithText("Белова Ева убрана из состава").assertIsDisplayed()
+        onNodeWithText("Убрать из группы").performClick()
         awaitNode(hasText("В группе пока никого"))
+        waitUntil(timeoutMillis = 5_000) { runBlocking { groups.rows(today).first().single().members.isEmpty() } }
         onNodeWithText("Отменить").performClick()
         awaitNode(hasTestTag(memberRowTag("Белова Ева")))
     }

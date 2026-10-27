@@ -2,10 +2,7 @@ package com.akenory.personalka.domain.group
 
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.money.Sharing
-import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.minus
-import kotlinx.datetime.plus
 
 // ТЗ 3.5, 4.4, 5.10. Постоянная группа для форм и правил — без служебных полей базы.
 
@@ -23,9 +20,6 @@ data class GroupDraft(
 
 enum class GroupField { NAME, TYPE, PLACE }
 
-/** Поля правки места в составе, под которыми показывается ошибка. */
-enum class MemberField { FROM, NOT_FROM }
-
 /** Правила групп: проверка форм, правка состава, гости «на раз», посещаемость. */
 object GroupRules {
     /** Ошибки формы группы словами тренера. [otherNames] — названия других групп: не повторяются. */
@@ -37,31 +31,6 @@ object GroupRules {
         }
         if (draft.typeId == null) put(GroupField.TYPE, "Выберите тип")
         if (draft.locationId == null) put(GroupField.PLACE, "Выберите место")
-    }
-
-    /**
-     * Последний день в группе по дню, с которого ребёнок «не ходит» (5.10: «исключить с даты»): не ходит
-     * с 26.10 — последний день 25.10. Пусто — занимается.
-     */
-    fun lastDay(notFrom: LocalDate?): LocalDate? = notFrom?.minus(1, DateTimeUnit.DAY)
-
-    /** Обратно: с какого дня не ходит, если последний день [toDate]. */
-    fun notFrom(toDate: LocalDate?): LocalDate? = toDate?.plus(1, DateTimeUnit.DAY)
-
-    /**
-     * Ошибки правки места в составе: «В группе с» обязательно, «Не ходит с» — позже него. Набранное, но не
-     * понятое приложением, — тоже ошибка. [fromText] и [notFromText] — то, что в полях; разбирает их вызывающий.
-     */
-    fun memberProblems(from: LocalDate?, fromText: String, notFrom: LocalDate?, notFromText: String): Map<MemberField, String> = buildMap {
-        when {
-            fromText.isBlank() -> put(MemberField.FROM, "Укажите дату")
-            from == null -> put(MemberField.FROM, "Дата в виде 22.10.2026")
-        }
-        when {
-            notFromText.isBlank() -> Unit
-            notFrom == null -> put(MemberField.NOT_FROM, "Дата в виде 22.10.2026")
-            from != null && notFrom <= from -> put(MemberField.NOT_FROM, "Позже, чем «В группе с»")
-        }
     }
 
     /**

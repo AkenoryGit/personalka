@@ -1,8 +1,7 @@
 package com.akenory.personalka.domain.format
 
 import com.akenory.personalka.domain.client.ScheduleLine
-import com.akenory.personalka.domain.format.RuText.DASH
-import kotlinx.datetime.LocalDate
+import com.akenory.personalka.domain.model.Sex
 
 /** Строки о группах: список, карточка, состав (5.10). */
 object GroupFormat {
@@ -25,12 +24,12 @@ object GroupFormat {
         return listOfNotNull(days, placeShort, children(count)).joinToString(DOT)
     }
 
-    /** Место в составе: «с 01.09.2026», ушедший — «01.09–15.10.2026», через год — «01.09.2025–15.10.2026». */
-    fun membership(from: LocalDate, to: LocalDate?): String = when {
-        to == null -> "с ${DateFormat.full(from)}"
-        to.year == from.year -> "${DateFormat.dayMonth(from)}$DASH${DateFormat.full(to)}"
-        else -> "${DateFormat.full(from)}$DASH${DateFormat.full(to)}"
-    }
+    /** Нажатие на ребёнка в составе (шаг 3.9т): состав — просто список, без дат. */
+    const val LEAVE = "Убрать из группы"
+    const val LEAVE_NOTE = "Прошедшие тренировки его помнят, в следующих его больше не ждут."
+
+    /** Сообщение с «Отменить»: «Белова Ева убрана из группы». */
+    fun left(name: String, sex: Sex?): String = RuText.bySex(sex, "$name убран из группы", "$name убрана из группы", "$name — не в группе")
 
     /** Посещаемость проведённой: «пришли 5 из 12». */
     fun attended(attended: Int, total: Int): String = "пришли $attended из $total"
