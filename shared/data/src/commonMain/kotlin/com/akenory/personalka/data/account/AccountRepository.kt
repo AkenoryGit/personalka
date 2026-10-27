@@ -1,5 +1,10 @@
 package com.akenory.personalka.data.account
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
+import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.money.SalarySetupRules
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
@@ -246,3 +251,10 @@ class AccountRepository(
         }
     }
 }
+
+/**
+ * Открыты ли виды оплаты (решение Дмитрия 27.10.2026): только у вошедшего аккаунта с открытой «С налогом 6,5 %».
+ * Без входа или с закрытой — зарплата везде «100 % 10-го» (SalarySetupRules.payTypes).
+ */
+fun AccountRepository.payTypes(clock: () -> Long): Flow<Boolean> =
+    account.map { a -> a != null && SalarySetupRules.payTypes(AccountRules.open(a.features, ClubTime.today(clock()))) }.distinctUntilChanged()

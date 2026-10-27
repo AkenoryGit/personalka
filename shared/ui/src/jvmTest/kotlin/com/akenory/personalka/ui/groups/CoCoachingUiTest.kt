@@ -1,5 +1,10 @@
 package com.akenory.personalka.ui.groups
 
+import com.akenory.personalka.data.prefs.MemoryPrefs
+import com.akenory.personalka.domain.format.SalarySetupFormat
+import com.akenory.personalka.data.account.MemoryTokens
+import com.akenory.personalka.data.account.FakeServer
+import com.akenory.personalka.data.account.AccountRepository
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
@@ -53,8 +58,9 @@ class CoCoachingUiTest {
     private val groups = TestData.groupsOf(settings)
     private val today = TestData.now.date
 
-    private fun ComposeUiTest.openMore(item: MoreItem) {
-        setContent { Box(Modifier.size(412.dp, 900.dp)) { App("0.1.0", settings, clients, groups, TestData.calendarOf(settings), clock = TestData.clock) } }
+    /** [account] — вошедший администратор: у него открыты виды оплаты (решение Дмитрия 27.10.2026). */
+    private fun ComposeUiTest.openMore(item: MoreItem, account: AccountRepository? = null) {
+        setContent { Box(Modifier.size(412.dp, 900.dp)) { App("0.1.0", settings, clients, groups, TestData.calendarOf(settings), account = account, clock = TestData.clock) } }
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
         onNodeWithTag(moreRowTag(item)).performClick()
@@ -97,6 +103,34 @@ class CoCoachingUiTest {
         awaitNode(hasText("Сохранить"))
         onNodeWithText("Сохранить").performClick()
         onNodeWithText("Введите имя").assertIsDisplayed()
+        onNodeWithTag(COLLEAGUE_NAME_TAG).performTextInput("Лена")
+        // Видов оплаты нет (не открыты в админке) — и выбора схемы коллеги нет: у всех «100 % 10-го».
+        onNodeWithTag(colleagueSchemeTag(PaySchemeKind.NONE)).assertDoesNotExist()
+        onNodeWithText("Сохранить").performClick()
+
+        awaitNode(hasTestTag(colleagueRowTag("Лена")))
+        onNodeWithText(SalarySetupFormat.scheme(PaySchemeKind.NONE)).assertDoesNotExist()
+        onNodeWithTag(COLLEAGUE_ADD_TAG).assertIsDisplayed()
+        val row = runBlocking { settings.colleagues.rows(today).first().single() }
+        assertEquals(PaySchemeKind.NONE, row.kind)
+    }
+
+    @Test
+    fun colleagueSchemeWithPayTypesOpen() = runComposeUiTest {
+        // Администратор — у него «Официально с налогом 6,5 %» открыта, значит, и выбор схемы коллеги.
+        val server = FakeServer().apply {
+            signedUp("coach@example.ru", "длинный-пароль", "Андрей")
+            admin = "coach@example.ru"
+        }
+        val account = AccountRepository(server.api(), MemoryTokens(), MemoryPrefs(), "Samsung SM-F976B") { "coach-1" }
+        runBlocking { account.login("coach@example.ru", "длинный-пароль") }
+        runBlocking { settings.salary.saveCoCoaching(true) }
+        openMore(MoreItem.SETTINGS, account)
+        awaitNode(hasTestTag(COLLEAGUES_ROW_TAG))
+        onNodeWithTag(COLLEAGUES_ROW_TAG).performClick()
+        awaitNode(hasText(CoCoachingFormat.EMPTY))
+        onNodeWithText(CoCoachingFormat.NEW).performClick()
+        awaitNode(hasText("Сохранить"))
         onNodeWithTag(COLLEAGUE_NAME_TAG).performTextInput("Лена")
         onNodeWithTag(colleagueSchemeTag(PaySchemeKind.NONE)).assertIsOn()
         onNodeWithTag(colleagueSchemeTag(PaySchemeKind.HALF_OFFICIAL)).performClick()

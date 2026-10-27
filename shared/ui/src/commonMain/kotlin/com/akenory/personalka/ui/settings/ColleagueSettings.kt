@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.settings
 
+import com.akenory.personalka.domain.money.SalarySetupRules
+import com.akenory.personalka.domain.account.Feature
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -76,7 +78,7 @@ internal fun colleagueSchemeTag(k: PaySchemeKind) = "colleague-scheme-${k.name}"
  * архивные — ниже, в «В архиве». Нажатие — форма коллеги.
  */
 @Composable
-internal fun ColleaguesScreen(settings: SettingsRepository, today: LocalDate, shell: ShellState, onBack: () -> Unit) {
+internal fun ColleaguesScreen(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, onBack: () -> Unit) {
     val rows by remember(settings, today) { settings.colleagues.rows(today) }.collectAsState(initial = null)
     val loaded = rows ?: return
     val colors = PersonalkaTheme.colors
@@ -108,7 +110,7 @@ internal fun ColleaguesScreen(settings: SettingsRepository, today: LocalDate, sh
             loaded.partition { !it.colleague.archived }.toList().forEachIndexed { part, list ->
                 if (list.isEmpty()) return@forEachIndexed
                 if (part == 1) FormLabelSpaced(CoCoachingFormat.ARCHIVED)
-                ColleagueList(list) { shell.open(SettingsRoute.colleague(it)) }
+                ColleagueList(list, SalarySetupRules.payTypes(open)) { shell.open(SettingsRoute.colleague(it)) }
             }
             Spacer(Modifier.height(Dimens.space6))
         }
@@ -116,13 +118,14 @@ internal fun ColleaguesScreen(settings: SettingsRepository, today: LocalDate, sh
 }
 
 @Composable
-private fun ColleagueList(list: List<ColleagueRow>, onOpen: (String) -> Unit) {
+private fun ColleagueList(list: List<ColleagueRow>, payTypes: Boolean, onOpen: (String) -> Unit) {
     ListCard {
         list.forEachIndexed { i, row ->
             if (i > 0) RowDivider()
             PersonRow(
                 title = row.colleague.name,
-                subtitle = row.kind?.let { SalarySetupFormat.scheme(it) } ?: SalarySetupFormat.NOT_SET,
+                // Без видов оплаты схемы коллеги нет и в строке (27.10.2026).
+                subtitle = if (!payTypes) null else row.kind?.let { SalarySetupFormat.scheme(it) } ?: SalarySetupFormat.NOT_SET,
                 onClick = { onOpen(row.colleague.id) },
                 modifier = Modifier.testTag(colleagueRowTag(row.colleague.name)),
             )
@@ -136,7 +139,7 @@ private fun ColleagueList(list: List<ColleagueRow>, onOpen: (String) -> Unit) {
  * прошлые группы и взаиморасчёт его помнят.
  */
 @Composable
-internal fun ColleagueEditor(settings: SettingsRepository, id: String?, today: LocalDate, messages: MessageState, scope: CoroutineScope, onBack: () -> Unit) {
+internal fun ColleagueEditor(settings: SettingsRepository, id: String?, open: Set<Feature>, today: LocalDate, messages: MessageState, scope: CoroutineScope, onBack: () -> Unit) {
     val rows by remember(settings, today) { settings.colleagues.rows(today) }.collectAsState(initial = null)
     val loaded = rows ?: return
     val row = id?.let { loaded.firstOrNull { r -> r.colleague.id == it } ?: return }
@@ -164,25 +167,29 @@ internal fun ColleagueEditor(settings: SettingsRepository, id: String?, today: L
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
                     tag = COLLEAGUE_NAME_TAG,
                 )
-                SectionLabel(CoCoachingFormat.SCHEME)
-                ListCard {
-                    CoCoachingRules.SCHEMES.forEachIndexed { i, k ->
-                        if (i > 0) RowDivider()
-                        CheckRow(
-                            SalarySetupFormat.scheme(k),
-                            kind == k,
-                            { kindName = k.name },
-                            Modifier.padding(horizontal = Dimens.space4).testTag(colleagueSchemeTag(k)),
-                            subtitle = SalarySetupFormat.schemeNote(k),
-                        )
+                // Схема коллеги — только с открытыми видами оплаты (решение Дмитрия 27.10.2026): иначе её нет, а расчёт —
+                // «100 % 10-го» у всех.
+                if (SalarySetupRules.payTypes(open)) {
+                    SectionLabel(CoCoachingFormat.SCHEME)
+                    ListCard {
+                        CoCoachingRules.SCHEMES.forEachIndexed { i, k ->
+                            if (i > 0) RowDivider()
+                            CheckRow(
+                                SalarySetupFormat.scheme(k),
+                                kind == k,
+                                { kindName = k.name },
+                                Modifier.padding(horizontal = Dimens.space4).testTag(colleagueSchemeTag(k)),
+                                subtitle = SalarySetupFormat.schemeNote(k),
+                            )
+                        }
                     }
-                }
-                Hint(CoCoachingFormat.SCHEME_NOTE)
-                // Смена схемы у прежнего коллеги — с месяца: прошлые месяцы считаются по прежней.
-                if (row != null && kind != initialKind) {
-                    SectionLabel(SalarySetupFormat.FROM_MONTH)
-                    PickBox(RateFormat.month(month.firstDay), PIcons.CalendarMonth, { picking = true }, Modifier.fillMaxWidth().testTag(COLLEAGUE_FROM_TAG))
-                    Hint(SalarySetupFormat.SCHEME_NOTE)
+                    Hint(CoCoachingFormat.SCHEME_NOTE)
+                    // Смена схемы у прежнего коллеги — с месяца: прошлые месяцы считаются по прежней.
+                    if (row != null && kind != initialKind) {
+                        SectionLabel(SalarySetupFormat.FROM_MONTH)
+                        PickBox(RateFormat.month(month.firstDay), PIcons.CalendarMonth, { picking = true }, Modifier.fillMaxWidth().testTag(COLLEAGUE_FROM_TAG))
+                        Hint(SalarySetupFormat.SCHEME_NOTE)
+                    }
                 }
                 if (row != null) {
                     Spacer(Modifier.height(Dimens.space4))

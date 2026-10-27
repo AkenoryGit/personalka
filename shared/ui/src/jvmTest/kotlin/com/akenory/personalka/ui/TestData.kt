@@ -28,7 +28,7 @@ internal object TestData {
     /** До первого запуска: тренера нет. */
     fun fresh(): SettingsRepository {
         val db = inMemoryPersonalkaDatabase()
-        return SettingsRepository(db, clock).also {
+        return SettingsRepository(db, clock = clock).also {
             clients[it] = ClientRepository(db, clock)
             groups[it] = GroupRepository(db, clock)
             calendars[it] = CalendarRepository(db, clock)

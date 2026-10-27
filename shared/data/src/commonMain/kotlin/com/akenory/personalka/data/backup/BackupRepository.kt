@@ -1,5 +1,7 @@
 package com.akenory.personalka.data.backup
 
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
 import androidx.room3.deferredTransaction
 import androidx.room3.executeSQL
 import androidx.room3.immediateTransaction
@@ -117,6 +119,8 @@ class BackupRepository(
     private val prefs: DevicePrefs,
     private val folder: BackupFolder,
     private val updates: UpdateCopies? = null,
+    // Виды оплаты для листа «Год» выгрузки — как на экране «Зарплата» (27.10.2026).
+    private val payTypes: Flow<Boolean> = flowOf(true),
     private val clock: () -> Long,
 ) {
     private val _state = MutableStateFlow(load())
@@ -389,7 +393,7 @@ class BackupRepository(
             val name = names[r.clientId] ?: return@mapNotNull null
             ExcelResult(r.date, name, r.distanceM, r.style, r.poolM, r.timeCs, r.kind, r.eventName, r.note)
         }
-        val salary = SalaryRepository(db, clock)
+        val salary = SalaryRepository(db, clock, payTypes)
         val firstYear = minOf(trainings.firstOrNull()?.start?.year ?: today.year, today.year)
         val years = (firstYear..today.year).map { salary.year(it, today).first() }
 

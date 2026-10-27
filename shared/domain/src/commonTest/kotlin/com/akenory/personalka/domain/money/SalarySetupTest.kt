@@ -24,16 +24,17 @@ class SalarySetupTest {
         // У всех — только «Вся сумма, без аванса»: шага схемы в мастере нет, строки в «Профиле» тоже.
         assertEquals(listOf(PaySchemeKind.NONE), SalarySetupRules.schemes(emptySet()))
         assertFalse(SalarySetupRules.schemeStep(emptySet()))
-        assertFalse(SalarySetupRules.schemeRow(emptySet(), PaySchemeKind.NONE))
-        assertFalse(SalarySetupRules.schemeRow(emptySet(), null))
+        assertFalse(SalarySetupRules.schemeRow(emptySet()))
+        assertFalse(SalarySetupRules.payTypes(emptySet()))
         // Открыта «налог 6,5 %» — выбор из двух.
         val open = setOf(Feature.HALF_OFFICIAL)
         assertEquals(listOf(PaySchemeKind.NONE, PaySchemeKind.HALF_OFFICIAL), SalarySetupRules.schemes(open))
         assertTrue(SalarySetupRules.schemeStep(open))
-        assertTrue(SalarySetupRules.schemeRow(open, PaySchemeKind.NONE))
-        // Срок кончился или стоит старая схема — строка видна, чтобы сменить её на «Вся сумма».
-        assertTrue(SalarySetupRules.schemeRow(emptySet(), PaySchemeKind.HALF_OFFICIAL))
-        assertTrue(SalarySetupRules.schemeRow(emptySet(), PaySchemeKind.IP))
+        assertTrue(SalarySetupRules.schemeRow(open))
+        assertTrue(SalarySetupRules.payTypes(open))
+        // Решение 27.10.2026: закрыта — строки нет и со старой схемой, считается «100 % 10-го».
+        val plain = SalarySetupRules.plain(PayScheme(LocalDate(2026, 1, 1), PaySchemeKind.HALF_OFFICIAL, advanceDefault = 1_000_00))
+        assertEquals(PayScheme(LocalDate(2026, 1, 1), PaySchemeKind.NONE), plain)
         assertFalse(SalarySetupRules.selectable(PaySchemeKind.FULL_OFFICIAL, open))
         assertFalse(SalarySetupRules.selectable(PaySchemeKind.IP, open))
         // «Кабинеты» «налог 6,5 %» не открывают.

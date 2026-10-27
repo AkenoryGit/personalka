@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.money
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
@@ -100,6 +101,27 @@ class SalaryRepositoryTest {
         // Полностью официально: на карту 3 680 − 13 %, аванс ожидаемый.
         assertEquals(rub(10_000), view.payout.advance)
         assertEquals(rub(3680) - 47_840, view.totals.onHand)
+    }
+
+    @Test
+    fun withoutPayTypesEverythingIsPlain(): Unit = runBlocking {
+        // Решение Дмитрия 27.10.2026: «С налогом 6,5 %» в админке закрыта — сохранённая схема (здесь «Полностью
+        // официально» с авансом) не действует, схемы коллег не показываются: 100 % по ставкам одной выплатой 10-го.
+        setUp()
+        val lena = settings.colleagues.add("Лена", PaySchemeKind.HALF_OFFICIAL, today)
+        val payTypes = MutableStateFlow(false)
+        val plain = SettingsRepository(db, payTypes) { now }.months
+        val data = plain.month(october, today).first()
+        assertEquals(false, data.payTypes)
+        assertEquals(PaySchemeKind.NONE, data.view.scheme?.kind)
+        assertEquals(0L, data.view.payout.ndfl)
+        assertEquals(0L, data.view.payout.advance)
+        assertEquals(rub(3680), data.view.totals.onHand)
+        assertNull(data.colleagueSchemes[lena])
+        assertNull(plain.advance(october).first())
+        // Открыли снова — прежняя схема на месте.
+        payTypes.value = true
+        assertEquals(PaySchemeKind.FULL_OFFICIAL, plain.month(october, today).first().view.scheme?.kind)
     }
 
     @Test

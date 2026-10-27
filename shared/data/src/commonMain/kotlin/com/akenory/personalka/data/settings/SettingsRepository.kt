@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.settings
 
+import kotlinx.coroutines.flow.flowOf
 import androidx.room3.withWriteTransaction
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
@@ -28,7 +29,12 @@ import kotlinx.coroutines.flow.map
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
-class SettingsRepository(private val db: PersonalkaDatabase, private val clock: () -> Long) {
+class SettingsRepository(
+    private val db: PersonalkaDatabase,
+    // Открыты ли виды оплаты у аккаунта (решение Дмитрия 27.10.2026): без них зарплата — «100 % 10-го».
+    payTypes: Flow<Boolean> = flowOf(true),
+    private val clock: () -> Long,
+) {
     private val coaches = db.coachDao()
     private val reference = db.referenceDao()
 
@@ -42,7 +48,7 @@ class SettingsRepository(private val db: PersonalkaDatabase, private val clock: 
     val colleagues: ColleagueRepository = ColleagueRepository(db, clock)
 
     /** Месяц и выплаты экрана «Зарплата» (5.12, шаг 3.7). */
-    val months: SalaryRepository = SalaryRepository(db, clock)
+    val months: SalaryRepository = SalaryRepository(db, clock, payTypes)
 
     /** Сверка с отчётом 1С (5.14, ТЗ 8, шаг 4.2а). */
     val report1c: Report1cRepository = Report1cRepository(db, clock)

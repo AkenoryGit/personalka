@@ -121,11 +121,17 @@ object SalarySetupRules {
     fun schemeStep(open: Set<Feature>): Boolean = schemes(open).size > 1
 
     /**
-     * Строка схемы в «Профиле»: видна, когда есть из чего выбирать или действует не `NONE` (старая схема или
-     * «налог 6,5 %» с кончившимся сроком — её можно сменить на «Вся сумма»).
+     * Виды оплаты вообще (решение Дмитрия 27.10.2026): есть, только пока в админке открыта «С налогом 6,5 %». Закрыта —
+     * в приложении ни одного упоминания схем (своей, коллег, налога и аванса), всё считается «100 % 10-го»
+     * ([plain]); сохранённые версии не стираются и вернутся, если возможность снова откроют.
      */
-    fun schemeRow(open: Set<Feature>, current: PaySchemeKind?): Boolean =
-        schemeStep(open) || (current != null && current != PaySchemeKind.NONE)
+    fun payTypes(open: Set<Feature>): Boolean = Feature.HALF_OFFICIAL in open
+
+    /** Схема при закрытых видах оплаты: вся сумма по ставкам одной выплатой 10-го, без налога и аванса. */
+    fun plain(scheme: PayScheme): PayScheme = PayScheme(scheme.validFrom, PaySchemeKind.NONE)
+
+    /** Строка схемы в «Профиле» — только с открытыми видами оплаты (27.10.2026; до этого — и со старой схемой). */
+    fun schemeRow(open: Set<Feature>): Boolean = payTypes(open)
 
     /**
      * Версии схемы, которые пишет «Готово» мастера: схема [kind] с месяца [from]; если он позже месяца [start],

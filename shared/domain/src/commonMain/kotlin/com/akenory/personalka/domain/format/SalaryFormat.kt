@@ -32,6 +32,9 @@ object SalaryFormat {
     const val SET_PLAN = "Задать план"
     const val PLAN_TITLE = "План на месяц"
     const val PLAN_FIELD = "Сколько заработать до налогов, ₽"
+
+    /** Без видов оплаты налога нет — и слова о нём (27.10.2026). */
+    const val PLAN_FIELD_PLAIN = "Сколько заработать, ₽"
     const val PLAN_NOTE = "Следующие месяцы предложат этот же план."
     const val PLAN_SAVED = "План сохранён"
     const val TIER = "Ступень"
@@ -47,6 +50,7 @@ object SalaryFormat {
     const val ADJUST_FOR_EMPTY = "Напишите, за что"
     const val IN_CLUB = "Входит в начисление клуба"
     const val IN_CLUB_NOTE = "С неё считаются налог и выплаты"
+    const val IN_CLUB_NOTE_PLAIN = "С неё считается выплата 10-го"
     const val NOT_IN_CLUB = "не входит в начисление клуба"
     const val SAVE = "Сохранить"
     const val DELETE = "Удалить"
@@ -263,6 +267,13 @@ object SalaryFormat {
             MonthPeriod.CURRENT -> "по проведённым на ${DateFormat.short(today)}$DOT$scheme"
             MonthPeriod.FUTURE -> "проведённых ещё нет$DOT$scheme"
         }
+    }
+
+    /** То же без видов оплаты (27.10.2026): без названия схемы; у прошедшего месяца строки нет. */
+    fun accruedNote(period: MonthPeriod, today: LocalDate): String? = when (period) {
+        MonthPeriod.PAST -> null
+        MonthPeriod.CURRENT -> "по проведённым на ${DateFormat.short(today)}"
+        MonthPeriod.FUTURE -> "проведённых ещё нет"
     }
 
     /** «Официально · 50 %». */
