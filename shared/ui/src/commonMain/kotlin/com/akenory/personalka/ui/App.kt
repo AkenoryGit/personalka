@@ -175,8 +175,12 @@ fun App(
         val groupAbsent by remember(groups, hasCoach, now.date) {
             if (hasCoach == true) groups.absent(now.date) else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
-        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent) {
-            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent)
+        // Уточнить, придёт ли (шаг 3.14): сегодняшние клиенты с красной надёжностью.
+        val confirm by remember(clients, hasCoach, now) {
+            if (hasCoach == true) clients.reliability.confirm(now) else flowOf(emptyList())
+        }.collectAsState(initial = emptyList())
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent, confirm) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent, confirm)
         }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()

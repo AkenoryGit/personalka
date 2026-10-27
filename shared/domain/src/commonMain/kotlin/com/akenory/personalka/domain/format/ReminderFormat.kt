@@ -29,6 +29,7 @@ object ReminderFormat {
         items.joinToString(DOT) { (kind, count) -> digestItem(kind, count ?: 1) }.replaceFirstChar { it.uppercaseChar() }
 
     private fun digestItem(kind: TodoKind, n: Int): String = when (kind) {
+        TodoKind.CONFIRM_VISIT -> "уточнить, придёт ли " + RuText.count(n, "клиент", "клиента", "клиентов")
         TodoKind.UNMARKED_GROUPS ->
             if (n == 1) "группа не отмечена" else RuText.count(n, "группа", "группы", "групп") + " не отмечены"
         TodoKind.VACATION_NOTICE -> "предупредить об отпуске " + RuText.count(n, "клиента", "клиентов", "клиентов")

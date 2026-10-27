@@ -59,6 +59,7 @@ import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.NoticeRow
 import com.akenory.personalka.data.clients.Birthday
+import com.akenory.personalka.data.clients.ConfirmVisit
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.db.entity.ReconciliationItemEntity
@@ -77,6 +78,7 @@ import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.ReconcileFormat
+import com.akenory.personalka.domain.format.ReliabilityFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
@@ -177,7 +179,7 @@ data class SyncTodo(val late: Boolean, val lastSync: LocalDateTime?)
  * `CabinetRepository.due`); с шага 3.7а — СПТ, ждущие покупки ([spt] — `SptRepository.waiting`); с шага 3.9 — аванс
  * ([advance] — `SalaryRepository.advance`): с дня аванса, пока сумма не введена; с шага 3.12 — кого предупредить
  * об отпуске ([notices] — `CalendarSettingsRepository.notices`); с шага 3.9у — кто не ходит в группу 30 дней
- * ([absent] — `GroupRepository.absent`). [backup] `null` — раздела копии нет
+ * ([absent] — `GroupRepository.absent`); с шага 3.14 — «Уточнить, придёт ли» ([confirm] — `ClientReliability.confirm`). [backup] `null` — раздела копии нет
  * (тесты). Их число —
  * счётчик дел на значке «Главной».
  */
@@ -195,7 +197,20 @@ fun homeTodos(
     notices: List<NoticeRow> = emptyList(),
     report1c: List<ReconciliationItemEntity> = emptyList(),
     absent: List<AbsentMember> = emptyList(),
+    confirm: List<ConfirmVisit> = emptyList(),
 ): List<HomeTodo> = buildList {
+    if (confirm.isNotEmpty()) {
+        // Сегодня придут клиенты с красной надёжностью (шаг 3.14): нажатие — карточка первого, там «Позвонить» и Макс.
+        add(
+            HomeTodo(
+                kind = TodoKind.CONFIRM_VISIT,
+                title = ReliabilityFormat.CONFIRM_TODO,
+                note = ReliabilityFormat.confirmNote(confirm.map { it.name to it.start }),
+                count = confirm.size,
+                clientId = confirm.first().clientId,
+            ),
+        )
+    }
     val groups = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now)
     if (groups.isNotEmpty()) {
         val byId = trainings.associateBy { it.id }
@@ -677,6 +692,7 @@ private fun TodoBlock(todos: List<HomeTodo>, onClick: (HomeTodo) -> Unit) {
 }
 
 private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
+    TodoKind.CONFIRM_VISIT -> PIcons.Call
     TodoKind.UNMARKED_GROUPS -> PIcons.Groups
     TodoKind.NOT_BOOKED -> PIcons.EventBusy
     TodoKind.GROUP_ABSENT -> PIcons.Groups

@@ -65,10 +65,12 @@ import com.akenory.personalka.domain.cabinet.CabinetLinkRules
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
+import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
+import com.akenory.personalka.domain.format.ReliabilityFormat
 import com.akenory.personalka.domain.format.ResultFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.SptFormat
@@ -91,6 +93,7 @@ import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.components.ReliabilityChip
 import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
@@ -108,6 +111,7 @@ import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.WAIT_LINE_TAG
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -170,6 +174,8 @@ fun ClientCard(
     val series by remember(forms, clientId) { forms.seriesOf(clientId) }.collectAsState(initial = null)
     val results by remember(clients, clientId) { clients.results.results(clientId) }.collectAsState(initial = null)
     val upcomingCount by produceState(initialValue = 4, clients) { value = clients.upcomingInCard() }
+    // Надёжность (шаг 3.14): только тренеру, по ПТ, сплитам и мини-группам.
+    val reliability by remember(clients, clientId) { clients.reliability.observe().map { it[clientId] } }.collectAsState(initial = null)
     var tab by rememberSaveable(clientId) { mutableStateOf(startTab) }
     var deleteStep by rememberSaveable(clientId) { mutableStateOf(0) }
     var surname by rememberSaveable(clientId) { mutableStateOf("") }
@@ -251,6 +257,7 @@ fun ClientCard(
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 CardHeader(row, today, noBooking = clientId in followup.noBooking, waits = waits != null)
                 if (stats != null && !stats.isEmpty) StatsRow(stats)
+                reliability?.takeIf { it.total > 0 }?.let { ReliabilityRow(clientId, it) }
                 if (active || cabinet != null) {
                     Row(
                         Modifier.fillMaxWidth().padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space3),
@@ -526,6 +533,19 @@ private fun OutlineLabel(text: String, icon: ImageVector? = null) {
             Spacer(Modifier.width(4.dp))
         }
         Text(text, style = MaterialTheme.typography.labelMedium, color = colors.text)
+    }
+}
+
+/** Надёжность (шаг 3.14): «Надёжность 84 %» цветом уровня и «8 отмен из 50». */
+@Composable
+private fun ReliabilityRow(clientId: String, r: Reliability) {
+    Row(
+        Modifier.padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space2).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ReliabilityChip(r, ReliabilityFormat.label(r), clientId)
+        Spacer(Modifier.width(Dimens.space2))
+        Text(ReliabilityFormat.basis(r), style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

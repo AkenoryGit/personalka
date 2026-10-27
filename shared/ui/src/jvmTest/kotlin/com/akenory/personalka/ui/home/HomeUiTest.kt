@@ -151,6 +151,41 @@ class HomeUiTest {
         onNodeWithText(s("Ещё сегодня: 1, в_16:20")).assertIsDisplayed()
     }
 
+    /** Прошедшая ПТ клиента [daysAgo] дней назад: пришёл или отменил («Не сможет»). */
+    private fun past(clientId: String, daysAgo: Int, came: Boolean, time: String = "10:00") = runBlocking {
+        val day = today.plus(-daysAgo, DateTimeUnit.DAY)
+        val id = training(time, clientId, day = day)
+        val t = db.trainingDao().training(id)!!
+        db.trainingDao().upsertTraining(t.copy(status = if (came) TrainingStatus.DONE else TrainingStatus.CANCELLED, cancelReason = if (came) null else "Не сможет"))
+        val p = db.trainingDao().participationsOf(id).single()
+        db.trainingDao().upsertParticipation(p.copy(status = if (came) ParticipationStatus.ATTENDED else ParticipationStatus.CANCELLED, cancelReason = if (came) null else "Не сможет"))
+    }
+
+    @Test
+    fun unreliableClientTodayAskedToConfirm() = runComposeUiTest {
+        // Шаг 3.14: у Орлова 6 из 10 — 60 %, красная; у Петрова 10 из 10 — зелёная, его не спрашивают.
+        val orlov = client("Орлов", "Максим")
+        val petrov = client("Петров", "Игорь")
+        (1..10).forEach { past(orlov, it, came = it > 4) }
+        (1..10).forEach { past(petrov, it, came = true, time = "12:00") }
+        training("17:00", orlov)
+        training("18:00", petrov)
+        openHome()
+
+        awaitNode(hasTestTag(todoTag(TodoKind.CONFIRM_VISIT)))
+        onNodeWithText("Уточнить, придёт ли").assertIsDisplayed()
+        onNodeWithText(s("Орлов_М., 17:00")).assertIsDisplayed()
+
+        // В карточке ближайшей — «Надёжность 60 %» и из чего посчитано.
+        onNodeWithTag(NEAREST_OPEN_TAG).performClick()
+        awaitNode(inCard(s("60_%")))
+        onNode(inCard(s("4_отмены из 10"))).assertIsDisplayed()
+
+        // Имя ведёт в карточку клиента: там та же надёжность.
+        onNode(inCard(s("Орлов_М."))).performClick()
+        awaitNode(hasText(s("Надёжность 60_%")))
+    }
+
     @Test
     fun birthdayBlockAndCakeLineInCard() = runComposeUiTest {
         // Шаг 3.9р: Ковалёву сегодня 9 — блок «День рождения сегодня» и строка с тортом в карточке его тренировки.

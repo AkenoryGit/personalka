@@ -68,9 +68,11 @@ import com.akenory.personalka.data.training.TrainingCardRepository
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.client.ClientRules
+import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.ReliabilityFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
@@ -99,6 +101,7 @@ import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.components.PrimaryButton
+import com.akenory.personalka.ui.components.ReliabilityChip
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.SwitchRow
@@ -729,6 +732,10 @@ private fun ColumnScope.CardBody(
         card.birthdays.forEach { BirthdayLine(it) }
         sptAsk?.let { SptAskRow(it, onSpt) }
         card.sharing?.let { SharingRow(it, onSharing) }
+        // Надёжность одного клиента (шаг 3.14): у сплита и мини-группы — в строке каждого.
+        if (!isGroup && !TrainingCardRules.perClient(state)) {
+            single?.let { c -> card.reliability[c.id]?.let { ReliabilityLine(c.id, it) } }
+        }
 
         // Отменённая целиком или отменённый единственный клиент: причина и когда предупредили.
         val cancelled = card.clients.singleOrNull()?.state?.takeIf { it.isCancelled && !isGroup }
@@ -944,6 +951,19 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
+/** «Надёжность [84 %] 8 отмен из 50» у запланированной ПТ (шаг 3.14). */
+@Composable
+private fun ReliabilityLine(clientId: String, r: Reliability) {
+    val colors = PersonalkaTheme.colors
+    Row(Modifier.fillMaxWidth().padding(top = Dimens.space3), verticalAlignment = Alignment.CenterVertically) {
+        Text(ReliabilityFormat.TITLE, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+        Spacer(Modifier.width(Dimens.space2))
+        ReliabilityChip(r, ReliabilityFormat.value(r), clientId)
+        Spacer(Modifier.width(Dimens.space2))
+        Text(ReliabilityFormat.basis(r), style = MaterialTheme.typography.bodySmall, color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 /** Строка клиента сплита: имя ведёт в его карточку, итог, значок отмены или «Вернуть» (5.4). */
 @Composable
 private fun ClientLine(
@@ -960,8 +980,9 @@ private fun ClientLine(
             Modifier.weight(1f).heightIn(min = Dimens.touch).then(if (c.erased) Modifier else Modifier.clickable(role = Role.Button) { onClient(c.id) }),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(c.name, style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(c.name, modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!c.erased) Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+            card.reliability[c.id]?.let { ReliabilityChip(it, ReliabilityFormat.value(it), c.id, Modifier.padding(end = Dimens.space2)) }
         }
         val (bg, fg) = when (c.outcome) {
             ClientOutcome.DONE -> colors.doneContainer to colors.onDoneContainer
@@ -1073,6 +1094,7 @@ private fun GroupMembers(
                 }
                 Spacer(Modifier.width(Dimens.space3))
                 Text(c.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                card.reliability[c.id]?.let { ReliabilityChip(it, ReliabilityFormat.value(it), c.id, Modifier.padding(start = Dimens.space2)) }
                 if (c.guest) {
                     Text(TrainingCardFormat.GUEST, modifier = Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
                 }

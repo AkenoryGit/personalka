@@ -111,6 +111,9 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     /** СПТ клиента в «Инфо» (5.9) и «Купил блок со скидкой» (4.9, шаг 3.7а). */
     val spt = SptRepository(db, clock)
 
+    /** Надёжность клиентов (шаг 3.14): карточка клиента и «Уточнить, придёт ли» на «Главной». */
+    val reliability = ClientReliability(db)
+
     /** id всех клиентов, и в архиве: фото удалённых и объединённых стираются (шаг 3.13). */
     val ids: Flow<Set<String>> = clients.observeAllClients().map { list -> list.mapTo(HashSet()) { it.id } }
 

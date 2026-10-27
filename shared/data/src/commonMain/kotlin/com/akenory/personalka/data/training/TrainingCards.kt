@@ -1,6 +1,7 @@
 package com.akenory.personalka.data.training
 
 import androidx.room3.withWriteTransaction
+import com.akenory.personalka.data.clients.ClientReliability
 import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.clients.freedSlot
 import com.akenory.personalka.data.clients.newClientEntity
@@ -33,6 +34,8 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
+import com.akenory.personalka.domain.client.Reliability
+import com.akenory.personalka.domain.client.ReliabilityRules
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
@@ -126,6 +129,10 @@ data class TrainingCard(
     val carriedTo: LocalDate? = null,
     val sharing: CardSharing? = null,
     val birthdays: List<String> = emptyList(),
+    /** Запланированная ПТ, сплит или мини-группа: у клиентов видна надёжность (шаг 3.14). */
+    val reliable: Boolean = false,
+    /** Надёжность клиентов по id; только у [reliable]. */
+    val reliability: Map<String, Reliability> = emptyMap(),
 ) {
     /** Итог для метки статуса: у одного клиента — его итог («Отмена со списанием»), иначе — тренировки. */
     val outcome: ClientOutcome
@@ -194,6 +201,9 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
 
     /** СПТ (4.9, шаг 3.7а): вопрос на первой оплаченной ПТ и «Купил блок со скидкой» в карточке. */
     val spt: SptRepository = SptRepository(db, clock)
+
+    /** Надёжность клиентов (шаг 3.14) у запланированной тренировки. */
+    val reliability: ClientReliability = ClientReliability(db)
 
     /**
      * Сверенные месяцы (4.1, «Месяц сверен» в «Зарплате»): правка тренировки такого месяца в карточке сначала
@@ -296,7 +306,11 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                     val birth = c?.birthDate?.takeIf { !p.toState().isCancelled && ClientRules.isBirthday(it, t.start.date) }
                     birth?.let { ClientFormat.birthday(CalendarFormat.client(ClientName(c.lastName, c.firstName, c.middleName)), it, t.start.date) }
                 },
+                reliable = t.status == TrainingStatus.PLANNED && ReliabilityRules.counts(kind, type?.name.orEmpty(), type?.shortName.orEmpty()),
             )
+        }.combine(reliability.observe()) { card, all ->
+            // Надёжность (шаг 3.14) — у запланированной ПТ, сплита и мини-группы, у каждого клиента.
+            if (!card.reliable) card else card.copy(reliability = card.clients.filter { !it.erased }.associate { it.id to (all[it.id] ?: Reliability.NONE) })
         }
     }
 

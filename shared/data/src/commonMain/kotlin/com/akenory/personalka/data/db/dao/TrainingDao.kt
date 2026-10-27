@@ -25,6 +25,21 @@ data class ClientVisit(
     val kind: TrainingKind,
 )
 
+/**
+ * Участие клиента для надёжности (шаг 3.14): начало, вид и имена типа, статусы и причины отмены участия и тренировки.
+ */
+data class ReliabilityRow(
+    val clientId: String,
+    val start: LocalDateTime,
+    val kind: TrainingKind,
+    val typeName: String,
+    val typeShort: String,
+    val trainingStatus: TrainingStatus,
+    val participationStatus: ParticipationStatus,
+    val participationReason: String?,
+    val trainingReason: String?,
+)
+
 /** Тренировки и дежурства, участие клиентов, результаты, стартовые тренировки (ТЗ 3.5). */
 @Dao
 interface TrainingDao {
@@ -251,6 +266,24 @@ interface TrainingDao {
         """
     )
     fun observeClientVisits(from: LocalDateTime, training: TrainingStatus, participation: ParticipationStatus): Flow<List<ClientVisit>>
+
+    /**
+     * Участие клиентов в тренировках ПТ, сплитов и групп — для надёжности (шаг 3.14): мини-группу от группы
+     * отличает правило по имени типа, поэтому группы приходят все.
+     */
+    @Query(
+        """
+        SELECT p.clientId AS clientId, t.start AS start, ty.kind AS kind, ty.name AS typeName, ty.shortName AS typeShort,
+               t.status AS trainingStatus, p.status AS participationStatus,
+               p.cancelReason AS participationReason, t.cancelReason AS trainingReason
+        FROM participation AS p
+        JOIN training AS t ON t.id = p.trainingId
+        JOIN training_type AS ty ON ty.id = t.typeId
+        WHERE ty.kind IN ('PERSONAL', 'SPLIT', 'GROUP')
+          AND p.deletedAt IS NULL AND t.deletedAt IS NULL
+        """
+    )
+    fun observeReliabilityRows(): Flow<List<ReliabilityRow>>
 
     /** Все тренировки, участие и результаты — для выгрузки в Excel (7.6, шаг 3.8в). */
     @Query("SELECT * FROM training WHERE deletedAt IS NULL ORDER BY start")
