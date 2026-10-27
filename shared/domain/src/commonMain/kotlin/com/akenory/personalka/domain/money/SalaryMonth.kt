@@ -80,6 +80,7 @@ data class TierProgress(
  * [colleagues] — взаиморасчёт по каждому коллеге для вкладки «Коллеги» (3.8). [todayPt] и [todayPtAhead] — ПТ
  * сегодня: проведено и ещё запланировано (счёт как у ступени, 4.6), для «Денег» на «Главной». [todayCancelled] и
  * [monthCancelled] — отменённые тренировки сегодня и за месяц без дежурств (просьба Дмитрия 26.10.2026), там же.
+ * [work] — часы работы в неделю и заработок за час (шаг 3.9щ).
  */
 data class SalaryMonth(
     val month: YearMonth,
@@ -104,6 +105,7 @@ data class SalaryMonth(
     val todayPtAhead: Int? = null,
     val todayCancelled: Int? = null,
     val monthCancelled: Int = 0,
+    val work: WorkHours? = null,
 ) {
     /** «Месяц сверен» — у прошедшего и текущего: сверять будущий не с чем. */
     val canClose: Boolean get() = period != MonthPeriod.FUTURE
@@ -204,6 +206,7 @@ object SalaryMonthRules {
             todayPtAhead = ofToday?.let { list -> PayRules.ptCount(list.filter { it.status == TrainingStatus.PLANNED }, ptIds, forecast = true) },
             todayCancelled = ofToday?.let { cancelled.count { it.start.date == today } },
             monthCancelled = cancelled.size,
+            work = CancelRules.work(input.trainings, month, today, pay.earned),
         )
     }
 
@@ -239,7 +242,7 @@ object SalaryMonthRules {
             val k = target - pay.forecastPtCount
             val extra = SalaryPlan.withExtra(input, k, ptTypeId, placeId, on).pay()
             val newTier = extra.forecastTier
-            TierBeyond(k, target, newTier, extra.forecast - pay.forecast, k * rate.amount(if (tierDependent) newTier else 1))
+            TierBeyond(k, target, newTier, extra.scheduled - pay.scheduled, k * rate.amount(if (tierDependent) newTier else 1))
                 .takeIf { k in 1..MAX_BEYOND && newTier > pay.forecastTier }
         } else {
             null

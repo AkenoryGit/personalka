@@ -16,6 +16,7 @@ import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.money.AdvanceState
+import com.akenory.personalka.domain.money.CancelRules
 import com.akenory.personalka.domain.money.DutyCheck
 import com.akenory.personalka.domain.money.DutyCheckRules
 import com.akenory.personalka.domain.money.MonthInput
@@ -28,8 +29,8 @@ import com.akenory.personalka.domain.money.PayScheme
 import com.akenory.personalka.domain.money.PayTraining
 import com.akenory.personalka.domain.money.PayType
 import com.akenory.personalka.domain.money.Payouts
-import com.akenory.personalka.domain.money.SalaryMonth
 import com.akenory.personalka.domain.money.SalaryDaysRules
+import com.akenory.personalka.domain.money.SalaryMonth
 import com.akenory.personalka.domain.money.SalaryMonthRules
 import com.akenory.personalka.domain.money.SalaryPeriod
 import com.akenory.personalka.domain.money.SalaryYear
@@ -37,6 +38,7 @@ import com.akenory.personalka.domain.money.SalaryYearRules
 import com.akenory.personalka.domain.money.SptCase
 import com.akenory.personalka.domain.money.TierScheme
 import com.akenory.personalka.domain.money.Versions
+import com.akenory.personalka.domain.training.CancelReasons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -228,6 +230,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
             ),
             spt = spt,
             adjustments = m.adjustments.map { PayAdjustment(it.amount, it.inClubAccrual, ClubTime.today(it.sync.createdAt)) },
+            cancels = CancelRules.share(trainings, types, today),
         )
         // Две записи одного месяца с двух телефонов — берётся последняя изменённая, как в MoneyDao.monthRecord.
         val records = m.records.groupBy { it.month }.mapValues { (_, list) -> list.maxWith(compareBy({ it.sync.updatedAt }, { it.id })) }
@@ -348,6 +351,7 @@ fun TrainingEntity.pay(participations: List<ParticipationEntity>): PayTraining =
     colleagueId = colleagueId,
     groupId = groupId,
     coverFor = coverFor,
+    byUs = CancelReasons.isWithoutCharge(cancelReason) || participations.any { CancelReasons.isWithoutCharge(it.cancelReason) },
 )
 
 /** Тип из базы — во вход расчёта (3.3). Сплит без своего «ПТ» превращается в ПТ тренера ([ptTypeId]). */

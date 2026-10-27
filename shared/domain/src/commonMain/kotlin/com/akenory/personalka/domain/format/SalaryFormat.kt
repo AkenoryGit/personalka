@@ -5,6 +5,7 @@ import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.money.BreakdownLine
 import com.akenory.personalka.domain.money.BreakdownSection
 import com.akenory.personalka.domain.money.GroupCase
+import com.akenory.personalka.domain.money.MonthPay
 import com.akenory.personalka.domain.money.MonthPeriod
 import com.akenory.personalka.domain.money.PayoutKind
 import com.akenory.personalka.domain.money.PeriodPart
@@ -13,6 +14,7 @@ import com.akenory.personalka.domain.money.Shortfall
 import com.akenory.personalka.domain.money.SplitMark
 import com.akenory.personalka.domain.money.TierBeyond
 import com.akenory.personalka.domain.money.TierProgress
+import com.akenory.personalka.domain.money.WorkHours
 import com.akenory.personalka.domain.money.YearMonthRow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -83,6 +85,19 @@ object SalaryFormat {
 
     /** «Прогноз ≈ 203 490 ₽». */
     fun forecast(amount: Long): String = "Прогноз ${MoneyFormat.approxRub(amount)}"
+
+    /**
+     * Под прогнозом, если он учёл отмены (шаг 3.9щ): «по расписанию ≈ 204 780 ₽, обычно отменяется 20 %». Доли
+     * отмен нет или прогноз от неё не изменился — `null`.
+     */
+    fun scheduled(pay: MonthPay): String? {
+        val cancels = pay.cancels ?: return null
+        if (pay.scheduled == pay.forecast) return null
+        return "по расписанию ${MoneyFormat.approxRub(pay.scheduled)}, обычно отменяется ${cancels.percent}$NBSP%"
+    }
+
+    /** «Работа: 40 ч в неделю, ≈ 1 100 ₽ за час» (шаг 3.9щ). */
+    fun work(w: WorkHours): String = "Работа: ${w.perWeek}${NBSP}ч в неделю, ${MoneyFormat.approxRub(w.perHour)} за час"
 
     /** «97 % плана». */
     fun ofPlan(percent: Int): String = "$percent$NBSP% плана"

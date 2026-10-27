@@ -127,6 +127,31 @@ class SalaryMonthUiTest {
     }
 
     @Test
+    fun forecastWithCancelsAndWorkHours() = runComposeUiTest {
+        // Шаг 3.9щ: ещё 9 проведённых ПТ и 3 отменённые без списания в начале октября — из 14 прошедших 3 отмены, 21 %.
+        runBlocking {
+            val pt = typeId("ПТ")
+            val bb = placeId("ББ")
+            val coach = db.coachDao().currentCoach()!!.id
+            val now = TestData.clock()
+            (1..12).forEach { day ->
+                val done = day <= 9
+                val status = if (done) TrainingStatus.DONE else TrainingStatus.CANCELLED
+                db.trainingDao().upsertTraining(TrainingEntity("c$day", SyncFields.new(coach, now), pt, bb, LocalDateTime(2026, 10, day, 9, 0), 50, status = status))
+                val p = if (done) ParticipationStatus.ATTENDED else ParticipationStatus.CANCELLED
+                db.trainingDao().upsertParticipation(ParticipationEntity("cp$day", SyncFields.new(coach, now), "c$day", "client", p))
+            }
+        }
+        start()
+        // По расписанию 12 × 920 = 11 040 ₽; запланированная ПТ — с отменами: 11 × 920 + 920 × 11 / 14.
+        onNodeWithText(SalaryFormat.forecast(rub(10_120) + 72_286)).assertExists()
+        onNodeWithTag(SALARY_SCHEDULED_TAG).assertTextContains("по расписанию ${MoneyFormat.approxRub(rub(11_040))}, обычно отменяется 21", substring = true)
+        // 11 проведённых по 50 минут за 20 дней — 3 ч в неделю, 10 120 ₽ за 550 минут — ≈ 1 100 ₽ за час.
+        onNodeWithTag(SALARY_WORK_TAG).assertTextContains("Работа: 3", substring = true)
+        onNodeWithTag(SALARY_WORK_TAG).assertTextContains(MoneyFormat.approxRub(rub(1_104)), substring = true)
+    }
+
+    @Test
     fun payoutsAndAdvance() = runComposeUiTest {
         start()
         onNodeWithTag(salaryTabTag(SalaryTab.PAYOUTS)).performClick()

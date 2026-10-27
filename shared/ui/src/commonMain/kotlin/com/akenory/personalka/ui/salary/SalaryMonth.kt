@@ -106,6 +106,8 @@ import kotlin.math.roundToInt
 
 internal const val SALARY_EARNED_TAG = "salary-earned"
 internal const val SALARY_PLAN_TAG = "salary-plan"
+internal const val SALARY_SCHEDULED_TAG = "salary-scheduled"
+internal const val SALARY_WORK_TAG = "salary-work"
 internal const val SALARY_SLOTS_TAG = "salary-slots"
 internal const val SALARY_PLAN_FIELD_TAG = "salary-plan-field"
 internal const val SALARY_TITLE_TAG = "salary-title"
@@ -643,6 +645,7 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Un
             color = colors.text,
         )
         SalaryFormat.today(view.today, view.todayAhead)?.let { Muted(it) }
+        view.work?.let { Muted(SalaryFormat.work(it), Modifier.testTag(SALARY_WORK_TAG)) }
         Spacer(Modifier.height(Dimens.space2))
         Row(
             Modifier.fillMaxWidth().heightIn(min = Dimens.touch).clickable(onClick = onPlan).testTag(SALARY_PLAN_TAG),
@@ -669,6 +672,7 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Un
                 Muted(SalaryFormat.forecast(view.pay.forecast), Modifier.weight(1f))
                 view.forecastPercent?.let { Muted(SalaryFormat.ofPlan(it)) }
             }
+            SalaryFormat.scheduled(view.pay)?.let { Muted(it, Modifier.testTag(SALARY_SCHEDULED_TAG)) }
         }
         if (view.plan != null && !view.planOwn) Muted(SalaryFormat.PLAN_CARRIED)
         view.shortfall?.let { Note(SalaryFormat.shortfall(it)) }

@@ -163,8 +163,9 @@ data class MonthInput(
     val owners: OwnerSchemes = OwnerSchemes(),
     val spt: List<SptCase> = emptyList(),
     val adjustments: List<PayAdjustment> = emptyList(),
+    val cancels: CancelShare? = null,
 ) {
-    fun pay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments)
+    fun pay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments, cancels)
 }
 
 /**
@@ -217,10 +218,10 @@ object SalaryPlan {
             if (withExtra(mid).forecast >= plan) high = mid else low = mid
         }
         val reached = withExtra(high)
-        if (reached.forecastTier <= base.forecastTier) return Shortfall(missing, high)
+        if (reached.likelyTier <= base.likelyTier) return Shortfall(missing, high)
         val scheme = Versions.activeIn(input.schemes, input.month) { it.validFrom }
-        val from = scheme?.let { if (reached.forecastTier >= 3) it.t3From else it.t2From }
-        return Shortfall(missing, high, reached.forecastTier, from)
+        val from = scheme?.let { if (reached.likelyTier >= 3) it.t3From else it.t2From }
+        return Shortfall(missing, high, reached.likelyTier, from)
     }
 
     /** Месяц [input] с [k] добавочными запланированными ПТ типа [ptTypeId] в месте [locationId] в день [on]. */

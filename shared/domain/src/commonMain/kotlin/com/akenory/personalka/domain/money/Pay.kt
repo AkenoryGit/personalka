@@ -78,6 +78,7 @@ data class OwnerSchemes(
  * [owner] / [ownerColleagueId] — на ком числится группа, [conductedBy] / [colleagueId] — кто провёл (ТЗ 3.4, 4.8);
  * учитываются только у групп. [groupId] — группа тренировки: по ней прогноз берёт ожидаемое число детей (4.12).
  * [coverFor] — за кого дежурство (3.5): в разбивке месяца такие дежурства идут отдельными строками (4.10).
+ * [byUs] — отменена по инициативе тренера или клуба: в долю отмен клиентов (4.12) не входит.
  */
 data class PayTraining(
     val id: String,
@@ -94,6 +95,7 @@ data class PayTraining(
     val colleagueId: String? = null,
     val groupId: String? = null,
     val coverFor: String? = null,
+    val byUs: Boolean = false,
 )
 
 /**
@@ -131,6 +133,9 @@ data class TrainingPay(
  * (4.10): все — в заработано и прогноз, с `in_club_accrual` — ещё и в начислено. [forecastTrainings],
  * [forecastAccrued] и [forecastSettlements] — то же по прогнозной ступени, будто все запланированные состоялись:
  * из них «Если всё пройдёт по расписанию — ≈ …» на руки (5.12).
+ * [forecast] — прогноз с обычной долей отмен [cancels] (шаг 3.9щ): запланированные ПТ и сплиты — со скидкой на неё,
+ * и по ступени [likelyTier] от ожидаемого счётчика; [scheduled] — будто всё по расписанию состоялось. Доли нет —
+ * они равны.
  */
 data class MonthPay(
     val month: YearMonth,
@@ -150,6 +155,9 @@ data class MonthPay(
     val forecastTrainings: List<TrainingPay> = trainings,
     val forecastAccrued: Long = accrued,
     val forecastSettlements: Map<String, Long> = settlements,
+    val scheduled: Long = forecast,
+    val likelyTier: Int = forecastTier,
+    val cancels: CancelShare? = null,
 ) {
     /** Взаиморасчёт S (4.10): мне должны минус я должен, по всем коллегам. */
     val settlement: Long get() = settlements.values.sum()
@@ -321,6 +329,8 @@ object PayRules {
      * Доплаты за закрытие СПТ [spt] идут в месяц покупки (4.9), доплаты и удержания [adjustments] — этого месяца (4.10).
      * В прогнозе запланированная группа ждёт столько детей, сколько в среднем было на её последних 4 проведённых
      * (4.12): поэтому в [trainings] можно передавать и прошлые месяцы — считаются только тренировки [month].
+     * С долей отмен [cancels] (шаг 3.9щ) запланированных ПТ и сплитов в счётчике и в деньгах прогноза — столько, сколько
+     * обычно состоится; ступень прогноза — по такому счётчику. «По расписанию» — без скидки.
      */
     fun month(
         month: YearMonth,
@@ -331,6 +341,7 @@ object PayRules {
         owners: OwnerSchemes = OwnerSchemes(),
         spt: List<SptCase> = emptyList(),
         adjustments: List<PayAdjustment> = emptyList(),
+        cancels: CancelShare? = null,
     ): MonthPay {
         val ofMonth = inMonth(trainings, month)
         val scheme = Versions.activeIn(schemes, month) { it.validFrom }
@@ -350,6 +361,17 @@ object PayRules {
             pay(it, byId, rates, forecastTier, forecast = true, owners = owners, expected = expected)
         }
         val forecast = sptBonus + adjusted + forecastPays.sumOf { it.earned }
+        // Прогноз с отменами: запланированные ПТ и сплиты, которые принесут деньги, — со скидкой на обычную долю отмен.
+        val discounted = { t: PayTraining -> cancels != null && t.status == TrainingStatus.PLANNED && kindOf(t) in CancelRules.KINDS }
+        val plannedPt = ofMonth.count { discounted(it) && it.typeId in ptIds && paidClients(it, forecast = true) > 0 }
+        val likelyTier = tier(scheme, nForecast - plannedPt + (cancels?.keep(plannedPt) ?: plannedPt))
+        val likelyPays = if (likelyTier == forecastTier) forecastPays else ofMonth.map {
+            val expected = if (it.status == TrainingStatus.PLANNED && kindOf(it) == TrainingKind.GROUP) expectedChildren(it, trainings) else null
+            pay(it, byId, rates, likelyTier, forecast = true, owners = owners, expected = expected)
+        }
+        val (cut, kept) = ofMonth.zip(likelyPays).partition { (t, _) -> discounted(t) }
+        val likely = sptBonus + adjusted + kept.sumOf { it.second.earned } +
+            cut.sumOf { it.second.earned }.let { cancels?.keep(it) ?: it }
         val groupChildren = ofMonth.zip(pays)
             .filter { (t, _) -> kindOf(t) == TrainingKind.GROUP && t.conductedBy != ConductedBy.COLLEAGUE }
             .sumOf { (_, pay) -> pay.paidClients }
@@ -357,7 +379,7 @@ object PayRules {
             .filter { kindOf(it) == TrainingKind.DUTY && it.status == TrainingStatus.DONE }
             .sumOf { it.durationMin }
         return MonthPay(
-            month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned } + sptBonus + adjusted, forecast, pays,
+            month, n, tier, nForecast, forecastTier, pays.sumOf { it.earned } + sptBonus + adjusted, likely, pays,
             accrued = pays.sumOf { it.accrued } + sptBonus + adjustedInClub,
             settlements = settlementsOf(pays),
             groupChildren = groupChildren,
@@ -367,6 +389,9 @@ object PayRules {
             forecastTrainings = forecastPays,
             forecastAccrued = forecastPays.sumOf { it.accrued } + sptBonus + adjustedInClub,
             forecastSettlements = settlementsOf(forecastPays),
+            scheduled = forecast,
+            likelyTier = likelyTier,
+            cancels = cancels,
         )
     }
 
