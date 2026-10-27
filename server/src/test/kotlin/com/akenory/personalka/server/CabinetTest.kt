@@ -288,6 +288,8 @@ class CabinetTest {
         val positions = order.map { page.indexOf(it.replace(" 2026", "${RuText.NBSP}2026")) }
         assertTrue(positions.none { it < 0 } && positions == positions.sorted(), "разделы по порядку: $positions")
         assertTrue("<details class=\"mo\" open" in page, "текущий месяц раскрыт")
+        assertTrue("<details class=\"tr\">" in page, "тренировка в истории свёрнута до даты")
+        assertFalse("<details class=\"tr\" open" in page, "ни одна тренировка не раскрыта сразу")
         assertFalse("<script" in page)
         assertFalse("style=" in page, "встроенные стили запрещены CSP")
     }

@@ -54,6 +54,12 @@ details.mo{background:var(--surface);border-radius:12px}
 .chev{color:var(--text-muted)}
 .stack{display:flex;flex-direction:column;gap:8px}
 .nest{padding:8px}
+.it.hi{padding:0}
+.tr>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:48px;padding:10px 12px 10px 16px;cursor:pointer}
+.tr>summary::-webkit-details-marker{display:none}
+.tr>summary .top{flex:1 1 auto}
+.tr[open]>summary .chev{transform:rotate(180deg)}
+.trb{display:flex;flex-direction:column;gap:2px;padding:0 16px 14px}
 .nest .mo{background:var(--surface-alt)}
 .ft{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--divider);padding-top:20px}
 .badge{width:64px;height:64px;border-radius:999px;background:var(--surface-alt);display:grid;place-items:center;margin-top:72px;color:var(--text-muted)}

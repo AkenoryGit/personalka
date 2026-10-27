@@ -459,6 +459,7 @@ object CabinetHtml {
     }
 
     private fun UL.item(item: CabinetItem, upcoming: Boolean) {
+        if (!upcoming) return history(item)
         li("it") {
             val status = item.status
             if (status != null) {
@@ -469,15 +470,38 @@ object CabinetHtml {
             } else {
                 p("dt") { +item.whenText }
             }
-            p { +item.typePlace }
-            item.fields.forEach { (name, text) ->
-                div("f") {
-                    span("k") { +name }
-                    span { +text }
-                }
-            }
-            item.note?.let { p("mut") { +it } }
+            itemBody(item)
         }
+    }
+
+    /**
+     * Прошедшая тренировка в «Истории» свёрнута до даты и статуса (просьба Дмитрия 27.10.2026): родитель раскрывает
+     * нужную, и много дней с планом и фактом не вываливаются сразу.
+     */
+    private fun UL.history(item: CabinetItem) {
+        li("it hi") {
+            details("tr") {
+                summary {
+                    span("top") {
+                        span("dt") { +item.whenText }
+                        item.status?.let { span("st ${statusClass(it)}") { +it.label } }
+                    }
+                    unsafe { +CHEVRON }
+                }
+                div("trb") { itemBody(item) }
+            }
+        }
+    }
+
+    private fun FlowContent.itemBody(item: CabinetItem) {
+        p { +item.typePlace }
+        item.fields.forEach { (name, text) ->
+            div("f") {
+                span("k") { +name }
+                span { +text }
+            }
+        }
+        item.note?.let { p("mut") { +it } }
     }
 
     private fun statusClass(outcome: ClientOutcome): String = when (outcome) {
