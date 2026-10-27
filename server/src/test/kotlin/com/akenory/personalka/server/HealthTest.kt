@@ -16,7 +16,7 @@ class HealthTest {
         application { trener(database, version = "0.1.77") }
         val response = client.get("/health")
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("ok\nверсия 0.1.77\nсхема 5\n", response.bodyAsText())
+        assertEquals("ok\nверсия 0.1.77\nсхема 6\n", response.bodyAsText())
     }
 
     @Test

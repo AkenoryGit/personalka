@@ -38,6 +38,7 @@ fun Application.trener(
         sync(database, auth, sync)
         cabinets(database, auth, cabinets, limit)
         admin(database, auth)
+        adminSite(database, auth, limit)
     }
 }
 

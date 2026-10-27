@@ -302,7 +302,7 @@ class CabinetTest {
         assertEquals("noindex, nofollow", response.headers["X-Robots-Tag"])
         assertEquals("no-referrer", response.headers["Referrer-Policy"])
         assertEquals("private, no-store", response.headers[HttpHeaders.CacheControl])
-        assertEquals("User-agent: *\nDisallow: /c/\nDisallow: /p/\n", client.get("/robots.txt").bodyAsText())
+        assertEquals("User-agent: *\nDisallow: /c/\nDisallow: /p/\nDisallow: /admin\n", client.get("/robots.txt").bodyAsText())
         val css = client.get("/cabinet.css")
         assertEquals(HttpStatusCode.OK, css.status)
         assertTrue("prefers-color-scheme:dark" in css.bodyAsText())

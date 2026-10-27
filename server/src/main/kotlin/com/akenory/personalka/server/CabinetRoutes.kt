@@ -60,7 +60,7 @@ fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: Ra
     val accounts = auth.accounts
 
     get("/robots.txt") {
-        call.respondText("User-agent: *\nDisallow: /c/\nDisallow: /p/\n", ContentType.Text.Plain)
+        call.respondText("User-agent: *\nDisallow: /c/\nDisallow: /p/\nDisallow: /admin\n", ContentType.Text.Plain)
     }
 
     get(CabinetHtml.CSS_PATH) {
