@@ -3,6 +3,7 @@ package com.akenory.personalka.ui.slots
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -46,8 +47,7 @@ import com.akenory.personalka.data.calendar.SlotResult
 import com.akenory.personalka.data.calendar.WaitSlots
 import com.akenory.personalka.data.calendar.WorkHours
 import com.akenory.personalka.data.prefs.DevicePrefs
-import com.akenory.personalka.domain.calendar.FreeWindow
-import com.akenory.personalka.domain.calendar.SlotDay
+import com.akenory.personalka.domain.calendar.DayStarts
 import com.akenory.personalka.domain.calendar.SlotParams
 import com.akenory.personalka.domain.client.WaitRules
 import com.akenory.personalka.domain.format.DateFormat
@@ -63,7 +63,9 @@ import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.training.DatePickerPanel
 import com.akenory.personalka.ui.training.TrainingFormKey
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.isoDayNumber
 
@@ -75,8 +77,12 @@ internal fun slotPeriodTag(days: Int) = "slots-period-$days"
 internal fun slotDurationTag(minutes: Int) = "slots-duration-$minutes"
 internal fun slotGapTag(minutes: Int?) = "slots-gap-${minutes ?: "any"}"
 internal fun slotPlaceTag(id: String?) = "slots-place-${id ?: "any"}"
-internal fun slotWindowTag(w: FreeWindow) = "slots-window-${w.date}-${w.locationId}-${w.startMinute}"
-internal fun slotPlaceRowTag(day: SlotDay, placeId: String) = "slots-place-row-${day.date}-$placeId"
+internal fun slotStartTag(day: DayStarts, minute: Int) = slotStartTag(day.date, day.locationId, minute)
+internal fun slotStartTag(date: LocalDate, placeId: String?, minute: Int) = "slots-start-$date-$placeId-$minute"
+internal fun slotPlaceRowTag(placeId: String) = "slots-place-row-$placeId"
+internal const val SLOTS_CUSTOM_TAG = "slots-custom"
+internal const val SLOTS_FROM_TAG = "slots-from"
+internal const val SLOTS_TO_TAG = "slots-to"
 
 /** Экран «Свободные слоты» в стопке «Ещё»; у «Найти время» из листа ожидания — с id записи. */
 object SlotsRoute {
@@ -93,9 +99,9 @@ object SlotsRoute {
 /**
  * «Свободные слоты» (ТЗ 5.13, 4.13): вверху параметры, ниже — окна по дням, пересчитываются сразу. Последние
  * параметры запоминаются в настройках телефона; у «Найти время» ([waitId]) дни, время, место и длительность —
- * из записи листа ожидания, и запомненные не меняются. Нажатие на окно — новая тренировка на его начало
- * ([onForm]). «Скопировать список» и «Поделиться» — текст без имён; пометки «ждёт» в него не попадают.
- * На разложенном Fold параметры слева, окна справа; параметры и прокрутка объявлены над веткой «широкий / узкий».
+ * из записи листа ожидания, и запомненные не меняются. Результат — время начала занятий по помещениям (шаг 4.3б),
+ * нажатие на время — новая тренировка на него в этом помещении ([onForm]). «Скопировать список» и «Поделиться» —
+ * текст без имён; пометки «ждёт» в него не попадают. На разложенном Fold параметры слева, время справа; параметры и прокрутка объявлены над веткой «широкий / узкий».
  */
 @Composable
 internal fun SlotsScreen(
@@ -144,53 +150,77 @@ internal fun SlotsScreen(
 
     val copy: () -> Unit = {
         result?.let {
-            clipboard.setText(AnnotatedString(SlotFormat.copyText(it.days, placeShort)))
+            clipboard.setText(AnnotatedString(SlotFormat.copyText(it.places, placeShort)))
             messages.show(SlotFormat.COPIED)
         }
     }
-    val share: (() -> Unit)? = shareText?.let { send -> { result?.let { send(SlotFormat.copyText(it.days, placeShort)) } } }
-    // Из «Найти время» окно записывает того, кто ждёт, как «Записать» в листе ожидания (4.16).
-    val open: (FreeWindow) -> Unit = { w ->
+    val share: (() -> Unit)? = shareText?.let { send -> { result?.let { send(SlotFormat.copyText(it.places, placeShort)) } } }
+    // Из «Найти время» время записывает того, кто ждёт, как «Записать» в листе ожидания (4.16).
+    val open: (LocalDateTime, String?) -> Unit = { start, place ->
         val who = wait
+        val where = place ?: params.locationId
         onForm(
             if (who == null) {
-                TrainingFormKey.new(start = w.start, locationId = w.locationId ?: params.locationId)
+                TrainingFormKey.new(start = start, locationId = where)
             } else {
-                TrainingFormKey.new(start = w.start, clientId = who.clientId, weekly = who.series, typeId = who.typeId, locationId = w.locationId ?: params.locationId, waitId = waitId)
+                TrainingFormKey.new(start = start, clientId = who.clientId, weekly = who.series, typeId = who.typeId, locationId = where, waitId = waitId)
             },
         )
     }
+    // Свои даты «С» и «По» — календарём (шаг 4.3б); открытый календарь переживает сложение.
+    var picking by rememberSaveable { mutableStateOf<String?>(null) }
+    val period = PeriodPick(query.from, query.to, params.custom(now.date)) { picking = it }
 
-    Column(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
-        TopBar(SlotFormat.TITLE, onBack = onBack)
-        if (!loaded) return@Column
-        wait?.let {
-            Text(
-                SlotFormat.forWait(it.name),
-                Modifier.padding(horizontal = Dimens.space4).padding(bottom = Dimens.space2),
-                style = MaterialTheme.typography.bodyMedium,
-                color = PersonalkaTheme.colors.textMuted,
-            )
-        }
-        if (wide) {
-            Row(Modifier.fillMaxSize()) {
-                Column(Modifier.width(360.dp).fillMaxHeight().verticalScroll(paramsScroll).padding(Dimens.space4)) {
-                    Params(params, places, more, { more = it }, change)
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
+            TopBar(SlotFormat.TITLE, onBack = onBack)
+            if (!loaded) return@Column
+            wait?.let {
+                Text(
+                    SlotFormat.forWait(it.name),
+                    Modifier.padding(horizontal = Dimens.space4).padding(bottom = Dimens.space2),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = PersonalkaTheme.colors.textMuted,
+                )
+            }
+            if (wide) {
+                Row(Modifier.fillMaxSize()) {
+                    Column(Modifier.width(360.dp).fillMaxHeight().verticalScroll(paramsScroll).padding(Dimens.space4)) {
+                        Params(params, places, period, more, { more = it }, change)
+                    }
+                    VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)
+                    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
+                        Results(result, placeShort, copy, share, open)
+                    }
                 }
-                VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
+            } else {
+                Column(Modifier.fillMaxSize().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
+                    Params(params, places, period, more, { more = it }, change)
+                    HorizontalDivider(Modifier.padding(vertical = Dimens.space4), color = PersonalkaTheme.colors.divider)
                     Results(result, placeShort, copy, share, open)
                 }
             }
-        } else {
-            Column(Modifier.fillMaxSize().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
-                Params(params, places, more, { more = it }, change)
-                HorizontalDivider(Modifier.padding(vertical = Dimens.space4), color = PersonalkaTheme.colors.divider)
-                Results(result, placeShort, copy, share, open)
-            }
+        }
+        picking?.let { end ->
+            DatePickerPanel(
+                initial = if (end == PICK_FROM) query.from else query.to,
+                onPick = { date ->
+                    picking = null
+                    val from = if (end == PICK_FROM) date else query.from
+                    val to = if (end == PICK_FROM) maxOf(query.to, date) else maxOf(date, from)
+                    change(params.copy(fromDate = from, toDate = to))
+                },
+                onDismiss = { picking = null },
+            )
         }
     }
 }
+
+private const val PICK_FROM = "from"
+private const val PICK_TO = "to"
+
+/** Период на экране: даты запроса, свои ли они, и открыть календарь для «С» или «По». */
+private class PeriodPick(val from: LocalDate, val to: LocalDate, val custom: Boolean, val onPick: (String) -> Unit)
 
 private const val PREF_KEY = "slots.params"
 
@@ -202,6 +232,7 @@ private const val PREF_KEY = "slots.params"
 private fun ColumnScope.Params(
     p: SlotParams,
     places: List<CalendarPlace>,
+    period: PeriodPick,
     more: Boolean,
     onMore: (Boolean) -> Unit,
     onChange: (SlotParams) -> Unit,
@@ -210,8 +241,19 @@ private fun ColumnScope.Params(
     Label(SlotFormat.PERIOD)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         SlotFormat.PERIODS.forEach { days ->
-            ChoiceChip(SlotFormat.period(days), p.periodDays == days, { onChange(p.copy(periodDays = days)) }, Modifier.testTag(slotPeriodTag(days)))
+            ChoiceChip(
+                SlotFormat.period(days),
+                !period.custom && p.periodDays == days,
+                { onChange(p.copy(periodDays = days, fromDate = null, toDate = null)) },
+                Modifier.testTag(slotPeriodTag(days)),
+            )
         }
+        ChoiceChip(SlotFormat.CUSTOM_PERIOD, period.custom, { period.onPick(PICK_FROM) }, Modifier.testTag(SLOTS_CUSTOM_TAG))
+    }
+    // Даты периода видны всегда: «С 27.10.2026 по 09.11.2026», нажатие — календарь.
+    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        DateChip(SlotFormat.FROM, period.from, Modifier.testTag(SLOTS_FROM_TAG)) { period.onPick(PICK_FROM) }
+        DateChip(SlotFormat.TO, period.to, Modifier.testTag(SLOTS_TO_TAG)) { period.onPick(PICK_TO) }
     }
     if (places.size > 1) {
         Label(SlotFormat.PLACE)
@@ -278,6 +320,23 @@ private fun ColumnScope.Params(
 }
 
 @Composable
+private fun DateChip(title: String, date: LocalDate, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        modifier
+            .heightIn(min = Dimens.touch)
+            .clip(MaterialTheme.shapes.small)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = Dimens.space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+        Spacer(Modifier.width(Dimens.space1))
+        Text(DateFormat.full(date), style = MaterialTheme.typography.bodyLarge, color = colors.text)
+    }
+}
+
+@Composable
 private fun Label(text: String) {
     Text(
         text,
@@ -287,74 +346,70 @@ private fun Label(text: String) {
     )
 }
 
-/** Окна по дням; вверху — сколько найдено, «Скопировать список» и «Поделиться». Пока считается — пусто. */
+/**
+ * Свободное время по помещениям (шаг 4.3б): «ББ», под ним дни «Вторник (27.10.2026)» и время начала занятий по :00
+ * и :30; вверху — сколько дней, «Скопировать список» и «Поделиться». Пока считается — пусто.
+ */
 @Composable
 private fun ColumnScope.Results(
     result: SlotResult?,
     placeShort: (String) -> String,
     onCopy: () -> Unit,
     onShare: (() -> Unit)?,
-    onOpen: (FreeWindow) -> Unit,
+    onOpen: (LocalDateTime, String?) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     if (result == null) return
-    if (result.days.isEmpty()) {
+    if (result.places.isEmpty()) {
         Text(SlotFormat.NONE, Modifier.testTag(SLOTS_NONE_TAG), style = MaterialTheme.typography.titleMedium, color = colors.text)
         Text(SlotFormat.NONE_HINT, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
         return
     }
-    Text(SlotFormat.summary(result.days), style = MaterialTheme.typography.titleMedium, color = colors.text)
+    Text(SlotFormat.summary(result.places), style = MaterialTheme.typography.titleMedium, color = colors.text)
     Text(SlotFormat.TAP_HINT, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
     Row(Modifier.padding(top = Dimens.space3), horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         OutlineButton(SlotFormat.COPY, onCopy, Modifier.testTag(SLOTS_COPY_TAG), icon = PIcons.ContentCopy)
         if (onShare != null) OutlineButton(SlotFormat.SHARE, onShare, Modifier.testTag(SLOTS_SHARE_TAG), icon = PIcons.Share)
     }
-    // Несколько помещений — окна каждого своей строкой с коротким названием (шаг 4.3а).
-    val several = result.days.flatMap { d -> d.windows.map { it.locationId } }.distinct().size > 1
-    result.days.forEach { day -> Day(day, result.waiting, if (several) placeShort else null, onOpen) }
+    result.places.forEach { place ->
+        place.locationId?.let { id ->
+            Text(
+                placeShort(id) + ":",
+                Modifier.padding(top = Dimens.space5).semantics { heading() }.testTag(slotPlaceRowTag(id)),
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.text,
+            )
+        }
+        place.days.forEach { day -> Day(day, result.waiting[day].orEmpty(), onOpen) }
+    }
 }
 
 @Composable
-private fun Day(day: SlotDay, waiting: Map<FreeWindow, List<String>>, placeShort: ((String) -> String)?, onOpen: (FreeWindow) -> Unit) {
+private fun Day(day: DayStarts, waiting: List<String>, onOpen: (LocalDateTime, String?) -> Unit) {
     val colors = PersonalkaTheme.colors
     Text(
-        SlotFormat.day(day),
-        Modifier.padding(top = Dimens.space4, bottom = Dimens.space2).semantics { heading() },
+        SlotFormat.dayLong(day.date),
+        Modifier.padding(top = Dimens.space3, bottom = Dimens.space2),
         style = MaterialTheme.typography.labelLarge,
         color = colors.text,
     )
-    day.windows.groupBy { it.locationId }.forEach { (place, windows) ->
-        if (placeShort != null && place != null) {
-            Text(
-                placeShort(place),
-                Modifier.padding(top = Dimens.space1, bottom = 4.dp).testTag(slotPlaceRowTag(day, place)),
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.textMuted,
-            )
-        }
-        FlowRow(
-            Modifier.padding(bottom = Dimens.space2),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
-            verticalArrangement = Arrangement.spacedBy(Dimens.space2),
-        ) {
-            windows.forEach { w ->
-                val names = waiting[w].orEmpty()
-                Column(
-                    Modifier
-                        .heightIn(min = Dimens.touch)
-                        .clip(MaterialTheme.shapes.small)
-                        .background(colors.surface)
-                        .clickable(role = Role.Button) { onOpen(w) }
-                        .testTag(slotWindowTag(w))
-                        .padding(horizontal = Dimens.space3, vertical = Dimens.space2),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(SlotFormat.window(w), style = MaterialTheme.typography.labelLarge, color = colors.text)
-                    if (names.isNotEmpty()) {
-                        Text(SlotFormat.waiting(names), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-                    }
-                }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        day.starts.forEach { minute ->
+            Box(
+                Modifier
+                    .heightIn(min = Dimens.touch)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(colors.surface)
+                    .clickable(role = Role.Button) { onOpen(day.at(minute), day.locationId) }
+                    .testTag(slotStartTag(day, minute))
+                    .padding(horizontal = Dimens.space3),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(SlotFormat.start(minute), style = MaterialTheme.typography.labelLarge, color = colors.text)
             }
         }
+    }
+    if (waiting.isNotEmpty()) {
+        Text(SlotFormat.waiting(waiting), Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
     }
 }

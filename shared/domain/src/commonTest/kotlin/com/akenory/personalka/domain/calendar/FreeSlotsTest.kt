@@ -58,7 +58,7 @@ class FreeSlotsTest {
         // Перерыв до 1 ч: слот начинается не позже 1 ч после конца опоры или кончается не раньше 1 ч до начала.
         // 10:00–14:00 режется у обеих ПТ, слот 11:45–12:35 (ждать 1 ч 55 мин и 1 ч 25 мин) не предлагается.
         assertEquals(
-            listOf("07:15–09:00", "10:00–11:30", "12:15–14:00", "15:00–16:30", "16:15–21:45"),
+            listOf("07:30–09:00", "10:00–11:30", "12:30–14:00", "15:00–16:30", "16:30–21:30"),
             windows(query(gap = 60)),
         )
         FreeSlots.find(query(gap = 60), day, emptyList(), places, now).single().windows.forEach { w ->
@@ -95,7 +95,7 @@ class FreeSlotsTest {
     @Test
     fun pastOfTodayIsDropped() {
         assertEquals(listOf("15:00–23:00"), windows(query(), current = at(14, 20)))
-        assertEquals(listOf("10:15–14:00", "15:00–23:00"), windows(query(), current = at(10, 5)))
+        assertEquals(listOf("10:30–14:00", "15:00–23:00"), windows(query(), current = at(10, 5)))
     }
 
     @Test
@@ -153,16 +153,29 @@ class FreeSlotsTest {
     }
 
     @Test
-    fun copyTextHasNoNames() {
-        val days = FreeSlots.find(query(), day, emptyList(), places, now)
-        assertEquals("Свободное время:\nПн 02.11: 07:00–09:00, 10:00–14:00, 15:00–23:00", SlotFormat.copyText(days))
-        // Несколько помещений — короткое название перед окнами каждого.
+    fun startsOnHalfHours() {
+        // Шаг 4.3б: первая тренировка в 9:00 — «7.00 7.30 8.00»; конец ПТ 9:50 — следующее начало 10.00.
+        val window = FreeWindow(monday, 7 * 60, 9 * 60, "bb")
+        assertEquals(listOf(420, 450, 480), FreeSlots.starts(window, 50))
+        assertEquals(listOf("7.00", "7.30", "8.00"), FreeSlots.starts(window, 50).map { SlotFormat.start(it) })
+        assertEquals(listOf(600, 630, 660, 690, 720, 750, 780), FreeSlots.starts(FreeWindow(monday, 600, 840), 50))
+    }
+
+    @Test
+    fun copyTextByPlaceWithStartTimes() {
+        // Просьба Дмитрия 27.10.2026: «ББ:», «Вторник (27.10.2026): 8.00 9.00 …», отдельно по каждому помещению.
         val closed = Restriction("r", "db", "Группа", LocalTime(10, 0), LocalTime(23, 0), date = monday, validFrom = monday)
-        val both = FreeSlots.find(query(location = null), day, listOf(closed), places, now)
+        val shortDay = query(location = null).copy(dayEnd = LocalTime(17, 0))
+        val days = FreeSlots.find(shortDay, day, listOf(closed), places, now)
+        val text = SlotFormat.copyText(FreeSlots.byPlace(days, 50)) { if (it == "bb") "ББ" else "ДБ" }
         assertEquals(
-            "Свободное время:\nПн 02.11: ББ 07:00–09:00, 10:00–14:00, 15:00–23:00; ДБ 07:00–09:00",
-            SlotFormat.copyText(both) { if (it == "bb") "ББ" else "ДБ" },
+            "ББ:\nПонедельник (02.11.2026): 7.00 7.30 8.00 10.00 10.30 11.00 11.30 12.00 12.30 13.00 15.00 15.30 16.00\n\n" +
+                "ДБ:\nПонедельник (02.11.2026): 7.00 7.30 8.00",
+            text,
         )
+        // Одно помещение без названия — только строки дней.
+        assertEquals("Понедельник (02.11.2026): 7.00 7.30 8.00", SlotFormat.copyText(listOf(PlaceStarts(null, FreeSlots.byPlace(days, 50).last().days))))
+        assertFalse(text.contains("Орлов"))
     }
 }
 

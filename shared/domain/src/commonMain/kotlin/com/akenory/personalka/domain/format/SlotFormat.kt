@@ -1,8 +1,10 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.calendar.DayStarts
 import com.akenory.personalka.domain.calendar.FreeWindow
-import com.akenory.personalka.domain.calendar.SlotDay
+import com.akenory.personalka.domain.calendar.PlaceStarts
 import com.akenory.personalka.domain.format.RuText.NBSP
+import kotlinx.datetime.LocalDate
 
 /** Строки экрана «Свободные слоты» (ТЗ 5.13, 4.13). */
 object SlotFormat {
@@ -29,7 +31,10 @@ object SlotFormat {
     const val NONE_HINT = "Увеличьте период, уберите ограничение перерыва или включите дни без тренировок"
     const val FIND_TIME = "Найти время"
     const val FIND_SLOTS = "Найти свободные слоты"
-    const val TAP_HINT = "Нажмите на окно — откроется новая тренировка на его начало"
+    const val TAP_HINT = "Нажмите на время — откроется новая тренировка"
+    const val CUSTOM_PERIOD = "Свои даты"
+    const val FROM = "С"
+    const val TO = "По"
 
     /** Чипы периода — дней от сегодня. */
     val PERIODS = listOf(7, 14, 31)
@@ -57,40 +62,37 @@ object SlotFormat {
     /** «13:00–15:00». */
     fun window(w: FreeWindow): String = DateFormat.timeRange(w.startMinute, w.endMinute)
 
-    /** «Пн 03.11» — заголовок дня. */
-    fun day(day: SlotDay): String = DateFormat.short(day.date).replaceFirstChar { it.uppercase() }
-
     /** Подпись под заголовком у «Найти время»: «Время для: Петров К. Нажмите на окно, чтобы записать». */
-    fun forWait(name: String): String = "Время для: $name. Нажмите на окно, чтобы записать"
+    fun forWait(name: String): String = "Время для: $name. Нажмите на время, чтобы записать"
 
     /** «ждёт: Петров К., Смирнова И.». */
     fun waiting(names: List<String>): String = "ждёт: " + names.joinToString(", ")
 
-    /**
-     * Текст для клиента (4.13): «Свободное время:» и строки по дням — без имён и чужих тренировок, без пометок листа
-     * ожидания. Окна в нескольких помещениях — с коротким названием перед каждым: «Пн 03.11: ББ 13:00–15:00,
-     * 18:00–19:00; ДБ 13:00–14:00»; в одном — «Пн 03.11: 13:00–15:00, 18:00–19:00». [placeShort] — «ББ» по id места.
-     */
-    fun copyText(days: List<SlotDay>, placeShort: (String) -> String = { "" }): String = buildString {
-        val several = days.flatMap { d -> d.windows.map { it.locationId } }.distinct().size > 1
-        append("Свободное время:")
-        days.forEach { d ->
-            append('\n').append(day(d)).append(": ")
-            if (several) {
-                append(
-                    d.windows.groupBy { it.locationId }.entries.joinToString("; ") { (place, windows) ->
-                        place?.let(placeShort).orEmpty() + " " + windows.joinToString(", ") { window(it) }
-                    },
-                )
-            } else {
-                append(d.windows.joinToString(", ") { window(it) })
-            }
-        }
-    }
+    /** Начало занятия, как пишет Дмитрий: «8.00», «15.30» (шаг 4.3б). */
+    fun start(minute: Int): String = "${minute / 60}.${(minute % 60).toString().padStart(2, '0')}"
 
-    /** Подпись под заголовком: «12 окон в 5 днях». */
-    fun summary(days: List<SlotDay>): String {
-        val windows = days.sumOf { it.windows.size }
-        return RuText.count(windows, "окно", "окна", "окон") + " · " + RuText.count(days.size, "день", "дня", "дней")
+    /** День в тексте и на экране: «Вторник (27.10.2026)». */
+    fun dayLong(date: LocalDate): String =
+        DateFormat.weekday(date.dayOfWeek).replaceFirstChar { it.uppercase() } + " (" + DateFormat.full(date) + ")"
+
+    /** Строка дня: «Вторник (27.10.2026): 8.00 9.00 15.00 16.00». */
+    fun dayLine(day: DayStarts): String = dayLong(day.date) + ": " + day.starts.joinToString(" ") { start(it) }
+
+    /**
+     * Текст для клиента (4.13, шаг 4.3б) — отдельно по каждому помещению, время начала занятий:
+     * «ББ:» и строки «Вторник (27.10.2026): 8.00 9.00 15.00», между помещениями — пустая строка. Без имён и чужих
+     * тренировок, без пометок листа ожидания. [placeShort] — «ББ» по id места.
+     */
+    fun copyText(places: List<PlaceStarts>, placeShort: (String) -> String = { "" }): String =
+        places.joinToString("\n\n") { place ->
+            val title = place.locationId?.let(placeShort).orEmpty()
+            val lines = place.days.joinToString("\n") { dayLine(it) }
+            if (title.isEmpty()) lines else "$title:\n$lines"
+        }
+
+    /** Подпись над списком: «5 дней со свободным временем». */
+    fun summary(places: List<PlaceStarts>): String {
+        val days = places.flatMap { p -> p.days.map { it.date } }.distinct().size
+        return RuText.count(days, "день", "дня", "дней") + " со свободным временем"
     }
 }

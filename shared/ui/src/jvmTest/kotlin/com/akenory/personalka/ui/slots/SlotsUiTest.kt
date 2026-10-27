@@ -17,7 +17,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
-import com.akenory.personalka.domain.calendar.FreeWindow
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.WaitDraft
 import com.akenory.personalka.domain.client.WaitRules
@@ -69,8 +68,10 @@ class SlotsUiTest {
 
     private fun placeId(short: String) = runBlocking { settings.places.first().single { it.shortName == short }.id }
 
-    /** Окно ср в помещении [place] — по умолчанию ББ. */
-    private fun window(from: Int, to: Int, place: String = "ББ") = slotWindowTag(FreeWindow(wednesday, from, to, placeId(place)))
+    /** Время начала в ср в помещении [place] — по умолчанию ББ. */
+    private fun at(hour: Int, minute: Int = 0, place: String = "ББ") = slotStartTag(wednesday, placeId(place), hour * 60 + minute)
+
+    private fun ComposeUiTest.absent(tag: String) = assertTrue(onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isEmpty(), tag)
 
     private fun ComposeUiTest.start() {
         setContent { Box(Modifier.size(412.dp, 960.dp)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), calendar, clock = TestData.clock) } }
@@ -85,17 +86,23 @@ class SlotsUiTest {
         awaitNode(hasTestTag(moreRowTag(MoreItem.SLOTS)))
         onNodeWithTag(moreRowTag(MoreItem.SLOTS)).performClick()
 
-        // Окна дня с тренировкой; пустые дни не показываются.
-        awaitNode(hasTestTag(window(7 * 60, 10 * 60)))
-        onNodeWithTag(window(11 * 60, 23 * 60)).performScrollTo().assertIsDisplayed()
+        // Время начала по :00 и :30: тренировка в 10:00 — до неё 7.00 … 9.00, после — с 11.00.
+        awaitNode(hasTestTag(at(7)))
+        onNodeWithTag(at(9)).performScrollTo().assertIsDisplayed()
+        absent(at(9, 30))
+        onNodeWithTag(at(11)).performScrollTo().assertIsDisplayed()
+        assertTrue(onAllNodes(hasText("Среда (21.10.2026)")).fetchSemanticsNodes().isNotEmpty())
+        onNodeWithText("ББ:").assertIsDisplayed()
 
-        // Перерыв до 1 ч: ждать 2 часа не предлагается — окна только у тренировки.
+        // Перерыв до 1 ч: ждать 2 часа не предлагается — только время у тренировки.
         onNodeWithTag(slotGapTag(60)).performScrollTo().performClick()
-        awaitNode(hasTestTag(window(11 * 60, 12 * 60 + 30)))
-        onNodeWithTag(window(8 * 60 + 15, 10 * 60)).performScrollTo().assertIsDisplayed()
+        awaitNode(hasTestTag(at(8, 30)))
+        absent(at(7))
+        absent(at(22))
+        onNodeWithTag(at(11, 30)).performScrollTo().assertIsDisplayed()
 
-        // Нажатие на окно — новая тренировка на его начало.
-        onNodeWithTag(window(8 * 60 + 15, 10 * 60)).performScrollTo().performClick()
+        // Нажатие на время — новая тренировка на него.
+        onNodeWithTag(at(8, 30)).performScrollTo().performClick()
         awaitNode(hasTestTag(FORM_SEARCH_TAG))
     }
 
@@ -125,15 +132,15 @@ class SlotsUiTest {
         onNodeWithTag(navTag(Section.MORE)).performClick()
         awaitNode(hasTestTag(moreRowTag(MoreItem.SLOTS)))
         onNodeWithTag(moreRowTag(MoreItem.SLOTS)).performClick()
-        awaitNode(hasTestTag(window(7 * 60, 10 * 60)))
-        onNodeWithTag(window(11 * 60, 23 * 60, "ДБ")).performScrollTo().assertIsDisplayed()
-        assertTrue(onAllNodes(hasTestTag(window(7 * 60, 10 * 60, "ДБ"))).fetchSemanticsNodes().isEmpty())
+        awaitNode(hasTestTag(at(7)))
+        onNodeWithTag(at(11, place = "ДБ")).performScrollTo().assertIsDisplayed()
+        absent(at(7, place = "ДБ"))
 
         // Только ДБ — запрет по-прежнему учитывается.
         onNodeWithTag(slotPlaceTag(placeId("ДБ"))).performScrollTo().performClick()
-        awaitNode(hasTestTag(window(11 * 60, 23 * 60, "ДБ")))
-        assertTrue(onAllNodes(hasTestTag(window(7 * 60, 10 * 60, "ДБ"))).fetchSemanticsNodes().isEmpty())
-        assertTrue(onAllNodes(hasTestTag(window(7 * 60, 10 * 60))).fetchSemanticsNodes().isEmpty())
+        awaitNode(hasTestTag(at(11, place = "ДБ")))
+        absent(at(7, place = "ДБ"))
+        absent(at(7))
     }
 
     @Test
@@ -164,12 +171,12 @@ class SlotsUiTest {
         onNodeWithTag(waitMenuTag("Петров Кирилл")).performClick()
         onNodeWithText(SlotFormat.FIND_TIME).performClick()
 
-        // Ср, утро — из записи: оба окна с началом до 12:00 помечены «ждёт».
-        awaitNode(hasTestTag(window(7 * 60, 10 * 60)))
+        // Ср, утро — из записи: время до 12:00, день помечен «ждёт».
+        awaitNode(hasTestTag(at(7)))
         onNodeWithText(SlotFormat.forWait("Петров К.")).assertIsDisplayed()
-        onNodeWithTag(window(7 * 60, 10 * 60)).assert(hasText(SlotFormat.waiting(listOf("Петров К."))))
-        onNodeWithTag(window(11 * 60, 12 * 60 + 45)).assert(hasText(SlotFormat.waiting(listOf("Петров К."))))
-        onNodeWithTag(window(7 * 60, 10 * 60)).performScrollTo().performClick()
+        absent(at(13))
+        assertTrue(onAllNodes(hasText(SlotFormat.waiting(listOf("Петров К.")))).fetchSemanticsNodes().isNotEmpty())
+        onNodeWithTag(at(7)).performScrollTo().performClick()
 
         // Форма — с Петровым, как «Записать» в листе ожидания.
         awaitNode(hasTestTag(formClientTag(petrov)))

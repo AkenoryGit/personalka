@@ -45,6 +45,14 @@ data class FreeWindow(val date: LocalDate, val startMinute: Int, val endMinute: 
     val start: LocalDateTime get() = LocalDateTime(date, LocalTime(startMinute / 60, startMinute % 60))
 }
 
+/** Начала занятий одного дня в помещении [locationId] и окна, из которых они взяты (для пометок «ждёт»). */
+data class DayStarts(val date: LocalDate, val locationId: String?, val starts: List<Int>, val windows: List<FreeWindow>) {
+    fun at(minute: Int): LocalDateTime = LocalDateTime(date, LocalTime(minute / 60, minute % 60))
+}
+
+/** Помещение и его дни с началами занятий. */
+data class PlaceStarts(val locationId: String?, val days: List<DayStarts>)
+
 /** Окна одного дня: по помещениям в порядке справочника, в помещении — по времени. */
 data class SlotDay(val date: LocalDate, val windows: List<FreeWindow>)
 
@@ -63,8 +71,8 @@ object FreeSlots {
     /** Длительность по умолчанию — 50 минут, как у типов (макеты, шаг 0.4). */
     const val DURATION_DEFAULT = 50
 
-    /** Шаг сетки — 15 минут. */
-    const val STEP = 15
+    /** Шаг сетки — 30 минут: начала занятий только в :00 и :30 (просьба Дмитрия 27.10.2026, шаг 4.3б). */
+    const val STEP = 30
 
     /**
      * Окна с [query.from] по [query.to]. [busy] — тренировки и дежурства тренера этих дней, отменённых среди них нет;
@@ -160,6 +168,29 @@ object FreeSlots {
         return false
     }
 
+    /**
+     * Начала занятий в окне по сетке [step]: 7:00, 7:30, 8:00 — пока слот [durationMin] влезает до конца окна.
+     * Тренировка в 9:00 и D = 50 — «7:00 7:30 8:00» (шаг 4.3б).
+     */
+    fun starts(window: FreeWindow, durationMin: Int, step: Int = STEP): List<Int> =
+        (ceil(window.startMinute, step)..window.endMinute - durationMin step step).toList()
+
+    /**
+     * Окна, разложенные для показа (шаг 4.3б): по помещениям (в порядке окон), в помещении — по дням с началами
+     * занятий; дни и помещения без начал не попадают.
+     */
+    fun byPlace(days: List<SlotDay>, durationMin: Int, step: Int = STEP): List<PlaceStarts> {
+        val order = days.flatMap { d -> d.windows.map { it.locationId } }.distinct()
+        return order.mapNotNull { place ->
+            val list = days.mapNotNull { d ->
+                val windows = d.windows.filter { it.locationId == place }
+                val starts = windows.flatMap { starts(it, durationMin, step) }.distinct().sorted()
+                if (starts.isEmpty()) null else DayStarts(d.date, place, starts, windows)
+            }
+            if (list.isEmpty()) null else PlaceStarts(place, list)
+        }
+    }
+
     private fun ceil(minute: Int, step: Int): Int = (minute + step - 1) / step * step
 
     private fun runs(flags: BooleanArray): List<IntRange> {
@@ -199,6 +230,9 @@ object FreeSlots {
  */
 data class SlotParams(
     val periodDays: Int = 14,
+    /** Свои даты «с … по …» (шаг 4.3б); есть — вместо [periodDays], пока не прошли. */
+    val fromDate: LocalDate? = null,
+    val toDate: LocalDate? = null,
     val days: Set<DayOfWeek> = emptySet(),
     val ranges: List<TimeRange> = emptyList(),
     val locationId: String? = null,
@@ -208,10 +242,16 @@ data class SlotParams(
     val dutyBusy: Boolean = false,
     val emptyDays: Boolean = false,
 ) {
-    /** Запрос с сегодняшнего дня [today] на [periodDays] дней в рамках [dayStart]–[dayEnd]. */
+    /** Свои даты заданы и ещё не прошли к [today]. */
+    fun custom(today: LocalDate): Boolean = fromDate != null && toDate != null && toDate >= today && toDate >= fromDate
+
+    /**
+     * Запрос в рамках [dayStart]–[dayEnd]: свои даты (прошедшие дни отбрасываются) или с сегодняшнего дня [today]
+     * на [periodDays] дней.
+     */
     fun query(today: LocalDate, dayStart: LocalTime, dayEnd: LocalTime): SlotQuery = SlotQuery(
-        from = today,
-        to = today.plus(periodDays - 1, DateTimeUnit.DAY),
+        from = if (custom(today)) maxOf(fromDate!!, today) else today,
+        to = if (custom(today)) toDate!! else today.plus(periodDays - 1, DateTimeUnit.DAY),
         days = days,
         ranges = ranges,
         locationId = locationId,
@@ -224,9 +264,11 @@ data class SlotParams(
         emptyDays = emptyDays,
     )
 
-    /** Строка для настроек телефона: «p=14;d=1,3;r=07:00-12:00;l=bb;m=50;g=60;f=110». */
+    /** Строка для настроек телефона: «p=14;a=;b=;d=1,3;r=07:00-12:00;l=bb;m=50;g=60;f=110». */
     fun encode(): String = listOf(
         "p=$periodDays",
+        "a=" + (fromDate?.toString() ?: ""),
+        "b=" + (toDate?.toString() ?: ""),
         "d=" + days.sortedBy { it.ordinal }.joinToString(",") { (it.ordinal + 1).toString() },
         "r=" + ranges.joinToString(",") { "${it.start}-${it.end}" },
         "l=" + locationId.orEmpty(),
@@ -244,6 +286,8 @@ data class SlotParams(
             val flags = map["f"].orEmpty()
             return SlotParams(
                 periodDays = map["p"]?.toIntOrNull()?.takeIf { it in 1..62 } ?: base.periodDays,
+                fromDate = map["a"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                toDate = map["b"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
                 days = map["d"].orEmpty().split(',').mapNotNull { it.toIntOrNull()?.takeIf { n -> n in 1..7 } }
                     .map { DayOfWeek.entries[it - 1] }.toSet(),
                 ranges = map["r"].orEmpty().split(',').mapNotNull { range ->
