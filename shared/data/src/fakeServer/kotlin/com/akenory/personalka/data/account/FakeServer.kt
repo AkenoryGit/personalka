@@ -62,7 +62,8 @@ class FakeServer {
         val deletedAt: Long?, val device: String, val data: JsonObject, val seq: Long,
     )
 
-    val rows = mutableMapOf<Triple<String, String, String>, Row>()
+    // Тест читает строки, пока обмен их пишет: обычная карта бросала ConcurrentModificationException.
+    val rows: MutableMap<Triple<String, String, String>, Row> = java.util.concurrent.ConcurrentHashMap()
     private var seq = 0L
 
     /** Удалённые до этого номера стёрты (чистка 90 дней): выдача с меньшего `since` — 410. */

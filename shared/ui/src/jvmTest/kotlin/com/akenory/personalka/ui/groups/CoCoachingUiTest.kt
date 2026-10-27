@@ -93,6 +93,8 @@ class CoCoachingUiTest {
 
         awaitNode(hasText(CoCoachingFormat.EMPTY))
         onNodeWithText(CoCoachingFormat.NEW).performClick()
+        // Форма открывается не в тот же кадр — ждём кнопку.
+        awaitNode(hasText("Сохранить"))
         onNodeWithText("Сохранить").performClick()
         onNodeWithText("Введите имя").assertIsDisplayed()
         onNodeWithTag(COLLEAGUE_NAME_TAG).performTextInput("Лена")
