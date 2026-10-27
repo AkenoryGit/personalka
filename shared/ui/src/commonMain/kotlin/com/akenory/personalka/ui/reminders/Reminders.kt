@@ -2,13 +2,16 @@ package com.akenory.personalka.ui.reminders
 
 import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.calendar.CalendarRepository
+import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.money.SalaryRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.reminders.DiaryPrefs
+import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.home.HomeRules
+import com.akenory.personalka.domain.money.AdvanceState
 import com.akenory.personalka.domain.reminder.Reminder
 import com.akenory.personalka.domain.reminder.ReminderRules
 import com.akenory.personalka.domain.reminder.ReminderSettings
@@ -104,8 +107,47 @@ class Reminders(
         val advance = salary?.advance(now.date.yearMonth)?.first()
         val advanceDays = advanceDays(now.date).first()
         val due = ReminderRules.due(last, now, settings, slots, noDiary.map { it.id }.toSet(), advanceDays)
+        val notices = notices(due, now, home, noDiary, advance)
+        return ReminderCheck(notices, ReminderRules.next(now, settings, slots, advanceDays))
+    }
+
+    /**
+     * Уведомления наперёд — для iPhone (шаг 5.1): там нет будильника, который разбудит приложение для [check], поэтому
+     * система получает [limit] ближайших готовых уведомлений. Считаются по данным на сейчас и ничего не
+     * меняют; тренировка, которая к своему времени ещё не прошла, считается без дневника — «Дневник сразу» придёт,
+     * если дневник у неё вообще ведётся по настройкам. Приложение пересчитывает их при каждом открытии и правке.
+     */
+    suspend fun upcoming(limit: Int = UPCOMING): List<Pair<LocalDateTime, Notice>> {
+        if (!calendar.reminders.ready()) return emptyList()
+        val settings = settings(calendar.reminders.prefs.first())
+        val noDiary = calendar.diaries.missing.first()
+        var from = ClubTime.now(clock())
+        val advance = salary?.advance(from.date.yearMonth)?.first()
+        val out = mutableListOf<Pair<LocalDateTime, Notice>>()
+        repeat(limit) {
+            val home = calendar.homeTrainings(from.date).first()
+            val slots = home.map { it.slot() }
+            val advanceDays = advanceDays(from.date).first()
+            val at = ReminderRules.next(from, settings, slots, advanceDays) ?: return out
+            val ahead = noDiary.map { it.id }.toSet() + slots.filter { it.end > from }.map { it.id }
+            val due = ReminderRules.due(from, at, settings, slots, ahead, advanceDays)
+            notices(due, at, home, noDiary, advance).forEach { out += at to it }
+            if (out.size >= limit) return out.take(limit)
+            from = at
+        }
+        return out
+    }
+
+    private suspend fun notices(
+        due: List<Reminder>,
+        now: LocalDateTime,
+        home: List<CalendarTraining>,
+        noDiary: List<MissingDiary>,
+        advance: AdvanceState?,
+    ): List<Notice> {
+        val slots = home.map { it.slot() }
         val byId = home.associateBy { it.id }
-        val notices = due.mapNotNull { reminder ->
+        return due.mapNotNull { reminder ->
             when (reminder) {
                 Reminder.Digest -> {
                     val todos = homeTodos(
@@ -148,7 +190,6 @@ class Reminders(
                 }
             }
         }
-        return ReminderCheck(notices, ReminderRules.next(now, settings, slots, advanceDays))
     }
 
     /**
@@ -171,5 +212,8 @@ class Reminders(
         const val ADVANCE_KEY = "advance"
         const val DIGEST_KEY = "digest"
         const val DAY_PLAN_KEY = "dayPlan"
+
+        /** Сколько проверок наперёд отдаётся системе (у iPhone предел — 64 ожидающих уведомления). */
+        const val UPCOMING = 40
     }
 }

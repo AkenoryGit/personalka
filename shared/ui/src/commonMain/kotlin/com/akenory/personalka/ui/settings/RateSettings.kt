@@ -258,11 +258,11 @@ internal fun RateEditor(
                     )
                 }
 
-                val history = own.groupBy { it.rate.validFrom }.toSortedMap(compareByDescending { it })
+                val history = own.groupBy { it.rate.validFrom }.entries.sortedByDescending { it.key }
                 if (history.isNotEmpty()) {
                     SectionLabel(RateFormat.HISTORY)
                     ListCard {
-                        history.entries.forEachIndexed { index, (since, versions) ->
+                        history.forEachIndexed { index, (since, versions) ->
                             if (index > 0) RowDivider()
                             val line = versions.sortedBy { v -> places.indexOfFirst { it.id == v.rate.locationId }.let { if (it < 0) Int.MAX_VALUE else it } }
                                 .map { (it.rate.locationId?.let { id -> names[id] }) to it.amounts }

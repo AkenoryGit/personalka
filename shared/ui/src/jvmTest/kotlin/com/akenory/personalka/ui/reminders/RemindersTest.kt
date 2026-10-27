@@ -123,6 +123,28 @@ class RemindersTest {
     }
 
     @Test
+    fun upcomingForIphoneAhead() {
+        // iPhone (шаг 5.1): в 10:00 система получает уведомления дня наперёд — группа в 14:15, дневник ПТ в 15:05,
+        // сводка в 21:00. Расчёт наперёд ничего не меняет: время прошлой проверки не записано.
+        val settings = TestData.ready(diary = true)
+        val pt = dayWithTodos(settings)
+        runBlocking {
+            TestData.calendarOf(settings).reminders.saveInstantDiary(true)
+            TestData.calendarOf(settings).reminders.saveInstantGroup(true)
+        }
+        val reminders = remindersOf(settings)
+        now = at(10)
+        val ahead = runBlocking { reminders.upcoming() }
+        val today = ahead.filter { it.first.date == this.today }
+        assertEquals(listOf(at(14, 15), at(15, 5), at(21)), today.map { it.first }.distinct())
+        assertTrue(today.first().second.open is AppLink.Card)
+        assertEquals(AppLink.Diary(pt), today.single { it.first == at(15, 5) }.second.open)
+        assertEquals(NoticeChannel.DIGEST, today.last().second.channel)
+        assertTrue(ahead.size <= Reminders.UPCOMING)
+        assertNull(prefs.string(Reminders.CHECKED))
+    }
+
+    @Test
     fun dayPlanIsPhoneSettingAndOffByDefault() {
         val settings = TestData.ready()
         dayWithTodos(settings)

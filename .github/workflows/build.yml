@@ -56,11 +56,13 @@ jobs:
       - name: Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # Общий код под iPhone (шаг 5.1): Linux собирает klib для iOS — ошибки iosMain и commonMain видны здесь,
+      # само приложение iPhone собирает Xcode на Mac.
       - name: Тесты, проверки и APK
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew check :androidApp:assembleDebug :tools:import:importJar :server:serverJar --continue --console=plain --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew check :androidApp:assembleDebug :tools:import:importJar :server:serverJar :shared:ui:compileKotlinIosArm64 --continue --console=plain --stacktrace 2>&1 | tee build-log.txt
 
       - name: Что внутри APK
         if: success()

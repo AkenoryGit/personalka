@@ -1,0 +1,9 @@
+// «Персоналка» для iPhone (шаг 5.1). Пакет не меняется после первой установки (CLAUDE.md).
+// TEAM_ID — команда Apple Developer Дмитрия (та же, что у Planovo): с ней подписываются свой iPhone и TestFlight.
+// Номер сборки ставит фаза «Номер сборки» — число коммитов.
+APP_NAME = Персоналка
+PRODUCT_NAME = Personalka
+BUNDLE_ID = com.akenory.personalka
+TEAM_ID = N32V26YV5Y
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1

@@ -38,6 +38,14 @@ kotlin {
         withHostTestBuilder {}
     }
 
+    // iPhone (шаг 5.1): всё приложение — эти экраны во фреймворке PersonalkaUI, его собирает Xcode (iosApp).
+    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "PersonalkaUI"
+            isStatic = true
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(project(":shared:domain"))

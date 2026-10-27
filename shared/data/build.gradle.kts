@@ -23,6 +23,10 @@ kotlin {
         }
     }
 
+    // iPhone (шаг 5.1): платформенное — iosMain (база в Application Support, Keychain, NSUserDefaults, CommonCrypto и zlib).
+    iosArm64()
+    iosSimulatorArm64()
+
     compilerOptions {
         // expect object PersonalkaDatabaseConstructor — его actual пишет Room.
         freeCompilerArgs.add("-Xexpect-actual-classes")
@@ -45,6 +49,9 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.ktor.client.android)
         }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
+        }
         // Сервер входа в памяти (шаг 2.8а) — для тестов слоя данных и экранов.
         jvmTest {
             kotlin.srcDir("src/fakeServer/kotlin")
@@ -60,6 +67,8 @@ kotlin {
 dependencies {
     add("kspAndroid", libs.androidx.room3.compiler)
     add("kspJvm", libs.androidx.room3.compiler)
+    add("kspIosArm64", libs.androidx.room3.compiler)
+    add("kspIosSimulatorArm64", libs.androidx.room3.compiler)
 }
 
 // Схемы версий базы хранятся в репозитории: по ним Room проверяет и строит миграции.

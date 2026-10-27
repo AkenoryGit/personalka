@@ -55,6 +55,8 @@ ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref 
 # Вход в приложении (шаг 2.8а): клиент Ktor той же версии, на Android — движок на HttpURLConnection, без OkHttp.
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
+# iPhone (шаг 5.1): движок на NSURLSession.
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }

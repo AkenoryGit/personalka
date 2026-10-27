@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // Сущности, правила и расчёты на чистом Kotlin (ТЗ 2.2).
-// JVM-сборка нужна серверу и утилите импорта, Android — приложению; iOS добавится на шаге 5.1.
+// JVM-сборка нужна серверу и утилите импорта, Android и iOS (шаг 5.1) — приложениям.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -20,6 +20,9 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
+
+    iosArm64()
+    iosSimulatorArm64()
 
     sourceSets {
         commonMain.dependencies {
