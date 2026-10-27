@@ -18,6 +18,7 @@ data class DiaryPrefs(
     val instantGroup: Boolean = false,
     val followup: Boolean = true,
     val followupDays: Int = FollowupRules.DEFAULT_DAYS,
+    val reliability: Boolean = true,
 )
 
 /**
@@ -43,6 +44,7 @@ class ReminderSettingsRepository internal constructor(private val db: Personalka
                 s.instantGroup,
                 s.followupEnabled,
                 s.followupDays,
+                s.reliabilityEnabled,
             )
         }
     }
@@ -63,6 +65,8 @@ class ReminderSettingsRepository internal constructor(private val db: Personalka
     suspend fun saveInstantGroup(on: Boolean) = update { it.copy(instantGroup = on) }
 
     suspend fun saveFollowup(on: Boolean) = update { it.copy(followupEnabled = on) }
+
+    suspend fun saveReliability(on: Boolean) = update { it.copy(reliabilityEnabled = on) }
 
     suspend fun saveFollowupDays(days: Int) {
         require(days in ReminderRules.FOLLOWUP_DAYS) { "Срок «без записи»: $days" }

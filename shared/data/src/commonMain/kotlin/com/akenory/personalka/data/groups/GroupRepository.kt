@@ -1,6 +1,7 @@
 package com.akenory.personalka.data.groups
 
 import androidx.room3.withWriteTransaction
+import com.akenory.personalka.data.clients.ClientReliability
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ClientEntity
@@ -69,6 +70,7 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
     private val schedule = db.scheduleDao()
     private val reference = db.referenceDao()
     private val coaches = db.coachDao()
+    private val reliability = ClientReliability(db)
 
     /** Все группы с составом и расписанием на [today] и дальше. */
     fun rows(today: LocalDate): Flow<List<GroupRow>> = combine(
@@ -94,12 +96,12 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
      * и фамилии. Архивных и удалённых нет — архив сам выводит из групп, удалённого спрашивать не о ком.
      */
     fun absent(today: LocalDate): Flow<List<AbsentMember>> = combine(
-        clients.observeGroups(),
-        clients.observeAllMembers(),
+        combine(clients.observeGroups(), clients.observeAllMembers(), ::Pair),
         trainings.observeGroupTrainings(),
         trainings.observeGroupParticipations(),
         clients.observeClients(ClientStatus.ACTIVE),
-    ) { groups, members, groupTrainings, participations, active ->
+        reliability.observeGroups(),
+    ) { (groups, members), groupTrainings, participations, active, attendance ->
         val clientOf = active.associateBy { it.id }
         val byId = groupTrainings.associateBy { it.id }
         val held = groupTrainings.filter { it.status == TrainingStatus.DONE }.groupBy({ it.groupId }, { it.start.date })
@@ -118,7 +120,9 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
                 keptOn = mine.mapNotNull { it.absenceKeptOn }.maxOrNull(),
                 keeps = mine.maxOf { it.absenceKeeps },
             )
-            GroupAbsence.ask(input, held[groupId].orEmpty(), today)?.let { AbsentMember(group, clientId, client, it, input.keeps) }
+            // Не ходит 30 дней — или ходит, но редко (шаг 3.14б; выключенная надёжность — не спрашивает).
+            val absence = GroupAbsence.ask(input, held[groupId].orEmpty(), today) ?: GroupAbsence.askRare(input, attendance[groupId to clientId], today)
+            absence?.let { AbsentMember(group, clientId, client, it, input.keeps) }
         }.sortedWith(compareBy({ it.group.name }, { ClientRules.key("${it.client.lastName} ${it.client.firstName}") }))
     }
 

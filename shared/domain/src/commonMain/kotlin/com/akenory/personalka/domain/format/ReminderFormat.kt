@@ -72,6 +72,8 @@ object ReminderFormat {
     const val DIGEST = "Вечерняя сводка"
     const val DIGEST_NOTE = "Одно уведомление со всеми делами дня. Если дел нет, не приходит"
     const val FOLLOWUP = "Клиенты без записи"
+    const val RELIABILITY = "Надёжность клиентов"
+    const val RELIABILITY_NOTE = "Сколько из последних тренировок клиент пришёл — в карточках и календаре. Видна только вам"
     const val FOLLOWUP_DAYS = "Нет записи дальше чем на"
     const val MORE = "Дополнительно"
     const val INSTANT_DIARY = "Дневник сразу"

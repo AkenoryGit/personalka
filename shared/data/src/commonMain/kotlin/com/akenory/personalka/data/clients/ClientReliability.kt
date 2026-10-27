@@ -10,8 +10,12 @@ import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
 
@@ -25,17 +29,53 @@ data class ConfirmVisit(val clientId: String, val name: String, val start: Local
 class ClientReliability internal constructor(db: PersonalkaDatabase) {
     private val clients = db.clientDao()
     private val trainings = db.trainingDao()
+    private val coaches = db.coachDao()
 
-    /** Надёжность всех клиентов, у кого есть ПТ, сплиты или группы; у кого их нет — в карте его нет. */
-    fun observe(): Flow<Map<String, Reliability>> = trainings.observeReliabilityRows().map { rows ->
-        rows.groupBy({ it.clientId }, { it.visit() }).mapValues { (_, visits) -> ReliabilityRules.of(visits) }
+    /** Выключатель «Надёжность клиентов» в настройках (шаг 3.14а); настроек ещё нет — включена. */
+    val enabled: Flow<Boolean> = coaches.observeSettings().map { it?.reliabilityEnabled ?: true }.distinctUntilChanged()
+
+    /**
+     * Надёжность всех клиентов, у кого есть ПТ, сплиты или мини-группы; у кого их нет — в карте его нет. Выключена
+     * в настройках — карта пустая: надёжности не видно нигде.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observe(): Flow<Map<String, Reliability>> = enabled.flatMapLatest { on ->
+        if (!on) {
+            flowOf(emptyMap())
+        } else {
+            trainings.observeReliabilityRows().map { rows ->
+                rows.groupBy({ it.clientId }, { it.visit() }).mapValues { (_, visits) -> ReliabilityRules.of(visits) }
+            }
+        }
+    }
+
+    /**
+     * Посещаемость детей в группах и мини-группах (шаг 3.14б): по группе и ребёнку — его последние 50 тренировок
+     * этой группы. Выключена в настройках — пусто.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeGroups(): Flow<Map<Pair<String, String>, Reliability>> = enabled.flatMapLatest { on ->
+        if (!on) {
+            flowOf(emptyMap())
+        } else {
+            trainings.observeReliabilityRows().map { rows ->
+                rows.filter { it.groupId != null }
+                    .groupBy({ it.groupId!! to it.clientId }, { it.visit() })
+                    .mapValues { (_, visits) -> ReliabilityRules.ofGroup(visits) }
+            }
+        }
     }
 
     /**
      * «Уточнить, придёт ли» на «Главной»: сегодняшние ещё не начавшиеся ПТ, сплиты и мини-группы, где клиента ждут,
      * а его надёжность красная. По началу.
      */
-    fun confirm(now: LocalDateTime): Flow<List<ConfirmVisit>> = combine(trainings.observeReliabilityRows(), clients.observeAllClients()) { rows, all ->
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun confirm(now: LocalDateTime): Flow<List<ConfirmVisit>> = enabled.flatMapLatest { on ->
+        if (on) confirmOn(now) else flowOf(emptyList())
+    }
+
+    private fun confirmOn(now: LocalDateTime): Flow<List<ConfirmVisit>> = combine(trainings.observeReliabilityRows(), clients.observeAllClients()) { rows, all ->
         val byClient = rows.groupBy({ it.clientId }, { it.visit() })
         val names = all.filter { it.status == ClientStatus.ACTIVE }.associateBy { it.id }
         rows.asSequence()

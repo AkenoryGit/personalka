@@ -119,4 +119,33 @@ class ReliabilityTest {
         val note = ReliabilityFormat.confirmNote(listOf("Иванов И." to at(0), "Петров П." to at(0).let { LocalDateTime(it.date, LocalTime(18, 30)) }, "Сидоров С." to at(0)))
         assertEquals("Иванов И., 17:00 · Петров П., 18:30 и ещё 1", note)
     }
+
+    @Test
+    fun groupAttendanceAndRareKids() {
+        // Шаг 3.14б: большая группа считается по своим занятиям; группу отменили целиком — не в счёт.
+        fun group(day: Int, came: Boolean) = ReliabilityVisit(
+            at(day), TrainingKind.GROUP, "Группа", "Группа", TrainingStatus.DONE,
+            if (came) ParticipationStatus.ATTENDED else ParticipationStatus.CANCELLED,
+        )
+        val visits = (0 until 12).map { group(it, came = it % 3 == 0) } +
+            group(20, came = false).copy(training = TrainingStatus.CANCELLED, participation = ParticipationStatus.EXPECTED)
+        val r = ReliabilityRules.ofGroup(visits)
+        assertEquals(Reliability(4, 8), r)
+        assertEquals(33, r.percent)
+        assertTrue(ReliabilityRules.rareInGroup(r))
+        // Меньше 10 занятий или от 50 % — не предлагаем.
+        assertFalse(ReliabilityRules.rareInGroup(Reliability(2, 7)))
+        assertFalse(ReliabilityRules.rareInGroup(Reliability(5, 5)))
+        assertFalse(ReliabilityRules.rareInGroup(null))
+
+        val input = com.akenory.personalka.domain.group.AbsenceInput(first, lastAttended = first.plus(9, DateTimeUnit.DAY), keptOn = null, keeps = 0)
+        val today = first.plus(12, DateTimeUnit.DAY)
+        val rare = com.akenory.personalka.domain.group.GroupAbsence.askRare(input, r, today)!!
+        assertEquals(33, rare.rarePercent)
+        assertEquals("ходит на 33\u00A0% занятий из 12", com.akenory.personalka.domain.format.GroupFormat.absentSince(rare, null))
+        // «Оставить» — спросит через 30 дней; дважды — больше никогда.
+        assertNull(com.akenory.personalka.domain.group.GroupAbsence.askRare(input.copy(keptOn = today, keeps = 1), r, today.plus(29, DateTimeUnit.DAY)))
+        assertTrue(com.akenory.personalka.domain.group.GroupAbsence.askRare(input.copy(keptOn = today, keeps = 1), r, today.plus(30, DateTimeUnit.DAY)) != null)
+        assertNull(com.akenory.personalka.domain.group.GroupAbsence.askRare(input.copy(keptOn = today, keeps = 2), r, today.plus(90, DateTimeUnit.DAY)))
+    }
 }

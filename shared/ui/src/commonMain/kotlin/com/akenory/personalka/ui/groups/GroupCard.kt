@@ -222,7 +222,7 @@ fun GroupCard(
 
                 val absent = allAbsent.filter { it.group.id == groupId }
                 if (absent.isNotEmpty()) {
-                    FormLabelSpaced("${GroupFormat.ABSENT_TITLE} · ${absent.size}")
+                    FormLabelSpaced("${GroupFormat.absentTitle(absent.map { it.absence })} · ${absent.size}")
                     AbsentList(absent, groupId, groups, clients, messages, scope)
                 }
 

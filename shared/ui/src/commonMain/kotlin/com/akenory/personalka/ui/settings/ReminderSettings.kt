@@ -54,6 +54,7 @@ internal const val AUTO_DONE_TAG = "reminders-auto-done"
 internal const val DIGEST_TAG = "reminders-digest"
 internal const val DIGEST_TIME_TAG = "reminders-digest-time"
 internal const val FOLLOWUP_TAG = "reminders-followup"
+internal const val RELIABILITY_SWITCH_TAG = "reminders-reliability"
 internal const val MORE_TAG = "reminders-more"
 internal const val INSTANT_DIARY_TAG = "reminders-instant-diary"
 internal const val INSTANT_GROUP_TAG = "reminders-instant-group"
@@ -132,6 +133,8 @@ internal fun ReminderSettingsScreen(
                         save { saveFollowupDays(days) }
                     }
                 }
+                // Надёжность клиентов (4.18, шаг 3.14а): выключена — её не видно нигде.
+                SwitchRow(ReminderFormat.RELIABILITY, loaded.reliability, { on -> save { saveReliability(on) } }, Modifier.testTag(RELIABILITY_SWITCH_TAG), ReminderFormat.RELIABILITY_NOTE)
                 if (reminders != null) {
                     // «Аванс» 25-го в 19:00 (5.19) — по умолчанию включён, поэтому не под «Дополнительно».
                     SwitchRow(

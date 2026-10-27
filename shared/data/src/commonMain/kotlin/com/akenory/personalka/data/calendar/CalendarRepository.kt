@@ -1,6 +1,7 @@
 package com.akenory.personalka.data.calendar
 
 import androidx.room3.withWriteTransaction
+import com.akenory.personalka.data.clients.ClientReliability
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.GroupEntity
@@ -32,6 +33,7 @@ import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.calendar.ZoneSpan
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
+import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.format.BlockWho
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.CoCoachingFormat
@@ -93,6 +95,8 @@ data class CalendarTraining(
     val group: Boolean = false,
     val name: String = title,
     val who: BlockWho? = null,
+    /** Надёжность клиента запланированной ПТ или сплита (шаг 3.14а); «новый» и выключенная — `null`. */
+    val reliability: Reliability? = null,
 )
 
 /** Что вышло из переноса тренировки (5.3). */
@@ -231,6 +235,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     private val reference = db.referenceDao()
     private val coaches = db.coachDao()
     private val schedule = db.scheduleDao()
+    private val reliability = ClientReliability(db)
 
     val workHours: Flow<WorkHours> = coaches.observeSettings().map { settings ->
         if (settings == null) WorkHours() else WorkHours(settings.workDayStart, settings.workDayEnd)
@@ -303,7 +308,8 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
             trainings.observeParticipationsBetween(start, end),
             names,
             coaches.observeSettings(),
-        ) { list, participations, n, settings ->
+            reliability.observe(),
+        ) { list, participations, n, settings, reliable ->
             val byTraining = participations.groupBy { it.trainingId }
             val diaryEnabled = settings?.diaryEnabled ?: false
             val coCoaching = settings?.coCoachingEnabled == true
@@ -344,6 +350,15 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                     marked = marked,
                     // Как строка «Проводим» карточки (5.4): выключено или отменена — не видно.
                     who = if (coCoaching && !cancelled && type?.kind == TrainingKind.GROUP) CoCoachingFormat.blockWho(t.sharing(), n.colleagues) else null,
+                    // Надёжность на блоке (шаг 3.14а): запланированная ПТ или сплит — самая низкая из ждущих клиентов.
+                    reliability = if (t.status != TrainingStatus.PLANNED || type == null || type.kind !in BLOCK_RELIABILITY) {
+                        null
+                    } else {
+                        people.filter { it.status == ParticipationStatus.EXPECTED }
+                            .mapNotNull { reliable[it.clientId] }
+                            .filter { it.percent != null }
+                            .minByOrNull { it.percent!! }
+                    },
                 )
             }
         }
@@ -483,6 +498,7 @@ private fun TrainingEntity.toCalendar(
     badges: List<CalendarBadge>,
     marked: Boolean,
     who: BlockWho?,
+    reliability: Reliability?,
 ) = CalendarTraining(
     id = id,
     start = start,
@@ -501,4 +517,8 @@ private fun TrainingEntity.toCalendar(
     done = status == TrainingStatus.DONE,
     group = type?.kind == TrainingKind.GROUP,
     who = who,
+    reliability = reliability,
 )
+
+/** На блоке календаря надёжность — у ПТ и сплита; у мини-группы она в строке каждого ребёнка карточки. */
+private val BLOCK_RELIABILITY = setOf(TrainingKind.PERSONAL, TrainingKind.SPLIT)

@@ -106,10 +106,13 @@ import com.akenory.personalka.domain.calendar.GridHours
 import com.akenory.personalka.domain.calendar.GridView
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.calendar.ZonePlace
+import com.akenory.personalka.domain.client.ReliabilityLevel
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.ReliabilityFormat
 import com.akenory.personalka.domain.format.WhoKind
 import com.akenory.personalka.domain.training.TrainingTime
+import com.akenory.personalka.ui.components.reliabilityTone
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.Motion
@@ -117,18 +120,18 @@ import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.theme.WhoTone
-import com.akenory.personalka.ui.theme.whoTone
 import com.akenory.personalka.ui.theme.dutyFill
 import com.akenory.personalka.ui.theme.tabular
+import com.akenory.personalka.ui.theme.whoTone
+import kotlinx.coroutines.launch
+import kotlin.math.floor
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
-import kotlinx.coroutines.launch
 import kotlinx.datetime.plus
-import kotlin.math.floor
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 const val CALENDAR_GRID_TAG = "calendar-grid"
 const val CALENDAR_PAGER_TAG = "calendar-pager"
@@ -173,10 +176,19 @@ data class BlockInfo(
     val who: String = "",
     val whoShort: String = who,
     val whoKind: WhoKind? = null,
+    /** Надёжность клиента запланированной ПТ или сплита (шаг 3.14а): «84 %» и её уровень; пусто — не видна. */
+    val reliability: String = "",
+    val reliabilityLevel: ReliabilityLevel? = null,
 ) {
-    /** Блок словами — для TalkBack и тестов: имя, кто ведёт, время, «тип · место». */
+    /** Блок словами — для TalkBack и тестов: имя, кто ведёт, время, «тип · место», надёжность. */
     val lines: List<String>
-        get() = listOfNotNull(name, who.ifEmpty { null }, time, listOf(type, place).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null })
+        get() = listOfNotNull(
+            name,
+            who.ifEmpty { null },
+            time,
+            listOf(type, place).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null },
+            reliability.ifEmpty { null }?.let { ReliabilityFormat.TITLE + " " + it },
+        )
 }
 
 /** Метка «+N», как её видит тест: подпись и скрытые тренировки. */
@@ -1075,6 +1087,8 @@ internal fun dayBlocks(
             who = training.who?.full.orEmpty(),
             whoShort = training.who?.short.orEmpty(),
             whoKind = training.who?.kind,
+            reliability = training.reliability?.let { ReliabilityFormat.value(it) }.orEmpty(),
+            reliabilityLevel = training.reliability?.level,
         )
     }
     val more = layout.more.map { m ->
@@ -1111,7 +1125,9 @@ private fun CalendarTraining.timeText(): String = DateFormat.timeRange(start, Tr
  * Строка «время и плашки» блока: плашка «кто ведёт» [who] (шаг 3.9л), время (его может не быть) и плашки типа
  * и места; пустая — ничего не рисует.
  */
-private class MetaLine(val time: TextLayoutResult?, val tags: List<TextLayoutResult>, val who: TextLayoutResult? = null)
+private class MetaLine(val time: TextLayoutResult?, val tags: List<TextLayoutResult>, val who: TextLayoutResult? = null, val rel: TextLayoutResult? = null) {
+    fun with(rel: TextLayoutResult?) = MetaLine(time, tags, who, rel)
+}
 
 /** Измеренный текст блока: строки имени и строки «время и плашки»; [inline] — всё в одной строке. */
 private class BlockText(val name: List<TextLayoutResult>, val meta: List<MetaLine>, val inline: Boolean)
@@ -1178,11 +1194,13 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
     val start = time(block.start)
     val none = MetaLine(null, emptyList())
     fun MetaLine.width(): Float {
-        val parts = listOfNotNull(who?.size?.width?.plus(pad * 2), time?.size?.width?.toFloat()) + tags.map { it.size.width + pad * 2 }
+        val parts = listOfNotNull(who?.size?.width?.plus(pad * 2), time?.size?.width?.toFloat(), rel?.size?.width?.plus(pad * 2)) + tags.map { it.size.width + pad * 2 }
         return parts.sum() + gap * (parts.size - 1).coerceAtLeast(0)
     }
     val whoFull = tag(block.who)
     val whoShort = tag(block.whoShort)
+    // Надёжность (шаг 3.14а) — последней в строке плашек и только если входит: место и время важнее.
+    val rel = tag(block.reliability)
     if (lines <= 1) {
         val free = width - room - wide(block.name) - gap
         val candidates = if (whoFull != null) {
@@ -1190,7 +1208,7 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
         } else {
             listOf(MetaLine(start, both), MetaLine(start, placeOnly), MetaLine(null, placeOnly))
         }
-        val meta = candidates.firstOrNull { it.width() <= free } ?: none
+        val meta = candidates.firstOrNull { it.width() <= free }?.let { m -> m.with(rel).takeIf { rel != null && it.width() <= free } ?: m } ?: none
         val used = meta.width().let { if (it > 0f) it + gap else 0f }
         return BlockText(name(width - room - used, 1), listOf(meta), inline = true)
     }
@@ -1210,9 +1228,10 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
                 ),
             )
     }
+    fun MetaLine.withRel() = if (rel != null && with(rel).fits()) with(rel) else this
     if (who != null && lines == 2) {
         val withPlace = MetaLine(null, placeOnly, who.who)
-        return BlockText(name(width - room, 1), listOf(if (withPlace.fits()) withPlace else who), inline = false)
+        return BlockText(name(width - room, 1), listOf((if (withPlace.fits()) withPlace else who).withRel()), inline = false)
     }
     val title = name(width - room, lines - if (who != null) 2 else 1)
     val rows = lines - title.size - if (who != null) 1 else 0
@@ -1229,7 +1248,7 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
                 .firstOrNull { it.fits() } ?: none,
         )
     }
-    return BlockText(title, listOfNotNull(who) + meta, inline = false)
+    return BlockText(title, listOfNotNull(who) + meta.dropLast(1) + meta.last().withRel(), inline = false)
 }
 
 /** Подпись зоны в одну строку: у дежурства — справа, у запрета — слева, на плашке. */
@@ -1376,10 +1395,10 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
             y += line
         }
         if (text.inline) {
-            text.meta.forEach { drawMeta(it, left + text.name.first().size.width + TAG_GAP.toPx(), rect.top + TEXT_TOP.toPx(), line, ink, whoTone, colors) }
+            text.meta.forEach { drawMeta(it, left + text.name.first().size.width + TAG_GAP.toPx(), rect.top + TEXT_TOP.toPx(), line, ink, whoTone, colors, block.reliabilityLevel) }
         } else {
             text.meta.forEach {
-                drawMeta(it, left, y, line, ink, whoTone, colors)
+                drawMeta(it, left, y, line, ink, whoTone, colors, block.reliabilityLevel)
                 y += line
             }
         }
@@ -1392,7 +1411,7 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
  * Плашка «кто ведёт» — сплошная, своим цветом на каждый случай [who] (шаг 3.9п): своя один, своя вдвоём, группа
  * коллеги, ведёт коллега.
  */
-private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, ink: Color, who: WhoTone?, colors: PersonalkaColors) {
+private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, ink: Color, who: WhoTone?, colors: PersonalkaColors, level: ReliabilityLevel?) {
     var left = x
     val gap = TAG_GAP.toPx()
     if (meta.who != null && who != null) {
@@ -1422,6 +1441,15 @@ private fun DrawScope.drawMeta(meta: MetaLine, x: Float, y: Float, line: Float, 
         )
         drawText(tag, color = ink, topLeft = Offset(left + padX, top + padY))
         left += width + gap
+    }
+    meta.rel?.let { tag ->
+        // Надёжность — сплошной плашкой цвета уровня, как в карточках.
+        val (fill, text) = reliabilityTone(level, colors)
+        val width = tag.size.width + padX * 2
+        val height = tag.size.height + padY * 2
+        val top = y + (line - height) / 2
+        drawRoundRect(color = fill, topLeft = Offset(left, top), size = Size(width, height), cornerRadius = CornerRadius(TAG_RADIUS.toPx()))
+        drawText(tag, color = text, topLeft = Offset(left + padX, top + padY))
     }
 }
 

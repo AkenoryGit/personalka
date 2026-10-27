@@ -263,6 +263,48 @@ class GroupsUiTest {
     }
 
     @Test
+    fun rareChildOfferedAndPercentInTrainingCard() = runComposeUiTest {
+        // Шаг 3.14б: Ева ходит на 4 из 12 занятий (33 %) — «ходит редко» с тремя кнопками; Глеб — на все, его нет.
+        val eva = kid("Белова", "Ева")
+        val gleb = kid("Ильин", "Глеб")
+        val id = group()
+        groups.addMember(id, eva, LocalDate(2026, 9, 1))
+        groups.addMember(id, gleb, LocalDate(2026, 9, 1))
+        val db = TestData.dbOf(settings)
+        runBlocking {
+            val coach = db.coachDao().currentCoach()!!.id
+            val type = settings.types.first().first { it.shortName == "Группа" }.id
+            val place = settings.places.first().first { it.shortName == "ББ" }.id
+            (1..12).forEach { day ->
+                val t = TrainingEntity("r$day", SyncFields.new(coach, 1), type, place, LocalDateTime(2026, 10, day, 9, 0), 45, groupId = id, status = TrainingStatus.DONE)
+                db.trainingDao().upsertTraining(t)
+                val came = day % 3 == 1
+                db.trainingDao().upsertParticipation(ParticipationEntity("re$day", SyncFields.new(coach, 1), t.id, eva, if (came) ParticipationStatus.ATTENDED else ParticipationStatus.CANCELLED))
+                db.trainingDao().upsertParticipation(ParticipationEntity("rg$day", SyncFields.new(coach, 1), t.id, gleb, ParticipationStatus.ATTENDED))
+            }
+            // Сегодняшняя группа: в карточке у каждого — как он ходит в эту группу.
+            val today = TrainingEntity("today", SyncFields.new(coach, 1), type, place, LocalDateTime(2026, 10, 20, 17, 0), 45, groupId = id)
+            db.trainingDao().upsertTraining(today)
+            db.trainingDao().upsertParticipation(ParticipationEntity("te", SyncFields.new(coach, 1), today.id, eva))
+            db.trainingDao().upsertParticipation(ParticipationEntity("tg", SyncFields.new(coach, 1), today.id, gleb))
+            val card = TestData.calendarOf(settings).cards.card("today").first()!!
+            assertEquals(mapOf(eva to 33, gleb to 100), card.reliability.mapValues { it.value.percent })
+        }
+        openGroupCard()
+        awaitNode(hasText("Не ходят или ходят редко · 1"))
+        onNodeWithText(s("ходит на 33_% занятий из 12")).assertIsDisplayed()
+        assertEquals(0, onAllNodes(hasTestTag(absentRowTag("Ильин Глеб"))).fetchSemanticsNodes().size)
+        onNodeWithText("Оставить").performClick()
+        awaitNode(hasText("Оставили. Спрошу ещё раз через 30 дней"))
+
+        // Надёжность выключена — карточка тренировки без процентов.
+        runBlocking {
+            TestData.calendarOf(settings).reminders.saveReliability(false)
+            assertTrue(TestData.calendarOf(settings).cards.card("today").first()!!.reliability.isEmpty())
+        }
+    }
+
+    @Test
     fun absentChildRemovedOrArchived() = runComposeUiTest {
         val (_, eva) = absentEva()
         openGroupCard()

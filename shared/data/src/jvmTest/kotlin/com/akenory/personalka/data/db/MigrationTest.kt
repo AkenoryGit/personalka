@@ -443,8 +443,39 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion13() {
-        assertEquals(13, PersonalkaDatabase.VERSION)
-        assertTrue((1..12).all { schemaFile(it).exists() }, "Схемы версий 1–12 хранятся: по ним строятся переходы")
+    fun version13KeepsSettingsAndGetsReliabilityOn(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v13", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.9х–3.14: выключателя надёжности нет, а сама она уже видна.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 13)
+                raw.exec(
+                    "INSERT INTO coach_settings (id, cancelNoticeMinutes, diaryEnabled, digestEnabled, digestTime, instantDiary, instantGroup, " +
+                        "followupEnabled, followupDays, cabinetsEnabled, coCoachingEnabled, workDayStart, workDayEnd, dragStepMinutes, " +
+                        "seriesHorizonWeeks, upcomingInCard, autoDonePersonal, weekViewDays, backupFolderUri, backupFrequency, " +
+                        "coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('s1', 90, 1, 1, '21:00', 0, 0, 1, 14, 0, 0, '07:00', '23:00', 15, 8, 4, 1, 3, NULL, 'DAILY', 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val settings = db.coachDao().observeSettings().first()!!
+                assertEquals(90, settings.cancelNoticeMinutes, "Настройки не тронуты")
+                assertTrue(settings.reliabilityEnabled, "У прежних надёжность включена")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion14() {
+        assertEquals(14, PersonalkaDatabase.VERSION)
+        assertTrue((1..13).all { schemaFile(it).exists() }, "Схемы версий 1–13 хранятся: по ним строятся переходы")
     }
 }

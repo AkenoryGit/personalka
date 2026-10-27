@@ -39,6 +39,7 @@ import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.calendar.CALENDAR_GRID_TAG
+import com.akenory.personalka.ui.calendar.calendarDayTag
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.CREATE_NOW_TAG
 import com.akenory.personalka.ui.settings.PlatformFiles
@@ -184,6 +185,28 @@ class HomeUiTest {
         // Имя ведёт в карточку клиента: там та же надёжность.
         onNode(inCard(s("Орлов_М."))).performClick()
         awaitNode(hasText(s("Надёжность 60_%")))
+    }
+
+    @Test
+    fun reliabilityOnCalendarBlockAndSwitchedOff() = runComposeUiTest {
+        // Шаг 3.14а: «Надёжность 60 %» на блоке ПТ в календаре; выключатель в настройках убирает её отовсюду.
+        val orlov = client("Орлов", "Максим")
+        (1..10).forEach { past(orlov, it, came = it > 4) }
+        training("17:00", orlov)
+        openHome()
+        awaitNode(hasTestTag(todoTag(TodoKind.CONFIRM_VISIT)))
+
+        onNodeWithTag(navTag(Section.CALENDAR)).performClick()
+        awaitNode(hasTestTag(calendarDayTag(today)) and hasContentDescription(s("Надёжность 60_%"), substring = true))
+
+        runBlocking { calendar.reminders.saveReliability(false) }
+        awaitNode(hasTestTag(calendarDayTag(today)) and hasContentDescription("Орлов", substring = true))
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodes(hasTestTag(calendarDayTag(today)) and hasContentDescription("Надёжность", substring = true)).fetchSemanticsNodes().isEmpty()
+        }
+        onNodeWithTag(navTag(Section.HOME)).performClick()
+        awaitNode(hasTestTag(NEAREST_TAG))
+        assertEquals(0, onAllNodes(hasTestTag(todoTag(TodoKind.CONFIRM_VISIT))).fetchSemanticsNodes().size)
     }
 
     @Test

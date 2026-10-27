@@ -306,11 +306,20 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                     val birth = c?.birthDate?.takeIf { !p.toState().isCancelled && ClientRules.isBirthday(it, t.start.date) }
                     birth?.let { ClientFormat.birthday(CalendarFormat.client(ClientName(c.lastName, c.firstName, c.middleName)), it, t.start.date) }
                 },
-                reliable = t.status == TrainingStatus.PLANNED && ReliabilityRules.counts(kind, type?.name.orEmpty(), type?.shortName.orEmpty()),
+                reliable = t.status == TrainingStatus.PLANNED &&
+                    (kind == TrainingKind.GROUP || ReliabilityRules.counts(kind, type?.name.orEmpty(), type?.shortName.orEmpty())),
             )
-        }.combine(reliability.observe()) { card, all ->
-            // Надёжность (шаг 3.14) — у запланированной ПТ, сплита и мини-группы, у каждого клиента.
-            if (!card.reliable) card else card.copy(reliability = card.clients.filter { !it.erased }.associate { it.id to (all[it.id] ?: Reliability.NONE) })
+        }.combine(combine(reliability.enabled, reliability.observe(), reliability.observeGroups(), ::Triple)) { card, (on, all, groups) ->
+            // Надёжность (шаг 3.14) — у запланированной ПТ и сплита; у группы и мини-группы — как ребёнок ходит
+            // именно в эту группу (шаг 3.14б). Выключена в настройках (шаг 3.14а) — её нет.
+            val people = card.clients.filter { !it.erased }
+            val group = card.groupId
+            when {
+                !card.reliable || !on -> card
+                card.state.kind == TrainingKind.GROUP ->
+                    if (group == null) card else card.copy(reliability = people.associate { it.id to (groups[group to it.id] ?: Reliability.NONE) })
+                else -> card.copy(reliability = people.associate { it.id to (all[it.id] ?: Reliability.NONE) })
+            }
         }
     }
 
