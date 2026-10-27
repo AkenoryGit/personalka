@@ -1,5 +1,7 @@
 package com.akenory.personalka.domain.group
 
+import com.akenory.personalka.domain.client.Reliability
+import com.akenory.personalka.domain.client.ReliabilityRules
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
@@ -17,8 +19,11 @@ data class AbsenceInput(
     val keeps: Int,
 )
 
-/** Вопрос о ребёнке, который не ходит в группу: [since] — с какого дня его нет (последний раз пришёл или пришёл в группу). */
-data class Absence(val since: LocalDate, val attendedEver: Boolean)
+/**
+ * Вопрос о ребёнке, который не ходит в группу: [since] — с какого дня его нет (последний раз пришёл или пришёл в группу).
+ * [rarePercent] — ходит, но редко (шаг 3.14б): сколько процентов занятий он приходит; `null` — не ходит 30 дней.
+ */
+data class Absence(val since: LocalDate, val attendedEver: Boolean, val rarePercent: Int? = null, val rareTotal: Int = 0)
 
 object GroupAbsence {
     /** Через сколько дней без группы приложение спрашивает. */
@@ -38,5 +43,15 @@ object GroupAbsence {
         if (from.plus(DAYS, DateTimeUnit.DAY) > today) return null
         if (held.none { it > from && it <= today }) return null
         return Absence(since = input.lastAttended ?: input.fromDate, attendedEver = input.lastAttended != null)
+    }
+
+    /**
+     * Ходит редко (шаг 3.14б): в этой группе приходит реже чем на половину занятий из десяти и больше
+     * (`ReliabilityRules.rareInGroup`). Спрашивает так же: после «Оставить» — через 30 дней, после второго — никогда.
+     */
+    fun askRare(input: AbsenceInput, attendance: Reliability?, today: LocalDate): Absence? {
+        if (input.keeps >= KEEPS || !ReliabilityRules.rareInGroup(attendance)) return null
+        if (input.keptOn != null && input.keptOn.plus(DAYS, DateTimeUnit.DAY) > today) return null
+        return Absence(input.lastAttended ?: input.fromDate, input.lastAttended != null, attendance!!.percent, attendance.total)
     }
 }

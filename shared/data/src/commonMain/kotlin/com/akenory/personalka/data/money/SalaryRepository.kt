@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.money
 
+import com.akenory.personalka.domain.money.SalarySetupRules
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
@@ -73,6 +74,7 @@ data class SalaryMonthData(
     val groups: Map<String, String> = emptyMap(),
     val colleagueSchemes: Map<String, PaySchemeKind> = emptyMap(),
     val duties: DutyCheck = DutyCheck(emptyList(), null, canCheck = false),
+    val payTypes: Boolean = true,
 )
 
 /** «Период» (5.12, 3.7в): расчёт [view] и месяцы, которые он задевает, — для имён, доплат и тренировок. */
@@ -84,7 +86,13 @@ data class SalaryPeriodData(val view: SalaryPeriod, val months: List<SalaryMonth
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
-class SalaryRepository(private val db: PersonalkaDatabase, private val clock: () -> Long) {
+class SalaryRepository(
+    private val db: PersonalkaDatabase,
+    private val clock: () -> Long,
+    // Виды оплаты (решение Дмитрия 27.10.2026): открыта ли «С налогом 6,5 %» у аккаунта. Закрыта — свои схемы и
+    // схемы коллег считаются «100 % 10-го», а их названий в данных экрана нет (SalarySetupRules.payTypes).
+    private val payTypes: Flow<Boolean> = flowOf(true),
+) {
     private val trainingDao = db.trainingDao()
     private val reference = db.referenceDao()
     private val money = db.moneyDao()
@@ -112,6 +120,7 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         val spt: List<SptCaseEntity>,
         val adjustments: List<MonthAdjustmentEntity>,
         val records: List<MonthRecordEntity>,
+        val payTypes: Boolean = true,
     )
 
     /**
@@ -158,6 +167,16 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
                 colleagueSchemes.groupBy { it.colleagueId },
                 spt, adjustments, records,
             )
+        }.combine(payTypes) { m, open ->
+            if (open) {
+                m
+            } else {
+                m.copy(
+                    schemes = m.schemes.map(SalarySetupRules::plain),
+                    colleagueSchemes = m.colleagueSchemes.mapValues { (_, list) -> list.map { it.copy(kind = PaySchemeKind.NONE) } },
+                    payTypes = false,
+                )
+            }
         }
         // Отметки «Рассчитались» (3.8): у коллеги с двумя записями (два телефона) — последняя изменённая.
         val settled = (if (first == last) money.observeSettlements(first) else money.observeSettlementsBetween(first, last))
@@ -251,9 +270,10 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
         return SalaryMonthData(
             view, m.adjustments, s.types.associateBy { it.id }, places.associateBy { it.id }, n.colleagues,
             input = input, trainings = ofMonth.associateBy { it.id }, whom = whom, groups = n.groups,
-            colleagueSchemes = m.colleagueSchemes.mapNotNull { (id, list) ->
+            colleagueSchemes = if (!m.payTypes) emptyMap() else m.colleagueSchemes.mapNotNull { (id, list) ->
                 Versions.activeIn(list, month) { it.validFrom }?.let { id to it.kind }
             }.toMap(),
+            payTypes = m.payTypes,
             duties = DutyCheckRules.build(input, view.pay, today, records[month]?.dutiesCheckedMin),
         )
     }
@@ -266,10 +286,11 @@ class SalaryRepository(private val db: PersonalkaDatabase, private val clock: ()
      * Читает только схемы выплат и записи месяцев — не пересчитывает зарплату. У схемы без аванса — `null`.
      */
     fun advance(month: YearMonth): Flow<AdvanceState?> =
-        combine(coaches.observePaySchemeVersions(), money.observeMonthRecords()) { schemes, records ->
+        combine(coaches.observePaySchemeVersions(), money.observeMonthRecords(), payTypes) { schemes, records, open ->
             // Две записи месяца с двух телефонов — последняя изменённая, как в build.
             val record = records.filter { it.month == month }.maxWithOrNull(compareBy({ it.sync.updatedAt }, { it.id }))
-            Payouts.advance(month, schemes.map { it.payScheme() }, record?.advanceActual)
+            // Без видов оплаты аванса нет (27.10.2026).
+            if (open) Payouts.advance(month, schemes.map { it.payScheme() }, record?.advanceActual) else null
         }
 
     /** Фактический аванс месяца [month] (4.11); `null` — снова ожидаемый. */

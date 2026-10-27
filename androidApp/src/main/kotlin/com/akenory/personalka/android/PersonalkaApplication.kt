@@ -1,5 +1,6 @@
 package com.akenory.personalka.android
 
+import com.akenory.personalka.data.account.payTypes
 import android.app.Application
 import com.akenory.personalka.BuildConfig
 import com.akenory.personalka.data.account.AccountRepository
@@ -41,7 +42,9 @@ class PersonalkaApplication : Application() {
     val database: PersonalkaDatabase by lazy {
         personalkaDatabase(this) { connection, from -> backup.beforeMigration(connection, from) }
     }
-    val settings: SettingsRepository by lazy { SettingsRepository(database, System::currentTimeMillis) }
+    // Виды оплаты — по возможности аккаунта из админки (27.10.2026): аккаунт читает базу через settings только в
+    // своих запросах, поэтому ленивые поля друг друга не ждут.
+    val settings: SettingsRepository by lazy { SettingsRepository(database, account.payTypes(System::currentTimeMillis), System::currentTimeMillis) }
     val clients: ClientRepository by lazy { ClientRepository(database, System::currentTimeMillis) }
     val groups: GroupRepository by lazy { GroupRepository(database, System::currentTimeMillis) }
     val calendar: CalendarRepository by lazy { CalendarRepository(database, System::currentTimeMillis) }
@@ -55,7 +58,7 @@ class PersonalkaApplication : Application() {
      */
     val backup: BackupRepository by lazy {
         val updates = UpdateCopies(fileBackupFolder(), File(filesDir, "update-backups").path)
-        BackupRepository(database, prefs, safBackupFolder(this), updates, System::currentTimeMillis)
+        BackupRepository(database, prefs, safBackupFolder(this), updates, account.payTypes(System::currentTimeMillis), System::currentTimeMillis)
     }
 
     /** Аккаунт на сервере (шаг 2.8а): id тренера и адрес сервера — из базы, токен — в Android Keystore. */

@@ -183,9 +183,9 @@ fun SettingsScreen(
             val type = loadedTypes.firstOrNull { it.id == SettingsRoute.rateTypeId(route) } ?: return
             RateEditor(settings.rates, type, activePlaces, loadedTypes, now.date, messages, scope, close)
         }
-        route == SettingsRoute.COLLEAGUES -> ColleaguesScreen(settings, now.date, shell, close)
-        route == SettingsRoute.NEW_COLLEAGUE -> ColleagueEditor(settings, null, now.date, messages, scope, close)
-        SettingsRoute.colleagueId(route) != null -> ColleagueEditor(settings, SettingsRoute.colleagueId(route), now.date, messages, scope, close)
+        route == SettingsRoute.COLLEAGUES -> ColleaguesScreen(settings, openFeatures(account, now.date), now.date, shell, close)
+        route == SettingsRoute.NEW_COLLEAGUE -> ColleagueEditor(settings, null, openFeatures(account, now.date), now.date, messages, scope, close)
+        SettingsRoute.colleagueId(route) != null -> ColleagueEditor(settings, SettingsRoute.colleagueId(route), openFeatures(account, now.date), now.date, messages, scope, close)
         route == SettingsRoute.CABINETS -> if (cabinets) CabinetSettingsScreen(settings, messages, scope, close)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
         route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)

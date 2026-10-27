@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -232,6 +232,16 @@ internal object Migration12To13 : Migration(12, 13) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `wait_entry` ADD COLUMN `remindFrom` TEXT")
         connection.exec("ALTER TABLE `wait_entry` ADD COLUMN `hideUntilRemind` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
+ * Версия 14 (шаг 3.14а): выключатель «Надёжность клиентов» в настройках тренера (4.18). У прежних — включена: ею уже
+ * пользуются.
+ */
+internal object Migration13To14 : Migration(13, 14) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `coach_settings` ADD COLUMN `reliabilityEnabled` INTEGER NOT NULL DEFAULT 1")
     }
 }
 

@@ -51,7 +51,7 @@ object AdminFormat {
     fun note(feature: Feature): String = when (feature) {
         Feature.SERVER_COPY -> "Синхронизация, второй телефон, восстановление"
         Feature.CABINETS -> "Ссылки для родителей; открывают и копию на сервере"
-        Feature.HALF_OFFICIAL -> "Второй вариант оплаты Академии — выбор в «Зарплате»"
+        Feature.HALF_OFFICIAL -> "Виды оплаты: выбор «с налогом 6,5\u00A0%» у себя и у коллег. Выключено — о них ни слова, всё 100\u00A0% 10-го"
     }
 
     /**

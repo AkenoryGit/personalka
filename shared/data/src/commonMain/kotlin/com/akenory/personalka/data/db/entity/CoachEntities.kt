@@ -53,6 +53,8 @@ data class CoachSettingsEntity(
     val followupDays: Int = 14,
     val cabinetsEnabled: Boolean = false,
     val coCoachingEnabled: Boolean = false,
+    /** Надёжность клиентов (4.18): включена — видна в карточках, календаре и на «Главной». С версии 14 базы. */
+    val reliabilityEnabled: Boolean = true,
     /** Часы сетки календаря и рамки поиска слотов; по умолчанию — часы клуба. */
     val workDayStart: LocalTime = LocalTime(7, 0),
     val workDayEnd: LocalTime = LocalTime(23, 0),

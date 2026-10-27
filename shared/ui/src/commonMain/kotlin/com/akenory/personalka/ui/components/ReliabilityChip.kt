@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.client.ReliabilityLevel
 import com.akenory.personalka.ui.theme.Dimens
+import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 
@@ -20,14 +21,14 @@ fun reliabilityTag(clientId: String) = "reliability-$clientId"
 
 /** Фон и текст надёжности (шаг 3.14): зелёный, жёлтый, красный — не оранжевый «+»; «новый» — нейтральный. */
 @Composable
-fun reliabilityColors(r: Reliability): Pair<Color, Color> {
-    val colors = PersonalkaTheme.colors
-    return when (r.level) {
-        ReliabilityLevel.HIGH -> colors.doneContainer to colors.onDoneContainer
-        ReliabilityLevel.MIDDLE -> colors.chargedContainer to colors.onChargedContainer
-        ReliabilityLevel.LOW -> colors.errorContainer to colors.onErrorContainer
-        null -> colors.surfaceAlt to colors.textMuted
-    }
+fun reliabilityColors(r: Reliability): Pair<Color, Color> = reliabilityTone(r.level, PersonalkaTheme.colors)
+
+/** То же для рисования без Compose — плашка на блоке календаря (шаг 3.14а). */
+fun reliabilityTone(level: ReliabilityLevel?, colors: PersonalkaColors): Pair<Color, Color> = when (level) {
+    ReliabilityLevel.HIGH -> colors.doneContainer to colors.onDoneContainer
+    ReliabilityLevel.MIDDLE -> colors.chargedContainer to colors.onChargedContainer
+    ReliabilityLevel.LOW -> colors.errorContainer to colors.onErrorContainer
+    null -> colors.surfaceAlt to colors.textMuted
 }
 
 /** Плашка надёжности клиента: [text] — «84 %», «новый» или «Надёжность 84 %». */

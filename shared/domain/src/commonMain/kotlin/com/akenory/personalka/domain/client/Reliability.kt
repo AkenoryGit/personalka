@@ -79,8 +79,11 @@ object ReliabilityRules {
     }
 
     /** Пришёл (`true`), отменил (`false`) или не считается (`null`). */
-    fun came(visit: ReliabilityVisit): Boolean? {
-        if (!counts(visit.kind, visit.typeName, visit.typeShort)) return null
+    fun came(visit: ReliabilityVisit): Boolean? =
+        if (counts(visit.kind, visit.typeName, visit.typeShort)) outcome(visit) else null
+
+    /** То же без отбора по типу: пришёл, отменил или не считается. */
+    fun outcome(visit: ReliabilityVisit): Boolean? {
         return when (ClientOutcome.of(visit.training, visit.participation)) {
             ClientOutcome.PLANNED -> null
             ClientOutcome.DONE -> true
@@ -103,6 +106,22 @@ object ReliabilityRules {
         val done = last.count { it }
         return Reliability(done, last.size - done)
     }
+
+    /**
+     * Посещаемость ребёнка в одной группе или мини-группе (шаг 3.14б): последние [WINDOW] её тренировок, где его
+     * ждали, — пришёл или нет. [visits] — только тренировки этой группы.
+     */
+    fun ofGroup(visits: List<ReliabilityVisit>): Reliability {
+        val last = visits.sortedByDescending { it.start }.mapNotNull { outcome(it) }.take(WINDOW)
+        val done = last.count { it }
+        return Reliability(done, last.size - done)
+    }
+
+    /** Предложить убрать из группы (шаг 3.14б): ниже [GROUP_LOW] % из [GROUP_MIN] и больше занятий. */
+    const val GROUP_LOW = 50
+    const val GROUP_MIN = 10
+
+    fun rareInGroup(r: Reliability?): Boolean = r != null && r.total >= GROUP_MIN && (r.percent ?: 100) < GROUP_LOW
 
     /** Спросить, придёт ли: надёжность красная. */
     fun ask(reliability: Reliability?): Boolean = reliability?.level == ReliabilityLevel.LOW

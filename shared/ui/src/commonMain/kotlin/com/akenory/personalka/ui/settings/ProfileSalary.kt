@@ -80,7 +80,7 @@ internal fun ProfileSalaryRows(settings: SettingsRepository, open: Set<Feature>,
             onClick = { shell.open(SettingsRoute.CATEGORY) },
             modifier = Modifier.testTag(CATEGORY_ROW_TAG),
         )
-        if (SalarySetupRules.schemeRow(open, scheme?.kind)) {
+        if (SalarySetupRules.schemeRow(open)) {
             RowDivider()
             NavRow(
                 title = SalarySetupFormat.SCHEME,

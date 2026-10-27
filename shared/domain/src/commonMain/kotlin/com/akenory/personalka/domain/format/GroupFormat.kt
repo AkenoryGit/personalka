@@ -39,8 +39,14 @@ object GroupFormat {
     const val ARCHIVE = "В архив"
     const val KEEP = "Оставить"
 
-    /** «не была с 19.09», «ни разу не был». */
+    /** Заголовок блока: есть те, кто ходит редко (шаг 3.14б), — «Не ходят или ходят редко». */
+    fun absentTitle(list: List<Absence>): String = if (list.any { it.rarePercent != null }) "Не ходят или ходят редко" else ABSENT_TITLE
+
+    /** «не была с 19.09», «ни разу не был»; ходит редко — «ходит на 40 % занятий из 20». */
     fun absentSince(absence: Absence, sex: Sex?): String {
+        absence.rarePercent?.let { p ->
+            return "ходит на $p${RuText.NBSP}% занятий из ${RuText.digits(absence.rareTotal.toLong())}"
+        }
         val verb = RuText.bySex(sex, "не был", "не была", "не был(а)")
         return if (absence.attendedEver) "$verb с ${DateFormat.dayMonth(absence.since)}" else "ни разу $verb"
     }

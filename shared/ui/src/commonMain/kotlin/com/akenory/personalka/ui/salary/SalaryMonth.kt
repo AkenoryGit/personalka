@@ -298,7 +298,7 @@ internal fun SalaryMonthScreen(
         }
         val loaded = data?.takeIf { it.view.month == month } ?: return@BoxWithConstraints
         if (planOpen) {
-            PlanPanel(loaded.view, onDismiss = { planOpen = false }) { amount ->
+            PlanPanel(loaded.view, loaded.payTypes, onDismiss = { planOpen = false }) { amount ->
                 planOpen = false
                 scope.launch {
                     repo.savePlan(month, amount)
@@ -794,7 +794,8 @@ private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () ->
     SalaryCard {
         Muted(SalaryFormat.ACCRUED)
         Text(MoneyFormat.rub(payout.accrued), style = MaterialTheme.typography.headlineSmall, color = colors.text)
-        Muted(SalaryFormat.accruedNote(view.period, today, payout.kind))
+        // Без видов оплаты — без названия схемы (27.10.2026).
+        if (data.payTypes) Muted(SalaryFormat.accruedNote(view.period, today, payout.kind)) else SalaryFormat.accruedNote(view.period, today)?.let { Muted(it) }
         val scheme = view.scheme
         if (payout.official != 0L && scheme != null) {
             HorizontalDivider(thickness = 1.dp, color = colors.divider)
@@ -856,14 +857,14 @@ private fun AdvanceChip(received: Boolean) {
 // --- Окна ---
 
 @Composable
-private fun PlanPanel(view: SalaryMonth, onDismiss: () -> Unit, onSave: (Long) -> Unit) {
+private fun PlanPanel(view: SalaryMonth, payTypes: Boolean, onDismiss: () -> Unit, onSave: (Long) -> Unit) {
     var text by rememberSaveable { mutableStateOf(RateRules.moneyText(view.plan)) }
     var tried by rememberSaveable { mutableStateOf(false) }
     val amount = RateRules.money(text)
     val error = if (!tried) null else RateRules.moneyProblem(text) ?: if (amount == null || amount == 0L) SalaryFormat.AMOUNT_EMPTY else null
     Panel(SalaryFormat.PLAN_TITLE, onDismiss) {
         Field(
-            SalaryFormat.PLAN_FIELD,
+            if (payTypes) SalaryFormat.PLAN_FIELD else SalaryFormat.PLAN_FIELD_PLAIN,
             text,
             { text = it },
             error = error,
@@ -908,7 +909,7 @@ private fun AdjustmentPanel(
             tag = ADJUST_AMOUNT_TAG,
         )
         Field(SalaryFormat.ADJUST_FOR, comment, { comment = it }, error = commentError, tag = ADJUST_FOR_TAG)
-        CheckRow(SalaryFormat.IN_CLUB, inClub, { inClub = it }, subtitle = SalaryFormat.IN_CLUB_NOTE)
+        CheckRow(SalaryFormat.IN_CLUB, inClub, { inClub = it }, subtitle = if (data.payTypes) SalaryFormat.IN_CLUB_NOTE else SalaryFormat.IN_CLUB_NOTE_PLAIN)
         willBe?.let { Muted(SalaryFormat.earnedWillBe(it)) }
         val save = {
             tried = true

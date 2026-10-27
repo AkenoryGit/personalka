@@ -147,7 +147,7 @@ class DataSettingsUiTest {
             putString("backup.updateName", "trener-backup-20261019-0905.zip")
             putString("backup.updateAt", "2026-10-19T09:05")
         }
-        val withCopy = BackupRepository(TestData.dbOf(settings), prefs, folder, UpdateCopies(updates, "update-backups"), TestData.clock)
+        val withCopy = BackupRepository(TestData.dbOf(settings), prefs, folder, UpdateCopies(updates, "update-backups"), clock = TestData.clock)
         val plain = BackupRepository(TestData.dbOf(settings), MemoryPrefs().apply { putBoolean("backup.encrypt", false) }, folder, clock = TestData.clock)
         updates.files["trener-backup-20261019-0905.zip"] = runBlocking { plain.create()!!.bytes }
         setContent {

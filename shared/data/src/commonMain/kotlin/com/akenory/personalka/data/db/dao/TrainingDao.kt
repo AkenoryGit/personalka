@@ -31,6 +31,8 @@ data class ClientVisit(
 data class ReliabilityRow(
     val clientId: String,
     val start: LocalDateTime,
+    /** Группа тренировки: посещаемость ребёнка в ней (шаг 3.14б). */
+    val groupId: String?,
     val kind: TrainingKind,
     val typeName: String,
     val typeShort: String,
@@ -273,7 +275,7 @@ interface TrainingDao {
      */
     @Query(
         """
-        SELECT p.clientId AS clientId, t.start AS start, ty.kind AS kind, ty.name AS typeName, ty.shortName AS typeShort,
+        SELECT p.clientId AS clientId, t.start AS start, t.groupId AS groupId, ty.kind AS kind, ty.name AS typeName, ty.shortName AS typeShort,
                t.status AS trainingStatus, p.status AS participationStatus,
                p.cancelReason AS participationReason, t.cancelReason AS trainingReason
         FROM participation AS p
