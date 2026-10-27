@@ -19,7 +19,7 @@
 | [`docs/mockups/design-system/`](docs/mockups/design-system/README.md) | Палитра, шрифты, отступы, элементы; готовые `theme/Color.kt` и `theme/Theme.kt` |
 | [`docs/mockups/icon/`](docs/mockups/icon/README.md) | Иконка: SVG и готовые ресурсы Android в `res/` |
 | `shared/domain`, `shared/data`, `shared/ui` | Общий код (ТЗ 2.2); тема — `shared/ui/.../ui/theme/` |
-| `androidApp`, `server`, `tools/import` | Приложение Android, сервер, утилита импорта; `iosApp` — с шага 5.1 |
+| `androidApp`, `iosApp`, `server`, `tools/import` | Приложения Android и iPhone (с шага 5.1), сервер, утилита импорта |
 | [`deploy/`](deploy/README.md) | Сервер на VPS: служба, Caddy, база, переключение версии с откатом, установка по шагам |
 | [`gradle/libs.versions.toml`](gradle/libs.versions.toml) | Все версии: Kotlin, AGP, Compose, библиотеки |
 | [`.github/workflows/build.yml`](.github/workflows/build.yml) | Сборка при каждом push: тесты, lint, APK |
@@ -31,7 +31,8 @@
 - **APK:** только в релизе «Последняя сборка» из `main`, ссылка постоянная: `releases/download/latest-build/personalka.apk`. Артефакты Actions не используются: хранилище на аккаунте общее (500 МБ) и заполнено.
 - **Подпись:** отладочный ключ лежит в `androidApp/debug.keystore`, поэтому каждая новая сборка ставится поверх прежней с сохранением данных. Номер версии — номер сборки в Actions.
 - **Схема базы** (`shared/data/schemas`) пишется Room при сборке. В ветку шага её коммитит сама сборка («N.N: схема базы из сборки K») — после зелёной сборки сделать `git pull`. В `main` схема обязана совпадать со сборкой.
-- **Общий код** в `commonMain` — только общий Kotlin, без `java.*` и Android: iOS-цели добавятся на шаге 5.1.
+- **Общий код** в `commonMain` — только общий Kotlin, без `java.*` и Android (и без функций только JVM вроде `toSortedMap`): с шага 5.1 у модулей есть цели iOS, «Сборка» компилирует klib для iOS (`:shared:ui:compileKotlinIosArm64`). Платформенное для iPhone — `iosMain` (`shared/data/.../iosMain`, `shared/ui/.../ios`).
+- **iPhone** собирается только на Mac Дмитрия (Remote Control): репозиторий — `~/Downloads/iOS Personalka/personalka`, Xcode — `iosApp/iosApp.xcodeproj`, первая сборка Kotlin — `./gradlew :shared:ui:linkDebugFrameworkIosSimulatorArm64`, тесты общего кода на iOS — `:shared:data:iosSimulatorArm64Test`; подробно — [`iosApp/README.md`](iosApp/README.md).
 - **Тесты сервера** — на настоящем PostgreSQL 16: в Actions — служба `postgres:16` сборки, в облачной сессии — свой PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, `initdb` и `pg_ctl` от пользователя `postgres`) и `TRENER_TEST_DB_URL`, `TRENER_TEST_DB_USER`, `TRENER_TEST_DB_PASSWORD`. Если Maven Central отвечает 429 — зеркало `maven-central.storage-download.googleapis.com` через init-скрипт (`-I`) в папке сессии (шаг 2.7).
 - **Тесты экранов** — в `shared/ui/src/jvmTest` через `runComposeUiTest`: у `shared/ui` есть JVM-цель только для них, Compose рисуется на компьютере без телефона. Логика, которой нужно состояние Compose, тоже тестируется там.
 
