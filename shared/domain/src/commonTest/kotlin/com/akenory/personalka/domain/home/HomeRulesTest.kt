@@ -54,7 +54,7 @@ class HomeRulesTest {
 
     @Test
     fun ongoingPtStaysUntilItsEnd() {
-        // Шаг 3.9т: 15:48 — ПТ 15:00 идёт, на «Главной» она и её план, а не мини-группа 16:00.
+        // Шаг 3.9ф: 15:48 — ПТ 15:00 идёт, на «Главной» она и её план, а не мини-группа 16:00.
         val now = at(15, 48)
         val nearest = HomeRules.nearest(day, now)
         assertEquals("pt15", nearest?.id)

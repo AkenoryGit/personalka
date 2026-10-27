@@ -138,7 +138,7 @@ class HomeUiTest {
 
     @Test
     fun ongoingTrainingStaysWithItsPlan() = runComposeUiTest {
-        // Шаг 3.9т: ПТ 15:00 идёт — на «Главной» она и её план до конца, а не следующая в 16:20.
+        // Шаг 3.9ф: ПТ 15:00 идёт — на «Главной» она и её план до конца, а не следующая в 16:20.
         training("15:00", client("Орлов", "Максим"), plan = "Брасс, 4 по 25")
         training("16:20", client("Петров", "Игорь"))
         openHome()
@@ -264,7 +264,7 @@ class HomeUiTest {
         var width by mutableStateOf(unfolded)
         openHome(width = { width })
 
-        // Слева расписание дня: прошедшая 09:00 свёрнута, 15:30 идёт — она и выделена (шаг 3.9т); внизу — завтра.
+        // Слева расписание дня: прошедшая 09:00 свёрнута, 15:30 идёт — она и выделена (шаг 3.9ф); внизу — завтра.
         awaitNode(hasText("Показать прошедшие · 1"))
         onNodeWithText(s("ПТ · ББ · до конца 40_мин")).assertIsDisplayed()
         assertEquals(0, onAllNodes(hasText("идёт")).fetchSemanticsNodes().size)
