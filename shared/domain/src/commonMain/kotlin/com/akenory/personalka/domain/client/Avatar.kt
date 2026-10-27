@@ -74,7 +74,7 @@ object AvatarRules {
         sex = sex ?: ClientRules.guessSex(name.middleName, name.lastName)?.sex,
     )
 
-    /** Аватарка тренера — со свистком; пол у тренера не вводится, угадывается по отчеству и фамилии. */
+    /** Аватарка тренера — в кепке «ТРЕНЕР» (3.13а); пол у тренера не вводится, угадывается по отчеству и фамилии. */
     fun coach(lastName: String, firstName: String, middleName: String?): AvatarLook = AvatarLook(
         initials = initials(lastName, firstName),
         tone = tone(lastName, firstName),

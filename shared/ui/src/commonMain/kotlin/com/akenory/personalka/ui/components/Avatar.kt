@@ -168,7 +168,7 @@ const val AVATAR_REMOVE_TAG = "avatar-remove"
 
 /**
  * Аватарка: фото, если оно есть под [photoKey], иначе рисованный пловец [look] — шапочка цвета человека
- * с инициалами, фигура по возрасту и полу (шаг 3.13а, подробно — у рисунка), у тренера — кепка и свисток.
+ * с инициалами, фигура по возрасту и полу (шаг 3.13а, подробно — у рисунка), у тренера — кепка «ТРЕНЕР».
  */
 @Composable
 fun Avatar(look: AvatarLook, photoKey: String?, size: Dp, modifier: Modifier = Modifier) {
@@ -267,7 +267,6 @@ private val ear = Color(0xFFEDC1A0)
 private val blush = Color(0xFFF2A7A0)
 private val eyes = Color(0xFF2F2A26)
 private val lens = Color(0xFF9FD4E8)
-private val whistle = Color(0xFFC9CED6)
 private val hair = Color(0xFF6B4630)
 private val grey = Color(0xFFB9B9B9)
 private val freckle = Color(0xFFC98A64)
@@ -278,8 +277,8 @@ private val earring = Color(0xFFE0B04A)
 /**
  * Рисунок в квадрате 100 × 100 условных точек — растягивается до любого размера (шаг 3.13а).
  * Возраст: малыш — крупное лицо и соска, ребёнок — румянец и улыбка во весь рот, подросток — очки на шапочке
- * и веснушки, взрослый — вытянутое лицо и очки на шапочке, 60+ — очки и седина, тренер — кепка, футболка
- * и свисток. Пол: у мужчин и мальчиков — уши и виски, у женщин и девочек — волосы из-под шапочки (хвостики,
+ * и веснушки, взрослый — вытянутое лицо и очки на шапочке, 60+ — очки и седина, тренер — кепка с надписью
+ * «ТРЕНЕР» и футболка. Пол: у мужчин и мальчиков — уши и виски, у женщин и девочек — волосы из-под шапочки (хвостики,
  * хвост, длинные), ресницы, у малышки — бант; пол не известен — ни того ни другого.
  */
 @Composable
@@ -394,17 +393,20 @@ private fun Swimmer(look: AvatarLook, modifier: Modifier) {
             AvatarAge.BABY -> if (female) bow(u) else if (male) curl(u)
             AvatarAge.TEEN, AvatarAge.ADULT -> goggles(u)
             AvatarAge.SENIOR -> glasses(u, eyeY)
-            AvatarAge.COACH -> whistle(u)
+            AvatarAge.COACH -> collar(u)
             AvatarAge.KID -> Unit
         }
-        // Инициалы на шапочке или кепке.
+        // Инициалы на шапочке, у тренера на кепке — «ТРЕНЕР».
         val textY = when (age) {
             AvatarAge.BABY -> 42f
-            AvatarAge.COACH -> 33f
+            AvatarAge.COACH -> 36f
             else -> 38f
         }
-        val style = TextStyle(color = Color.White, fontSize = (17f * u).toSp(), fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-        val text = measurer.measure(look.initials, style)
+        val coach = age == AvatarAge.COACH
+        val style = TextStyle(
+            color = Color.White, fontSize = ((if (coach) 10.5f else 17f) * u).toSp(), fontWeight = FontWeight.Bold, letterSpacing = 0.sp,
+        )
+        val text = measurer.measure(if (coach) AvatarFormat.COACH_CAP else look.initials, style)
         drawText(text, topLeft = Offset((size.width - text.size.width) / 2f, textY * u - text.size.height / 2f))
     }
 }
@@ -505,12 +507,8 @@ private fun DrawScope.glasses(u: Float, eyeY: Float) {
     drawLine(frame, Offset(47.5f * u, eyeY * u), Offset(52.5f * u, eyeY * u), 1.6f * u)
 }
 
-/** Свисток тренера на шнурке и ворот футболки. */
-private fun DrawScope.whistle(u: Float) {
+/** Белый ворот футболки тренера. */
+private fun DrawScope.collar(u: Float) {
     drawLine(Color.White, Offset(40f * u, 93f * u), Offset(50f * u, 100f * u), 2.4f * u)
     drawLine(Color.White, Offset(60f * u, 93f * u), Offset(50f * u, 100f * u), 2.4f * u)
-    drawLine(Color.Black.copy(alpha = 0.4f), Offset(36f * u, 86f * u), Offset(48f * u, 92f * u), 1.6f * u)
-    drawLine(Color.Black.copy(alpha = 0.4f), Offset(64f * u, 86f * u), Offset(56f * u, 90f * u), 1.6f * u)
-    drawRoundRect(whistle, Offset(44f * u, 89f * u), Size(15f * u, 9f * u), CornerRadius(4.5f * u))
-    drawCircle(Color(0xFF8A919C), 2f * u, Offset(54f * u, 93.5f * u))
 }
