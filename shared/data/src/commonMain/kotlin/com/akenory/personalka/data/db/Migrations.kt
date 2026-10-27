@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -221,6 +221,17 @@ internal object Migration11To12 : Migration(11, 12) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `group_member` ADD COLUMN `absenceKeptOn` TEXT")
         connection.exec("ALTER TABLE `group_member` ADD COLUMN `absenceKeeps` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
+ * Версия 13 (шаг 3.9х): «Напомнить с» и «Скрыть до этого дня» у записи листа ожидания (4.16). Прежние записи — без
+ * дня: видны и ждут, как раньше.
+ */
+internal object Migration12To13 : Migration(12, 13) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `wait_entry` ADD COLUMN `remindFrom` TEXT")
+        connection.exec("ALTER TABLE `wait_entry` ADD COLUMN `hideUntilRemind` INTEGER NOT NULL DEFAULT 0")
     }
 }
 

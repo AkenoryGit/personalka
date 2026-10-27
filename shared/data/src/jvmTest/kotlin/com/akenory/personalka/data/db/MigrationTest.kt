@@ -9,6 +9,7 @@ import kotlinx.datetime.YearMonth
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -409,8 +410,41 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion12() {
-        assertEquals(12, PersonalkaDatabase.VERSION)
-        assertTrue((1..11).all { schemaFile(it).exists() }, "Схемы версий 1–11 хранятся: по ним строятся переходы")
+    fun version12KeepsWaitEntriesAndGetsRemindFrom(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v12", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.9у–3.9ф: у листа ожидания нет «Напомнить с».
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 12)
+                raw.exec(
+                    "INSERT INTO wait_entry (id, clientId, wantsSeries, wantsOneOff, days, timeRanges, locationId, typeId, until, note, contactedAt, " +
+                        "matchOneOff, matchSlot, matchDate, status, closedAt, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('w1', 'k1', 1, 0, '', '', NULL, 't1', NULL, 'вт, чт на 8', NULL, 0, NULL, NULL, 'WAITING', NULL, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val clients = db.clientDao()
+                val entry = clients.waitEntry("w1")!!
+                assertEquals("вт, чт на 8", entry.note, "Запись не тронута")
+                assertNull(entry.remindFrom, "Прежние записи — без дня: ждут, как раньше")
+                assertFalse(entry.hideUntilRemind)
+                clients.upsertWaitEntry(entry.copy(remindFrom = LocalDate(2026, 11, 10), hideUntilRemind = true))
+                assertEquals(LocalDate(2026, 11, 10), clients.waitEntry("w1")!!.remindFrom)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion13() {
+        assertEquals(13, PersonalkaDatabase.VERSION)
+        assertTrue((1..12).all { schemaFile(it).exists() }, "Схемы версий 1–12 хранятся: по ним строятся переходы")
     }
 }

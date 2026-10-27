@@ -83,7 +83,10 @@ object WaitFormat {
     const val ANY_PLACE = "Любое"
     const val TYPE = "Тип"
     const val NOTE = "Заметка"
-    const val NOTE_HINT = "Своими словами: какие часы удобнее, с кем можно в сплит"
+    const val NOTE_HINT = "Своими словами: какие часы удобнее, с кем можно в сплит, до какого числа уехали"
+    const val REMIND_FROM = "Напомнить с"
+    const val REMIND_NOW = "Сразу"
+    const val HIDE_UNTIL = "Скрыть до этого дня"
     const val SAVE = "Сохранить"
     const val EXACT_TITLE = "Время начала"
     const val EXACT_FROM = "С"
@@ -102,6 +105,20 @@ object WaitFormat {
         WaitProblem.NO_TYPE -> "Выберите тип"
         WaitProblem.UNTIL_PAST -> "Срок уже прошёл"
     }
+
+    // --- «Напомнить с» (шаг 3.9х) ---
+
+    /** Пометка отложенного в строке: «напомнить с 10.11». */
+    fun remindFrom(date: LocalDate): String = "напомнить с " + DateFormat.dayMonth(date)
+
+    /** Пометка, когда день настал: «Пора записать · с 10.11». */
+    fun remindDue(date: LocalDate): String = REMIND_TODO + DOT + "с " + DateFormat.dayMonth(date)
+
+    /** Пункт «Нужно сделать» (5.2) и его подпись — имена, как у «Освободилось». */
+    const val REMIND_TODO = "Пора записать"
+
+    /** Строка-переключатель под «Ждут время»: «Скрыты до своего дня: 2». */
+    fun hiddenTitle(count: Int): String = "Скрыты до своего дня: " + RuText.digits(count.toLong())
 
     // --- Действия ---
 

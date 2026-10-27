@@ -92,7 +92,8 @@ internal fun ConflictPanel(conflicts: List<String>, onDismiss: () -> Unit, onPla
 }
 
 /**
- * Выбор даты — календарь Material по центру экрана. [onClear] — третья кнопка «Бессрочно» у конца повтора.
+ * Выбор даты — календарь Material по центру экрана. [onClear] — третья кнопка «Бессрочно» у конца повтора;
+ * [clearText] — её слово («Сразу» у «Напомнить с»).
  * Как и [Panel], это часть экрана: при сложении Fold окно остаётся на месте.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,6 +103,7 @@ internal fun DatePickerPanel(
     onPick: (LocalDate) -> Unit,
     onDismiss: () -> Unit,
     onClear: (() -> Unit)? = null,
+    clearText: String = BESSROCHNO,
 ) {
     val state = rememberDatePickerState(initialSelectedDateMillis = initial.toEpochDays() * DAY_MS)
     PickerCard(title = "Дата", onDismiss = onDismiss) {
@@ -110,6 +112,7 @@ internal fun DatePickerPanel(
             onDismiss = onDismiss,
             onDone = { state.selectedDateMillis?.let { onPick(LocalDate.fromEpochDays(it / DAY_MS)) } ?: onDismiss() },
             onClear = onClear,
+            clearText = clearText,
         )
     }
 }
@@ -154,11 +157,11 @@ private fun PickerCard(title: String, onDismiss: () -> Unit, content: @Composabl
 }
 
 @Composable
-private fun PickerButtons(onDismiss: () -> Unit, onDone: () -> Unit, onClear: (() -> Unit)?) {
+private fun PickerButtons(onDismiss: () -> Unit, onDone: () -> Unit, onClear: (() -> Unit)?, clearText: String = BESSROCHNO) {
     val colors = PersonalkaTheme.colors
     Row(Modifier.fillMaxWidth().padding(horizontal = Dimens.space3), horizontalArrangement = Arrangement.End) {
         if (onClear != null) {
-            TextButton(onClick = onClear) { Text(BESSROCHNO, style = MaterialTheme.typography.labelLarge, color = colors.text) }
+            TextButton(onClick = onClear) { Text(clearText, style = MaterialTheme.typography.labelLarge, color = colors.text) }
             Box(Modifier.weight(1f))
         }
         TextButton(onClick = onDismiss) { Text(ZoneFormat.CONFLICT_CANCEL, style = MaterialTheme.typography.labelLarge, color = colors.text) }

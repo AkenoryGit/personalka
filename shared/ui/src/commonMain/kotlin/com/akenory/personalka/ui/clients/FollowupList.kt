@@ -96,6 +96,7 @@ const val PAUSE_NOTE_TAG = "followup-pause-note"
  * копирует номер) и меню с «Пауза до…», «Убрать из списка» (шаг 3.9н: перешёл в группу — без архива) и «Больше не ходит». Нажатие на имя открывает карточку клиента.
  *
  * Сверху — раздел «Ждут время» (4.16, шаг 2.4а): виден всегда, пустой — «Никто не ждёт»; над ним — «+ В ожидание».
+ * Скрытые до дня «Напомнить с» (шаг 3.9х) — под строкой «Скрыты до своего дня: 2», нажатие раскрывает их.
  *
  * @param onForm «Записать»: форма тренировки с этим клиентом, тем же типом и местом на ближайший такой же день
  *   недели и время, что и последнее посещение.
@@ -119,7 +120,10 @@ internal fun FollowupList(
     val today = now.date
     val onOpen: (String) -> Unit = nav::openFromList
     val rows = followup.rows.filter { ClientRules.matches(query, it.name) }
-    val waits = waiting.filter { ClientRules.matches(query, ClientName(it.client.lastName, it.client.firstName, it.client.middleName)) }
+    val found = waiting.filter { ClientRules.matches(query, ClientName(it.client.lastName, it.client.firstName, it.client.middleName)) }
+    val waits = found.filter { !it.hidden }
+    val hidden = found.filter { it.hidden }
+    var showHidden by rememberSaveable { mutableStateOf(false) }
     var pausing by rememberSaveable { mutableStateOf<String?>(null) }
     // «Больше не ждёт» у клиента без тренировок — вопрос «Удалить и карточку?» (4.16).
     var erasing by rememberSaveable { mutableStateOf<String?>(null) }
@@ -148,7 +152,7 @@ internal fun FollowupList(
                     SecondaryButton(WaitFormat.ADD, { nav.formFromList(ClientRoute.waitNew()) }, Modifier.testTag(WAIT_ADD_TAG), icon = PIcons.Add)
                 }
             }
-            if (waits.isEmpty()) {
+            if (waits.isEmpty() && hidden.isEmpty()) {
                 item(key = "wait-empty") {
                     Text(
                         if (query.isBlank()) WaitFormat.EMPTY else "Никого не нашлось",
@@ -158,7 +162,25 @@ internal fun FollowupList(
                     )
                 }
             }
-            items(waits, key = { "wait-" + it.entry.id }) { row ->
+            if (hidden.isNotEmpty()) {
+                item(key = "wait-hidden") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable(role = Role.Button) { showHidden = !showHidden }
+                            .padding(vertical = Dimens.space2)
+                            .testTag(WAIT_HIDDEN_TAG),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(PIcons.Schedule, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(Dimens.space2))
+                        Text(WaitFormat.hiddenTitle(hidden.size), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+                        Icon(if (showHidden) PIcons.ExpandLess else PIcons.ExpandMore, contentDescription = null, tint = colors.textMuted)
+                    }
+                }
+            }
+            items(waits + if (showHidden) hidden else emptyList(), key = { "wait-" + it.entry.id }) { row ->
                 val name = CalendarFormat.client(ClientName(row.client.lastName, row.client.firstName))
                 WaitItem(
                     row = row,
@@ -452,6 +474,8 @@ fun waitRowTag(name: String) = "wait-row-$name"
 fun waitBookTag(name: String) = "wait-book-$name"
 fun waitMenuTag(name: String) = "wait-menu-$name"
 fun waitFreedTag(name: String) = "wait-freed-$name"
+fun waitRemindTag(name: String) = "wait-remind-$name"
+const val WAIT_HIDDEN_TAG = "wait-hidden"
 
 /**
  * Строка «Ждут время» (5.8, макет ClNoBooking): имя и «ждёт 37 дней», «писали 02.10», что ждёт, заметка одной
@@ -499,6 +523,23 @@ private fun WaitItem(
             Text(WaitFormat.waiting(WaitRules.daysWaiting(row.since, today)), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
         }
         val contacted = row.entry.contactedAt?.let { FollowupFormat.contacted(ClubTime.today(it)) }
+        val from = row.entry.remindFrom
+        // «Напомнить с» (шаг 3.9х): настал день — пометка графитом, как «Освободилось»; до него — рамкой.
+        val due = row.due && from != null
+        if (from != null && (row.deferred || due)) {
+            Spacer(Modifier.size(6.dp))
+            Row(
+                (if (due) Modifier.background(colors.primary, MaterialTheme.shapes.small) else Modifier.border(1.dp, colors.outline, MaterialTheme.shapes.small))
+                    .padding(horizontal = Dimens.space2, vertical = 4.dp)
+                    .testTag(waitRemindTag(title)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val tint = if (due) colors.onPrimary else colors.text
+                Icon(PIcons.Schedule, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(if (due) WaitFormat.remindDue(from) else WaitFormat.remindFrom(from), style = MaterialTheme.typography.labelMedium, color = tint)
+            }
+        }
         if (match != null || contacted != null) {
             Spacer(Modifier.size(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
@@ -532,14 +573,15 @@ private fun WaitItem(
                 modifier = Modifier.padding(end = Dimens.space3),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.text,
-                maxLines = 1,
+                // У отложенного заметка — «уехали до 10.11»: видна целиком в две строки.
+                maxLines = if (from != null) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.size(Dimens.space3))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
             // С освободившимся временем «Записать» — главная кнопка строки (макет ClNoBooking).
-            if (match != null) {
+            if (match != null || due) {
                 PrimaryButton(WaitFormat.BOOK, onBook, modifier = Modifier.testTag(waitBookTag(title)))
             } else {
                 SecondaryButton(WaitFormat.BOOK, onBook, modifier = Modifier.testTag(waitBookTag(title)))

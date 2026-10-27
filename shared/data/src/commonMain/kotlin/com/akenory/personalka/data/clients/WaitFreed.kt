@@ -11,6 +11,7 @@ import com.akenory.personalka.domain.client.Busy
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.FreedSlot
 import com.akenory.personalka.domain.client.WaitMatch
+import com.akenory.personalka.domain.client.WaitRules
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.model.ClientStatus
@@ -101,6 +102,8 @@ internal suspend fun PersonalkaDatabase.waitingFor(
         if (clientDao.client(entry.clientId)?.status != ClientStatus.ACTIVE) return@mapNotNull null
         val duration = types[entry.typeId]?.defaultDurationMin ?: return@mapNotNull null
         val want = entry.want()
+        // До дня «Напомнить с» клиента нет (шаг 3.9х): время ему не ищется.
+        if (WaitRules.deferred(want, now.date)) return@mapNotNull null
         slots.filter { slot ->
             WaitMatch.matches(want, slot, duration, busy(slot.date), now) &&
                 !RestrictionRules.flag(Placement(slot.at, duration, slot.locationId), restrictions)

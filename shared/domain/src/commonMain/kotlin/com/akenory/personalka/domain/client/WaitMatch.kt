@@ -68,9 +68,16 @@ object WaitMatch {
     }
 
     /**
-     * Порядок «Ждут время» (4.16): сначала записи, для которых освободилось время, ближайшее — выше; дальше — кто ждёт
-     * дольше. [matchOf] — текущее совпадение записи, [since] — момент записи.
+     * Порядок «Ждут время» (4.16): сначала записи, для которых освободилось время, ближайшее — выше; дальше — «Пора
+     * записать» ([due], шаг 3.9х), потом кто ждёт дольше; отложенные до дня «Напомнить с» ([later]) — в конце,
+     * ближайший день выше. [matchOf] — текущее совпадение записи, [since] — момент записи.
      */
-    fun <T> order(items: List<T>, matchOf: (T) -> FreedSlot?, since: (T) -> Long): List<T> =
-        items.sortedWith(compareBy<T>({ matchOf(it) == null }, { matchOf(it)?.at }, { since(it) }))
+    fun <T> order(
+        items: List<T>,
+        matchOf: (T) -> FreedSlot?,
+        since: (T) -> Long,
+        due: (T) -> Boolean = { false },
+        later: (T) -> LocalDate? = { null },
+    ): List<T> =
+        items.sortedWith(compareBy<T>({ matchOf(it) == null }, { matchOf(it)?.at }, { !due(it) }, { later(it) }, { since(it) }))
 }

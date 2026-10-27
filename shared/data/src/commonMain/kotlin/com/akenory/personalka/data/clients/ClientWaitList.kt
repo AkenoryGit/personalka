@@ -27,7 +27,8 @@ import kotlinx.datetime.plus
 
 /**
  * Строка «Ждут время» (5.8): запись, клиент, что ждёт, короткие тип и место (`null` — любое), день, с которого
- * ждёт, и освободившееся время [match], которое ещё держится (4.16).
+ * ждёт, и освободившееся время [match], которое ещё держится (4.16). [deferred] — до дня «Напомнить с»,
+ * [hidden] — к тому же скрыт до него, [due] — день настал, пора записать (шаг 3.9х).
  */
 data class WaitRow(
     val entry: WaitEntryEntity,
@@ -37,6 +38,9 @@ data class WaitRow(
     val placeShort: String?,
     val since: LocalDate,
     val match: FreedSlot? = null,
+    val deferred: Boolean = false,
+    val hidden: Boolean = false,
+    val due: Boolean = false,
 )
 
 /** Чипы формы «+ В ожидание»: действующие индивидуальные типы и места — группы в лист не входят (4.16). */
@@ -72,13 +76,20 @@ class ClientWaitList internal constructor(private val db: PersonalkaDatabase, pr
             val placeShort = l.places.associate { it.id to it.shortName }
             val list = l.entries.mapNotNull { e ->
                 val client = byId[e.clientId]?.takeIf { it.status == ClientStatus.ACTIVE } ?: return@mapNotNull null
-                val match = e.match()?.let { WaitMatch.current(it, now) }?.takeIf { slot ->
+                val want = e.want()
+                val deferred = WaitRules.deferred(want, now.date)
+                val match = e.match()?.takeIf { !deferred }?.let { WaitMatch.current(it, now) }?.takeIf { slot ->
                     // Заняли другой тренировкой — совпадения больше нет.
                     db.waitingFor(listOf(slot), now).any { it.first.id == e.id }
                 }
-                WaitRow(e, client, e.want(), typeOf[e.typeId]?.shortName.orEmpty(), e.locationId?.let { placeShort[it] }, ClubTime.today(e.sync.createdAt), match)
+                WaitRow(
+                    e, client, want, typeOf[e.typeId]?.shortName.orEmpty(), e.locationId?.let { placeShort[it] }, ClubTime.today(e.sync.createdAt), match,
+                    deferred = deferred,
+                    hidden = WaitRules.hidden(want, now.date),
+                    due = WaitRules.remindDue(want, e.contactedAt?.let { ClubTime.today(it) }, now.date),
+                )
             }
-            WaitMatch.order(list, { it.match }, { it.entry.sync.createdAt })
+            WaitMatch.order(list, { it.match }, { it.entry.sync.createdAt }, { it.due }, { it.entry.remindFrom?.takeIf { _ -> it.deferred } })
         }
     }
 
@@ -142,6 +153,8 @@ class ClientWaitList internal constructor(private val db: PersonalkaDatabase, pr
                     typeId = typeId,
                     until = want.until,
                     note = want.note.ifEmpty { null },
+                    remindFrom = want.remindFrom,
+                    hideUntilRemind = want.hideUntil,
                     sync = old?.sync?.touched(now) ?: SyncFields.new(coachId, now),
                 )
             clients.upsertWaitEntry(entry)
@@ -226,6 +239,8 @@ fun WaitEntryEntity.want(): WaitWant = WaitWant(
     typeId = typeId,
     until = until,
     note = note.orEmpty(),
+    remindFrom = remindFrom,
+    hideUntil = hideUntilRemind,
 )
 
 /**

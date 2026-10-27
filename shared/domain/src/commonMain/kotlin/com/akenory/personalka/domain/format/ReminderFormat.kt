@@ -34,6 +34,7 @@ object ReminderFormat {
         TodoKind.VACATION_NOTICE -> "предупредить об отпуске " + RuText.count(n, "клиента", "клиентов", "клиентов")
         TodoKind.NO_DIARY -> RuText.digits(n.toLong()) + NBSP + "без дневника"
         TodoKind.FREED_TIME -> "освободилось время"
+        TodoKind.WAIT_REMIND -> "пора записать " + RuText.count(n, "клиента", "клиентов", "клиентов")
         TodoKind.NOT_BOOKED -> RuText.count(n, "клиент", "клиента", "клиентов") + " без записи"
         TodoKind.GROUP_ABSENT -> "не ходят в группу: " + RuText.count(n, "ребёнок", "ребёнка", "детей")
         TodoKind.SPT_PURCHASE -> "СПТ ждут покупки"

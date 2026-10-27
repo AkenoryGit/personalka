@@ -86,6 +86,8 @@ const val WAIT_SEARCH_TAG = "wait-search"
 const val WAIT_SERIES_TAG = "wait-series"
 const val WAIT_ONE_OFF_TAG = "wait-one-off"
 const val WAIT_NOTE_TAG = "wait-note"
+const val WAIT_REMIND_TAG = "wait-remind"
+const val WAIT_HIDE_TAG = "wait-hide"
 const val WAIT_NEW_LAST_TAG = "wait-new-last"
 const val WAIT_NEW_FIRST_TAG = "wait-new-first"
 fun waitClientTag(id: String) = "wait-client-$id"
@@ -101,7 +103,8 @@ private const val CLIENT_CHIPS = 3
  * «+ В ожидание» и «Изменить» записи листа ожидания (5.8, 4.16, макет ClWaitAdd): клиент чипом или поиском, нет
  * в списке — «Новый клиент» (фамилия, имя, телефон); «Постоянное время» и/или «Разово» (у разового — срок «до …»);
  * дни недели; время начала чипами «Утро», «День», «Вечер» или «Точнее…»; место (по умолчанию любое) и тип
- * (по умолчанию первый — ПТ); заметка с голосовым вводом. Одна запись на клиента: у кого запись уже есть, та
+ * (по умолчанию первый — ПТ); «Напомнить с» — «Сразу» или день, с которого напомнить записать, и «Скрыть до этого
+ * дня» (шаг 3.9х); заметка с голосовым вводом. Одна запись на клиента: у кого запись уже есть, та
  * и меняется.
  *
  * @param entryId `null` — новая запись; [clientId] — клиент, уже выбранный: «В лист ожидания…» из его карточки.
@@ -137,6 +140,8 @@ fun WaitEditor(
     var place by rememberSaveable { mutableStateOf<String?>(null) }
     var type by rememberSaveable { mutableStateOf<String?>(null) }
     var note by rememberSaveable { mutableStateOf("") }
+    var remindFrom by rememberSaveable { mutableStateOf("") }
+    var hideUntil by rememberSaveable { mutableStateOf(false) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var exact by rememberSaveable { mutableStateOf(false) }
     var exactFrom by rememberSaveable { mutableStateOf("07:00") }
@@ -159,6 +164,8 @@ fun WaitEditor(
         place = w.locationId
         type = w.typeId
         note = w.note
+        remindFrom = w.remindFrom?.toString().orEmpty()
+        hideUntil = w.hideUntil
         loaded = true
     }
     // Новая запись: тип по умолчанию — первый (ПТ).
@@ -177,6 +184,8 @@ fun WaitEditor(
         typeId = type,
         until = until.takeIf { it.isNotEmpty() }?.let(LocalDate::parse),
         note = note,
+        remindFrom = remindFrom.takeIf { it.isNotEmpty() }?.let(LocalDate::parse),
+        hideUntil = hideUntil,
     )
     val newReady = adding && newLast.isNotBlank() && newFirst.isNotBlank()
     val problems = WaitRules.problems(WaitDraft(client ?: "new".takeIf { newReady }, want), today)
@@ -377,6 +386,21 @@ fun WaitEditor(
                     if (WaitProblem.NO_TYPE in shown) ProblemText(WaitFormat.problem(WaitProblem.NO_TYPE))
                 }
 
+                // «Напомнить с» (шаг 3.9х): уехали, заняты — с этого дня приложение напомнит записать.
+                Column {
+                    FormLabel(WaitFormat.REMIND_FROM)
+                    PickBox(
+                        text = want.remindFrom?.let { TrainingFormat.date(it) } ?: WaitFormat.REMIND_NOW,
+                        icon = PIcons.CalendarMonth,
+                        onClick = { picking = "remind" },
+                        modifier = Modifier.fillMaxWidth().testTag(WAIT_REMIND_TAG),
+                    )
+                    if (want.remindFrom != null) {
+                        Spacer(Modifier.height(Dimens.space2))
+                        ChoiceChip(WaitFormat.HIDE_UNTIL, hideUntil, { hideUntil = !hideUntil }, Modifier.testTag(WAIT_HIDE_TAG), toggle = true)
+                    }
+                }
+
                 val mic: (@Composable () -> Unit)? = voice?.let { v ->
                     @Composable {
                         IconButton(onClick = { v.listen { heard -> note = appendHeard(note, heard) } }) {
@@ -437,6 +461,20 @@ fun WaitEditor(
                     until = ""
                     picking = null
                 },
+            )
+            "remind" -> DatePickerPanel(
+                initial = want.remindFrom ?: today.plus(14, DateTimeUnit.DAY),
+                onPick = {
+                    remindFrom = it.toString()
+                    picking = null
+                },
+                onDismiss = { picking = null },
+                onClear = {
+                    remindFrom = ""
+                    hideUntil = false
+                    picking = null
+                },
+                clearText = WaitFormat.REMIND_NOW,
             )
             "from" -> TimePickerPanel(LocalTime.parse(exactFrom), {
                 exactFrom = it.toString()

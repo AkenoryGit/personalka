@@ -116,6 +116,10 @@ data class WaitEntryEntity(
     val matchDate: LocalDate? = null,
     val status: WaitStatus = WaitStatus.WAITING,
     val closedAt: Long? = null,
+    /** «Напомнить с» (шаг 3.9х): до этого дня клиента нет — уехал, занят; с него — «Пора записать». */
+    val remindFrom: LocalDate? = null,
+    /** До [remindFrom] строки не видно в «Ждут время». */
+    @ColumnInfo(defaultValue = "0") val hideUntilRemind: Boolean = false,
 )
 
 /**

@@ -78,4 +78,26 @@ class WaitRulesTest {
         // Время не указано — время предложит форма.
         assertNull(WaitRules.bookingStart(WaitWant(typeId = "pt"), now))
     }
+
+    @Test
+    fun remindFromDefersHidesAndReminds() {
+        val away = smirnova.copy(remindFrom = LocalDate(2026, 11, 10), hideUntil = true, note = "уехали до 10.11")
+        // До 10.11 — отложен и скрыт; 10.11 — «Пора записать», пока с этого дня не писали.
+        assertTrue(WaitRules.deferred(away, LocalDate(2026, 11, 9)))
+        assertTrue(WaitRules.hidden(away, LocalDate(2026, 11, 9)))
+        assertFalse(WaitRules.remindDue(away, null, LocalDate(2026, 11, 9)))
+        assertFalse(WaitRules.deferred(away, LocalDate(2026, 11, 10)))
+        assertFalse(WaitRules.hidden(away, LocalDate(2026, 11, 10)))
+        assertTrue(WaitRules.remindDue(away, null, LocalDate(2026, 11, 10)))
+        // Писали до отъезда — напоминание всё равно; написали 10.11 — снято.
+        assertTrue(WaitRules.remindDue(away, LocalDate(2026, 10, 20), LocalDate(2026, 11, 12)))
+        assertFalse(WaitRules.remindDue(away, LocalDate(2026, 11, 10), LocalDate(2026, 11, 12)))
+        // Без дня — ни отложен, ни напоминания; «Скрыть» без дня не сохраняется.
+        assertFalse(WaitRules.deferred(smirnova, LocalDate(2026, 10, 20)))
+        assertFalse(WaitRules.remindDue(smirnova, null, LocalDate(2026, 10, 20)))
+        assertFalse(WaitRules.clean(smirnova.copy(hideUntil = true)).hideUntil)
+        assertEquals("напомнить с 10.11", WaitFormat.remindFrom(LocalDate(2026, 11, 10)))
+        assertEquals("Пора записать · с 10.11", WaitFormat.remindDue(LocalDate(2026, 11, 10)))
+        assertEquals("Скрыты до своего дня: 2", WaitFormat.hiddenTitle(2))
+    }
 }

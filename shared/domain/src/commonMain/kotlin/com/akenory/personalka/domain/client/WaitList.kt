@@ -12,6 +12,9 @@ import kotlinx.datetime.plus
 /**
  * Что ждёт клиент (4.16): постоянное время и/или разовое посещение, дни недели (пусто — любой), промежутки начала
  * (пусто — любое время), место (`null` — любое), тип, срок разового и заметка своими словами.
+ *
+ * [remindFrom] — «Напомнить с» (шаг 3.9х): клиент уехал или занят до этого дня; с него приложение напоминает
+ * записать. [hideUntil] — до этого дня строки в «Ждут время» не видно.
  */
 data class WaitWant(
     val series: Boolean = true,
@@ -22,6 +25,8 @@ data class WaitWant(
     val typeId: String? = null,
     val until: LocalDate? = null,
     val note: String = "",
+    val remindFrom: LocalDate? = null,
+    val hideUntil: Boolean = false,
 )
 
 /** Поля формы «+ В ожидание» (5.8): кто и что ждёт. */
@@ -54,7 +59,23 @@ object WaitRules {
         until = want.until.takeIf { want.oneOff },
         ranges = want.ranges.distinct().sortedBy { it.start },
         note = want.note.trim(),
+        hideUntil = want.hideUntil && want.remindFrom != null,
     )
+
+    /** До дня «Напомнить с» (шаг 3.9х): клиента пока нет — освободившееся время ему не ищется. */
+    fun deferred(want: WaitWant, today: LocalDate): Boolean = want.remindFrom != null && today < want.remindFrom
+
+    /** Отложен и скрыт: до дня «Напомнить с» строка не видна в «Ждут время». */
+    fun hidden(want: WaitWant, today: LocalDate): Boolean = want.hideUntil && deferred(want, today)
+
+    /**
+     * «Пора записать» (шаг 3.9х): день «Напомнить с» настал, а клиенту с этого дня ещё не писали ([contactedOn] —
+     * день «Написал»). Напоминание держится, пока клиента не записали, не нажали «Написал» или «Больше не ждёт».
+     */
+    fun remindDue(want: WaitWant, contactedOn: LocalDate?, today: LocalDate): Boolean {
+        val from = want.remindFrom ?: return false
+        return today >= from && (contactedOn == null || contactedOn < from)
+    }
 
     /** «ждёт 37 дней»: с дня записи до сегодня. */
     fun daysWaiting(since: LocalDate, today: LocalDate): Int = since.daysUntil(today).coerceAtLeast(0)

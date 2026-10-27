@@ -35,6 +35,7 @@ import com.akenory.personalka.ui.components.PANEL_TAG
 import com.akenory.personalka.ui.home.todoTag
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import com.akenory.personalka.ui.training.DONE
 import com.akenory.personalka.ui.training.FORM_WEEKLY_TAG
 import com.akenory.personalka.ui.training.formClientTag
 import kotlin.test.Test
@@ -42,6 +43,7 @@ import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
 /** Лист ожидания (шаг 2.4а, ТЗ 4.16, 5.8, макеты ClNoBooking, ClWaitAdd, ClBook). «Сейчас» — вт 20.10.2026 15:40. */
@@ -156,5 +158,49 @@ class WaitUiTest {
         val booked = runBlocking { db.trainingDao().trainingsAfter(TestData.now).filter { it.status == TrainingStatus.PLANNED } }
         assertEquals(LocalDateTime(2026, 10, 20, 17, 0), booked.single().start)
         awaitNode(hasText(WaitFormat.BOOKED))
+    }
+
+    @Test
+    fun remindFromHidesUntilDayAndRemindsOnHome() = runComposeUiTest {
+        // Смирнова уехала до 10.11 и скрыта; у Беловой день «Напомнить с» — сегодня, 20.10.
+        val smirnova = client("Смирнова", "Ирина")
+        val belova = client("Белова", "Аня")
+        val orlov = client("Орлов", "Максим")
+        runBlocking {
+            clients.waitlist.save(
+                WaitDraft(smirnova, WaitWant(typeId = ptId(), note = "уехали до 10.11", remindFrom = LocalDate(2026, 11, 10), hideUntil = true)),
+            )
+            clients.waitlist.save(WaitDraft(belova, WaitWant(typeId = ptId(), remindFrom = LocalDate(2026, 10, 20))))
+        }
+        setContent { Box(Modifier.size(412.dp, 960.dp)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), calendar, clock = TestData.clock) } }
+
+        // «Главная»: пункт «Пора записать» ведёт в «Без записи».
+        awaitNode(hasTestTag(todoTag(TodoKind.WAIT_REMIND)))
+        onNodeWithTag(todoTag(TodoKind.WAIT_REMIND)).performClick()
+        awaitNode(hasTestTag(waitRowTag("Белова Аня")))
+        onNodeWithText(WaitFormat.remindDue(LocalDate(2026, 10, 20))).assertIsDisplayed()
+
+        // Смирновой не видно — только строка «Скрыты до своего дня: 1»; нажатие раскрывает её с заметкой.
+        assertEquals(0, onAllNodes(hasTestTag(waitRowTag("Смирнова Ирина"))).fetchSemanticsNodes().size)
+        onNodeWithText(WaitFormat.hiddenTitle(1)).performClick()
+        awaitNode(hasTestTag(waitRowTag("Смирнова Ирина")))
+        onNodeWithText(WaitFormat.remindFrom(LocalDate(2026, 11, 10))).assertIsDisplayed()
+        onNodeWithText(WaitFormat.note("уехали до 10.11")).assertIsDisplayed()
+
+        // «+ В ожидание» с днём «Напомнить с» (по умолчанию через две недели) и «Скрыть до этого дня».
+        onNodeWithTag(WAIT_ADD_TAG).performClick()
+        awaitNode(hasTestTag(WAIT_SEARCH_TAG))
+        onNodeWithTag(WAIT_SEARCH_TAG).performTextInput("орл")
+        awaitNode(hasTestTag(waitClientTag(orlov)))
+        onNodeWithTag(waitClientTag(orlov)).performClick()
+        onNodeWithTag(WAIT_REMIND_TAG).performScrollTo().performClick()
+        awaitNode(hasText(DONE))
+        onNodeWithText(DONE).performClick()
+        onNodeWithTag(WAIT_HIDE_TAG).performScrollTo().performClick()
+        onNodeWithText(WaitFormat.SAVE).performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.clientDao().waitEntriesOf(orlov) }.isNotEmpty() }
+        val entry = entryOf(orlov)
+        assertEquals(LocalDate(2026, 11, 3), entry.remindFrom)
+        assertEquals(true, entry.hideUntilRemind)
     }
 }

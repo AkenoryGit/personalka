@@ -189,4 +189,45 @@ class ClientWaitListTest {
         assertNull(repo.waitlist.observe(now).first().single { it.entry.id == entry }.match)
         assertEquals(WaitStatus.WAITING, repo.waitlist.entry(entry)!!.status)
     }
+
+    // --- «Напомнить с» (шаг 3.9х) ---
+
+    @Test
+    fun remindFromHidesSkipsMatchesAndRemindsOnTheDay(): Unit = runBlocking {
+        val smirnova = repo.create(ClientDraft("Смирнова", "Ирина"))
+        val belova = repo.create(ClientDraft("Белова", "Аня"))
+        val orlov = repo.create(ClientDraft("Орлов", "Максим"))
+        // Смирнова уехала до 10.11 и скрыта; Белова — с 01.11, видна в конце списка.
+        val away = repo.waitlist.save(
+            WaitDraft(
+                smirnova,
+                WaitWant(series = false, oneOff = true, ranges = listOf(WaitRules.EVENING), typeId = ptId, note = "уехали до 10.11", remindFrom = LocalDate(2026, 11, 10), hideUntil = true),
+            ),
+        )!!
+        repo.waitlist.save(WaitDraft(belova, petrov.copy(typeId = ptId, remindFrom = LocalDate(2026, 11, 1))))
+        repo.waitlist.save(WaitDraft(orlov, petrov.copy(typeId = ptId)))
+        val rows = repo.waitlist.observe(now).first()
+        assertEquals(listOf("Орлов", "Белова", "Смирнова"), rows.map { it.client.lastName })
+        val hidden = rows.single { it.client.id == smirnova }
+        assertTrue(hidden.hidden && hidden.deferred && !hidden.due)
+        assertEquals("уехали до 10.11", hidden.want.note)
+        val later = rows.single { it.client.id == belova }
+        assertTrue(later.deferred && !later.hidden)
+
+        // Освободился вечер сегодня — Смирнову не предлагают: её нет до 10.11.
+        val kovalev = repo.create(ClientDraft("Ковалёв", "Артём"))
+        calendar.forms.create(TrainingDraft(LocalDateTime(2026, 10, 20, 17, 0), ptId, listOf(kovalev), null, bbId, 50))
+        val training = db.trainingDao().trainingsAfter(now).single()
+        assertNull(calendar.cards.waitingLine(training.id))
+
+        // 10.11 — «Пора записать», строка видна и выше остальных.
+        val day = LocalDateTime(2026, 11, 10, 9, 0)
+        millis = ClubTime.toMillis(day)
+        val due = repo.waitlist.observe(day).first()
+        assertEquals("Смирнова", due.first().client.lastName)
+        assertTrue(due.first().due && !due.first().hidden)
+        // «Написал» — напоминание снято, запись ждёт дальше.
+        repo.waitlist.contacted(away)
+        assertFalse(repo.waitlist.observe(day).first().single { it.client.id == smirnova }.due)
+    }
 }

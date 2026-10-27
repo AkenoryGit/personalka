@@ -237,7 +237,7 @@ fun ClientsScreen(
                 selectedId = top?.clientId,
                 onOpen = nav::openFromList,
                 onNew = nav::newFromList,
-                noBookingCount = followup.rows.size + waiting.size,
+                noBookingCount = followup.rows.size + waiting.count { !it.hidden },
                 noBooking = { modifier ->
                     FollowupList(followup, waiting, list.query, followupScroll, clients, messages, scope, now, nav, onForm, modifier, onFindTime)
                 },
