@@ -28,7 +28,7 @@
 
 ## TestFlight
 
-Обычно — само (шаг 5.1в): после push в `main` workflow «iPhone» (`.github/workflows/ios.yml`) собирает приложение на машине Mac GitHub и выгружает в TestFlight по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, ключ «App Manager»). Вручную с Mac (шаг 5.1б) — так:
+Обычно — само (шаг 5.1в): после push в `main` workflow «iPhone» (`.github/workflows/ios.yml`) собирает приложение на машине Mac GitHub и выгружает в TestFlight по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, ключ с ролью «Администратор»). Вручную с Mac (шаг 5.1б) — так:
 
 Приложение в App Store Connect — «Персоналка», Bundle ID `com.akenory.personalka`, SKU `personalka`. Номер сборки — число коммитов, версия — `MARKETING_VERSION` в `Config.xcconfig`.
 
