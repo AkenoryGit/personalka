@@ -65,7 +65,7 @@ internal fun followupDaysTag(days: Int) = "followup-$days"
 
 /**
  * «Настройки → Дневник и напоминания» (ТЗ 5.16, 5.19, шаг 2.5): «Вести дневник», автоотметка «Проведено», вечерняя
- * сводка и её время, «Клиенты без записи» со сроком, «Аванс» (шаг 3.9); под свёрнутой строкой «Дополнительно» — мгновенные напоминания
+ * сводка и её время, «Клиенты без записи» со сроком, «Аванс» (шаг 3.9); под свёрнутой строкой «Другие уведомления» — мгновенные напоминания
  * и «План на день». Всё пишется сразу, без «Сохранить». Время сводки и срок видны, только когда они включены (10.7).
  *
  * @param reminders «План на день» — настройка телефона; `null` — строки нет (тесты без платформы).
@@ -126,7 +126,7 @@ internal fun ReminderSettingsScreen(
                         modifier = Modifier.fillMaxWidth().testTag(DIGEST_TIME_TAG),
                     )
                 }
-                SwitchRow(ReminderFormat.FOLLOWUP, loaded.followup, { on -> save { saveFollowup(on) } }, Modifier.testTag(FOLLOWUP_TAG))
+                SwitchRow(ReminderFormat.FOLLOWUP, loaded.followup, { on -> save { saveFollowup(on) } }, Modifier.testTag(FOLLOWUP_TAG), ReminderFormat.FOLLOWUP_NOTE)
                 if (loaded.followup) {
                     SectionLabel(ReminderFormat.FOLLOWUP_DAYS, Modifier.padding(top = 0.dp))
                     Chips(ReminderRules.FOLLOWUP_DAYS, loaded.followupDays, ReminderFormat::days, ::followupDaysTag) { days ->
@@ -136,7 +136,7 @@ internal fun ReminderSettingsScreen(
                 // Надёжность клиентов (4.18, шаг 3.14а): выключена — её не видно нигде.
                 SwitchRow(ReminderFormat.RELIABILITY, loaded.reliability, { on -> save { saveReliability(on) } }, Modifier.testTag(RELIABILITY_SWITCH_TAG), ReminderFormat.RELIABILITY_NOTE)
                 if (reminders != null) {
-                    // «Аванс» 25-го в 19:00 (5.19) — по умолчанию включён, поэтому не под «Дополнительно».
+                    // «Аванс» 25-го в 19:00 (5.19) — по умолчанию включён, поэтому не под «Другими уведомлениями».
                     SwitchRow(
                         ReminderFormat.ADVANCE,
                         advance,
@@ -198,7 +198,7 @@ internal fun ReminderSettingsScreen(
     }
 }
 
-/** Свёрнутая строка «Дополнительно» (5.16): редкие настройки раздела. */
+/** Свёрнутая строка «Другие уведомления» (5.16): редкие напоминания раздела. */
 @Composable
 private fun MoreRow(open: Boolean, onToggle: () -> Unit) {
     val colors = PersonalkaTheme.colors

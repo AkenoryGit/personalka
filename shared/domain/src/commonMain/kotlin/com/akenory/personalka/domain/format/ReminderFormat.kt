@@ -56,34 +56,35 @@ object ReminderFormat {
     fun dayPlan(count: Int, first: LocalDateTime): String =
         "Сегодня " + CalendarFormat.trainings(count) + (if (count == 1) ", в$NBSP" else ", первая в$NBSP") + DateFormat.time(first.time)
 
-    /** «Дневник сразу»: «16:00–16:50 · заполните дневник»; заголовок — имя клиента или группа. */
+    /** «Дневник сразу после тренировки»: «16:00–16:50 · заполните дневник»; заголовок — имя клиента или группа. */
     fun instantDiary(start: LocalDateTime, end: LocalDateTime): String = DateFormat.timeRange(start, end) + DOT + "заполните дневник"
 
-    /** «Группа сразу»: «18:00–18:45 · отметьте, кто пришёл»; заголовок — группа. */
+    /** «Отметить группу сразу»: «18:00–18:45 · отметьте, кто пришёл»; заголовок — группа. */
     fun instantGroup(start: LocalDateTime, end: LocalDateTime): String = DateFormat.timeRange(start, end) + DOT + "отметьте, кто пришёл"
 
     // --- «Настройки → Дневник и напоминания» ---
 
     const val TITLE = "Дневник и напоминания"
     const val DIARY = "Вести дневник"
-    const val DIARY_NOTE = "План, факт и поведение на тренировке — какие поля, задаётся в типе"
+    const val DIARY_NOTE = "После тренировки — что планировали, что сделали, как вёл себя клиент. Какие поля, задаётся в типе тренировки"
     const val AUTO_DONE = "Автоотметка «Проведено»"
     const val AUTO_DONE_NOTE = "ПТ, сплит и СПТ отмечаются проведёнными сами в конце тренировки"
     const val DIGEST = "Вечерняя сводка"
-    const val DIGEST_NOTE = "Одно уведомление со всеми делами дня. Если дел нет, не приходит"
+    const val DIGEST_NOTE = "Одно уведомление вечером со всеми делами из «Нужно сделать» на «Главной». Если дел нет, не приходит"
     const val FOLLOWUP = "Клиенты без записи"
+    const val FOLLOWUP_NOTE = "Попадают в «Нужно сделать», если недавно были на ПТ, сплите или СПТ и не записаны на следующую. Группы не считаются"
     const val RELIABILITY = "Надёжность клиентов"
     const val RELIABILITY_NOTE = "Сколько из последних тренировок клиент пришёл — в карточках и календаре. Видна только вам"
-    const val FOLLOWUP_DAYS = "Нет записи дальше чем на"
-    const val MORE = "Дополнительно"
-    const val INSTANT_DIARY = "Дневник сразу"
-    const val INSTANT_DIARY_NOTE = "Через 15 минут после конца тренировки без дневника"
-    const val INSTANT_GROUP = "Группа сразу"
-    const val INSTANT_GROUP_NOTE = "Через 15 минут после конца группы без отметки"
-    const val DAY_PLAN = "План на день"
-    const val DAY_PLAN_NOTE = "В 07:00: сколько тренировок и когда первая. Если тренировок нет, не приходит"
+    const val FOLLOWUP_DAYS = "Был на тренировке за последние"
+    const val MORE = "Другие уведомления"
+    const val INSTANT_DIARY = "Дневник сразу после тренировки"
+    const val INSTANT_DIARY_NOTE = "Уведомление через 15 минут после конца, если дневник не заполнен. Без него напомнит только вечерняя сводка"
+    const val INSTANT_GROUP = "Отметить группу сразу"
+    const val INSTANT_GROUP_NOTE = "Уведомление через 15 минут после конца группы, если не отмечено, кто пришёл. Без него напомнит только вечерняя сводка"
+    const val DAY_PLAN = "План на день утром"
+    const val DAY_PLAN_NOTE = "Уведомление в 07:00: сколько сегодня тренировок и во сколько первая. В день без тренировок не приходит"
     const val ADVANCE = "Аванс"
-    const val ADVANCE_NOTE = "В день аванса в 19:00: ввести, сколько пришло. Если сумма уже введена, не приходит"
+    const val ADVANCE_NOTE = "Уведомление в день аванса в 19:00 — ввести, сколько пришло. Если сумма уже введена, не приходит"
     const val BLOCKED = "Уведомления «Персоналки» выключены в настройках телефона"
     const val BLOCKED_ACTION = "Включить"
 
