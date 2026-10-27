@@ -200,6 +200,8 @@ class TrainingCardUiTest {
         val id = training("16:41", orlov)
         openCalendar()
         tapBlock("Орлов Максим")
+        // Карточка выезжает: в Actions нажатие сразу после касания блока через раз не находило кнопку (5.1).
+        awaitNode(inCard(TrainingCardFormat.action(CardAction.CANCEL)))
         cardButton(CardAction.CANCEL).performClick()
         awaitNode(hasTestTag(CANCEL_PANEL_TAG))
         onNode(inCard(s("предупредили за_1_ч 1_мин"))).assertIsDisplayed()
