@@ -4,6 +4,8 @@ import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.money.AdvanceState
 import com.akenory.personalka.domain.money.PayScheme
 import com.akenory.personalka.domain.money.Payouts
+import com.akenory.personalka.domain.money.PlanPace
+import com.akenory.personalka.domain.money.SalaryPlan
 import com.akenory.personalka.domain.money.TierProgress
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.YearMonth
@@ -21,15 +23,28 @@ class HomeMoneyFormatTest {
         TierProgress(count, forecast, tier, forecastTier, 101, 151, emptySet())
 
     @Test
-    fun tierLine() {
-        // Прогноз меняет ступень — «по расписанию будет 2» (макет HomeDay).
-        assertEquals("Ступень 1 · по расписанию будет 2", HomeFormat.tierLine(94, tiers(94, 145, 1, 2)))
-        // Не меняет — сколько до следующего порога по проведённым.
-        assertEquals(s("Ступень 2 · до_151 ещё 49_ПТ"), HomeFormat.tierLine(102, tiers(102, 130, 2, 2)))
-        assertEquals(s("Ступень 1 · до_101 ещё 41_ПТ"), HomeFormat.tierLine(60, tiers(60, 90, 1, 1)))
-        // Ступень 3 — выше некуда; ступени выключены — строки нет.
-        assertEquals("Ступень 3", HomeFormat.tierLine(160, tiers(160, 170, 3, 3)))
-        assertNull(HomeFormat.tierLine(94, null))
+    fun tierChip() {
+        // До 101-й — сколько осталось по проведённым; дальше — «бонус» и «максимум» (просьба Дмитрия 27.10.2026).
+        assertEquals(s("Ступень 1 · до бонуса 61_ПТ"), HomeFormat.tierChip(tiers(40, 55, 1, 1)))
+        assertEquals(s("Ступень 1 · до бонуса 7_ПТ"), HomeFormat.tierChip(tiers(94, 145, 1, 2)))
+        assertEquals("Ступень 2 · бонус", HomeFormat.tierChip(tiers(105, 132, 2, 2)))
+        assertEquals("Ступень 3 · максимум", HomeFormat.tierChip(tiers(157, 184, 3, 3)))
+        assertNull(HomeFormat.tierChip(null))
+    }
+
+    @Test
+    fun pace() {
+        // План 80 000: проведено 36 800, по расписанию 61 640 — не хватает; план 120 000 при прогнозе 126 720 — идёт.
+        assertEquals(PlanPace.BEHIND, SalaryPlan.pace(3_680_000, 6_164_000, 8_000_000))
+        assertEquals(PlanPace.ON_TRACK, SalaryPlan.pace(10_080_000, 12_672_000, 12_000_000))
+        assertEquals(PlanPace.DONE, SalaryPlan.pace(15_700_000, 18_400_000, 15_000_000))
+        assertEquals(PlanPace.DONE, SalaryPlan.pace(15_000_000, 15_000_000, 15_000_000))
+        assertNull(SalaryPlan.pace(100, 200, null))
+        assertNull(SalaryPlan.pace(100, 200, 0))
+        assertEquals(s("Поднажать: до плана ещё 20_ПТ"), HomeFormat.pace(PlanPace.BEHIND, 46, 77, 20))
+        assertEquals(s("Поднажать: прогноз 77_% плана"), HomeFormat.pace(PlanPace.BEHIND, 46, 77, null))
+        assertEquals(s("Хорошо идёте: прогноз 105_% плана"), HomeFormat.pace(PlanPace.ON_TRACK, 84, 105, null))
+        assertEquals(s("План выполнен: 104_%"), HomeFormat.pace(PlanPace.DONE, 104, 122, null))
     }
 
     @Test
@@ -52,7 +67,6 @@ class HomeMoneyFormatTest {
     @Test
     fun planLine() {
         assertEquals(s("60_% плана"), SalaryFormat.ofPlan(60))
-        assertEquals(s("прогноз 97_%"), HomeFormat.forecastPercent(97))
         assertEquals("Деньги · октябрь", HomeFormat.moneyTitle(LocalDate(2026, 10, 20)))
     }
 

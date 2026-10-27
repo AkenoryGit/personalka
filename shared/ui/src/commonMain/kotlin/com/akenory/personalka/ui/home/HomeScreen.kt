@@ -1,6 +1,11 @@
 package com.akenory.personalka.ui.home
 
 import androidx.compose.foundation.background
+import com.akenory.personalka.domain.money.SalaryPlan
+import com.akenory.personalka.domain.money.PlanPace
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,7 +75,6 @@ import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.ReconcileFormat
-import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
@@ -94,7 +98,6 @@ import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
-import com.akenory.personalka.ui.salary.TwoPartBar
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
@@ -126,6 +129,7 @@ internal fun birthdayTag(id: String) = "home-birthday-$id"
 internal const val MONEY_SETUP_TAG = "home-money-setup"
 internal const val MONEY_TODAY_TAG = "home-money-today"
 internal const val MONEY_MONTH_TAG = "home-money-month"
+internal const val MONEY_TIER_TAG = "home-money-tier"
 internal fun todoTag(kind: TodoKind) = "home-todo-${kind.name.lowercase()}"
 internal fun dayRowTag(id: String) = "home-day-$id"
 
@@ -702,10 +706,12 @@ private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: ()
 }
 
 /**
- * «Деньги» (5.2) — первый блок «Главной»: две колонки «Сегодня» и «За месяц» — заработано, «будет ≈ …» по расписанию
- * и ПТ «2 ПТ · будет 5», под ней отмены «2 отмены», если были. Ниже полоса плана — проведено основным цветом, прогноз цветом рамок, конец полосы — план;
- * под ней «60 % плана» и «прогноз 97 %», затем строка ступени. Плана нет — полосы нет. Нажатие — «Зарплата».
- * Зарплата не настроена — приглашение и «Настроить зарплату» (5.18).
+ * «Деньги» (5.2) — первый блок «Главной»: сверху «Деньги · октябрь» и плашка ступени; две колонки «Сегодня» и «За месяц» —
+ * заработано, «будет ≈ …» по расписанию и ПТ «2 ПТ · будет 5», под ней отмены «2 отмены», если были. Ниже полоса
+ * плана — «заряжается» ступенью (шаг 3.9с, просьба Дмитрия): на ступени 1 проведено основным цветом, со 101-й ПТ —
+ * зелёным («бонус» действует на весь месяц), со 151-й — зелёным с косыми штрихами; прогноз — цветом рамок, конец
+ * полосы — план. Под полосой оценка с точкой: зелёная «Хорошо идёте…», «План выполнен…», янтарная «Поднажать…».
+ * Плана нет — ни полосы, ни оценки. Нажатие — «Зарплата». Не настроена — приглашение и «Настроить зарплату» (5.18).
  */
 @Composable
 private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit) {
@@ -725,11 +731,12 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
         }
         is HomeMoney.Month -> {
             val view = money.view
+            val tier = view.tiers?.tier ?: 1
             Block(Modifier.clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
                 Padded {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(HomeFormat.moneyTitle(today), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
-                        Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+                        HomeFormat.tierChip(view.tiers)?.let { TierChip(it, tier) }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
                         val earnedToday = view.today ?: 0
@@ -752,26 +759,74 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                         )
                     }
                     val plan = view.plan
-                    if (plan != null && plan > 0) {
+                    val pace = SalaryPlan.pace(view.pay.earned, view.pay.forecast, plan)
+                    if (plan != null && pace != null) {
                         val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
                         val forecast = (view.pay.forecast.toFloat() / plan).coerceIn(done, 1f)
-                        TwoPartBar(done, forecast)
-                        Row(Modifier.fillMaxWidth()) {
-                            view.percent?.let { Text(SalaryFormat.ofPlan(it), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted) }
-                            view.forecastPercent?.let { Text(HomeFormat.forecastPercent(it), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted) }
+                        ChargedBar(done, forecast, tier)
+                        Row(
+                            Modifier.padding(top = Dimens.space1),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+                        ) {
+                            Box(Modifier.size(8.dp).background(if (pace == PlanPace.BEHIND) colors.charged else colors.done, CircleShape))
+                            Text(
+                                HomeFormat.pace(pace, view.percent ?: 0, view.forecastPercent ?: 0, view.shortfall?.pts),
+                                style = MaterialTheme.typography.labelLarge.tabular(),
+                                color = colors.text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
-                HomeFormat.tierLine(view.pay.ptCount, view.tiers)?.let { line ->
-                    HorizontalDivider(Modifier.padding(horizontal = Dimens.space4), thickness = 1.dp, color = colors.divider)
-                    Text(
-                        line,
-                        Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space3),
-                        style = MaterialTheme.typography.bodyLarge.tabular(),
-                        color = colors.text,
-                    )
-                }
             }
+        }
+    }
+}
+
+/** Плашка ступени: на ступени 1 — серая; со ступени 2 — зелёная с молнией, на ступени 3 — с двумя. */
+@Composable
+private fun TierChip(text: String, tier: Int) {
+    val colors = PersonalkaTheme.colors
+    val bonus = tier > 1
+    Row(
+        Modifier
+            .background(if (bonus) colors.doneContainer else colors.surfaceAlt, CircleShape)
+            .padding(start = if (bonus) 8.dp else 10.dp, end = 10.dp, top = 3.dp, bottom = 3.dp)
+            .testTag(MONEY_TIER_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        repeat(tier - 1) { Icon(PIcons.Bolt, contentDescription = null, tint = colors.onDoneContainer, modifier = Modifier.size(14.dp)) }
+        Text(text, style = MaterialTheme.typography.labelMedium.tabular(), color = if (bonus) colors.onDoneContainer else colors.text, maxLines = 1)
+    }
+}
+
+/** Полоса плана, «заряженная» ступенью: проведено — основным цветом, со ступени 2 — зелёным, на ступени 3 — со штрихами. */
+@Composable
+private fun ChargedBar(done: Float, forecast: Float, tier: Int) {
+    val colors = PersonalkaTheme.colors
+    Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(colors.surfaceAlt)) {
+        if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(colors.outline))
+        if (done > 0f) {
+            Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(if (tier > 1) colors.done else colors.primary)) {
+                if (tier >= 3) Sparks()
+            }
+        }
+    }
+}
+
+/** Косые светлые штрихи по проведённой части полосы на ступени 3 — «заряд максимальный», без анимации. */
+@Composable
+private fun Sparks() {
+    val stroke = Color.White.copy(alpha = 0.28f)
+    Canvas(Modifier.fillMaxSize()) {
+        val step = 9.dp.toPx()
+        var x = -size.height
+        while (x < size.width) {
+            drawLine(stroke, Offset(x, size.height), Offset(x + size.height, 0f), strokeWidth = 1.dp.toPx())
+            x += step
         }
     }
 }

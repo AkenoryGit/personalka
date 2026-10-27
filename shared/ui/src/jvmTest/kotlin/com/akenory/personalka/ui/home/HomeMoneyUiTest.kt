@@ -110,11 +110,17 @@ class HomeMoneyUiTest {
         // 20.10 тренировок нет.
         awaitIn(MONEY_TODAY_TAG, HomeFormat.willBe(0, 0))
         awaitIn(MONEY_TODAY_TAG, "без ПТ")
-        awaitNode(hasText(s("Ступень 1 · до_101 ещё 99_ПТ")))
-        // План 3 680 ₽: проведено 50 %, прогноз 75 %.
+        // Плашка ступени (шаг 3.9с): до 101-й ещё 99 ПТ; плана нет — ни полосы, ни оценки.
+        awaitIn(MONEY_TIER_TAG, s("Ступень 1 · до бонуса 99_ПТ"))
+        assertEquals(0, onAllNodes(hasTestTag(MONEY_TAG) and hasText("Поднажать", substring = true)).fetchSemanticsNodes().size)
+        // План 3 680 ₽: прогноз 2 760 ₽ ниже — «Поднажать: до плана ещё 1 ПТ» (одна ПТ ББ добирает 920 ₽).
         runBlocking { settings.months.savePlan(october, rub(3680)) }
-        awaitNode(hasTestTag(MONEY_TAG) and hasText(SalaryFormat.ofPlan(50)))
-        awaitNode(hasText(HomeFormat.forecastPercent(75)))
+        awaitNode(hasTestTag(MONEY_TAG) and hasText(s("Поднажать: до плана ещё 1_ПТ")))
+        // План 2 000 ₽: по расписанию выполняется; 1 500 ₽ — уже выполнен.
+        runBlocking { settings.months.savePlan(october, rub(2000)) }
+        awaitNode(hasTestTag(MONEY_TAG) and hasText(s("Хорошо идёте: прогноз 138_% плана")))
+        runBlocking { settings.months.savePlan(october, rub(1500)) }
+        awaitNode(hasTestTag(MONEY_TAG) and hasText(s("План выполнен: 122_%")))
         // Нажатие — «Зарплата».
         onNodeWithTag(MONEY_TAG).performScrollTo().performClick()
         awaitNode(hasTestTag(com.akenory.personalka.ui.salary.SALARY_EARNED_TAG))

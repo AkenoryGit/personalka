@@ -174,7 +174,18 @@ data class MonthInput(
  */
 data class Shortfall(val missing: Long, val pts: Int?, val newTier: Int? = null, val tierFrom: Int? = null)
 
+/** Идёт ли месяц по плану (5.2, шаг 3.9с): выполнен, по расписанию будет выполнен или нужно добавить. */
+enum class PlanPace { DONE, ON_TRACK, BEHIND }
+
 object SalaryPlan {
+
+    /** План набран — [PlanPace.DONE]; прогноз не ниже плана — [PlanPace.ON_TRACK]; ниже — [PlanPace.BEHIND]; плана нет — `null`. */
+    fun pace(earned: Long, forecast: Long, plan: Long?): PlanPace? = when {
+        plan == null || plan <= 0 -> null
+        earned >= plan -> PlanPace.DONE
+        forecast >= plan -> PlanPace.ON_TRACK
+        else -> PlanPace.BEHIND
+    }
 
     /** План месяца [month]: свой, а нет — план последнего месяца до него (новый месяц предлагает план прошлого). */
     fun planFor(month: YearMonth, plans: Map<YearMonth, Long>): Long? =

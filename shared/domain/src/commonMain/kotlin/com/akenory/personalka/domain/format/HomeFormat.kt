@@ -4,6 +4,7 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.RuText.NBSP
 import com.akenory.personalka.domain.home.BackupTodo
 import com.akenory.personalka.domain.money.AdvanceState
+import com.akenory.personalka.domain.money.PlanPace
 import com.akenory.personalka.domain.money.TierProgress
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -150,9 +151,6 @@ object HomeFormat {
     /** Заголовок карточки: «Деньги · октябрь». */
     fun moneyTitle(month: LocalDate): String = MONEY + DOT + DateFormat.month(month)
 
-    /** Под полосой плана справа: «прогноз 97 %». */
-    fun forecastPercent(percent: Int): String = "прогноз $percent$NBSP%"
-
     /** Колонки «Денег» (5.2, просьба Дмитрия 26.10.2026): сегодня и месяц. */
     const val TODAY = "Сегодня"
     const val MONTH = "За месяц"
@@ -178,20 +176,24 @@ object HomeFormat {
     fun cancelledLine(n: Int): String? = if (n <= 0) null else RuText.count(n, "отмена", "отмены", "отмен")
 
     /**
-     * Строка ступени (5.2): прогноз меняет ступень — «Ступень 1 · по расписанию будет 2»; не меняет —
-     * «Ступень 2 · до 151 ещё 49 ПТ» (по проведённым [ptCount]); ступень 3 — «Ступень 3»; ступени выключены
-     * ([tiers] `null`) — строки нет. Число ПТ — в колонках над ней.
+     * Плашка ступени у заголовка «Денег» (5.2, шаг 3.9с): «Ступень 1 · до бонуса 61 ПТ» — сколько ПТ до 101-й по
+     * проведённым; «Ступень 2 · бонус»; «Ступень 3 · максимум». Ступени выключены ([tiers] `null`) — плашки нет.
      */
-    fun tierLine(ptCount: Int, tiers: TierProgress?): String? {
-        if (tiers == null) return null
-        val head = "Ступень " + tiers.tier
-        if (tiers.forecastTier > tiers.tier) return head + DOT + "по расписанию будет " + tiers.forecastTier
-        val next = when (tiers.tier) {
-            1 -> tiers.t2From
-            2 -> tiers.t3From
-            else -> return head
-        }
-        return head + DOT + "до$NBSP$next ещё " + RuText.digits((next - ptCount).toLong()) + NBSP + "ПТ"
+    fun tierChip(tiers: TierProgress?): String? = when (tiers?.tier) {
+        null -> null
+        1 -> "Ступень 1" + DOT + "до бонуса " + RuText.digits((tiers.t2From - tiers.count).toLong()) + NBSP + "ПТ"
+        2 -> "Ступень 2" + DOT + "бонус"
+        else -> "Ступень " + tiers.tier + DOT + "максимум"
+    }
+
+    /**
+     * Оценка месяца под полосой плана (5.2, шаг 3.9с): «План выполнен: 104 %», «Хорошо идёте: прогноз 105 % плана»,
+     * отстаёт — «Поднажать: до плана ещё 20 ПТ» (K из 4.12, [pts]); K не найден — «Поднажать: прогноз 84 % плана».
+     */
+    fun pace(pace: PlanPace, percent: Int, forecastPercent: Int, pts: Int?): String = when (pace) {
+        PlanPace.DONE -> "План выполнен: $percent$NBSP%"
+        PlanPace.ON_TRACK -> "Хорошо идёте: прогноз $forecastPercent$NBSP% плана"
+        PlanPace.BEHIND -> if (pts != null) "Поднажать: до плана ещё " + RuText.digits(pts.toLong()) + NBSP + "ПТ" else "Поднажать: прогноз $forecastPercent$NBSP% плана"
     }
 
     /** Зарплата не настроена (5.18): вместо суммы — приглашение и кнопка. */
