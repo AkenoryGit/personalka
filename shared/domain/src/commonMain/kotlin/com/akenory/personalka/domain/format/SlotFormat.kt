@@ -11,7 +11,7 @@ object SlotFormat {
     const val DAYS = "Дни"
     const val TIME = "Время начала"
     const val PLACE = "Место"
-    const val ANY_PLACE = "Любое"
+    const val ANY_PLACE = "Все"
     const val DURATION = "Длительность"
     const val GAP = "Перерыв"
     const val NO_GAP = "Любой"
@@ -67,13 +67,24 @@ object SlotFormat {
     fun waiting(names: List<String>): String = "ждёт: " + names.joinToString(", ")
 
     /**
-     * Текст для клиента (4.13): «Свободное время:» и строки «Пн 03.11: 13:00–15:00, 18:00–19:00» — без имён и чужих
-     * тренировок, без пометок листа ожидания.
+     * Текст для клиента (4.13): «Свободное время:» и строки по дням — без имён и чужих тренировок, без пометок листа
+     * ожидания. Окна в нескольких помещениях — с коротким названием перед каждым: «Пн 03.11: ББ 13:00–15:00,
+     * 18:00–19:00; ДБ 13:00–14:00»; в одном — «Пн 03.11: 13:00–15:00, 18:00–19:00». [placeShort] — «ББ» по id места.
      */
-    fun copyText(days: List<SlotDay>): String = buildString {
+    fun copyText(days: List<SlotDay>, placeShort: (String) -> String = { "" }): String = buildString {
+        val several = days.flatMap { d -> d.windows.map { it.locationId } }.distinct().size > 1
         append("Свободное время:")
         days.forEach { d ->
-            append('\n').append(day(d)).append(": ").append(d.windows.joinToString(", ") { window(it) })
+            append('\n').append(day(d)).append(": ")
+            if (several) {
+                append(
+                    d.windows.groupBy { it.locationId }.entries.joinToString("; ") { (place, windows) ->
+                        place?.let(placeShort).orEmpty() + " " + windows.joinToString(", ") { window(it) }
+                    },
+                )
+            } else {
+                append(d.windows.joinToString(", ") { window(it) })
+            }
         }
     }
 

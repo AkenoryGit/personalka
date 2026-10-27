@@ -3,7 +3,6 @@ package com.akenory.personalka.domain.calendar
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.WaitWant
 import com.akenory.personalka.domain.model.TimeRange
-import com.akenory.personalka.domain.restriction.Placement
 import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import kotlinx.datetime.DateTimeUnit
@@ -38,12 +37,15 @@ data class SlotQuery(
 /** Тренировка или дежурство тренера (неотменённые): занятое время и опора для «не дальше Gmax» (4.13). */
 data class SlotBusy(val start: LocalDateTime, val durationMin: Int, val duty: Boolean = false)
 
-/** Свободное окно дня: слот длительностью D можно начать с [startMinute] и закончить не позже [endMinute]. */
-data class FreeWindow(val date: LocalDate, val startMinute: Int, val endMinute: Int) {
+/**
+ * Свободное окно дня в помещении [locationId]: слот длительностью D можно начать с [startMinute] и закончить не позже
+ * [endMinute]. `null` — мест в справочнике нет, запреты не проверялись.
+ */
+data class FreeWindow(val date: LocalDate, val startMinute: Int, val endMinute: Int, val locationId: String? = null) {
     val start: LocalDateTime get() = LocalDateTime(date, LocalTime(startMinute / 60, startMinute % 60))
 }
 
-/** Окна одного дня по времени. */
+/** Окна одного дня: по помещениям в порядке справочника, в помещении — по времени. */
 data class SlotDay(val date: LocalDate, val windows: List<FreeWindow>)
 
 /**
@@ -66,8 +68,9 @@ object FreeSlots {
 
     /**
      * Окна с [query.from] по [query.to]. [busy] — тренировки и дежурства тренера этих дней, отменённых среди них нет;
-     * [restrictions] — все запреты (свои и клуба); [places] — все места: при «любом» месте время закрыто запретом,
-     * только если запрещено во всех местах. Дни без окон не попадают в список.
+     * [restrictions] — все запреты (свои и клуба, «все места» — запрет в каждом месте); [places] — действующие места
+     * по порядку. При «любом» месте окна ищутся в каждом помещении отдельно со своими запретами (шаг 4.3а): клиенту
+     * ДБ время ББ не нужно. Дни без окон не попадают в список.
      */
     fun find(
         query: SlotQuery,
@@ -81,7 +84,12 @@ object FreeSlots {
         var date = maxOf(query.from, now.date)
         while (date <= query.to) {
             if (query.days.isEmpty() || date.dayOfWeek in query.days) {
-                val windows = day(query, date, byDay[date].orEmpty(), restrictions, places, now)
+                val where = query.locationId?.let { listOf(it) } ?: places
+                val windows = if (where.isEmpty()) {
+                    day(query, date, byDay[date].orEmpty(), restrictions, now)
+                } else {
+                    where.flatMap { place -> day(query.copy(locationId = place), date, byDay[date].orEmpty(), restrictions, now) }
+                }
                 if (windows.isNotEmpty()) result += SlotDay(date, windows)
             }
             date = date.plus(1, DateTimeUnit.DAY)
@@ -89,13 +97,12 @@ object FreeSlots {
         return result
     }
 
-    /** Окна одного дня [date]; [busy] — тренировки и дежурства этого дня. */
+    /** Окна одного дня [date] в месте [SlotQuery.locationId]; [busy] — тренировки и дежурства этого дня. */
     fun day(
         query: SlotQuery,
         date: LocalDate,
         busy: List<SlotBusy>,
         restrictions: List<Restriction>,
-        places: List<String>,
         now: LocalDateTime,
     ): List<FreeWindow> {
         // Опоры — тренировки и дежурства дня; день без них — только с «показывать пустые дни».
@@ -105,7 +112,10 @@ object FreeSlots {
         val d = query.durationMin
         val closed = BooleanArray(ClubTime.MINUTES_PER_DAY)
         busy.filter { !it.duty || query.dutyBusy }.forEach { close(closed, span(it)) }
-        if (query.restrictions) restricted(restrictions, date, query.locationId, places).forEach { close(closed, it) }
+        val place = query.locationId
+        if (query.restrictions && place != null) {
+            RestrictionRules.on(restrictions, date, place).forEach { close(closed, it.restriction.startMinute until it.restriction.endMinute) }
+        }
         // Рамки дня.
         close(closed, 0 until minute(query.dayStart))
         close(closed, minute(query.dayEnd, end = true) until ClubTime.MINUTES_PER_DAY)
@@ -129,51 +139,28 @@ object FreeSlots {
         // Подряд идущие начала — одно окно: с первого начала до конца слота с последнего, обе границы по шагу.
         return runs(allowed).mapNotNull { run ->
             val first = ceil(run.first, step)
-            if (first > run.last) null else FreeWindow(date, first, maxOf((run.last + d) / step * step, first + d))
+            if (first > run.last) null else FreeWindow(date, first, maxOf((run.last + d) / step * step, first + d), place)
         }
     }
 
     /**
-     * Окно подходит записи листа ожидания [want] (4.16): день в её днях, место её (или любое), у разового — не позже
-     * срока, и в окне есть начало из её промежутков, с которого влезает [durationMin] — длительность её типа. Если
-     * поиск шёл по любому месту, а запись ждёт определённое, слот не должен попадать под запрет этого места.
+     * Окно подходит записи листа ожидания [want] (4.16): день в её днях, место окна — её (или она ждёт любое),
+     * у разового — не позже срока, и в окне есть начало по сетке [step] из её промежутков, с которого влезает
+     * [durationMin] — длительность её типа. Запреты места окно уже учло.
      */
-    fun suits(
-        window: FreeWindow,
-        query: SlotQuery,
-        want: WaitWant,
-        durationMin: Int,
-        restrictions: List<Restriction>,
-    ): Boolean {
+    fun suits(window: FreeWindow, want: WaitWant, durationMin: Int, step: Int = STEP): Boolean {
         if (want.days.isNotEmpty() && window.date.dayOfWeek !in want.days) return false
-        if (want.locationId != null && query.locationId != null && want.locationId != query.locationId) return false
+        if (want.locationId != null && window.locationId != null && want.locationId != window.locationId) return false
         if (!want.series && want.until != null && window.date > want.until) return false
         var s = window.startMinute
         while (s + durationMin <= window.endMinute) {
-            val inRange = want.ranges.isEmpty() || want.ranges.any { time(s) in it }
-            val free = want.locationId == null || query.locationId != null || !query.restrictions ||
-                !RestrictionRules.flag(Placement(LocalDateTime(window.date, time(s)), durationMin, want.locationId), restrictions)
-            if (inRange && free) return true
-            s += query.stepMin
+            if (want.ranges.isEmpty() || want.ranges.any { time(s) in it }) return true
+            s += step
         }
         return false
     }
 
     private fun ceil(minute: Int, step: Int): Int = (minute + step - 1) / step * step
-
-    /** Занятые промежутки запретов дня: одного места или — при любом — только там, где запрещено во всех местах. */
-    private fun restricted(restrictions: List<Restriction>, date: LocalDate, locationId: String?, places: List<String>): List<IntRange> {
-        fun of(place: String) = RestrictionRules.on(restrictions, date, place).map { it.restriction.startMinute until it.restriction.endMinute }
-        if (locationId != null) return of(locationId)
-        if (places.isEmpty()) return emptyList()
-        val all = BooleanArray(ClubTime.MINUTES_PER_DAY) { true }
-        places.forEach { place ->
-            val one = BooleanArray(ClubTime.MINUTES_PER_DAY)
-            of(place).forEach { close(one, it) }
-            for (m in all.indices) all[m] = all[m] && one[m]
-        }
-        return runs(all)
-    }
 
     private fun runs(flags: BooleanArray): List<IntRange> {
         val out = mutableListOf<IntRange>()

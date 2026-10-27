@@ -28,7 +28,8 @@ data class SlotResult(val days: List<SlotDay>, val waiting: Map<FreeWindow, List
 
 /**
  * Свободные слоты (ТЗ 4.13, 5.13) из базы телефона: занятое — неотменённые тренировки и дежурства тренера (группа,
- * которую ведёт коллега без него, не занимает), запреты — свои и клуба; пометки «ждёт» — записи листа ожидания
+ * которую ведёт коллега без него, не занимает), запреты — свои и клуба, по каждому помещению отдельно (шаг 4.3а);
+ * пометки «ждёт» — записи листа ожидания
  * действующих клиентов с длительностью их типа.
  */
 class FreeSlotRepository internal constructor(private val db: PersonalkaDatabase) {
@@ -58,7 +59,7 @@ class FreeSlotRepository internal constructor(private val db: PersonalkaDatabase
             val marks = days.flatMap { it.windows }.associateWith { window ->
                 waiting.mapNotNull { (entry, client) ->
                     val duration = typeById[entry.typeId]?.defaultDurationMin ?: return@mapNotNull null
-                    if (!FreeSlots.suits(window, query, entry.want(), duration, restrictions)) return@mapNotNull null
+                    if (!FreeSlots.suits(window, entry.want(), duration, query.stepMin)) return@mapNotNull null
                     CalendarFormat.client(ClientName(client.lastName, client.firstName))
                 }
             }.filterValues { it.isNotEmpty() }

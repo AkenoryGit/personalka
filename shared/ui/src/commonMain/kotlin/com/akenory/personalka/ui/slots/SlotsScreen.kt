@@ -75,7 +75,8 @@ internal fun slotPeriodTag(days: Int) = "slots-period-$days"
 internal fun slotDurationTag(minutes: Int) = "slots-duration-$minutes"
 internal fun slotGapTag(minutes: Int?) = "slots-gap-${minutes ?: "any"}"
 internal fun slotPlaceTag(id: String?) = "slots-place-${id ?: "any"}"
-internal fun slotWindowTag(w: FreeWindow) = "slots-window-${w.date}-${w.startMinute}"
+internal fun slotWindowTag(w: FreeWindow) = "slots-window-${w.date}-${w.locationId}-${w.startMinute}"
+internal fun slotPlaceRowTag(day: SlotDay, placeId: String) = "slots-place-row-${day.date}-$placeId"
 
 /** Экран «Свободные слоты» в стопке «Ещё»; у «Найти время» из листа ожидания — с id записи. */
 object SlotsRoute {
@@ -138,23 +139,24 @@ internal fun SlotsScreen(
     val hours by calendar.workHours.collectAsState(initial = WorkHours())
     val places by calendar.places.collectAsState(initial = emptyList())
     val query = params.query(now.date, hours.start, hours.end)
+    val placeShort: (String) -> String = { id -> places.firstOrNull { it.id == id }?.shortName.orEmpty() }
     val result by remember(query, now) { calendar.slots.observe(query, now) }.collectAsState(initial = null)
 
     val copy: () -> Unit = {
         result?.let {
-            clipboard.setText(AnnotatedString(SlotFormat.copyText(it.days)))
+            clipboard.setText(AnnotatedString(SlotFormat.copyText(it.days, placeShort)))
             messages.show(SlotFormat.COPIED)
         }
     }
-    val share: (() -> Unit)? = shareText?.let { send -> { result?.let { send(SlotFormat.copyText(it.days)) } } }
+    val share: (() -> Unit)? = shareText?.let { send -> { result?.let { send(SlotFormat.copyText(it.days, placeShort)) } } }
     // Из «Найти время» окно записывает того, кто ждёт, как «Записать» в листе ожидания (4.16).
     val open: (FreeWindow) -> Unit = { w ->
         val who = wait
         onForm(
             if (who == null) {
-                TrainingFormKey.new(start = w.start, locationId = params.locationId)
+                TrainingFormKey.new(start = w.start, locationId = w.locationId ?: params.locationId)
             } else {
-                TrainingFormKey.new(start = w.start, clientId = who.clientId, weekly = who.series, typeId = who.typeId, locationId = params.locationId, waitId = waitId)
+                TrainingFormKey.new(start = w.start, clientId = who.clientId, weekly = who.series, typeId = who.typeId, locationId = w.locationId ?: params.locationId, waitId = waitId)
             },
         )
     }
@@ -177,14 +179,14 @@ internal fun SlotsScreen(
                 }
                 VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)
                 Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
-                    Results(result, copy, share, open)
+                    Results(result, placeShort, copy, share, open)
                 }
             }
         } else {
             Column(Modifier.fillMaxSize().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
                 Params(params, places, more, { more = it }, change)
                 HorizontalDivider(Modifier.padding(vertical = Dimens.space4), color = PersonalkaTheme.colors.divider)
-                Results(result, copy, share, open)
+                Results(result, placeShort, copy, share, open)
             }
         }
     }
@@ -289,6 +291,7 @@ private fun Label(text: String) {
 @Composable
 private fun ColumnScope.Results(
     result: SlotResult?,
+    placeShort: (String) -> String,
     onCopy: () -> Unit,
     onShare: (() -> Unit)?,
     onOpen: (FreeWindow) -> Unit,
@@ -306,11 +309,13 @@ private fun ColumnScope.Results(
         OutlineButton(SlotFormat.COPY, onCopy, Modifier.testTag(SLOTS_COPY_TAG), icon = PIcons.ContentCopy)
         if (onShare != null) OutlineButton(SlotFormat.SHARE, onShare, Modifier.testTag(SLOTS_SHARE_TAG), icon = PIcons.Share)
     }
-    result.days.forEach { day -> Day(day, result.waiting, onOpen) }
+    // Несколько помещений — окна каждого своей строкой с коротким названием (шаг 4.3а).
+    val several = result.days.flatMap { d -> d.windows.map { it.locationId } }.distinct().size > 1
+    result.days.forEach { day -> Day(day, result.waiting, if (several) placeShort else null, onOpen) }
 }
 
 @Composable
-private fun Day(day: SlotDay, waiting: Map<FreeWindow, List<String>>, onOpen: (FreeWindow) -> Unit) {
+private fun Day(day: SlotDay, waiting: Map<FreeWindow, List<String>>, placeShort: ((String) -> String)?, onOpen: (FreeWindow) -> Unit) {
     val colors = PersonalkaTheme.colors
     Text(
         SlotFormat.day(day),
@@ -318,22 +323,36 @@ private fun Day(day: SlotDay, waiting: Map<FreeWindow, List<String>>, onOpen: (F
         style = MaterialTheme.typography.labelLarge,
         color = colors.text,
     )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-        day.windows.forEach { w ->
-            val names = waiting[w].orEmpty()
-            Column(
-                Modifier
-                    .heightIn(min = Dimens.touch)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(colors.surface)
-                    .clickable(role = Role.Button) { onOpen(w) }
-                    .testTag(slotWindowTag(w))
-                    .padding(horizontal = Dimens.space3, vertical = Dimens.space2),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(SlotFormat.window(w), style = MaterialTheme.typography.labelLarge, color = colors.text)
-                if (names.isNotEmpty()) {
-                    Text(SlotFormat.waiting(names), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+    day.windows.groupBy { it.locationId }.forEach { (place, windows) ->
+        if (placeShort != null && place != null) {
+            Text(
+                placeShort(place),
+                Modifier.padding(top = Dimens.space1, bottom = 4.dp).testTag(slotPlaceRowTag(day, place)),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.textMuted,
+            )
+        }
+        FlowRow(
+            Modifier.padding(bottom = Dimens.space2),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+            verticalArrangement = Arrangement.spacedBy(Dimens.space2),
+        ) {
+            windows.forEach { w ->
+                val names = waiting[w].orEmpty()
+                Column(
+                    Modifier
+                        .heightIn(min = Dimens.touch)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(colors.surface)
+                        .clickable(role = Role.Button) { onOpen(w) }
+                        .testTag(slotWindowTag(w))
+                        .padding(horizontal = Dimens.space3, vertical = Dimens.space2),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(SlotFormat.window(w), style = MaterialTheme.typography.labelLarge, color = colors.text)
+                    if (names.isNotEmpty()) {
+                        Text(SlotFormat.waiting(names), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+                    }
                 }
             }
         }

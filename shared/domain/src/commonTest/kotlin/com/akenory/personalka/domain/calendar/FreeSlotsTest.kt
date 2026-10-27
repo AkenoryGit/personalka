@@ -33,13 +33,14 @@ class FreeSlotsTest {
     private fun query(
         gap: Int? = null,
         dutyBusy: Boolean = false,
-        location: String? = null,
+        location: String? = "bb",
         ranges: List<com.akenory.personalka.domain.model.TimeRange> = emptyList(),
         empty: Boolean = false,
     ) = SlotQuery(monday, monday, ranges = ranges, locationId = location, dutyBusy = dutyBusy, maxGapMin = gap, emptyDays = empty)
 
     private fun windows(q: SlotQuery, busy: List<SlotBusy> = day, restrictions: List<Restriction> = emptyList(), current: LocalDateTime = now) =
-        FreeSlots.find(q, busy, restrictions, places, current).flatMap { it.windows }.map { SlotFormat.window(it) }
+        FreeSlots.find(q, busy, restrictions, places, current).flatMap { it.windows }
+            .map { (if (q.locationId == null) "${it.locationId} " else "") + SlotFormat.window(it) }
 
     @Test
     fun windowsAreDayMinusTrainingsAlignedToStep() {
@@ -102,17 +103,32 @@ class FreeSlotsTest {
         val group = Restriction("r1", "db", "Группа", LocalTime(16, 0), LocalTime(19, 0), date = monday, validFrom = monday)
         assertEquals(listOf("07:00–09:00", "10:00–14:00", "15:00–16:00", "19:00–23:00"), windows(query(location = "db"), restrictions = listOf(group)))
         assertEquals(listOf("07:00–09:00", "10:00–14:00", "15:00–23:00"), windows(query(location = "bb"), restrictions = listOf(group)))
-        // Любое место: запрет только в ДБ — в ББ свободно.
-        assertEquals(listOf("07:00–09:00", "10:00–14:00", "15:00–23:00"), windows(query(), restrictions = listOf(group)))
-        val both = group.copy(id = "r2", locationId = "bb", startTime = LocalTime(17, 0), endTime = LocalTime(20, 0))
-        assertEquals(listOf("07:00–09:00", "10:00–14:00", "15:00–17:00", "19:00–23:00"), windows(query(), restrictions = listOf(group, both)))
         // Запреты выключены — не учитываются.
         assertEquals(3, windows(query(location = "db").copy(restrictions = false), restrictions = listOf(group)).size)
     }
 
     @Test
+    fun allPlacesSearchEachPlaceWithItsRestrictions() {
+        // Шаг 4.3а: «Все» — окна каждого помещения отдельно, запрет ДБ закрывает только ДБ.
+        val group = Restriction("r1", "db", "Группа", LocalTime(16, 0), LocalTime(19, 0), date = monday, validFrom = monday)
+        assertEquals(
+            listOf("bb 07:00–09:00", "bb 10:00–14:00", "bb 15:00–23:00", "db 07:00–09:00", "db 10:00–14:00", "db 15:00–16:00", "db 19:00–23:00"),
+            windows(query(location = null), restrictions = listOf(group)),
+        )
+        // Запрет «на все места» — запрет в каждом помещении: утро закрыто в обоих.
+        val morning = listOf("bb", "db").map { Restriction("m-$it", it, "Сборы", LocalTime(7, 0), LocalTime(9, 0), date = monday, validFrom = monday) }
+        assertEquals(
+            listOf("bb 10:00–14:00", "bb 15:00–23:00", "db 10:00–14:00", "db 15:00–23:00"),
+            windows(query(location = null), restrictions = morning),
+        )
+        // Повторяющийся запрет по понедельникам тоже учитывается.
+        val weekly = Restriction("w", "bb", "Школа", LocalTime(15, 0), LocalTime(23, 0), weekdays = setOf(DayOfWeek.MONDAY), validFrom = LocalDate(2026, 9, 1))
+        assertEquals(listOf("07:00–09:00", "10:00–14:00"), windows(query(), restrictions = listOf(weekly)))
+    }
+
+    @Test
     fun durationAndDaysOfWeek() {
-        val q = SlotQuery(monday, LocalDate(2026, 11, 8), days = setOf(DayOfWeek.MONDAY), durationMin = 90, dayStart = LocalTime(8, 0))
+        val q = SlotQuery(monday, LocalDate(2026, 11, 8), days = setOf(DayOfWeek.MONDAY), locationId = "bb", durationMin = 90, dayStart = LocalTime(8, 0))
         val found = FreeSlots.find(q, day + SlotBusy(at(10, date = LocalDate(2026, 11, 3)), 50), emptyList(), places, now)
         assertEquals(listOf(monday), found.map { it.date })
         // 08:00–09:00 короче 90 минут — не показывается.
@@ -121,27 +137,32 @@ class FreeSlotsTest {
 
     @Test
     fun waitListMarks() {
-        val window = FreeWindow(monday, 15 * 60, 23 * 60)
-        val q = query()
+        val window = FreeWindow(monday, 15 * 60, 23 * 60, "bb")
         val evening = WaitWant(days = setOf(DayOfWeek.MONDAY), ranges = listOf(WaitRules.EVENING), typeId = "pt")
         val morning = evening.copy(ranges = listOf(WaitRules.MORNING))
         val tuesday = evening.copy(days = setOf(DayOfWeek.TUESDAY))
         val expired = WaitWant(series = false, oneOff = true, until = LocalDate(2026, 11, 1), typeId = "pt")
-        assertTrue(FreeSlots.suits(window, q, evening, 50, emptyList()))
-        assertFalse(FreeSlots.suits(window, q, morning, 50, emptyList()))
-        assertFalse(FreeSlots.suits(window, q, tuesday, 50, emptyList()))
-        assertFalse(FreeSlots.suits(window, q, expired, 50, emptyList()))
-        // Ждёт ДБ, а там запрет весь вечер — окно «любого места» ему не подходит.
+        assertTrue(FreeSlots.suits(window, evening, 50))
+        assertFalse(FreeSlots.suits(window, morning, 50))
+        assertFalse(FreeSlots.suits(window, tuesday, 50))
+        assertFalse(FreeSlots.suits(window, expired, 50))
+        // Ждёт ДБ — окно ББ ему не подходит, окно ДБ — подходит.
         val db = evening.copy(locationId = "db")
-        val closed = Restriction("r", "db", "Группа", LocalTime(15, 0), LocalTime(23, 0), date = monday, validFrom = monday)
-        assertFalse(FreeSlots.suits(window, q, db, 50, listOf(closed)))
-        assertTrue(FreeSlots.suits(window, q, db, 50, emptyList()))
+        assertFalse(FreeSlots.suits(window, db, 50))
+        assertTrue(FreeSlots.suits(window.copy(locationId = "db"), db, 50))
     }
 
     @Test
     fun copyTextHasNoNames() {
         val days = FreeSlots.find(query(), day, emptyList(), places, now)
         assertEquals("Свободное время:\nПн 02.11: 07:00–09:00, 10:00–14:00, 15:00–23:00", SlotFormat.copyText(days))
+        // Несколько помещений — короткое название перед окнами каждого.
+        val closed = Restriction("r", "db", "Группа", LocalTime(10, 0), LocalTime(23, 0), date = monday, validFrom = monday)
+        val both = FreeSlots.find(query(location = null), day, listOf(closed), places, now)
+        assertEquals(
+            "Свободное время:\nПн 02.11: ББ 07:00–09:00, 10:00–14:00, 15:00–23:00; ДБ 07:00–09:00",
+            SlotFormat.copyText(both) { if (it == "bb") "ББ" else "ДБ" },
+        )
     }
 }
 
