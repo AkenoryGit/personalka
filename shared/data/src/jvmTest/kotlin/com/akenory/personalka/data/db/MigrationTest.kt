@@ -377,8 +377,40 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion11() {
-        assertEquals(11, PersonalkaDatabase.VERSION)
-        assertTrue((1..10).all { schemaFile(it).exists() }, "Схемы версий 1–10 хранятся: по ним строятся переходы")
+    fun version11KeepsGroupMembersAndGetsKeeps(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v11", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 4.2а–3.9т: состав групп без «Оставить».
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 11)
+                raw.exec(
+                    "INSERT INTO group_member (id, groupId, clientId, fromDate, toDate, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('m1', 'g1', 'k1', '2026-09-01', NULL, 'c1', 1, 1, 1, NULL), " +
+                        "('m2', 'g1', 'k2', '2026-09-01', '2026-10-15', 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val members = db.clientDao().membersOf("g1").sortedBy { it.id }
+                assertEquals(listOf("k1" to null, "k2" to LocalDate(2026, 10, 15)), members.map { it.clientId to it.toDate }, "Состав не тронут")
+                assertEquals(listOf(0, 0), members.map { it.absenceKeeps }, "Прежних ни разу не оставляли")
+                assertNull(members.first().absenceKeptOn)
+                db.clientDao().upsertGroupMember(members.first().copy(absenceKeptOn = LocalDate(2026, 10, 27), absenceKeeps = 1))
+                assertEquals(1, db.clientDao().groupMember("m1")!!.absenceKeeps)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion12() {
+        assertEquals(12, PersonalkaDatabase.VERSION)
+        assertTrue((1..11).all { schemaFile(it).exists() }, "Схемы версий 1–11 хранятся: по ним строятся переходы")
     }
 }

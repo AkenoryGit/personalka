@@ -3,6 +3,7 @@ package com.akenory.personalka.data.groups
 import androidx.room3.withWriteTransaction
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
+import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.GroupEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
@@ -11,10 +12,16 @@ import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
+import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.ScheduleLine
+import com.akenory.personalka.domain.group.Absence
+import com.akenory.personalka.domain.group.AbsenceInput
+import com.akenory.personalka.domain.group.GroupAbsence
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.group.MemberChange
+import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.money.Sharing
@@ -38,6 +45,12 @@ data class GroupRow(
     fun membersOn(date: LocalDate): List<GroupMemberEntity> =
         members.filter { date >= it.fromDate && (it.toDate == null || date <= it.toDate) }.distinctBy { it.clientId }
 }
+
+/**
+ * Ребёнок, который давно не ходит в группу (5.10, шаг 3.9у): группа, клиент и с какого дня его нет.
+ * [keeps] — сколько раз уже нажали «Оставить».
+ */
+data class AbsentMember(val group: GroupEntity, val clientId: String, val client: ClientEntity, val absence: Absence, val keeps: Int)
 
 /** Тренировка группы с участием детей: посещаемость и история в карточке группы. */
 data class GroupTrainingRow(val training: TrainingEntity, val participations: List<ParticipationEntity>)
@@ -75,6 +88,71 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
             GroupRow(g, typeOf[g.typeId], placeOf[g.locationId], membersOf[g.id].orEmpty(), lines)
         }
     }
+
+    /**
+     * Кто в составе на [today] и не ходит в группу 30 дней и больше (`GroupAbsence.ask`, шаг 3.9у): по группам
+     * и фамилии. Архивных и удалённых нет — архив сам выводит из групп, удалённого спрашивать не о ком.
+     */
+    fun absent(today: LocalDate): Flow<List<AbsentMember>> = combine(
+        clients.observeGroups(),
+        clients.observeAllMembers(),
+        trainings.observeGroupTrainings(),
+        trainings.observeGroupParticipations(),
+        clients.observeClients(ClientStatus.ACTIVE),
+    ) { groups, members, groupTrainings, participations, active ->
+        val clientOf = active.associateBy { it.id }
+        val byId = groupTrainings.associateBy { it.id }
+        val held = groupTrainings.filter { it.status == TrainingStatus.DONE }.groupBy({ it.groupId }, { it.start.date })
+        val lastVisit = participations.filter { it.status == ParticipationStatus.ATTENDED }
+            .mapNotNull { p -> byId[p.trainingId]?.takeIf { it.status == TrainingStatus.DONE }?.let { Triple(it.groupId, p.clientId, it.start.date) } }
+            .groupBy({ it.first to it.second }, { it.third })
+            .mapValues { (_, dates) -> dates.max() }
+        val groupOf = groups.associateBy { it.id }
+        current(members, today).mapNotNull { (key, mine) ->
+            val (groupId, clientId) = key
+            val group = groupOf[groupId] ?: return@mapNotNull null
+            val client = clientOf[clientId] ?: return@mapNotNull null
+            val input = AbsenceInput(
+                fromDate = mine.minOf { it.fromDate },
+                lastAttended = lastVisit[groupId to clientId],
+                keptOn = mine.mapNotNull { it.absenceKeptOn }.maxOrNull(),
+                keeps = mine.maxOf { it.absenceKeeps },
+            )
+            GroupAbsence.ask(input, held[groupId].orEmpty(), today)?.let { AbsentMember(group, clientId, client, it, input.keeps) }
+        }.sortedWith(compareBy({ it.group.name }, { ClientRules.key("${it.client.lastName} ${it.client.firstName}") }))
+    }
+
+    /**
+     * «Оставить» на вопрос «Не ходит 30 дней» (шаг 3.9у): спросить ещё раз через 30 дней, после второго раза — никогда.
+     * Возвращает прежние записи для «Отменить» ([undoKeep]) и сколько раз оставили теперь.
+     */
+    suspend fun keep(groupId: String, clientId: String): Pair<List<GroupMemberEntity>, Int> {
+        val now = clock()
+        val today = ClubTime.today(now)
+        var before: List<GroupMemberEntity> = emptyList()
+        var keeps = 0
+        db.withWriteTransaction {
+            before = current(clients.membersOf(groupId), today)[groupId to clientId].orEmpty()
+            keeps = (before.maxOfOrNull { it.absenceKeeps } ?: 0) + 1
+            before.forEach { clients.upsertGroupMember(it.copy(sync = it.sync.touched(now), absenceKeptOn = today, absenceKeeps = keeps)) }
+        }
+        return before to keeps
+    }
+
+    /** «Отменить» у [keep]: как было до нажатия. */
+    suspend fun undoKeep(before: List<GroupMemberEntity>) {
+        val now = clock()
+        db.withWriteTransaction {
+            for (old in before) {
+                val current = clients.groupMember(old.id) ?: continue
+                clients.upsertGroupMember(current.copy(sync = current.sync.touched(now), absenceKeptOn = old.absenceKeptOn, absenceKeeps = old.absenceKeeps))
+            }
+        }
+    }
+
+    /** Места в составе на [today] по группе и ребёнку: начались и не закончились. */
+    private fun current(members: List<GroupMemberEntity>, today: LocalDate): Map<Pair<String, String>, List<GroupMemberEntity>> =
+        members.filter { it.fromDate <= today && (it.toDate == null || it.toDate >= today) }.groupBy { it.groupId to it.clientId }
 
     /** Тренировки группы по времени с участием детей. */
     fun trainings(groupId: String): Flow<List<GroupTrainingRow>> = combine(

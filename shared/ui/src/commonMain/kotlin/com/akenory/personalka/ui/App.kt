@@ -171,8 +171,12 @@ fun App(
         val report1c by remember(settings, hasCoach) {
             if (hasCoach == true) settings.report1c.unresolved() else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
-        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c) {
-            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c)
+        // Не ходят в группу 30 дней (5.10, шаг 3.9у): пункт «Нужно сделать».
+        val groupAbsent by remember(groups, hasCoach, now.date) {
+            if (hasCoach == true) groups.absent(now.date) else flowOf(emptyList())
+        }.collectAsState(initial = emptyList())
+        val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent) {
+            homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent)
         }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()

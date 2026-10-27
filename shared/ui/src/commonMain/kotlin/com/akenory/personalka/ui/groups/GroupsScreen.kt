@@ -185,7 +185,7 @@ fun GroupsScreen(
                 onClose = close,
             )
         }
-        is GroupScreen.Card -> GroupCard(screen.groupId, loaded, kids, groups, shell, messages, scope, now, onBack, names.takeIf { coCoaching })
+        is GroupScreen.Card -> GroupCard(screen.groupId, loaded, kids, groups, clients, shell, messages, scope, now, onBack, names.takeIf { coCoaching })
         is GroupScreen.AddMember -> AddMemberForm(screen.groupId, loaded, kids, groups, clients, scope, today, close)
     }
 }
