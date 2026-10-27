@@ -231,7 +231,8 @@ class SyncUiTest {
         onNodeWithText(SyncFormat.TAKE).performClick()
         waitUntil(timeoutMillis = 5_000) { runBlocking { phone.settings.coach.first()?.id } == firstCoach }
         assertEquals(1, server.liveRows(EMAIL, "coach").size, "Второго тренера на сервере не появилось")
-        assertTrue(phone.sync.state.value.connected)
+        // Тренер сменился раньше, чем обмен отметил подключение: ждём и его (в Actions однажды не успело).
+        waitUntil(timeoutMillis = 5_000) { phone.sync.state.value.connected }
     }
 
     @Test
