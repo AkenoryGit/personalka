@@ -57,7 +57,8 @@ class SyncJob : JobService() {
                 .setPeriodic(SyncRules.PERIOD_MS)
                 .setPersisted(true)
                 .build()
-            jobs.schedule(job)
+            // Отказ системы (разрешения, предел задач) не роняет приложение: пока оно открыто, обмен ведёт SyncRunner.
+            runCatching { jobs.schedule(job) }
         }
     }
 }
