@@ -31,9 +31,13 @@ class AvatarRulesTest {
 
     @Test
     fun ageGroupsByBirthDate() {
+        assertEquals(AvatarAge.BABY, AvatarRules.age(LocalDate(2026, 3, 1), false, today))
+        assertEquals(AvatarAge.BABY, AvatarRules.age(LocalDate(2022, 10, 27), false, today))
+        assertEquals(AvatarAge.KID, AvatarRules.age(LocalDate(2022, 10, 26), false, today))
         assertEquals(AvatarAge.KID, AvatarRules.age(LocalDate(2015, 5, 12), false, today))
         assertEquals(AvatarAge.KID, AvatarRules.age(LocalDate(2014, 10, 27), false, today))
         assertEquals(AvatarAge.TEEN, AvatarRules.age(LocalDate(2014, 10, 26), false, today))
+        assertEquals(AvatarAge.TEEN, AvatarRules.age(LocalDate(2008, 10, 27), false, today))
         assertEquals(AvatarAge.ADULT, AvatarRules.age(LocalDate(2008, 10, 26), false, today))
         assertEquals(AvatarAge.SENIOR, AvatarRules.age(LocalDate(1966, 1, 1), false, today))
     }

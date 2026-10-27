@@ -5,8 +5,11 @@ import kotlinx.datetime.LocalDate
 
 // Шаг 3.13, ТЗ 5.8, 5.9, 5.16. Аватарка без фото: рисованный пловец в шапочке с инициалами.
 
-/** Кого рисует аватарка без фото: ребёнок, подросток, взрослый, старше 60 — и сам тренер. */
-enum class AvatarAge { KID, TEEN, ADULT, SENIOR, COACH }
+/**
+ * Кого рисует аватарка без фото (шаг 3.13а): малыш до 3 лет, ребёнок 4–11, подросток 12–17, взрослый 18+
+ * (с 60 — в очках) — и сам тренер.
+ */
+enum class AvatarAge { BABY, KID, TEEN, ADULT, SENIOR, COACH }
 
 /**
  * Аватарка без фото (шаг 3.13): [initials] на шапочке, цвет [tone] из [AvatarRules.TONES] — один и тот же
@@ -18,6 +21,9 @@ data class AvatarLook(val initials: String, val tone: Int, val age: AvatarAge, v
 object AvatarRules {
     /** Сколько цветов у аватарок; оранжевого среди них нет (ТЗ 10.4: он — ровно в пяти местах). */
     const val TONES = 12
+
+    /** До 3 лет включительно — малыш, с 4 — ребёнок (шаг 3.13а). */
+    const val BABY_UNTIL = 4
 
     /** С 12 лет — подросток. */
     const val TEEN_AGE = 12
@@ -49,7 +55,8 @@ object AvatarRules {
             years >= SENIOR_AGE -> AvatarAge.SENIOR
             years >= ClientRules.ADULT_AGE -> AvatarAge.ADULT
             years >= TEEN_AGE -> AvatarAge.TEEN
-            else -> AvatarAge.KID
+            years >= BABY_UNTIL -> AvatarAge.KID
+            else -> AvatarAge.BABY
         }
     }
 
