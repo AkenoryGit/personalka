@@ -137,6 +137,21 @@ class HomeUiTest {
     }
 
     @Test
+    fun ongoingTrainingStaysWithItsPlan() = runComposeUiTest {
+        // Шаг 3.9т: ПТ 15:00 идёт — на «Главной» она и её план до конца, а не следующая в 16:20.
+        training("15:00", client("Орлов", "Максим"), plan = "Брасс, 4 по 25")
+        training("16:20", client("Петров", "Игорь"))
+        openHome()
+
+        awaitNode(inNearest(s("Орлов_М.")))
+        onNodeWithText("Сейчас · 15:00–15:50").assertIsDisplayed()
+        onNodeWithText(s("до конца 10_мин")).assertIsDisplayed()
+        onNodeWithText("План Брасс, 4 по 25").assertIsDisplayed()
+        onNodeWithTag(NEAREST_DONE_TAG).assertIsDisplayed()
+        onNodeWithText(s("Ещё сегодня: 1, в_16:20")).assertIsDisplayed()
+    }
+
+    @Test
     fun birthdayBlockAndCakeLineInCard() = runComposeUiTest {
         // Шаг 3.9р: Ковалёву сегодня 9 — блок «День рождения сегодня» и строка с тортом в карточке его тренировки.
         val kovalev = runBlocking { clients.create(ClientDraft("Ковалёв", "Артём", birthDate = LocalDate(2017, 10, 20))) }
@@ -249,10 +264,10 @@ class HomeUiTest {
         var width by mutableStateOf(unfolded)
         openHome(width = { width })
 
-        // Слева расписание дня: прошедшая 09:00 свёрнута, 15:30 идёт, 16:20 — ближайшая; внизу — завтра.
+        // Слева расписание дня: прошедшая 09:00 свёрнута, 15:30 идёт — она и выделена (шаг 3.9т); внизу — завтра.
         awaitNode(hasText("Показать прошедшие · 1"))
-        onNodeWithText("идёт").assertIsDisplayed()
-        onNodeWithText(s("ПТ · ББ · через 40_мин")).assertIsDisplayed()
+        onNodeWithText(s("ПТ · ББ · до конца 40_мин")).assertIsDisplayed()
+        assertEquals(0, onAllNodes(hasText("идёт")).fetchSemanticsNodes().size)
         onNodeWithText(s("Завтра: 2_тренировки, первая в_07:00")).assertIsDisplayed()
         // На разложенном строки «Ещё сегодня» нет.
         assertEquals(0, onAllNodes(hasTestTag(LATER_TAG)).fetchSemanticsNodes().size)

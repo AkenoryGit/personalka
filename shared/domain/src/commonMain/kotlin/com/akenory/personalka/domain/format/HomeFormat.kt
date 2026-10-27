@@ -19,12 +19,19 @@ object HomeFormat {
 
     const val NEAREST = "Ближайшая"
 
-    /** «Ближайшая · 16:00–16:50». */
-    fun nearest(start: LocalDateTime, end: LocalDateTime): String = NEAREST + DOT + DateFormat.timeRange(start, end)
+    /** Идущая сейчас — «Сейчас · 16:00–16:50» (шаг 3.9т). */
+    const val NOW = "Сейчас"
 
-    /** Справа в шапке: «через 12 мин», «через 1 ч 20 мин»; идущая группа — «идёт». */
-    fun startsIn(now: LocalDateTime, start: LocalDateTime): String =
-        if (now >= start) ONGOING else "через " + DurationFormat.short(ClubTime.minutesBetween(now, start).coerceAtLeast(1))
+    /** «Ближайшая · 16:00–16:50»; уже идёт — «Сейчас · 16:00–16:50». */
+    fun nearest(start: LocalDateTime, end: LocalDateTime, now: LocalDateTime): String =
+        (if (now >= start) NOW else NEAREST) + DOT + DateFormat.timeRange(start, end)
+
+    /** Справа в шапке: «через 12 мин», «через 1 ч 20 мин»; идущая — «до конца 35 мин», как в карточке (5.4). */
+    fun startsIn(now: LocalDateTime, start: LocalDateTime, end: LocalDateTime): String = when {
+        now < start -> "через " + DurationFormat.short(ClubTime.minutesBetween(now, start).coerceAtLeast(1))
+        now < end -> "до конца " + DurationFormat.short(ClubTime.minutesBetween(now, end).coerceAtLeast(1))
+        else -> ONGOING
+    }
 
     const val ONGOING = "идёт"
 

@@ -450,7 +450,7 @@ private fun Padded(content: @Composable () -> Unit) {
 }
 
 /**
- * «Ближайшая» (5.2): время и «через N мин», имя с полосой цвета места, «Тип · место · каждый вт и чт» (у группы —
+ * «Ближайшая» (5.2): время и «через N мин» (идущая — «Сейчас» и «до конца N мин», шаг 3.9т), имя с полосой цвета места, «Тип · место · каждый вт и чт» (у группы —
  * «ждём 2 из 3»), план; с начала минус 15 минут — «Проведено» (у группы «Все пришли»); строка «Ещё сегодня».
  * Сегодня всё — «Сегодня всё. Завтра первая в 07:00» и строка следующей. «Дневник» появится с дневником (шаг 2.1).
  */
@@ -502,12 +502,12 @@ private fun NearestBody(
     val end = TrainingTime.end(nearest.start, nearest.durationMin)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            HomeFormat.nearest(nearest.start, end),
+            HomeFormat.nearest(nearest.start, end, now),
             Modifier.weight(1f),
             style = MaterialTheme.typography.labelMedium.tabular(),
             color = colors.textMuted,
         )
-        Text(HomeFormat.startsIn(now, nearest.start), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
+        Text(HomeFormat.startsIn(now, nearest.start, end), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
     }
     Row(
         modifier = Modifier
@@ -895,7 +895,7 @@ private fun DaySchedule(
                 time = DateFormat.time(t.start.time),
                 stripe = if (t.cancelled) colors.outline else PlaceColor.of(t.color).tone(colors.isDark).stripe,
                 title = t.title,
-                line = HomeFormat.dayLine(t.typeShort, t.placeShort, if (isNearest) HomeFormat.startsIn(now, t.start) else null),
+                line = HomeFormat.dayLine(t.typeShort, t.placeShort, if (isNearest) HomeFormat.startsIn(now, t.start, t.slot().end) else null),
                 crossed = t.cancelled,
                 badges = t.badges,
                 tag = dayRowTag(t.id),

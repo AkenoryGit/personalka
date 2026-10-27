@@ -39,24 +39,41 @@ class HomeRulesTest {
     )
 
     @Test
-    fun nearestIsNextByStartAndOngoingPtIsSkipped() {
-        // 15:48: ПТ 15:00 идёт — она отметится сама; ближайшая — мини-группа 16:00 через 12 минут.
+    fun nearestIsNextByStart() {
+        // 14:50: ПТ 15:00 ещё не началась — ближайшая через 10 минут.
+        val now = at(14, 50)
+        val nearest = HomeRules.nearest(day, now)
+        assertEquals("pt15", nearest?.id)
+        assertEquals(s("через 10_мин"), HomeFormat.startsIn(now, nearest!!.start, nearest.end))
+        assertEquals("Ближайшая · 15:00–15:50", HomeFormat.nearest(nearest.start, nearest.end, now))
+        val later = HomeRules.laterToday(day, nearest, today)
+        assertEquals(listOf("mini16", "pt17", "group18", "spt19"), later.map { it.id })
+        assertEquals(s("Ещё сегодня: 4, последняя в_19:00"), HomeFormat.laterToday(later.size, later.last().start))
+        assertFalse(HomeRules.todayDone(nearest, today))
+    }
+
+    @Test
+    fun ongoingPtStaysUntilItsEnd() {
+        // Шаг 3.9т: 15:48 — ПТ 15:00 идёт, на «Главной» она и её план, а не мини-группа 16:00.
         val now = at(15, 48)
         val nearest = HomeRules.nearest(day, now)
-        assertEquals("mini16", nearest?.id)
-        assertEquals(s("через 12_мин"), HomeFormat.startsIn(now, nearest!!.start))
-        assertEquals("Ближайшая · 16:00–16:50", HomeFormat.nearest(nearest.start, nearest.end))
-        val later = HomeRules.laterToday(day, nearest, today)
-        assertEquals(listOf("pt17", "group18", "spt19"), later.map { it.id })
-        assertEquals(s("Ещё сегодня: 3, последняя в_19:00"), HomeFormat.laterToday(later.size, later.last().start))
-        assertFalse(HomeRules.todayDone(nearest, today))
+        assertEquals("pt15", nearest?.id)
+        assertEquals("Сейчас · 15:00–15:50", HomeFormat.nearest(nearest!!.start, nearest.end, now))
+        assertEquals(s("до конца 2_мин"), HomeFormat.startsIn(now, nearest.start, nearest.end))
+        assertEquals(listOf("mini16", "pt17", "group18", "spt19"), HomeRules.laterToday(day, nearest, today).map { it.id })
+        // Закончилась (отметится сама) — ближайшая мини-группа 16:00 через 10 минут.
+        assertEquals("mini16", HomeRules.nearest(day, at(15, 50))?.id)
+        assertEquals(s("через 10_мин"), HomeFormat.startsIn(at(15, 50), at(16), at(16, 50)))
+        // «Проведено» нажали раньше конца — тоже следующая.
+        val done = day.map { if (it.id == "pt15") it.copy(marked = true) else it }
+        assertEquals("mini16", HomeRules.nearest(done, now)?.id)
     }
 
     @Test
     fun ongoingGroupStaysUntilMarked() {
         val now = at(16, 10)
         assertEquals("mini16", HomeRules.nearest(day, now)?.id)
-        assertEquals("идёт", HomeFormat.startsIn(now, at(16)))
+        assertEquals(s("до конца 40_мин"), HomeFormat.startsIn(now, at(16), at(16, 50)))
         // Отметили хоть одного — группа уходит, ближайшая — ПТ 17:00.
         val marked = day.map { if (it.id == "mini16") it.copy(marked = true) else it }
         assertEquals("pt17", HomeRules.nearest(marked, now)?.id)
@@ -116,7 +133,7 @@ class HomeRulesTest {
         assertTrue(HomeRules.isOngoing(list.first { it.id == "pt15" }, now))
         assertFalse(HomeRules.isOngoing(list.first { it.id == "mini16" }, now))
         assertEquals("ПТ · ДБ", HomeFormat.dayLine("ПТ", "ДБ"))
-        assertEquals(s("Мини-группа · ДБ · через 12_мин"), HomeFormat.dayLine("Мини-группа", "ДБ", HomeFormat.startsIn(now, at(16))))
+        assertEquals(s("Мини-группа · ДБ · через 12_мин"), HomeFormat.dayLine("Мини-группа", "ДБ", HomeFormat.startsIn(now, at(16), at(16, 50))))
     }
 
     @Test
