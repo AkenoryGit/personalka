@@ -104,9 +104,9 @@ class AdminSiteTest {
 
         // Тренер с верным паролем — как неверный пароль, письма нет.
         val coach = client.login(coachEmail, password)
-        assertEquals(HttpStatusCode.Unauthorized, coach.status)
+        assertEquals(HttpStatusCode.OK, coach.status)
         assertTrue("Неверная почта или пароль" in coach.html())
-        assertEquals(HttpStatusCode.Unauthorized, client.login(admin, "не-тот-пароль").status)
+        assertEquals(HttpStatusCode.OK, client.login(admin, "не-тот-пароль").status)
         assertEquals(letters, mailer.sent.size)
 
         // Пароль администратора — письмо с кодом, но без кода сессии нет.
@@ -116,7 +116,7 @@ class AdminSiteTest {
         assertEquals(admin, mailer.sent.last().first)
         assertTrue(mailer.sent.last().second.startsWith("Код входа в админку"))
         val wrong = client.code(admin, "000000".takeIf { it != mailer.lastCode() } ?: "111111")
-        assertEquals(HttpStatusCode.Unauthorized, wrong.status)
+        assertEquals(HttpStatusCode.OK, wrong.status)
         val wrongHtml = wrong.html()
         assertTrue("Неверный код" in wrongHtml, wrongHtml)
         assertEquals(null, wrong.headers[HttpHeaders.SetCookie])
@@ -144,9 +144,10 @@ class AdminSiteTest {
         assertFalse("/admin/coaches/$adminId/" in html, "у администратора кнопки нет")
 
         // Без поля формы или с чужим — ничего не меняется.
-        assertEquals(HttpStatusCode.Forbidden, client.act(cookie, "/admin/coaches/$id/suspend", null).status)
-        assertEquals(HttpStatusCode.Forbidden, client.act(cookie, "/admin/coaches/$id/suspend", "чужое").status)
-        assertEquals(HttpStatusCode.Unauthorized, client.act("adm=$appToken", "/admin/coaches/$id/suspend", csrf).status)
+        // Ошибки — страницей с подсказкой и кодом 200: на 401/403 браузер Samsung показывает свою заглушку.
+        assertTrue("Страница устарела" in client.act(cookie, "/admin/coaches/$id/suspend", null).html())
+        assertEquals(HttpStatusCode.OK, client.act(cookie, "/admin/coaches/$id/suspend", "чужое").status)
+        assertEquals(HttpStatusCode.OK, client.act("adm=$appToken", "/admin/coaches/$id/suspend", csrf).status)
         assertFalse(suspended(database, coachEmail))
 
         assertEquals(HttpStatusCode.SeeOther, client.act(cookie, "/admin/coaches/$id/suspend", csrf).status)
@@ -231,12 +232,12 @@ class AdminSiteTest {
 
         // Неверная дата — ничего не сохранено, страница с ошибкой.
         val bad = client.save(cookie, "/admin/coaches/$id/features", csrf, "f" to "cabinets", "until_cabinets" to "32.13.2026")
-        assertEquals(HttpStatusCode.BadRequest, bad.status)
+        assertEquals(HttpStatusCode.OK, bad.status)
         assertTrue("Проверьте дату" in bad.html())
         assertEquals(3, client.me(lena).size)
 
         // Без поля формы — ничего не меняется.
-        assertEquals(HttpStatusCode.Forbidden, client.save(cookie, "/admin/coaches/$id/features", "чужое").status)
+        assertEquals(HttpStatusCode.OK, client.save(cookie, "/admin/coaches/$id/features", "чужое").status)
         assertEquals(3, client.me(lena).size)
 
         // Себе администратор тоже выключает: оставил только копию.

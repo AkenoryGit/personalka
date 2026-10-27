@@ -138,8 +138,8 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
         val form = call.form()
         val email = AccountRules.email(form["email"].orEmpty())
         val password = form["password"].orEmpty()
-        if (email == null) return@post call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, AdminFormat.WRONG) }
-        if (!auth.mailer.enabled) return@post call.adminHtml(HttpStatusCode.ServiceUnavailable) { AdminHtml.login(this, AdminFormat.NO_MAIL) }
+        if (email == null) return@post call.adminHtml { AdminHtml.login(this, AdminFormat.WRONG) }
+        if (!auth.mailer.enabled) return@post call.adminHtml { AdminHtml.login(this, AdminFormat.NO_MAIL) }
         val ip = call.clientIp()
         val prepared = runCatching {
             database.tx { c ->
@@ -150,15 +150,15 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
         }
         val (coach, code) = prepared.getOrElse { e ->
             val message = (e as? ApiException)?.message ?: throw e
-            return@post call.adminHtml(HttpStatusCode.TooManyRequests) { AdminHtml.login(this, message) }
-        } ?: return@post call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, AdminFormat.WRONG) }
+            return@post call.adminHtml { AdminHtml.login(this, message) }
+        } ?: return@post call.adminHtml { AdminHtml.login(this, AdminFormat.WRONG) }
         val letter = Letters.admin(coach.displayName, code, MailCodes.MINUTES)
         try {
             auth.mailer.send(email, letter.subject, letter.text)
         } catch (e: MailException) {
             call.application.log.error("Письмо admin не ушло: ${e.message}")
             database.tx { codes.cancel(it, email, CodePurpose.ADMIN) }
-            return@post call.adminHtml(HttpStatusCode.ServiceUnavailable) { AdminHtml.login(this, AdminFormat.MAIL_FAILED) }
+            return@post call.adminHtml { AdminHtml.login(this, AdminFormat.MAIL_FAILED) }
         }
         call.adminHtml { AdminHtml.code(this, email, AdminFormat.codeSent(email, MailCodes.MINUTES), null) }
     }
@@ -166,7 +166,7 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
     post("/admin/code") {
         if (!call.adminLimit(limit)) return@post
         val form = call.form()
-        val email = AccountRules.email(form["email"].orEmpty()) ?: return@post call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, AdminFormat.CODE_EXPIRED) }
+        val email = AccountRules.email(form["email"].orEmpty()) ?: return@post call.adminHtml { AdminHtml.login(this, AdminFormat.CODE_EXPIRED) }
         val ip = call.clientIp()
         // Неверный код — попытка засчитывается: транзакция завершается, страница — после неё.
         val result = runCatching {
@@ -191,8 +191,8 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
                 )
                 call.adminRedirect()
             }
-            is AdminCode.Wrong -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.code(this, email, null, result.message) }
-            AdminCode.Expired -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, AdminFormat.CODE_EXPIRED) }
+            is AdminCode.Wrong -> call.adminHtml { AdminHtml.code(this, email, null, result.message) }
+            AdminCode.Expired -> call.adminHtml { AdminHtml.login(this, AdminFormat.CODE_EXPIRED) }
         }
     }
 
@@ -227,8 +227,8 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
                 true
             }
             when (ok) {
-                null -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, null) }
-                false -> call.adminHtml(HttpStatusCode.Forbidden) { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
+                null -> call.adminHtml { AdminHtml.login(this, null) }
+                false -> call.adminHtml { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
                 true -> call.adminRedirect()
             }
         }
@@ -243,7 +243,7 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
             summary?.let { AdminCoachPage(session, it, accounts.grants(c, it.coach)) } ?: false
         }
         when (page) {
-            null -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, null) }
+            null -> call.adminHtml { AdminHtml.login(this, null) }
             is AdminCoachPage -> call.adminHtml { AdminHtml.coach(this, page) }
             else -> call.adminRedirect()
         }
@@ -269,9 +269,9 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
             true
         }
         when (answer) {
-            null -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, null) }
-            false -> call.adminHtml(HttpStatusCode.Forbidden) { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
-            is AdminCoachPage -> call.adminHtml(HttpStatusCode.BadRequest) { AdminHtml.coach(this, answer) }
+            null -> call.adminHtml { AdminHtml.login(this, null) }
+            false -> call.adminHtml { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
+            is AdminCoachPage -> call.adminHtml { AdminHtml.coach(this, answer) }
             else -> call.adminRedirect()
         }
     }
@@ -288,8 +288,8 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
             true
         }
         when (ok) {
-            null -> call.adminHtml(HttpStatusCode.Unauthorized) { AdminHtml.login(this, null) }
-            false -> call.adminHtml(HttpStatusCode.Forbidden) { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
+            null -> call.adminHtml { AdminHtml.login(this, null) }
+            false -> call.adminHtml { AdminHtml.login(this, AdminFormat.FORM_EXPIRED) }
             true -> call.adminRedirect()
         }
     }
@@ -331,18 +331,22 @@ private suspend fun ApplicationCall.adminRedirect() {
     respond(HttpStatusCode.SeeOther)
 }
 
-/** Ответ админки: те же заголовки защиты, что у кабинета (6.2), и запрет отправлять формы на чужие адреса. */
-private suspend fun ApplicationCall.adminHtml(status: HttpStatusCode = HttpStatusCode.OK, block: kotlinx.html.HTML.() -> Unit) {
+/**
+ * Ответ админки: те же заголовки защиты, что у кабинета (6.2), и запрет отправлять формы на чужие адреса. Всегда 200:
+ * на 401 и 403 браузер Samsung показывает свою заглушку «Страница недоступна» вместо нашей страницы с подсказкой
+ * (проверка Дмитрия 27.10.2026) — что не так, пишет сама страница.
+ */
+private suspend fun ApplicationCall.adminHtml(block: kotlinx.html.HTML.() -> Unit) {
     cabinetHeaders()
     response.headers.append("Content-Security-Policy", "form-action 'self'; frame-ancestors 'none'", safeOnly = false)
-    respondHtml(status, block)
+    respondHtml(HttpStatusCode.OK, block)
 }
 
 /** Тот же предел запросов с одного IP, что у кабинета: сверх него — страница входа с «Слишком часто». */
 private suspend fun ApplicationCall.adminLimit(limit: RateLimit): Boolean {
     if (limit.allow("admin:" + (clientIp() ?: "?"))) return true
     response.header(HttpHeaders.RetryAfter, "60")
-    adminHtml(HttpStatusCode.TooManyRequests) { AdminHtml.login(this, Errors.tooMany(60).message) }
+    adminHtml { AdminHtml.login(this, Errors.tooMany(60).message) }
     return false
 }
 
