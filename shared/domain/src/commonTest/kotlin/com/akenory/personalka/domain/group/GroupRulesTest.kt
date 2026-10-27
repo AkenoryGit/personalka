@@ -3,12 +3,12 @@ package com.akenory.personalka.domain.group
 import com.akenory.personalka.domain.client.ScheduleLine
 import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.model.Sex
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Группы 5.10: форма, правка состава, дети «на раз», посещаемость, строки. «_» — неразрывный пробел. */
@@ -27,30 +27,6 @@ class GroupRulesTest {
             GroupRules.problems(GroupDraft("сб 9:00 ББ", "t", "p"), listOf("Сб 9:00 ББ")),
         )
         assertTrue(GroupRules.problems(GroupDraft("Сб 9:00 ББ", "t", "p"), listOf("Вт 18:00 ДБ")).isEmpty())
-    }
-
-    @Test
-    fun notFromIsDayAfterLastDay() {
-        assertEquals(day(25), GroupRules.lastDay(day(26)))
-        assertEquals(LocalDate(2026, 12, 31), GroupRules.lastDay(LocalDate(2027, 1, 1)))
-        assertEquals(day(26), GroupRules.notFrom(day(25)))
-        assertNull(GroupRules.lastDay(null))
-        assertNull(GroupRules.notFrom(null))
-    }
-
-    @Test
-    fun memberDatesChecked() {
-        assertEquals(mapOf(MemberField.FROM to "Укажите дату"), GroupRules.memberProblems(null, "", null, ""))
-        assertEquals(mapOf(MemberField.FROM to "Дата в виде 22.10.2026"), GroupRules.memberProblems(null, "1 сент", null, ""))
-        assertEquals(
-            mapOf(MemberField.NOT_FROM to "Позже, чем «В группе с»"),
-            GroupRules.memberProblems(day(1, 9), "01.09.2026", day(1, 9), "01.09.2026"),
-        )
-        assertEquals(
-            mapOf(MemberField.NOT_FROM to "Дата в виде 22.10.2026"),
-            GroupRules.memberProblems(day(1, 9), "01.09.2026", null, "завтра"),
-        )
-        assertTrue(GroupRules.memberProblems(day(1, 9), "01.09.2026", day(2, 9), "02.09.2026").isEmpty())
     }
 
     @Test
@@ -94,9 +70,7 @@ class GroupRulesTest {
         val sat = ScheduleLine(setOf(DayOfWeek.SATURDAY), LocalTime(9, 0), "Группа", "ББ")
         assertEquals(s("Сб_09:00 · ББ · 12_детей"), GroupFormat.subtitle(listOf(sat), "ББ", 12))
         assertEquals(s("без расписания · ДБ · 0_детей"), GroupFormat.subtitle(emptyList(), "ДБ", 0))
-        assertEquals("с 01.09.2026", GroupFormat.membership(day(1, 9), null))
-        assertEquals("01.09–15.10.2026", GroupFormat.membership(day(1, 9), day(15)))
-        assertEquals("01.09.2025–15.10.2026", GroupFormat.membership(LocalDate(2025, 9, 1), day(15)))
+        assertEquals("Белова Ева убрана из группы", GroupFormat.left("Белова Ева", Sex.FEMALE))
         assertEquals("пришли 5 из 12", GroupFormat.attended(5, 12))
         assertEquals("1 на раз", GroupFormat.guests(1))
     }

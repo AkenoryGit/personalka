@@ -62,7 +62,6 @@ import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupMember
 import com.akenory.personalka.domain.group.GroupRules
-import com.akenory.personalka.domain.group.MemberField
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -94,9 +93,6 @@ const val GROUP_MENU_TAG = "group-menu"
 const val GROUP_SHARING_TAG = "group-sharing"
 const val MEMBER_ADD_TAG = "member-add"
 const val MEMBER_SEARCH_TAG = "member-search"
-const val MEMBER_DATE_TAG = "member-date"
-const val MEMBER_FROM_TAG = "member-from"
-const val MEMBER_NOT_FROM_TAG = "member-not-from"
 const val NEW_MEMBER_TAG = "member-new"
 const val NEW_MEMBER_LAST_TAG = "member-new-last"
 const val NEW_MEMBER_FIRST_TAG = "member-new-first"
@@ -114,8 +110,8 @@ private fun GroupMemberEntity.member() = GroupMember(clientId, fromDate, toDate)
 private fun ClientRow?.nameOrGone(): String = this?.let { "${it.client.lastName} ${it.client.firstName}" } ?: "Клиент удалён"
 
 /**
- * Карточка группы (5.10): тип, место и расписание; состав сейчас и с будущей даты — нажатие правит даты места,
- * «+ В состав» добавляет ребёнка с даты; ушедшие — отдельно; ближайшие и прошедшие тренировки с числом пришедших
+ * Карточка группы (5.10): тип, место и расписание; состав — просто список (шаг 3.9т): «+ В состав» добавляет ребёнка,
+ * нажатие на ребёнка — «Убрать из группы» с «Отменить»; ближайшие и прошедшие тренировки с числом пришедших
  * и детьми «на раз», средняя посещаемость. «Числится на» и «Кто обычно ведёт» — с совместным ведением ([colleagues] —
  * имена коллег, `null` — выключено; шаг 3.7г).
  */
@@ -139,6 +135,7 @@ fun GroupCard(
     val deletable by produceState(initialValue = false, groups, groupId, history) { value = groups.canDelete(groupId) }
     var confirmDelete by rememberSaveable(groupId) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    var leaving by rememberSaveable(groupId) { mutableStateOf<String?>(null) }
 
     if (row == null) {
         TopBar("", onBack = onBack)
@@ -146,11 +143,9 @@ fun GroupCard(
     }
     val byId = kids.associateBy { it.client.id }
     val members = row.members.map { it.member() }
-    val current = row.members.filter { (it.toDate ?: today) >= today }
-        .sortedWith(compareBy<GroupMemberEntity>({ it.fromDate > today }, { ClientRules.key(byId[it.clientId].nameOrGone()) }))
-    val currentIds = current.map { it.clientId }.toSet()
-    val left = row.members.filter { (it.toDate ?: today) < today && it.clientId !in currentIds }
-        .sortedByDescending { it.toDate }
+    // Состав без дат (шаг 3.9т): все, кто в списке сейчас, и записанные прежде «с будущей даты» — тоже.
+    val current = row.members.filter { (it.toDate ?: today) >= today }.distinctBy { it.clientId }
+        .sortedBy { ClientRules.key(byId[it.clientId].nameOrGone()) }
     val trainings = history.orEmpty()
     val done = trainings.filter { it.training.status == TrainingStatus.DONE }
     val attended = done.map { t -> t.participations.count { it.status == ParticipationStatus.ATTENDED } }
@@ -209,7 +204,7 @@ fun GroupCard(
                         listOf(
                             RuText.digits(done.size.toLong()) to "проведено",
                             ClientFormat.tenths(GroupRules.averageTenths(attended)) to "в среднем пришли",
-                            RuText.digits(current.count { it.fromDate <= today }.toLong()) to "в составе",
+                            RuText.digits(current.size.toLong()) to "в составе",
                         ).forEach { (value, label) ->
                             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(value, style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text)
@@ -221,7 +216,7 @@ fun GroupCard(
 
                 Row(Modifier.fillMaxWidth().padding(top = Dimens.space5, bottom = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Состав · ${current.count { it.fromDate <= today }}",
+                        "Состав · ${current.size}",
                         Modifier.weight(1f),
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.textMuted,
@@ -231,11 +226,7 @@ fun GroupCard(
                 if (current.isEmpty()) {
                     Text("В группе пока никого", style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
                 } else {
-                    MemberList(current, byId, today) { shell.open(GroupRoute.member(groupId, it.id)) }
-                }
-                if (left.isNotEmpty()) {
-                    FormLabelSpaced("Ушли · ${left.size}")
-                    MemberList(left, byId, today) { shell.open(GroupRoute.member(groupId, it.id)) }
+                    MemberList(current, byId, today) { leaving = it.clientId }
                 }
 
                 val upcoming = trainings.filter { it.training.status == TrainingStatus.PLANNED && it.training.start >= now }
@@ -251,6 +242,26 @@ fun GroupCard(
                     TrainingList(past, members, now)
                 }
                 Spacer(Modifier.height(Dimens.space6))
+            }
+        }
+
+        leaving?.let { clientId ->
+            val kid = byId[clientId]
+            val name = kid.nameOrGone()
+            Panel(name, onDismiss = { leaving = null }) {
+                Text(GroupFormat.LEAVE_NOTE, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                PanelActions(
+                    primary = GroupFormat.LEAVE,
+                    onPrimary = {
+                        leaving = null
+                        scope.launch {
+                            val before = groups.leave(groupId, clientId)
+                            messages.showUndo(GroupFormat.left(name, kid?.client?.sex)) { scope.launch { groups.undoLeave(groupId, before) } }
+                        }
+                    },
+                    secondary = "Отмена",
+                    onSecondary = { leaving = null },
+                )
             }
         }
 
@@ -288,7 +299,6 @@ private fun MemberList(list: List<GroupMemberEntity>, byId: Map<String, ClientRo
             PersonRow(
                 title = name,
                 subtitle = listOfNotNull(
-                    GroupFormat.membership(m.fromDate, m.toDate),
                     kid?.client?.birthDate?.let { ClientFormat.age(it, today) },
                     archived,
                 ).joinToString(" · "),
@@ -334,7 +344,7 @@ private fun TrainingList(list: List<GroupTrainingRow>, members: List<GroupMember
 
 /**
  * «+ В состав» (5.10): ребёнок из клиентов — сначала дети, поиском — все, кого нет в составе; нет в списке —
- * «Новый клиент» с фамилией и именем. С какого дня — по умолчанию сегодня: с него ребёнок ожидается в будущих
+ * «Новый клиент» с фамилией и именем. Даты нет (шаг 3.9т): ребёнок в группе с сегодня — ожидается в будущих
  * тренировках группы, прошедшие не меняются.
  */
 @Composable
@@ -354,7 +364,6 @@ internal fun AddMemberForm(
     var creating by rememberSaveable { mutableStateOf(false) }
     var newLast by rememberSaveable { mutableStateOf("") }
     var newFirst by rememberSaveable { mutableStateOf("") }
-    var fromText by rememberSaveable { mutableStateOf(DateFormat.full(today)) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
     var similarId by rememberSaveable { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
@@ -366,12 +375,12 @@ internal fun AddMemberForm(
     } else {
         candidates.filter { ClientRules.matches(query, name(it)) }.sortedBy { ClientRules.sortKey(name(it)) }
     }
-    val from = DateFormat.parseFull(fromText)
+    val from = today
     val who = pickedId != null || (creating && newLast.isNotBlank() && newFirst.isNotBlank())
 
     fun save() {
         val date = from
-        if (!who || date == null) {
+        if (!who) {
             showErrors = true
             return
         }
@@ -400,7 +409,7 @@ internal fun AddMemberForm(
 
     /** «Да, выбрать» у похожего: архивный возвращается в действующие; уже в составе — добавлять нечего. */
     fun pickSimilar(similar: ClientEntity) {
-        val date = from ?: return
+        val date = from
         similarId = null
         close()
         scope.launch {
@@ -411,7 +420,7 @@ internal fun AddMemberForm(
 
     /** «Нет, это другой человек» — полный тёзка: заводится новый клиент. */
     fun createAnyway() {
-        val date = from ?: return
+        val date = from
         val last = newLast.trim()
         val first = newFirst.trim()
         similarId = null
@@ -471,16 +480,6 @@ internal fun AddMemberForm(
                     }
                 }
                 if (showErrors && !who) ErrorLine(if (creating) "Введите фамилию и имя" else "Выберите ребёнка или добавьте нового")
-                Spacer(Modifier.height(Dimens.space5))
-                Field(
-                    label = "С какого дня в группе",
-                    value = fromText,
-                    onValueChange = { fromText = it.take(12) },
-                    error = if (showErrors && from == null) "Дата в виде 22.10.2026" else null,
-                    hint = "С этого дня — в будущих тренировках группы. Прошедшие не изменятся.",
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                    tag = MEMBER_DATE_TAG,
-                )
                 Spacer(Modifier.height(Dimens.space6))
             }
             BottomAction("Сохранить", onClick = ::save)
@@ -499,76 +498,3 @@ internal fun AddMemberForm(
 }
 
 private fun name(row: ClientRow) = ClientName(row.client.lastName, row.client.firstName, row.client.middleName)
-
-/**
- * Место ребёнка в составе (5.10): «В группе с» и «Не ходит с» — «исключить с даты». Будущие тренировки группы
- * меняются сами, прошедшие — нет. Добавили по ошибке — «Убрать из состава» с «Отменить».
- */
-@Composable
-internal fun MemberForm(
-    groupId: String,
-    memberId: String,
-    rows: List<GroupRow>,
-    kids: List<ClientRow>,
-    groups: GroupRepository,
-    messages: MessageState,
-    scope: CoroutineScope,
-    today: LocalDate,
-    close: () -> Unit,
-) {
-    val row = rows.firstOrNull { it.group.id == groupId } ?: return
-    val member = row.members.firstOrNull { it.id == memberId } ?: return
-    val kid = kids.firstOrNull { it.client.id == member.clientId }
-    val name = kid.nameOrGone()
-    var fromText by rememberSaveable { mutableStateOf(DateFormat.full(member.fromDate)) }
-    var notFromText by rememberSaveable { mutableStateOf(GroupRules.notFrom(member.toDate)?.let { DateFormat.full(it) }.orEmpty()) }
-    var showErrors by rememberSaveable { mutableStateOf(false) }
-    val from = DateFormat.parseFull(fromText)
-    val notFrom = DateFormat.parseFull(notFromText)
-    val problems = GroupRules.memberProblems(from, fromText, notFrom, notFromText)
-    val shown = if (showErrors) problems else emptyMap()
-    val dates = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
-
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.systemBars))) {
-        TopBar(name, onBack = close, close = true)
-        Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4),
-            verticalArrangement = Arrangement.spacedBy(Dimens.space4),
-        ) {
-            Text(row.group.name, style = MaterialTheme.typography.bodyLarge, color = PersonalkaTheme.colors.textMuted)
-            Field("В группе с", fromText, { fromText = it.take(12) }, error = shown[MemberField.FROM], keyboardOptions = dates, tag = MEMBER_FROM_TAG)
-            Field(
-                label = "Не ходит с",
-                value = notFromText,
-                onValueChange = { notFromText = it.take(12) },
-                error = shown[MemberField.NOT_FROM],
-                hint = "Пусто — занимается. Прошедшие тренировки не изменятся.",
-                keyboardOptions = dates.copy(imeAction = ImeAction.Done),
-                tag = MEMBER_NOT_FROM_TAG,
-            )
-            if (notFromText.isBlank()) {
-                SecondaryButton("Не ходит с сегодня", { notFromText = DateFormat.full(today) })
-            }
-            TextButton(
-                onClick = {
-                    scope.launch { groups.removeMember(memberId) }
-                    close()
-                    messages.showUndo(
-                        RuText.bySex(kid?.client?.sex, "$name убран из состава", "$name убрана из состава", "$name — не в составе"),
-                    ) { scope.launch { groups.restoreMember(memberId) } }
-                },
-            ) {
-                Text("Добавлен по ошибке — убрать из состава", style = MaterialTheme.typography.labelLarge, color = PersonalkaTheme.colors.text)
-            }
-        }
-        BottomAction("Сохранить", onClick = {
-            val start = from
-            if (problems.isNotEmpty() || start == null) {
-                showErrors = true
-            } else {
-                scope.launch { groups.updateMember(memberId, start, GroupRules.lastDay(notFrom)) }
-                close()
-            }
-        })
-    }
-}

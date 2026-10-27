@@ -13,12 +13,16 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ScheduleLine
 import com.akenory.personalka.domain.group.GroupDraft
+import com.akenory.personalka.domain.group.GroupRules
+import com.akenory.personalka.domain.group.MemberChange
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.money.Sharing
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 
 /**
  * Группа в списке и карточке (5.10): тип, место, весь состав с датами (и ушедшие) и постоянное расписание.
@@ -174,6 +178,42 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
         val now = clock()
         changeMembers(member.groupId, now) {
             clients.upsertGroupMember(member.copy(sync = member.sync.touched(now), fromDate = from, toDate = lastDay))
+        }
+    }
+
+    /**
+     * «Убрать из группы» (5.10, шаг 3.9т): ребёнок больше не в списке группы. Его места в составе заканчиваются
+     * вчера — прошедшие тренировки его помнят, будущие неотмеченные его больше не ждут (`GroupRules.leave`); места,
+     * которые ещё не начались (добавили сегодня), убираются совсем. Возвращает прежние записи для «Отменить»
+     * ([undoLeave]); ребёнка нет в списке — пусто.
+     */
+    suspend fun leave(groupId: String, clientId: String): List<GroupMemberEntity> {
+        val now = clock()
+        val lastDay = ClubTime.today(now).minus(1, DateTimeUnit.DAY)
+        var before: List<GroupMemberEntity> = emptyList()
+        changeMembers(groupId, now) {
+            val mine = clients.membersOf(groupId).filter { it.clientId == clientId }
+            before = mine.filter { it.toDate == null || it.toDate > lastDay }
+            for (change in GroupRules.leave(before.map { it.member() }, lastDay)) {
+                val row = before.first { it.member() == change.member }
+                when (change) {
+                    is MemberChange.End -> clients.upsertGroupMember(row.copy(sync = row.sync.touched(now), toDate = change.lastDay))
+                    is MemberChange.Remove -> clients.upsertGroupMember(row.copy(sync = row.sync.deleted(now)))
+                }
+            }
+        }
+        return before
+    }
+
+    /** «Отменить» у [leave]: записи состава — как были. */
+    suspend fun undoLeave(groupId: String, before: List<GroupMemberEntity>) {
+        if (before.isEmpty()) return
+        val now = clock()
+        changeMembers(groupId, now) {
+            for (old in before) {
+                val current = clients.groupMember(old.id) ?: continue
+                clients.upsertGroupMember(old.copy(sync = current.sync.restored(now)))
+            }
         }
     }
 
