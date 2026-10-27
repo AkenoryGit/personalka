@@ -33,6 +33,7 @@ import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.client.RelativeLink
 import com.akenory.personalka.domain.client.ScheduleLine
 import com.akenory.personalka.domain.client.StoredRelation
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.group.MemberChange
 import com.akenory.personalka.domain.model.ClientStatus
@@ -88,6 +89,9 @@ data class ClientTrainingRow(
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
+/** Именинник на «Главной» (шаг 3.9р): [text] — «Ковалёв Артём · 9 лет». */
+data class Birthday(val clientId: String, internal val sortKey: String, val text: String)
+
 class ClientRepository(private val db: PersonalkaDatabase, private val clock: () -> Long) {
     private val clients = db.clientDao()
     private val schedule = db.scheduleDao()
@@ -144,6 +148,18 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     }
 
     fun client(id: String): Flow<ClientEntity?> = clients.observeClient(id)
+
+    /**
+     * Именинники [day] среди занимающихся (шаг 3.9р): блок «День рождения сегодня» на «Главной», по фамилии.
+     * Архивных нет — они больше не ходят.
+     */
+    fun birthdays(day: LocalDate): Flow<List<Birthday>> = clients.observeClients(ClientStatus.ACTIVE).map { list ->
+        list.mapNotNull { c ->
+            val birth = c.birthDate?.takeIf { ClientRules.isBirthday(it, day) } ?: return@mapNotNull null
+            val name = ClientName(c.lastName, c.firstName, c.middleName)
+            Birthday(c.id, ClientRules.sortKey(name), ClientFormat.birthday(name.short, birth, day))
+        }.sortedBy { it.sortKey }
+    }
 
     /** Родственники клиента (4.17), и те, что в архиве, — в порядке, в котором их добавляли. */
     fun relatives(clientId: String, today: LocalDate): Flow<List<RelativeRow>> = combine(

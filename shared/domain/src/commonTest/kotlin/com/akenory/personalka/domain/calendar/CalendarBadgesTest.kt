@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.calendar
 
+import com.akenory.personalka.domain.calendar.CalendarBadge.BIRTHDAY
 import com.akenory.personalka.domain.calendar.CalendarBadge.CHARGED
 import com.akenory.personalka.domain.calendar.CalendarBadge.DONE
 import com.akenory.personalka.domain.calendar.CalendarBadge.NO_DIARY
@@ -17,9 +18,9 @@ class CalendarBadgesTest {
     @Test
     fun allBadgesInOrderOfImportance() {
         val all = CalendarBadges.of(
-            BadgeFacts(charged = true, overRestriction = true, noDiary = true, overDuty = true, done = true),
+            BadgeFacts(charged = true, overRestriction = true, noDiary = true, birthday = true, overDuty = true, done = true),
         )
-        assertEquals(listOf(CHARGED, OVER_RESTRICTION, NO_DIARY, OVER_DUTY, DONE), all)
+        assertEquals(listOf(CHARGED, OVER_RESTRICTION, NO_DIARY, BIRTHDAY, OVER_DUTY, DONE), all)
     }
 
     @Test
@@ -44,6 +45,14 @@ class CalendarBadgesTest {
         assertEquals(listOf(OVER_RESTRICTION), CalendarBadges.of(BadgeFacts(overRestriction = true)))
         // Соколова 15:00 идёт сейчас: значков нет.
         assertEquals(emptyList(), CalendarBadges.of(BadgeFacts()))
+    }
+
+    @Test
+    fun birthdayBeforeDutyAndCheckButNotOnCancelled() {
+        // Шаг 3.9р: у Ковалёва день рождения — торт виден и на низком блоке проведённой тренировки.
+        val kovalev = CalendarBadges.of(BadgeFacts(birthday = true, done = true))
+        assertEquals(listOf(BIRTHDAY), CalendarBadges.visible(kovalev, BlockRows.ONE))
+        assertEquals(emptyList(), CalendarBadges.of(BadgeFacts(cancelled = true, birthday = true)))
     }
 
     @Test

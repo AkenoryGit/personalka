@@ -172,6 +172,8 @@ fun SectionScreen(
             // «Деньги» (5.2, шаг 3.9): текущий месяц тем же расчётом, что «Зарплата»; читается, только пока «Главная» открыта.
             val categories by remember(settings) { settings.salary.categories }.collectAsState(initial = null)
             val month by remember(settings, now.date) { settings.months.month(now.date.yearMonth, now.date) }.collectAsState(initial = null)
+            // Именинники (шаг 3.9р) — тоже только пока «Главная» открыта.
+            val birthdays by remember(clients, now.date) { clients.birthdays(now.date) }.collectAsState(initial = emptyList())
             val loadedCategories = categories
             val money = when {
                 loadedCategories == null -> null
@@ -223,6 +225,7 @@ fun SectionScreen(
                 shell.selectRoot(Section.SALARY)
             },
             notices = notices,
+            birthdays = birthdays,
         )
         }
         Section.CALENDAR -> CalendarScreen(

@@ -256,6 +256,7 @@ private fun RowBadge(badge: CalendarBadge) {
     val (icon, tint) = when (badge) {
         CalendarBadge.CHARGED -> PIcons.BadgeRuble to colors.charged
         CalendarBadge.OVER_RESTRICTION -> PIcons.BadgeWarning to colors.over
+        CalendarBadge.BIRTHDAY -> PIcons.BadgeCake to colors.primary
         CalendarBadge.OVER_DUTY -> PIcons.BadgeLayers to colors.textMuted
         else -> PIcons.BadgeCheck to colors.done
     }

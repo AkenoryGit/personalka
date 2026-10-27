@@ -51,6 +51,7 @@ import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.NoticeRow
+import com.akenory.personalka.data.clients.Birthday
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.db.entity.ReconciliationItemEntity
@@ -63,6 +64,7 @@ import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.HomeFormat
@@ -119,6 +121,8 @@ internal const val TODO_TAG = "home-todo"
 internal const val PAST_TAG = "home-past"
 internal const val TOMORROW_TAG = "home-tomorrow"
 internal const val MONEY_TAG = "home-money"
+internal const val BIRTHDAYS_TAG = "home-birthdays"
+internal fun birthdayTag(id: String) = "home-birthday-$id"
 internal const val MONEY_SETUP_TAG = "home-money-setup"
 internal const val MONEY_TODAY_TAG = "home-money-today"
 internal const val MONEY_MONTH_TAG = "home-money-month"
@@ -274,6 +278,7 @@ fun homeTodos(
  * @param onSalary нажатие на «Деньги» и «Настроить зарплату» — раздел «Зарплата».
  * @param onAdvance пункт «Введите сумму аванса» — «Зарплата» → «Выплаты» с окном аванса.
  * @param notices пункт «Предупредить об отпуске» — окно со списком ([VacationNoticePanel]) здесь же.
+ * @param birthdays блок «День рождения сегодня» (шаг 3.9р); нажатие на имя — карточка клиента ([onClient]).
  */
 @Composable
 fun HomeScreen(
@@ -298,6 +303,7 @@ fun HomeScreen(
     onSalary: () -> Unit = {},
     onAdvance: () -> Unit = onSalary,
     notices: List<NoticeRow> = emptyList(),
+    birthdays: List<Birthday> = emptyList(),
 ) {
     val wide = LocalWide.current
     var noticesOpen by rememberSaveable { mutableStateOf(false) }
@@ -347,6 +353,8 @@ fun HomeScreen(
             onDiary = onDiary,
             onDay = onDay,
         )
+        // Именинники (шаг 3.9р) — между «Ближайшей» и делами: поздравить до тренировки. Нет — блока нет (10.7).
+        if (birthdays.isNotEmpty()) BirthdayBlock(birthdays, onClient)
         if (todos.isNotEmpty()) TodoBlock(todos, onTodo)
     }
 
@@ -575,6 +583,40 @@ private fun BlockRow(text: String, tag: String, onClick: () -> Unit) {
         ) {
             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** «День рождения сегодня» с тортом и строки «Ковалёв Артём · 9 лет»; нажатие — карточка клиента. */
+@Composable
+private fun BirthdayBlock(birthdays: List<Birthday>, onClient: (String) -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Block(Modifier.testTag(BIRTHDAYS_TAG)) {
+        Row(
+            Modifier.padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space4, bottom = Dimens.space1),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+        ) {
+            Icon(PIcons.Cake, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+            Text(ClientFormat.BIRTHDAY_TODAY, style = MaterialTheme.typography.titleMedium, color = colors.text)
+        }
+        Column(Modifier.padding(bottom = Dimens.space1)) {
+            birthdays.forEachIndexed { i, b ->
+                if (i > 0) HorizontalDivider(Modifier.padding(start = Dimens.space4), thickness = 1.dp, color = colors.divider)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = Dimens.touch)
+                        .clickable(role = Role.Button) { onClient(b.clientId) }
+                        .semantics(mergeDescendants = true) {}
+                        .testTag(birthdayTag(b.clientId))
+                        .padding(start = Dimens.space4, end = Dimens.space3),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(b.text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+                }
+            }
         }
     }
 }

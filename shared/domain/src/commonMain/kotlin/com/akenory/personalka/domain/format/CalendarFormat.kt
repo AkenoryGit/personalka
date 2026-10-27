@@ -113,6 +113,7 @@ object CalendarFormat {
         CalendarBadge.CHARGED -> "Отмена со списанием"
         CalendarBadge.OVER_RESTRICTION -> "Поверх запрета"
         CalendarBadge.NO_DIARY -> "Дневник не заполнен"
+        CalendarBadge.BIRTHDAY -> ClientFormat.BIRTHDAY
         CalendarBadge.OVER_DUTY -> "Поверх дежурства"
         CalendarBadge.DONE -> "Проведено"
     }

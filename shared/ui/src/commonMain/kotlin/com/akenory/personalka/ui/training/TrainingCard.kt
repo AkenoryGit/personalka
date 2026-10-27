@@ -125,6 +125,7 @@ const val CHARGE_SWITCH_TAG = "charge-switch"
 const val OWN_REASON_TAG = "own-reason"
 const val CLOSED_MONTH_TAG = "closed-month"
 const val DELETE_FOLLOWING_TAG = "delete-following"
+const val CARD_BIRTHDAY_TAG = "card-birthday"
 
 fun cardClientTag(id: String) = "card-client-$id"
 fun cardClientActionTag(id: String) = "card-client-action-$id"
@@ -724,6 +725,8 @@ private fun ColumnScope.CardBody(
             note = TrainingCardFormat.statusNote(card.outcome, phase, now, state.start, end, came, TrainingCardRules.groupTotal(state), state.doneAt),
         )
         card.warnings.forEach { WarningLine(it) }
+        // Шаг 3.9р: именинник среди клиентов — строкой с тортом, как на блоке календаря.
+        card.birthdays.forEach { BirthdayLine(it) }
         sptAsk?.let { SptAskRow(it, onSpt) }
         card.sharing?.let { SharingRow(it, onSharing) }
 
@@ -891,6 +894,26 @@ private fun PlanQuestion(whom: String, first: Pair<String, String>, second: Pair
             Text(label, style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
             Text(text, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text)
         }
+    }
+}
+
+/** Именинник в карточке (шаг 3.9р): торт и «День рождения · Ковалёв А. · 9 лет». */
+@Composable
+private fun BirthdayLine(text: String) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        Modifier
+            .padding(top = Dimens.space3)
+            .fillMaxWidth()
+            .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+            .padding(Dimens.space3)
+            .semantics(mergeDescendants = true) {}
+            .testTag(CARD_BIRTHDAY_TAG),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(PIcons.Cake, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+        Text(ClientFormat.cardBirthday(text), style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text)
     }
 }
 

@@ -8,6 +8,7 @@ import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.calendar.CalendarBadge.BIRTHDAY
 import com.akenory.personalka.domain.calendar.CalendarBadge.CHARGED
 import com.akenory.personalka.domain.calendar.CalendarBadge.DONE
 import com.akenory.personalka.domain.calendar.CalendarBadge.NO_DIARY
@@ -226,6 +227,29 @@ class CalendarRepositoryTest {
         val duty = db.trainingDao().trainingsBetween(at(tuesday, 11), at(tuesday, 12)).single()
         db.trainingDao().upsertTraining(duty.copy(status = TrainingStatus.CANCELLED))
         assertEquals(listOf(listOf(DONE), listOf(DONE), listOf(CHARGED), emptyList(), listOf(OVER_RESTRICTION)), day().map { it.badges })
+    }
+
+    @Test
+    fun birthdayCakeOnTrainingOfThatDayOnly(): Unit = runBlocking {
+        // Шаг 3.9р: Ковалёву 20.10 исполняется 9 — торт на его вторничных тренировках, в среду — нет.
+        val kovalev = clients.create(ClientDraft("Ковалёв", "Артём", birthDate = LocalDate(2017, 10, 20)))
+        val petrov = client("Петров", "Игорь")
+        training("ПТ", "ББ", at(tuesday, 8), clientIds = listOf(petrov, kovalev))
+        training("ПТ", "ББ", at(tuesday, 9), clientIds = listOf(petrov))
+        // Отменил себя в сплите — именинника на тренировке нет.
+        training(
+            "ПТ", "ББ", at(tuesday, 10), clientIds = listOf(petrov, kovalev),
+            statuses = listOf(ParticipationStatus.EXPECTED, ParticipationStatus.CANCELLED),
+        )
+        training("ПТ", "ББ", at(tuesday.plus(1, DateTimeUnit.DAY), 8), clientIds = listOf(kovalev))
+        assertEquals(listOf(listOf(BIRTHDAY), emptyList(), emptyList()), day().map { it.badges })
+        assertEquals(listOf(emptyList()), day(tuesday.plus(1, DateTimeUnit.DAY)).map { it.badges })
+
+        // Именинники «Главной» — только занимающиеся, по фамилии.
+        assertEquals(listOf(kovalev to s("Ковалёв Артём · 9_лет")), clients.birthdays(tuesday).first().map { it.clientId to it.text })
+        assertEquals(emptyList(), clients.birthdays(tuesday.plus(1, DateTimeUnit.DAY)).first())
+        clients.archive(kovalev)
+        assertEquals(emptyList(), clients.birthdays(tuesday).first())
     }
 
     @Test

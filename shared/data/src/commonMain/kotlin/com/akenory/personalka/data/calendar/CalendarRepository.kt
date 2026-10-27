@@ -31,6 +31,7 @@ import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.calendar.ZoneSpan
 import com.akenory.personalka.domain.client.ClientName
+import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.BlockWho
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.CoCoachingFormat
@@ -322,6 +323,11 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
                         charged = people.any { it.status == ParticipationStatus.CANCELLED_CHARGED },
                         overRestriction = t.overRestriction,
                         noDiary = DiaryRules.missing(t.status, diaryEnabled, type?.diaryFact == true, t.fact),
+                        // Торт (шаг 3.9р): именинник среди тех, кого ждут; отменивший себя — не в счёт.
+                        birthday = people.any { p ->
+                            p.status != ParticipationStatus.CANCELLED && p.status != ParticipationStatus.CANCELLED_CHARGED &&
+                                n.clients[p.clientId]?.birthDate?.let { ClientRules.isBirthday(it, t.start.date) } == true
+                        },
                         overDuty = RestrictionRules.dutyOverlaps(t.placement(isDuty = false), duties).isNotEmpty(),
                         done = t.status == TrainingStatus.DONE,
                     ),

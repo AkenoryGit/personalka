@@ -23,6 +23,16 @@ object ClientFormat {
     /** «12.05.2017 · 9 лет» — строка «Дата рождения» в карточке. */
     fun birth(birth: LocalDate, today: LocalDate): String = DateFormat.full(birth) + DOT + age(birth, today)
 
+    /** Блок «Главной» и строка карточки тренировки (шаг 3.9р). */
+    const val BIRTHDAY_TODAY = "День рождения сегодня"
+    const val BIRTHDAY = "День рождения"
+
+    /** Именинник: «Ковалёв Артём · 9 лет» — сколько исполняется в [day]. */
+    fun birthday(name: String, birth: LocalDate, day: LocalDate): String = name + DOT + age(birth, day)
+
+    /** Строка карточки тренировки: «День рождения · Ковалёв А. · 9 лет». */
+    fun cardBirthday(birthday: String): String = BIRTHDAY + DOT + birthday
+
     /** Подсказка под датой рождения в форме: «9 лет · ребёнок». */
     fun ageHint(birth: LocalDate, today: LocalDate): String =
         age(birth, today) + DOT + if (ClientRules.isAdult(birth, false, today)) "взрослый" else "ребёнок"

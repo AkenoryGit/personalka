@@ -34,6 +34,7 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.money.CoCoachingRules
@@ -124,6 +125,7 @@ data class TrainingCard(
     val keepsDiary: Boolean = false,
     val carriedTo: LocalDate? = null,
     val sharing: CardSharing? = null,
+    val birthdays: List<String> = emptyList(),
 ) {
     /** Итог для метки статуса: у одного клиента — его итог («Отмена со списанием»), иначе — тренировки. */
     val outcome: ClientOutcome
@@ -288,6 +290,12 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                     DiaryRules.fields(kind, type.diaryPlan, type.diaryFact, type.diaryBehavior).any,
                 carriedTo = if (t.status == TrainingStatus.CANCELLED) trainings.trainingsCarriedFrom(t.id).firstOrNull()?.start?.date else null,
                 sharing = if (kind == TrainingKind.GROUP && t.status != TrainingStatus.CANCELLED && settingsRow?.coCoachingEnabled == true) cardSharing(t.sharing()) else null,
+                // Именинники (шаг 3.9р): «Ковалёв А. · 9 лет» — у отменённой тренировки строки нет, как и торта на блоке.
+                birthdays = if (t.status == TrainingStatus.CANCELLED) emptyList() else inOrder.mapNotNull { p ->
+                    val c = names[p.clientId]
+                    val birth = c?.birthDate?.takeIf { !p.toState().isCancelled && ClientRules.isBirthday(it, t.start.date) }
+                    birth?.let { ClientFormat.birthday(CalendarFormat.client(ClientName(c.lastName, c.firstName, c.middleName)), it, t.start.date) }
+                },
             )
         }
     }

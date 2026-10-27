@@ -155,6 +155,17 @@ object ClientRules {
     fun ageMonths(birth: LocalDate, today: LocalDate): Int =
         (today.year - birth.year) * 12 + today.month.number - birth.month.number - if (today.day < birth.day) 1 else 0
 
+    /**
+     * День рождения ли у клиента в [day] (шаг 3.9р): то же число и месяц. Родившийся 29.02 в невисокосный год
+     * празднует 01.03 — в этот день [age] и прибавляет год.
+     */
+    fun isBirthday(birth: LocalDate, day: LocalDate): Boolean {
+        if (birth.month.number == 2 && birth.day == 29 && !isLeap(day.year)) return day.month.number == 3 && day.day == 1
+        return day.month.number == birth.month.number && day.day == birth.day
+    }
+
+    private fun isLeap(year: Int): Boolean = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+
     private fun beforeBirthday(birth: LocalDate, today: LocalDate): Boolean =
         today.month.number < birth.month.number || (today.month.number == birth.month.number && today.day < birth.day)
 

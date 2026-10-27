@@ -26,6 +26,7 @@ import com.akenory.personalka.data.backup.BackupFolder
 import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.group.GroupDraft
@@ -43,6 +44,7 @@ import com.akenory.personalka.ui.settings.CREATE_NOW_TAG
 import com.akenory.personalka.ui.settings.PlatformFiles
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import com.akenory.personalka.ui.training.CARD_BIRTHDAY_TAG
 import com.akenory.personalka.ui.training.TRAINING_CARD_TAG
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -132,6 +134,31 @@ class HomeUiTest {
         // Нажатие на имя — карточка тренировки прямо на «Главной».
         onNodeWithTag(NEAREST_OPEN_TAG).performClick()
         awaitNode(inCard(s("Орлов_М.")))
+    }
+
+    @Test
+    fun birthdayBlockAndCakeLineInCard() = runComposeUiTest {
+        // Шаг 3.9р: Ковалёву сегодня 9 — блок «День рождения сегодня» и строка с тортом в карточке его тренировки.
+        val kovalev = runBlocking { clients.create(ClientDraft("Ковалёв", "Артём", birthDate = LocalDate(2017, 10, 20))) }
+        runBlocking { clients.create(ClientDraft("Петров", "Игорь", birthDate = LocalDate(2017, 10, 21))) }
+        training("16:20", kovalev)
+        openHome()
+
+        awaitNode(hasTestTag(BIRTHDAYS_TAG))
+        onNode(hasText(ClientFormat.BIRTHDAY_TODAY) and hasAnyAncestor(hasTestTag(BIRTHDAYS_TAG))).assertIsDisplayed()
+        onNode(hasText(s("Ковалёв Артём · 9_лет")) and hasAnyAncestor(hasTestTag(BIRTHDAYS_TAG))).assertIsDisplayed()
+        assertEquals(0, onAllNodes(hasText("Петров", substring = true) and hasAnyAncestor(hasTestTag(BIRTHDAYS_TAG))).fetchSemanticsNodes().size)
+
+        onNodeWithTag(NEAREST_OPEN_TAG).performClick()
+        awaitNode(inCard(s("День рождения · Ковалёв_А. · 9_лет")))
+    }
+
+    @Test
+    fun noBirthdayNoBlock() = runComposeUiTest {
+        training("16:20", client("Орлов", "Максим"))
+        openHome()
+        assertEquals(0, onAllNodes(hasTestTag(BIRTHDAYS_TAG)).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodes(hasTestTag(CARD_BIRTHDAY_TAG)).fetchSemanticsNodes().size)
     }
 
     @Test

@@ -975,14 +975,15 @@ private fun blockStyles(): BlockStyles = BlockStyles(
     more = MaterialTheme.typography.labelMedium.tabular(),
 )
 
-/** Значки блока (ТЗ 5.3): «₽», треугольник «поверх запрета», «слои» дежурства, галочка; точка дневника рисуется кругом. */
+/** Значки блока (ТЗ 5.3): «₽», треугольник «поверх запрета», торт дня рождения, «слои» дежурства, галочка; точка дневника рисуется кругом. */
 @Stable
-private class BadgeIcons(val ruble: Painter, val warning: Painter, val layers: Painter, val check: Painter)
+private class BadgeIcons(val ruble: Painter, val warning: Painter, val cake: Painter, val layers: Painter, val check: Painter)
 
 @Composable
 private fun badgeIcons(): BadgeIcons = BadgeIcons(
     ruble = rememberVectorPainter(PIcons.BadgeRuble),
     warning = rememberVectorPainter(PIcons.BadgeWarning),
+    cake = rememberVectorPainter(PIcons.BadgeCake),
     layers = rememberVectorPainter(PIcons.BadgeLayers),
     check = rememberVectorPainter(PIcons.BadgeCheck),
 )
@@ -1481,7 +1482,7 @@ private fun DrawScope.drawSelected(block: BlockInfo, colors: PersonalkaColors) {
 
 /**
  * Значки в правом верхнем углу (ТЗ 5.3) слева направо по важности, в кружках 16 dp цвета фона: «₽» янтарный,
- * треугольник фиолетовый, точка дневника оранжевая, «слои» серые, галочка зелёная.
+ * треугольник фиолетовый, точка дневника оранжевая, торт основным цветом, «слои» серые, галочка зелёная.
  */
 private fun DrawScope.drawBadges(badges: List<CalendarBadge>, rect: Rect, icons: BadgeIcons, colors: PersonalkaColors) {
     if (badges.isEmpty()) return
@@ -1497,6 +1498,7 @@ private fun DrawScope.drawBadges(badges: List<CalendarBadge>, rect: Rect, icons:
             CalendarBadge.CHARGED -> icons.ruble to colors.charged
             CalendarBadge.OVER_RESTRICTION -> icons.warning to colors.over
             CalendarBadge.NO_DIARY -> null to colors.accentGraphic
+            CalendarBadge.BIRTHDAY -> icons.cake to colors.primary
             CalendarBadge.OVER_DUTY -> icons.layers to colors.textMuted
             CalendarBadge.DONE -> icons.check to colors.done
         }

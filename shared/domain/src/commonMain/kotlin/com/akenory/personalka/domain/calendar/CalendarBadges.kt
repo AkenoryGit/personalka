@@ -11,6 +11,9 @@ enum class CalendarBadge {
     /** Оранжевая точка: проведена, а дневник не заполнен. */
     NO_DIARY,
 
+    /** Торт: у клиента тренировки в этот день день рождения (шаг 3.9р). */
+    BIRTHDAY,
+
     /** Серые «слои»: поверх дежурства. */
     OVER_DUTY,
 
@@ -28,13 +31,15 @@ data class BadgeFacts(
     val overRestriction: Boolean = false,
     /** Проведена без дневника (`DiaryRules.missing`). */
     val noDiary: Boolean = false,
+    /** У кого-то из записанных (не отменённых) клиентов в этот день день рождения (`ClientRules.isBirthday`). */
+    val birthday: Boolean = false,
     /** Под ней есть неотменённое дежурство (`RestrictionRules.dutyOverlaps`). */
     val overDuty: Boolean = false,
     val done: Boolean = false,
 )
 
 /**
- * Значки блока (ТЗ 5.3): «₽» → поверх запрета → нет дневника → поверх дежурства → проведено. На блоке ниже 56 dp
+ * Значки блока (ТЗ 5.3): «₽» → поверх запрета → нет дневника → день рождения → поверх дежурства → проведено. На блоке ниже 56 dp
  * виден один, самый важный; от 56 dp — до двух. Все — с пояснениями в карточке тренировки (5.4).
  */
 object CalendarBadges {
@@ -47,6 +52,7 @@ object CalendarBadges {
         if (facts.cancelled) return@buildList
         if (facts.overRestriction) add(CalendarBadge.OVER_RESTRICTION)
         if (facts.noDiary) add(CalendarBadge.NO_DIARY)
+        if (facts.birthday) add(CalendarBadge.BIRTHDAY)
         if (facts.overDuty) add(CalendarBadge.OVER_DUTY)
         if (facts.done) add(CalendarBadge.DONE)
     }

@@ -16,6 +16,28 @@ class ClientRulesTest {
     private val adelina = ClientName("Дельфенурова", "Аделина")
     private val artem = ClientName("Ковалёв", "Артём", "Сергеевич")
 
+    // День рождения (шаг 3.9р)
+
+    @Test
+    fun birthdayIsSameDayAndMonthAnyYear() {
+        val birth = LocalDate(2017, 10, 20)
+        assertTrue(ClientRules.isBirthday(birth, today))
+        assertTrue(ClientRules.isBirthday(birth, LocalDate(2030, 10, 20)))
+        assertFalse(ClientRules.isBirthday(birth, LocalDate(2026, 10, 21)))
+        assertFalse(ClientRules.isBirthday(birth, LocalDate(2026, 11, 20)))
+        assertEquals(9, ClientRules.age(birth, today))
+    }
+
+    @Test
+    fun leapDayBirthdayIsFirstOfMarchInOrdinaryYear() {
+        val birth = LocalDate(2016, 2, 29)
+        assertTrue(ClientRules.isBirthday(birth, LocalDate(2028, 2, 29)))
+        assertFalse(ClientRules.isBirthday(birth, LocalDate(2028, 3, 1)))
+        assertTrue(ClientRules.isBirthday(birth, LocalDate(2027, 3, 1)))
+        assertFalse(ClientRules.isBirthday(birth, LocalDate(2027, 2, 28)))
+        assertEquals(11, ClientRules.age(birth, LocalDate(2027, 3, 1)))
+    }
+
     // Поиск
 
     @Test
