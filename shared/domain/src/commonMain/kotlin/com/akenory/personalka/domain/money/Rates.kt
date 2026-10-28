@@ -39,6 +39,7 @@ object RateRules {
     /** Порог ступени — не больше 1 000 ПТ в месяц. */
     const val MAX_TIER_FROM = 1000
 
+    /** Пороги-пример (5.3а): подставляются как пример в подсказке поля и в «ставках-примере» мастера. */
     const val T2_FROM = 101
     const val T3_FROM = 151
 
@@ -131,14 +132,19 @@ object RateRules {
     fun defaultTierMonth(today: LocalDate): YearMonth = today.yearMonth
 
     /**
-     * Ступени в форме: действующие в месяце [month] или, пока версий нет, по умолчанию — 101 и 151, как ПТ —
-     * типы с отметкой «Считать как ПТ» (ТЗ 3.3).
+     * Ступени в форме: действующие в месяце [month] или, пока версий нет, — без ступеней (решение 28.10.2026, шаг 5.3а:
+     * пороги одного клуба не подставляются, 101 и 151 — только пример в подсказке поля), как ПТ — типы с отметкой
+     * «Считать как ПТ» (ТЗ 3.3).
      */
     fun tierDraft(versions: List<TierScheme>, month: YearMonth, defaultPtTypes: Set<String>): TierDraft {
         val active = Versions.activeIn(versions, month) { it.validFrom }
-            ?: return TierDraft(enabled = true, t2From = T2_FROM, t3From = T3_FROM, ptTypeIds = defaultPtTypes)
+            ?: return TierDraft(enabled = false, t2From = T2_FROM, t3From = T3_FROM, ptTypeIds = defaultPtTypes)
         return TierDraft(active.enabled, active.t2From, active.t3From, active.ptTypeIds)
     }
+
+    /** Текст поля порога: есть версия ступеней в месяце — её порог, нет — пусто (пример — в подсказке поля). */
+    fun thresholdText(versions: List<TierScheme>, month: YearMonth, value: Int): String =
+        if (Versions.activeIn(versions, month) { it.validFrom } == null) "" else value.toString()
 
     /** Порог из поля: целое от 1 до [MAX_TIER_FROM]. */
     fun threshold(text: String): Int? = text.trim().toIntOrNull()?.takeIf { it in 1..MAX_TIER_FROM }

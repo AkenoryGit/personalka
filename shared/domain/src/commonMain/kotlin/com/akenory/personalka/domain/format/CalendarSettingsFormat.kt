@@ -37,8 +37,8 @@ object CalendarSettingsFormat {
     const val NOTICE_COPY = "Скопировать список"
     const val NOTICE_COPIED = "Список скопирован"
     const val NOTICE_CLOSE = "Закрыть"
-    const val OWN_RESTRICTIONS = "Мои запреты"
-    const val CLUB_RESTRICTIONS = "Запреты клуба"
+    // Запретов клуба нет (решение 28.10.2026, шаг 5.3а): каждый тренер ведёт свои.
+    const val OWN_RESTRICTIONS = "Запреты"
     const val DUTIES = "Дежурства"
 
     /** Строка раздела в «Настройках»: «07:00–23:00 · шаг 15 мин · серии на 8 недель». */

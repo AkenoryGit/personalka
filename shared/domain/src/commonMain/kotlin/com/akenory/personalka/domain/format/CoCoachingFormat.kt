@@ -21,7 +21,7 @@ object CoCoachingFormat {
     const val COLLEAGUES = "Коллеги"
     const val NEW = "Новый коллега"
     const val NAME = "Имя"
-    const val NAME_HINT = "Как вы зовёте коллегу: «Лена»"
+    const val NAME_HINT = "Как вы зовёте коллегу, например «Аня»"
     const val SCHEME = "Схема выплат коллеги"
     const val SCHEME_NOTE = "Нужна для доли налога, когда группа числится на коллеге."
     const val EMPTY = "Коллег пока нет"

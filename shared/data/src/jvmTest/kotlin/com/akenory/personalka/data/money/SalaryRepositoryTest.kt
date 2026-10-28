@@ -8,7 +8,6 @@ import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.settings.SettingsRepository
-import com.akenory.personalka.domain.model.CoachCategory
 import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.PaySchemeKind
@@ -70,12 +69,10 @@ class SalaryRepositoryTest {
         val bb = placeId("ББ")
         settings.salary.finish(
             SalarySetupDraft(
-                category = CoachCategory.MASTER,
                 scheme = PaySchemeKind.FULL_OFFICIAL,
                 advance = rub(10_000),
                 schemeFrom = YearMonth(2026, 1),
                 rates = mapOf(pt to mapOf(bb to RateAmounts(rub(920), rub(960), rub(1000)))),
-                services = emptyMap(),
                 tiers = TierDraft(true, 101, 151, setOf(pt, typeId("Сплит"))),
             ),
             today,

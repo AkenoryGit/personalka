@@ -21,7 +21,7 @@ object MoreFormat {
     const val VACATION_NOTE = "Снять тренировки на дни отпуска и предупредить клиентов"
 
     const val PROFILE = "Профиль"
-    const val PROFILE_NOTE = "ФИО, категория тренера, совместное ведение групп"
+    const val PROFILE_NOTE = "ФИО, день зарплаты, совместное ведение групп"
     const val PLACES = "Места и типы"
     const val PLACES_NOTE = "Бассейны и залы, виды тренировок и их цвета"
     const val RATES = "Ставки и ступени"

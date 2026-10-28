@@ -3,7 +3,6 @@ package com.akenory.personalka.data.money
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.inMemoryPersonalkaDatabase
 import com.akenory.personalka.data.settings.SettingsRepository
-import com.akenory.personalka.domain.model.CoachCategory
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.money.RateAmounts
 import com.akenory.personalka.domain.money.SalarySetupDraft
@@ -19,6 +18,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -52,42 +52,42 @@ class SalarySetupRepositoryTest {
         val bb = placeId("ББ")
         val dbPlace = placeId("ДБ")
         val asPt = setOf(pt, typeId("Сплит"))
-        // ДБ тренер поправил — связи с сеткой у неё нет.
         val draft = SalarySetupDraft(
-            category = CoachCategory.MASTER,
             scheme = PaySchemeKind.HALF_OFFICIAL,
             advance = 1_354_650,
             // Переход на «налог 6,5 %» с марта: январь–февраль — вся сумма.
             schemeFrom = YearMonth(2026, 3),
+            // Свои дни выплат (5.3а): аванс 20-го, зарплата 5-го.
+            advanceDay = 20,
+            salaryDay = 5,
             rates = mapOf(pt to mapOf(bb to RateAmounts(rub(920), rub(960), rub(1000)), dbPlace to RateAmounts(rub(850)))),
-            services = mapOf(pt to mapOf(bb to "Персональная")),
             tiers = TierDraft(true, 101, 151, asPt),
         )
-        assertTrue(SalarySetupRules.needed(salary.categories.first()))
+        assertTrue(SalarySetupRules.needed(salary.schemes.first()))
         salary.finish(draft, today)
+        assertFalse(SalarySetupRules.needed(salary.schemes.first()))
 
         val jan = LocalDate(2026, 1, 1)
-        assertEquals(listOf(jan), salary.categories.first().map { it.validFrom })
-        assertEquals(CoachCategory.MASTER, salary.categories.first().single().category)
         val (before, scheme) = salary.schemes.first().map { it.scheme }.sortedBy { it.validFrom }
         assertEquals(jan, before.validFrom)
         assertEquals(PaySchemeKind.NONE, before.kind)
         assertNull(before.advanceDefault)
+        assertEquals(5, before.salaryDay)
         assertEquals(LocalDate(2026, 3, 1), scheme.validFrom)
         assertEquals(5000, scheme.officialShareBp)
-        assertEquals(25, scheme.advanceDay)
+        assertEquals(20, scheme.advanceDay)
+        assertEquals(5, scheme.salaryDay)
         assertEquals(1_354_650, scheme.advanceDefault)
         val rates = db.referenceDao().rateVersions(pt)
         assertEquals(listOf(jan, jan), rates.map { it.validFrom })
-        assertEquals("Персональная", rates.single { it.locationId == bb }.clubService)
-        assertNull(rates.single { it.locationId == dbPlace }.clubService)
+        // Сетки клуба нет — связей с ней мастер не пишет.
+        assertTrue(rates.all { it.clubService == null })
         val tiers = settings.rates.tiers.first().single()
         assertEquals(jan, tiers.validFrom)
         assertEquals(asPt, tiers.ptTypeIds)
 
         // Повтор «Готово» (прерванная запись) не дублирует версий.
         salary.finish(draft, today)
-        assertEquals(1, salary.categories.first().size)
         assertEquals(2, salary.schemes.first().size)
         assertEquals(2, db.referenceDao().rateVersions(pt).size)
         assertEquals(1, settings.rates.tiers.first().size)
@@ -96,12 +96,6 @@ class SalarySetupRepositoryTest {
     @Test
     fun profileVersions(): Unit = runBlocking {
         val jan = LocalDate(2026, 1, 1)
-        salary.saveCategory(jan, CoachCategory.TRAINER)
-        salary.saveCategory(jan, CoachCategory.MASTER)
-        salary.saveCategory(LocalDate(2026, 11, 1), CoachCategory.MASTER)
-        salary.saveCategory(LocalDate(2026, 11, 1), CoachCategory.ELITE)
-        assertEquals(listOf(CoachCategory.MASTER, CoachCategory.ELITE), salary.categories.first().map { it.category })
-
         salary.saveScheme(YearMonth(2026, 1), SalarySetupRules.scheme(jan, PaySchemeKind.HALF_OFFICIAL, rub(13_000)))
         // Тот же вид и аванс с ноября — ничего; другой аванс — новая версия с 01.11; ИП в том же месяце — правка её.
         salary.saveScheme(YearMonth(2026, 11), SalarySetupRules.scheme(jan, PaySchemeKind.HALF_OFFICIAL, rub(13_000)))
@@ -113,6 +107,11 @@ class SalarySetupRepositoryTest {
         assertEquals(PaySchemeKind.IP, schemes[1].kind)
         assertEquals(0, schemes[1].officialShareBp)
         assertNull(schemes[1].advanceDay)
+
+        // День зарплаты с декабря (5.3а): та же схема, другой день — новая версия; тот же — ничего.
+        salary.saveScheme(YearMonth(2026, 12), schemes[1].copy(validFrom = LocalDate(2026, 12, 1), salaryDay = 7))
+        salary.saveScheme(YearMonth(2026, 12), schemes[1].copy(validFrom = LocalDate(2026, 12, 1), salaryDay = 7))
+        assertEquals(listOf(10, 10, 7), salary.schemes.first().map { it.scheme.salaryDay })
 
         assertEquals(false, salary.coCoaching.first())
         salary.saveCoCoaching(true)

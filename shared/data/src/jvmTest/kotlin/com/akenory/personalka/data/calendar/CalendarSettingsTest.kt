@@ -230,8 +230,8 @@ class CalendarSettingsTest {
             lists.own.map { it.title to it.subtitle },
         )
         assertTrue(lists.own.all { it.id != null })
-        assertEquals(listOf("ББ 17:00–18:00 — ДЮСШ" to "Каждый пн"), lists.club.map { it.title to it.subtitle })
-        assertNull(lists.club.single().id)
+        // Запрет не тренера (прежний scope = CLUB) в списки не попадает — запретов клуба нет (5.3а).
+        assertTrue(lists.own.none { "ДЮСШ" in it.title })
         assertEquals(
             listOf("ББ 15:00–19:00" to "Каждую пт с 23.10.2026", "ДБ 11:00–15:00" to s("вс_25.10.2026")),
             lists.duties.map { it.title to it.subtitle },

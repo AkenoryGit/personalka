@@ -38,10 +38,9 @@ import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.format.RateFormat
 import com.akenory.personalka.domain.format.SalarySetupFormat
-import com.akenory.personalka.domain.model.CoachCategory
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingKind
-import com.akenory.personalka.domain.money.ClubRateGrid
+import com.akenory.personalka.domain.money.ExampleRates
 import com.akenory.personalka.domain.money.RateAmounts
 import com.akenory.personalka.domain.money.RateRules
 import com.akenory.personalka.domain.money.SalarySetupDraft
@@ -74,7 +73,12 @@ internal const val SETUP_SCHEME_FROM_TAG = "salary-setup-scheme-from"
 internal const val SALARY_RATES_TAG = "salary-rates"
 internal const val SETUP_T2_TAG = "salary-setup-t2"
 internal const val SETUP_T3_TAG = "salary-setup-t3"
-internal fun categoryTag(c: CoachCategory) = "category-${c.name}"
+internal const val SETUP_SALARY_DAY_TAG = "salary-setup-salary-day"
+internal const val SETUP_ADVANCE_DAY_TAG = "salary-setup-advance-day"
+internal const val SETUP_TIERS_ON_TAG = "salary-setup-tiers-on"
+internal const val SOURCE_EXAMPLE = "example"
+internal const val SOURCE_OWN = "own"
+internal fun sourceTag(key: String) = "salary-source-$key"
 internal fun schemeTag(k: PaySchemeKind) = "scheme-${k.name}"
 internal fun setupRateTag(type: String, place: String, tier: Int) = "setup-rate-$type-$place-$tier"
 internal fun setupAsPtTag(name: String) = "setup-as-pt-$name"
@@ -107,10 +111,10 @@ fun SalaryScreen(
     onSlots: (() -> Unit)? = null,
     onRates: () -> Unit,
 ) {
-    val categories by remember(settings) { settings.salary.categories }.collectAsState(initial = null)
+    val schemes by remember(settings) { settings.salary.schemes }.collectAsState(initial = null)
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
-    val loaded = categories ?: return
+    val loaded = schemes ?: return
     val loadedPlaces = places ?: return
     val loadedTypes = types ?: return
     if (SalarySetupRules.needed(loaded)) {
@@ -121,8 +125,9 @@ fun SalaryScreen(
 }
 
 /**
- * Мастер «Настроить зарплату» (ТЗ 5.18): категория → схема выплат (только с открытой «налог 6,5 %») → ставки из
- * сетки клуба с проверкой → ступени.
+ * Мастер «Настроить зарплату» (ТЗ 5.18, шаг 5.3а): как платят (ставки-пример или свои, день зарплаты) → схема выплат
+ * (только с открытой «налог 6,5 %») → ступени → ставки. Категорий и сетки одного клуба нет: пример помечен «сверьте
+ * со своим расчётным листком», пороги ступеней и дни выплат без примера не подставляются.
  * До «Готово» в базу ничего не пишется; выбранное переживает сложение Fold и выгрузку из памяти.
  */
 @Composable
@@ -141,45 +146,53 @@ private fun SalarySetupWizard(
     val tierVersions = savedTiers ?: return
 
     var step by rememberSaveable { mutableStateOf(1) }
-    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var source by rememberSaveable { mutableStateOf<String?>(null) }
+    var salaryDay by rememberSaveable { mutableStateOf("") }
     var scheme by rememberSaveable { mutableStateOf<String?>(null) }
     var advance by rememberSaveable { mutableStateOf("") }
+    var advanceDay by rememberSaveable { mutableStateOf("") }
     var schemeFrom by rememberSaveable { mutableStateOf(YearMonth(today.year, 1).toString()) }
     var pickingMonth by rememberSaveable { mutableStateOf(false) }
-    // Поля ставок заполняются по категории; смена категории заполняет их заново.
+    // Поля ставок и ступеней заполняются по выбору «пример / свои»; смена выбора заполняет их заново.
     var fieldsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var fields by rememberSaveable { mutableStateOf(listOf<String>()) }
+    val tierMonth = SalarySetupRules.tierMonth(tierVersions.isNotEmpty(), today)
     val initialTiers = remember(tierVersions, types) {
-        RateRules.tierDraft(tierVersions, SalarySetupRules.tierMonth(tierVersions.isNotEmpty(), today), types.filter { it.countsTowardPt }.map { it.id }.toSet())
+        RateRules.tierDraft(tierVersions, tierMonth, types.filter { it.countsTowardPt }.map { it.id }.toSet())
     }
+    val hasTiers = tierVersions.isNotEmpty()
     var tiersOn by rememberSaveable { mutableStateOf(initialTiers.enabled) }
-    var t2 by rememberSaveable { mutableStateOf(initialTiers.t2From.toString()) }
-    var t3 by rememberSaveable { mutableStateOf(initialTiers.t3From.toString()) }
+    var t2 by rememberSaveable { mutableStateOf(RateRules.thresholdText(tierVersions, tierMonth, initialTiers.t2From)) }
+    var t3 by rememberSaveable { mutableStateOf(RateRules.thresholdText(tierVersions, tierMonth, initialTiers.t3From)) }
     var asPt by rememberSaveable { mutableStateOf(initialTiers.ptTypeIds.toList()) }
 
     val schemes = SalarySetupRules.schemes(open)
     // Шаг схемы — только с открытой «налог 6,5 %»: шаги — по номерам 1–4, без выбора схемы второго нет.
     val pages = listOfNotNull(1, 2.takeIf { SalarySetupRules.schemeStep(open) }, 3, 4)
     val page = if (step in pages) step else pages.first { it > step }
-    val picked = category?.let { CoachCategory.valueOf(it) }
+    val example = source == SOURCE_EXAMPLE
     val pickedScheme = scheme?.let { PaySchemeKind.valueOf(it) }?.takeIf { it in schemes } ?: PaySchemeKind.NONE
+    val withAdvance = SalarySetupRules.hasAdvance(pickedScheme)
     val fromMonth = YearMonth.parse(schemeFrom)
     val ptId = RatesRepository.ptTypeId(types)
-    // Типы, которые знает сетка клуба: ПТ, сплит, грудничковое.
-    val gridTypes = types.mapNotNull { t -> ClubRateGrid.service(t.id, t.name, t.kind == TrainingKind.SPLIT, ptId)?.let { t to it } }
+    // Типы, для которых есть пример: ПТ, сплит, грудничковое; остальные — потом в «Ставках и ступенях».
+    val rateTypes = types.mapNotNull { t -> ExampleRates.service(t.id, t.name, t.kind == TrainingKind.SPLIT, ptId)?.let { t to it } }
         .distinctBy { it.second }
 
     fun index(type: Int, place: Int, tier: Int) = (type * places.size + place) * TIERS + tier
-    fun gridAt(type: Int, place: Int): RateAmounts? = picked?.let { ClubRateGrid.amounts(it, gridTypes[type].second, places[place].shortName) }
-    fun fill(c: CoachCategory): List<String> = gridTypes.indices.flatMap { ti ->
+    fun fill(withExample: Boolean): List<String> = rateTypes.indices.flatMap { ti ->
         places.indices.flatMap { pi ->
-            val own = RateRules.activeAt(rates.filter { it.rate.typeId == gridTypes[ti].first.id }, places[pi].id, today)?.amounts
-            val a = SalarySetupRules.prefill(own, ClubRateGrid.amounts(c, gridTypes[ti].second, places[pi].shortName))
+            val own = RateRules.activeAt(rates.filter { it.rate.typeId == rateTypes[ti].first.id }, places[pi].id, today)?.amounts
+            val a = SalarySetupRules.prefill(own, if (withExample) ExampleRates.amounts(rateTypes[ti].second) else null)
             listOf(RateRules.moneyText(a?.t1), RateRules.moneyText(a?.t2), RateRules.moneyText(a?.t3))
         }
     }
     fun text(i: Int) = fields.getOrElse(i) { "" }
+    // Ступени без ступеней — одно поле «Ставка»: ступени 2–3 не пишутся.
+    val tierCount = if (tiersOn) TIERS else 1
 
+    val salaryDayValue = SalarySetupRules.day(salaryDay)
+    val advanceDayValue = SalarySetupRules.day(advanceDay)
     val advanceValue = RateRules.money(advance)
     val advanceProblem = RateRules.moneyProblem(advance)
     val t2From = RateRules.threshold(t2)
@@ -188,24 +201,17 @@ private fun SalarySetupWizard(
 
     // Введённые ставки: тип → место → суммы; пустые места не пишутся; ступень 2–3 без ступени 1 — ошибка.
     val entered = mutableMapOf<String, Map<String, RateAmounts>>()
-    val services = mutableMapOf<String, Map<String, String>>()
     val rateProblems = mutableSetOf<Int>()
-    gridTypes.forEachIndexed { ti, (type, service) ->
+    rateTypes.forEachIndexed { ti, (type, _) ->
         val byPlace = linkedMapOf<String, RateAmounts>()
-        val fromGrid = linkedMapOf<String, String>()
         places.forEachIndexed { pi, place ->
-            val values = (0 until TIERS).map { RateRules.money(text(index(ti, pi, it))) }
-            (0 until TIERS).forEach { if (RateRules.moneyProblem(text(index(ti, pi, it))) != null) rateProblems += index(ti, pi, it) }
+            val values = (0 until TIERS).map { if (it < tierCount) RateRules.money(text(index(ti, pi, it))) else null }
+            (0 until tierCount).forEach { if (RateRules.moneyProblem(text(index(ti, pi, it))) != null) rateProblems += index(ti, pi, it) }
             val (a1, a2, a3) = values
             if (RateRules.needsT1(a1, a2, a3, null)) rateProblems += index(ti, pi, 0)
-            if (a1 != null) {
-                val amounts = RateAmounts(a1, a2, a3)
-                byPlace[place.id] = amounts
-                if (amounts == gridAt(ti, pi)) fromGrid[place.id] = service.title
-            }
+            if (a1 != null) byPlace[place.id] = RateAmounts(a1, a2, a3)
         }
         entered[type.id] = byPlace
-        services[type.id] = fromGrid
     }
 
     fun number(p: Int) = pages.indexOf(p) + 1
@@ -215,18 +221,33 @@ private fun SalarySetupWizard(
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
                 when (page) {
                     1 -> {
-                        StepTitle(number(1), pages.size, SalarySetupFormat.CATEGORY_TITLE, SalarySetupFormat.CATEGORY_TEXT)
+                        StepTitle(number(1), pages.size, SalarySetupFormat.PAY_TITLE, SalarySetupFormat.PAY_TEXT)
                         ListCard {
-                            SalarySetupRules.CATEGORIES.forEachIndexed { i, c ->
+                            listOf(
+                                Triple(SOURCE_EXAMPLE, SalarySetupFormat.EXAMPLE, SalarySetupFormat.EXAMPLE_NOTE),
+                                Triple(SOURCE_OWN, SalarySetupFormat.OWN, SalarySetupFormat.OWN_NOTE),
+                            ).forEachIndexed { i, (key, title, note) ->
                                 if (i > 0) RowDivider()
                                 CheckRow(
-                                    title = SalarySetupFormat.category(c),
-                                    checked = picked == c,
-                                    onToggle = { category = c.name },
-                                    modifier = Modifier.padding(horizontal = Dimens.space4).testTag(categoryTag(c)),
+                                    title = title,
+                                    subtitle = note,
+                                    checked = source == key,
+                                    onToggle = { source = key },
+                                    modifier = Modifier.padding(horizontal = Dimens.space4).testTag(sourceTag(key)),
                                 )
                             }
                         }
+                        Spacer(Modifier.height(Dimens.space4))
+                        Field(
+                            SalarySetupFormat.SALARY_DAY,
+                            salaryDay,
+                            { salaryDay = it },
+                            error = if (salaryDay.isNotBlank()) SalarySetupRules.dayProblem(salaryDay) else null,
+                            hint = SalarySetupFormat.SALARY_DAY_NOTE,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                            tag = SETUP_SALARY_DAY_TAG,
+                            placeholder = RateFormat.example(SalarySetupRules.SALARY_DAY_EXAMPLE),
+                        )
                     }
                     2 -> {
                         StepTitle(number(2), pages.size, SalarySetupFormat.SCHEME_TITLE, SalarySetupFormat.SCHEME_TEXT)
@@ -242,7 +263,18 @@ private fun SalarySetupWizard(
                                 )
                             }
                         }
-                        if (SalarySetupRules.hasAdvance(pickedScheme)) {
+                        if (withAdvance) {
+                            Spacer(Modifier.height(Dimens.space4))
+                            Field(
+                                SalarySetupFormat.ADVANCE_DAY,
+                                advanceDay,
+                                { advanceDay = it },
+                                error = if (advanceDay.isNotBlank()) SalarySetupRules.dayProblem(advanceDay) else null,
+                                hint = SalarySetupFormat.ADVANCE_DAY_NOTE,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                                tag = SETUP_ADVANCE_DAY_TAG,
+                                placeholder = RateFormat.example(SalarySetupRules.ADVANCE_DAY_EXAMPLE),
+                            )
                             Spacer(Modifier.height(Dimens.space4))
                             Field(
                                 SalarySetupFormat.ADVANCE,
@@ -262,44 +294,23 @@ private fun SalarySetupWizard(
                         }
                     }
                     3 -> {
-                        val anyGrid = gridTypes.indices.any { ti -> places.indices.any { pi -> gridAt(ti, pi) != null } }
-                        StepTitle(number(3), pages.size, SalarySetupFormat.RATES_TITLE, if (anyGrid) SalarySetupFormat.GRID_TEXT else SalarySetupFormat.NO_GRID_TEXT)
-                        gridTypes.forEachIndexed { ti, (type, _) ->
-                            places.forEachIndexed { pi, place ->
-                                SectionLabel("${type.name} · ${place.shortName}")
-                                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                                    listOf(RateFormat.TIER_1, RateFormat.TIER_2, RateFormat.TIER_3).forEachIndexed { tier, label ->
-                                        val i = index(ti, pi, tier)
-                                        Field(
-                                            label,
-                                            text(i),
-                                            { value -> if (i < fields.size) fields = fields.toMutableList().also { it[i] = value } },
-                                            Modifier.weight(1f),
-                                            error = if (i in rateProblems) "" else null,
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
-                                            tag = setupRateTag(type.shortName, place.shortName, tier),
-                                        )
-                                    }
-                                }
-                                if (index(ti, pi, 0) in rateProblems && RateRules.money(text(index(ti, pi, 0))) == null && RateRules.moneyProblem(text(index(ti, pi, 0))) == null) {
-                                    ErrorText("Впишите ступень 1")
-                                } else if ((0 until TIERS).any { index(ti, pi, it) in rateProblems }) {
-                                    ErrorText("Сумма — числом: 920 или 13 546,50")
-                                }
-                            }
-                        }
-                        Hint(SalarySetupFormat.OTHER_RATES)
-                    }
-                    else -> {
-                        StepTitle(number(4), pages.size, SalarySetupFormat.TIERS_TITLE, SalarySetupFormat.TIERS_TEXT)
-                        SwitchRow(RateFormat.TIERS_ON, tiersOn, { tiersOn = it }, subtitle = if (tiersOn) null else RateFormat.TIERS_ON_NOTE)
+                        StepTitle(number(3), pages.size, SalarySetupFormat.TIERS_TITLE, SalarySetupFormat.TIERS_TEXT)
+                        SwitchRow(RateFormat.TIERS_ON, tiersOn, { tiersOn = it }, Modifier.testTag(SETUP_TIERS_ON_TAG), subtitle = if (tiersOn) null else RateFormat.TIERS_ON_NOTE)
                         if (tiersOn) {
                             Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                                 val number = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
-                                Field(RateFormat.T2_FROM, t2, { t2 = it }, Modifier.weight(1f), error = if (t2From == null) "" else null, keyboardOptions = number, tag = SETUP_T2_TAG)
-                                Field(RateFormat.T3_FROM, t3, { t3 = it }, Modifier.weight(1f), error = if (tierProblem != null && t2From != null) "" else null, keyboardOptions = number, tag = SETUP_T3_TAG)
+                                Field(
+                                    RateFormat.T2_FROM, t2, { t2 = it }, Modifier.weight(1f),
+                                    error = if (t2.isNotBlank() && t2From == null) "" else null, keyboardOptions = number, tag = SETUP_T2_TAG,
+                                    placeholder = RateFormat.example(RateRules.T2_FROM),
+                                )
+                                Field(
+                                    RateFormat.T3_FROM, t3, { t3 = it }, Modifier.weight(1f),
+                                    error = if (tierProblem != null && t2From != null && t3.isNotBlank()) "" else null, keyboardOptions = number, tag = SETUP_T3_TAG,
+                                    placeholder = RateFormat.example(RateRules.T3_FROM),
+                                )
                             }
-                            tierProblem?.let { ErrorText(it) }
+                            if (t2.isNotBlank() && t3.isNotBlank()) tierProblem?.let { ErrorText(it) }
                         }
                         SectionLabel(RateFormat.AS_PT)
                         ListCard {
@@ -315,14 +326,43 @@ private fun SalarySetupWizard(
                         }
                         Hint(RateFormat.AS_PT_NOTE)
                     }
+                    else -> {
+                        StepTitle(number(4), pages.size, SalarySetupFormat.RATES_TITLE, if (example) SalarySetupFormat.EXAMPLE_TEXT else SalarySetupFormat.OWN_TEXT)
+                        rateTypes.forEachIndexed { ti, (type, _) ->
+                            places.forEachIndexed { pi, place ->
+                                SectionLabel("${type.name} · ${place.shortName}")
+                                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                                    val labels = if (tiersOn) listOf(RateFormat.TIER_1, RateFormat.TIER_2, RateFormat.TIER_3) else listOf(RateFormat.ONLY)
+                                    labels.forEachIndexed { tier, label ->
+                                        val i = index(ti, pi, tier)
+                                        Field(
+                                            label,
+                                            text(i),
+                                            { value -> if (i < fields.size) fields = fields.toMutableList().also { it[i] = value } },
+                                            Modifier.weight(1f),
+                                            error = if (i in rateProblems) "" else null,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                                            tag = setupRateTag(type.shortName, place.shortName, tier),
+                                        )
+                                    }
+                                }
+                                if (index(ti, pi, 0) in rateProblems && RateRules.money(text(index(ti, pi, 0))) == null && RateRules.moneyProblem(text(index(ti, pi, 0))) == null) {
+                                    ErrorText("Впишите ступень 1")
+                                } else if ((0 until tierCount).any { index(ti, pi, it) in rateProblems }) {
+                                    ErrorText("Сумма — числом: 920 или 13 546,50")
+                                }
+                            }
+                        }
+                        Hint(SalarySetupFormat.OTHER_RATES)
+                    }
                 }
                 Spacer(Modifier.height(Dimens.space6))
             }
             val enabled = when (page) {
-                1 -> picked != null
-                2 -> !SalarySetupRules.hasAdvance(pickedScheme) || advanceProblem == null
-                3 -> rateProblems.isEmpty()
-                else -> tierProblem == null
+                1 -> source != null && salaryDayValue != null
+                2 -> !withAdvance || (advanceDayValue != null && advanceProblem == null)
+                3 -> tierProblem == null
+                else -> rateProblems.isEmpty()
             }
             BottomAction(
                 text = if (page < pages.last()) SalarySetupFormat.NEXT else SalarySetupFormat.DONE,
@@ -330,22 +370,29 @@ private fun SalarySetupWizard(
                 onClick = {
                     when {
                         page == 1 -> {
-                            val c = picked ?: return@BottomAction
-                            if (fieldsFor != c.name) {
-                                fields = fill(c)
-                                fieldsFor = c.name
+                            val key = source ?: return@BottomAction
+                            if (fieldsFor != key) {
+                                fields = fill(key == SOURCE_EXAMPLE)
+                                // Пример — со ступенями 101 и 151; свои — без ступеней, пока тренер их не включит.
+                                if (!hasTiers) {
+                                    val on = key == SOURCE_EXAMPLE
+                                    tiersOn = on
+                                    t2 = if (on) RateRules.T2_FROM.toString() else ""
+                                    t3 = if (on) RateRules.T3_FROM.toString() else ""
+                                }
+                                fieldsFor = key
                             }
                             step = pages[1]
                         }
                         page < pages.last() -> step = pages.first { it > page }
                         else -> {
                             val draft = SalarySetupDraft(
-                                category = picked ?: return@BottomAction,
                                 scheme = pickedScheme,
                                 advance = advanceValue,
                                 schemeFrom = fromMonth,
+                                advanceDay = advanceDayValue,
+                                salaryDay = salaryDayValue ?: return@BottomAction,
                                 rates = entered,
-                                services = services,
                                 tiers = TierDraft(tiersOn, t2From ?: initialTiers.t2From, t3From ?: initialTiers.t3From, asPt.toSet()),
                             )
                             scope.launch { settings.salary.finish(draft, today) }

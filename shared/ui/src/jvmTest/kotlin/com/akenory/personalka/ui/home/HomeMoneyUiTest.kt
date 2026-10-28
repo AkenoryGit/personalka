@@ -24,7 +24,6 @@ import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.home.TodoKind
-import com.akenory.personalka.domain.model.CoachCategory
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -35,7 +34,8 @@ import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.salary.ADVANCE_FIELD_TAG
-import com.akenory.personalka.ui.salary.categoryTag
+import com.akenory.personalka.ui.salary.SOURCE_EXAMPLE
+import com.akenory.personalka.ui.salary.sourceTag
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
 import kotlin.test.Test
@@ -60,12 +60,10 @@ class HomeMoneyUiTest {
         val bb = settings.places.first().single { it.shortName == "ББ" }.id
         settings.salary.finish(
             SalarySetupDraft(
-                category = CoachCategory.MASTER,
                 scheme = PaySchemeKind.FULL_OFFICIAL,
                 advance = rub(10_000),
                 schemeFrom = YearMonth(2026, 1),
                 rates = mapOf(pt to mapOf(bb to RateAmounts(rub(920), rub(960), rub(1000)))),
-                services = emptyMap(),
                 tiers = TierDraft(true, 101, 151, setOf(pt)),
             ),
             TestData.now.date,
@@ -94,7 +92,7 @@ class HomeMoneyUiTest {
         awaitNode(hasText(HomeFormat.SALARY_NOT_SET))
         onNodeWithTag(MONEY_SETUP_TAG).performScrollTo().performClick()
         // «Настроить зарплату» — мастер в «Зарплате» (5.18).
-        awaitNode(hasTestTag(categoryTag(CoachCategory.MASTER)))
+        awaitNode(hasTestTag(sourceTag(SOURCE_EXAMPLE)))
     }
 
     @Test

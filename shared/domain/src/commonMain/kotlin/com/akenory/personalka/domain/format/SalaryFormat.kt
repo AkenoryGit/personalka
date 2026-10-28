@@ -50,7 +50,7 @@ object SalaryFormat {
     const val ADJUST_FOR_EMPTY = "Напишите, за что"
     const val IN_CLUB = "Входит в начисление клуба"
     const val IN_CLUB_NOTE = "С неё считаются налог и выплаты"
-    const val IN_CLUB_NOTE_PLAIN = "С неё считается выплата 10-го"
+    const val IN_CLUB_NOTE_PLAIN = "С неё считается зарплата"
     const val NOT_IN_CLUB = "не входит в начисление клуба"
     const val SAVE = "Сохранить"
     const val DELETE = "Удалить"

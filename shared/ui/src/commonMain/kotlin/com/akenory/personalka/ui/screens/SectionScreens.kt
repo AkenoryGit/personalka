@@ -176,14 +176,14 @@ fun SectionScreen(
     when (section) {
         Section.HOME -> {
             // «Деньги» (5.2, шаг 3.9): текущий месяц тем же расчётом, что «Зарплата»; читается, только пока «Главная» открыта.
-            val categories by remember(settings) { settings.salary.categories }.collectAsState(initial = null)
+            val schemes by remember(settings) { settings.salary.schemes }.collectAsState(initial = null)
             val month by remember(settings, now.date) { settings.months.month(now.date.yearMonth, now.date) }.collectAsState(initial = null)
             // Именинники (шаг 3.9р) — тоже только пока «Главная» открыта.
             val birthdays by remember(clients, now.date) { clients.birthdays(now.date) }.collectAsState(initial = emptyList())
-            val loadedCategories = categories
+            val loadedSchemes = schemes
             val money = when {
-                loadedCategories == null -> null
-                SalarySetupRules.needed(loadedCategories) -> HomeMoney.NotSet
+                loadedSchemes == null -> null
+                SalarySetupRules.needed(loadedSchemes) -> HomeMoney.NotSet
                 else -> month?.takeIf { it.view.month == now.date.yearMonth }?.let { HomeMoney.Month(it.view) }
             }
             HomeScreen(

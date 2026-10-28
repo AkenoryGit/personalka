@@ -174,7 +174,6 @@ internal fun CalendarSettingsScreen(
 
                 zones?.let { lists ->
                     ZoneList(CalendarSettingsFormat.OWN_RESTRICTIONS, lists.own) { onForm(TrainingFormKey.restriction(it)) }
-                    ZoneList(CalendarSettingsFormat.CLUB_RESTRICTIONS, lists.club, onOpen = null)
                     ZoneList(CalendarSettingsFormat.DUTIES, lists.duties) { onForm(TrainingFormKey.edit(it)) }
                 }
                 }

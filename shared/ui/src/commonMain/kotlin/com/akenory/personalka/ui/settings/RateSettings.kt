@@ -311,8 +311,9 @@ internal fun TierEditor(
     val month = YearMonth.parse(monthText)
     val initial = RateRules.tierDraft(loaded, month, defaultPtTypes(types))
     var enabled by rememberSaveable(monthText) { mutableStateOf(initial.enabled) }
-    var t2 by rememberSaveable(monthText) { mutableStateOf(initial.t2From.toString()) }
-    var t3 by rememberSaveable(monthText) { mutableStateOf(initial.t3From.toString()) }
+    // Пока ступеней нет — поля пустые, 101 и 151 только в подсказке (шаг 5.3а).
+    var t2 by rememberSaveable(monthText) { mutableStateOf(RateRules.thresholdText(loaded, month, initial.t2From)) }
+    var t3 by rememberSaveable(monthText) { mutableStateOf(RateRules.thresholdText(loaded, month, initial.t3From)) }
     var pt by rememberSaveable(monthText) { mutableStateOf(initial.ptTypeIds.toList()) }
     var picking by rememberSaveable { mutableStateOf(false) }
     // Архивный тип виден, только пока он в списке: снять отметку можно, поставить новую — нет.
@@ -338,8 +339,8 @@ internal fun TierEditor(
                 SwitchRow(RateFormat.TIERS_ON, enabled, { enabled = it }, Modifier.testTag(TIERS_ON_TAG), subtitle = if (enabled) null else RateFormat.TIERS_ON_NOTE)
                 if (enabled) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                        Field(RateFormat.T2_FROM, t2, { t2 = it }, Modifier.weight(1f), error = if (t2From == null) "" else null, keyboardOptions = NUMBER, tag = T2_FROM_TAG)
-                        Field(RateFormat.T3_FROM, t3, { t3 = it }, Modifier.weight(1f), error = if (problem != null && t2From != null) "" else null, keyboardOptions = NUMBER, tag = T3_FROM_TAG)
+                        Field(RateFormat.T2_FROM, t2, { t2 = it }, Modifier.weight(1f), error = if (t2From == null) "" else null, keyboardOptions = NUMBER, tag = T2_FROM_TAG, placeholder = RateFormat.example(RateRules.T2_FROM))
+                        Field(RateFormat.T3_FROM, t3, { t3 = it }, Modifier.weight(1f), error = if (problem != null && t2From != null) "" else null, keyboardOptions = NUMBER, tag = T3_FROM_TAG, placeholder = RateFormat.example(RateRules.T3_FROM))
                     }
                     problem?.let { ErrorText(it) }
                 }

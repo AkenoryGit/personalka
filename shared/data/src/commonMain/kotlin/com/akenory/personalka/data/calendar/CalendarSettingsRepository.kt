@@ -58,7 +58,7 @@ data class CalendarPrefs(
 data class ZoneRow(val key: String, val title: String, val subtitle: String, val id: String?)
 
 /** Списки раздела «Календарь»: свои запреты, запреты клуба и дежурства, которые ещё действуют. */
-data class ZoneLists(val own: List<ZoneRow>, val club: List<ZoneRow>, val duties: List<ZoneRow>)
+data class ZoneLists(val own: List<ZoneRow>, val duties: List<ZoneRow>)
 
 /** Строка «Кого предупредить» в окне отпуска: клиент или дежурства — «2 тренировки · пн 02.11, ср 04.11». */
 data class VacationRow(val key: String, val title: String, val subtitle: String)
@@ -276,14 +276,14 @@ class CalendarSettingsRepository internal constructor(
             val place = places.associate { it.id to it.shortName }
             val restrictions = CalendarSettingsRules.current(blocks.map { it.toRestriction() }, today)
             val scopes = blocks.associate { it.id to it.scope }
-            val rows = restrictions.map { r ->
-                val own = scopes[r.id] == Scope.COACH
+            // Только свои запреты: раздела «Клуб» и запретов клуба нет (шаг 5.3а).
+            val rows = restrictions.filter { scopes[it.id] == Scope.COACH }.map { r ->
                 ZoneRow(
                     key = r.id,
                     title = ZoneFormat.restriction(place[r.locationId].orEmpty(), r.startMinute, r.endMinute, r.reason),
                     subtitle = CalendarSettingsFormat.period(r.weekdays, r.date, r.validFrom, r.validTo, today),
-                    id = r.id.takeIf { own },
-                ) to own
+                    id = r.id,
+                )
             }
             val duties = types.filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val next = upcoming.filter { it.typeId in duties && it.sync.deletedAt == null && it.start > now }.sortedBy { it.start }
@@ -308,8 +308,7 @@ class CalendarSettingsRepository internal constructor(
                 )
             }
             ZoneLists(
-                own = rows.filter { it.second }.map { it.first },
-                club = rows.filter { !it.second }.map { it.first },
+                own = rows,
                 duties = dutySeries + oneOff,
             )
         }

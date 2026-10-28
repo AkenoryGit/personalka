@@ -33,6 +33,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** «Ещё → Настройки → Ставки и ступени» (шаг 3.6, ТЗ 5.16, 3.3). «Сейчас» — вт 20.10.2026 15:40. */
 @OptIn(ExperimentalTestApi::class)
@@ -126,10 +127,14 @@ class RateSettingsUiTest {
     @Test
     fun tiersWithPtTypes() = runComposeUiTest {
         openRates()
-        onNodeWithTag(TIERS_ROW_TAG).assertTextContains(s("Ступень 2 — от 101_ПТ, 3 — от 151"))
+        // Пока ступеней нет — «Без ступеней», пороги пустые: 101 и 151 только примером в подсказке (5.3а).
+        onNodeWithTag(TIERS_ROW_TAG).assertTextContains("Без ступеней", substring = true)
         onNodeWithTag(TIERS_ROW_TAG).performClick()
         awaitNode(hasTestTag(TIERS_MONTH_TAG))
         onNodeWithText(s("Октябрь_2026")).assertExists()
+        onNodeWithTag(TIERS_ON_TAG).performClick()
+        onNodeWithText("Сохранить").assertIsNotEnabled()
+        onNodeWithTag(T2_FROM_TAG).performTextReplacement("101")
         onNodeWithTag(T3_FROM_TAG).performTextReplacement("90")
         onNodeWithText("Ступень 3 начинается позже ступени 2").performScrollTo()
         onNodeWithText("Сохранить").assertIsNotEnabled()
@@ -141,6 +146,7 @@ class RateSettingsUiTest {
         val tier = runBlocking { settings.rates.tiers.first() }.single()
         assertEquals(LocalDate(2026, 10, 1), tier.validFrom)
         assertEquals(150, tier.t3From)
+        assertTrue(tier.enabled)
         // По умолчанию как ПТ — ПТ, сплит, грудничковое, гидро и кинезио; кинезио сняли.
         assertEquals(setOf("ПТ", "Сплит", "Грудничковое", "Гидрореабилитация").map(::typeId).toSet(), tier.ptTypeIds)
         awaitNode(hasText(s("с_01.10.2026")))

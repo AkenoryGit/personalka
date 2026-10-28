@@ -110,10 +110,14 @@ class RatesTest {
     @Test
     fun tiersByMonthOrDefault() {
         val month = YearMonth(2026, 10)
-        assertEquals(TierDraft(true, 101, 151, setOf("pt", "split")), RateRules.tierDraft(emptyList(), month, setOf("pt", "split")))
+        // Пока ступеней нет — без ступеней, поля порогов пустые (пример 101 и 151 — в подсказке, шаг 5.3а).
+        assertEquals(TierDraft(false, 101, 151, setOf("pt", "split")), RateRules.tierDraft(emptyList(), month, setOf("pt", "split")))
+        assertEquals("", RateRules.thresholdText(emptyList(), month, 101))
+        assertEquals("например, 101", com.akenory.personalka.domain.format.RateFormat.example(101))
         val versions = listOf(TierScheme(d(9, 1), enabled = false, ptTypeIds = setOf("pt")), TierScheme(d(11, 1), t2From = 90, t3From = 140, ptTypeIds = setOf("pt", "kin")))
         assertEquals(TierDraft(false, 101, 151, setOf("pt")), RateRules.tierDraft(versions, month, setOf("x")))
         assertEquals(TierDraft(true, 90, 140, setOf("pt", "kin")), RateRules.tierDraft(versions, YearMonth(2026, 11), setOf("x")))
+        assertEquals("90", RateRules.thresholdText(versions, YearMonth(2026, 11), 90))
         assertEquals(d(11, 1), RateRules.tierFrom(YearMonth(2026, 11)))
         assertEquals(101, RateRules.threshold(" 101 "))
         assertNull(RateRules.threshold("0"))

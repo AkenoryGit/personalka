@@ -8,7 +8,6 @@ import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.training.TrainingDraft
-import com.akenory.personalka.domain.model.CoachCategory
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.money.RateAmounts
 import com.akenory.personalka.domain.money.SalarySetupDraft
@@ -166,12 +165,10 @@ class RemindersTest {
             val bb = settings.places.first().single { it.shortName == "ББ" }.id
             settings.salary.finish(
                 SalarySetupDraft(
-                    category = CoachCategory.MASTER,
                     scheme = PaySchemeKind.FULL_OFFICIAL,
                     advance = 1_000_000,
                     schemeFrom = YearMonth(2026, 1),
                     rates = mapOf(pt to mapOf(bb to RateAmounts(92_000, 96_000, 100_000))),
-                    services = emptyMap(),
                     tiers = TierDraft(true, 101, 151, setOf(pt)),
                 ),
                 today,

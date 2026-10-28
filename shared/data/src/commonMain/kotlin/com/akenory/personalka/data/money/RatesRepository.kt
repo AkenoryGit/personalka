@@ -39,7 +39,7 @@ class RatesRepository(private val db: PersonalkaDatabase, private val clock: () 
 
     /**
      * «Сохранить» в форме ставок типа [typeId]: [entered] — введённое по местам (`null` — поля пустые), [from] —
-     * «Действуют с». [services] — услуга сетки клуба по месту, если сумма взята из сетки без правки (мастер 5.18).
+     * «Действуют с». [services] — услуга сетки клуба по месту (`club_service`); с шага 5.3а сетки нет и не передаётся.
      * Возвращает число записанных изменений: 0 — всё совпало с тем, что уже действует.
      */
     suspend fun saveRates(typeId: String, from: LocalDate, entered: Map<String?, RateAmounts?>, services: Map<String?, String> = emptyMap()): Int {

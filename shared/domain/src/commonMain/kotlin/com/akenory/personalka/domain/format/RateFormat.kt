@@ -31,6 +31,9 @@ object RateFormat {
     const val T3_FROM = "Ступень 3 — с какой ПТ"
     const val AS_PT = "Считать как ПТ"
     const val AS_PT_NOTE = "Эти тренировки идут в счётчик ПТ месяца, по нему выбирается ступень."
+    /** Подсказка пустого поля: «например, 101» — пример, а не значение (шаг 5.3а). */
+    fun example(value: Int): String = "например, $value"
+
     const val TIERS_MONTH = "С месяца"
     const val TIERS_MONTH_NOTE = "Ступени меняются с 1-го числа: прошлые месяцы не пересчитываются."
 

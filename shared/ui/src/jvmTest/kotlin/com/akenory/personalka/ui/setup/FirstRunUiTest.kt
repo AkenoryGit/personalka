@@ -64,12 +64,16 @@ class FirstRunUiTest {
         onNodeWithTag(FIRST_NAME_TAG).performTextInput("Андрей ")
         onNodeWithText("Далее").assertIsEnabled().performClick()
 
-        // Шаг 2: всё отмечено, лишнее снимается.
+        // Шаг 2 (5.3а): набор только предложен — ничего не отмечено, тренер отмечает своё.
         onNodeWithText("Места и типы").assertIsDisplayed()
-        onNodeWithText("Зал").assertIsOn().performClick()
         onNodeWithText("Зал").assertIsOff()
-        onNodeWithTag(setupTypeTag("Кинезио")).performScrollTo().assertIsOn().performClick()
-        onNodeWithTag(setupTypeTag("Кинезио")).assertIsOff()
+        onNodeWithText("ББ").assertIsOff().performClick()
+        onNodeWithText("ДБ").performClick()
+        onNodeWithText("ББ").assertIsOn()
+        onNodeWithTag(setupTypeTag("Кинезио")).performScrollTo().assertIsOff()
+        onNodeWithTag(setupTypeTag("ПТ")).performScrollTo().assertIsOff().performClick()
+        onNodeWithTag(setupTypeTag("ПТ")).assertIsOn()
+        onNodeWithTag(setupTypeTag("Группа")).performScrollTo().performClick()
 
         // Новый тип прямо здесь — тот же конструктор, что в настройках.
         onNodeWithTag(NEW_TYPE_ROW_TAG).performScrollTo().performClick()
@@ -96,12 +100,12 @@ class FirstRunUiTest {
             assertNull(coach.middleName)
             assertEquals(listOf("ББ", "ДБ"), settings.places.first().map { it.shortName })
             val types = settings.types.first()
-            assertTrue(types.none { it.name == "Кинезио" }, "Снятый тип не создан")
+            assertTrue(types.none { it.name == "Кинезио" }, "Неотмеченный тип не создан")
             val aqua = types.single { it.name == "Аквааэробика" }
             assertEquals(TrainingKind.GROUP, aqua.kind)
             assertEquals(PayUnit.PER_CLIENT, aqua.payUnit)
             assertEquals(3, aqua.shade)
-            assertEquals(9, types.size)
+            assertEquals(setOf("ПТ", "Группа", "Аквааэробика"), types.map { it.name }.toSet())
         }
     }
 
@@ -114,11 +118,13 @@ class FirstRunUiTest {
         onNodeWithTag(FIRST_NAME_TAG).performTextInput("Андрей")
         onNodeWithText("Далее").performClick()
 
-        for (place in listOf("ББ", "ДБ", "Зал")) onNodeWithText(place).performClick()
+        // Сначала ничего не отмечено (5.3а).
         onNodeWithText("Готово").assertIsNotEnabled()
         onNodeWithText("Отметьте хотя бы одно место и один тип.").assertIsDisplayed()
 
         onNodeWithText("ДБ").performClick()
+        onNodeWithText("Готово").assertIsNotEnabled()
+        onNodeWithTag(setupTypeTag("ПТ")).performScrollTo().performClick()
         onNodeWithText("Готово").assertIsEnabled()
     }
 

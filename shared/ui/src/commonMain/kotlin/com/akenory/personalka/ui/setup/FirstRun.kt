@@ -113,7 +113,7 @@ internal fun setupTypeTag(name: String) = "setup-type-$name"
  */
 enum class FirstRunPage { WELCOME, NAME, SETUP, NEW_PLACE, NEW_TYPE, SIGN_IN }
 
-/** Пункт списка с отметкой: «Лишнее снимите». */
+/** Пункт списка с отметкой. Предложенные по умолчанию не отмечены (шаг 5.3а), добавленные тренером — отмечены. */
 data class Picked<T>(val item: T, val on: Boolean = true)
 
 /**
@@ -125,8 +125,9 @@ data class Picked<T>(val item: T, val on: Boolean = true)
 class FirstRunState(
     page: FirstRunPage = FirstRunPage.WELCOME,
     name: CoachName = CoachName("", "", ""),
-    places: List<Picked<PlaceDraft>> = ReferenceRules.defaultPlaces.map { Picked(it) },
-    types: List<Picked<TypeDraft>> = ReferenceRules.defaultTypes.map { Picked(it) },
+    // Решение 28.10.2026 (шаг 5.3а): набор одного клуба только предложен — тренер отмечает своё сам.
+    places: List<Picked<PlaceDraft>> = ReferenceRules.defaultPlaces.map { Picked(it, on = false) },
+    types: List<Picked<TypeDraft>> = ReferenceRules.defaultTypes.map { Picked(it, on = false) },
 ) {
     var page: FirstRunPage by mutableStateOf(page)
     var name: CoachName by mutableStateOf(name)
@@ -519,7 +520,7 @@ private fun SetupPage(state: FirstRunState, saving: Boolean, failed: Boolean, on
             StepTitle(
                 step = 2,
                 title = "Места и типы",
-                text = "Обычный набор клуба уже заполнен. Лишнее снимите, остальное поправите потом в настройках.",
+                text = "Отметьте, где вы работаете и какие тренировки ведёте. Нет нужного — добавьте; остальное поправите потом в настройках.",
             )
             SectionLabel("Места")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
