@@ -400,8 +400,9 @@ class TrainingCardUiTest {
         // Шаг 5.3в: прошедшая ПТ закрылась сама «Проведено» — её тоже можно удалить, со своим окном.
         val orlov = client("Орлов", "Максим")
         val id = training("10:00", orlov)
+        runBlocking { calendar.cards.markDone(id) }
+        assertEquals(TrainingStatus.DONE, runBlocking { db.trainingDao().training(id)!!.status })
         openCalendar()
-        waitUntil(timeoutMillis = 5_000) { runBlocking { db.trainingDao().training(id)!!.status == TrainingStatus.DONE } }
         tapBlock("Орлов Максим")
         awaitNode(hasTestTag(CARD_MENU_TAG))
         onNodeWithTag(CARD_MENU_TAG).performClick()
