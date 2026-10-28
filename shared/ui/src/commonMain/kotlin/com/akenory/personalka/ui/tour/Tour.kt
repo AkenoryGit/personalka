@@ -151,6 +151,7 @@ fun TourOverlay(tour: TourState, card: TourCard) {
     val holes = keys.mapNotNull { tour.targets[it] }.filter { it.width > 0f && it.height > 0f }
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         val heightPx = with(density) { maxHeight.toPx() }
+        val wide = maxWidth >= WideFrom
         if (holes.isNotEmpty()) {
             val pad = with(density) { 6.dp.toPx() }
             val ring = with(density) { 2.dp.toPx() }
@@ -172,7 +173,7 @@ fun TourOverlay(tour: TourState, card: TourCard) {
             contentAlignment = if (low) Alignment.TopCenter else Alignment.BottomCenter,
         ) {
             // На сложенном внизу — панель разделов: карточка стоит над ней, разделы остаются под рукой.
-            val nav = if (maxWidth >= WideFrom) 0.dp else NavBarHeight
+            val nav = if (wide) 0.dp else NavBarHeight
             val bottom = nav + if (card.aboveFab) Dimens.fab + Dimens.space4 * 2 else Dimens.space3
             TourCardView(
                 card,
