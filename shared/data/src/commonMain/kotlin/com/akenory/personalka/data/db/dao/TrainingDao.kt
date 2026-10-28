@@ -40,6 +40,11 @@ data class ReliabilityRow(
     val participationStatus: ParticipationStatus,
     val participationReason: String?,
     val trainingReason: String?,
+    /** Для «Уточнить, придёт ли» (шаг 3.16): участие, тренировка, место, «Придёт» на это начало. */
+    val participationId: String = "",
+    val trainingId: String = "",
+    val placeShort: String? = null,
+    val confirmedStart: LocalDateTime? = null,
 )
 
 /** Тренировки и дежурства, участие клиентов, результаты, стартовые тренировки (ТЗ 3.5). */
@@ -277,10 +282,12 @@ interface TrainingDao {
         """
         SELECT p.clientId AS clientId, t.start AS start, t.groupId AS groupId, ty.kind AS kind, ty.name AS typeName, ty.shortName AS typeShort,
                t.status AS trainingStatus, p.status AS participationStatus,
-               p.cancelReason AS participationReason, t.cancelReason AS trainingReason
+               p.cancelReason AS participationReason, t.cancelReason AS trainingReason,
+               p.id AS participationId, t.id AS trainingId, l.shortName AS placeShort, p.confirmedStart AS confirmedStart
         FROM participation AS p
         JOIN training AS t ON t.id = p.trainingId
         JOIN training_type AS ty ON ty.id = t.typeId
+        LEFT JOIN location AS l ON l.id = t.locationId
         WHERE ty.kind IN ('PERSONAL', 'SPLIT', 'GROUP')
           AND p.deletedAt IS NULL AND t.deletedAt IS NULL
         """

@@ -256,42 +256,7 @@ internal fun FollowupList(
                 }
             }
             items(rows, key = { it.client.id }) { row ->
-                FollowupItem(
-                    row = row,
-                    today = today,
-                    onOpen = { onOpen(row.client.id) },
-                    onBook = {
-                        val last = row.item.last
-                        onForm(
-                            TrainingFormKey.new(
-                                start = FollowupRules.bookingStart(last, now),
-                                clientId = row.client.id,
-                                typeId = last.typeId,
-                                locationId = last.locationId,
-                            ),
-                        )
-                    },
-                    onContacted = {
-                        scope.launch {
-                            val before = clients.followup.contacted(row.client.id) ?: return@launch
-                            messages.showUndo(FollowupFormat.contactedMessage(row.short)) { scope.launch { clients.followup.undo(before) } }
-                        }
-                    },
-                    onPause = { pausing = row.client.id },
-                    onDismiss = {
-                        scope.launch {
-                            val before = clients.followup.dismiss(row.client.id) ?: return@launch
-                            messages.showUndo(FollowupFormat.dismissedMessage(row.short)) { scope.launch { clients.followup.undo(before) } }
-                        }
-                    },
-                    onGone = {
-                        scope.launch {
-                            val undo = clients.archive(row.client.id) ?: return@launch
-                            messages.showUndo("${row.short} в архиве") { scope.launch { clients.undoArchive(undo) } }
-                        }
-                    },
-                    onCopied = { messages.show(FollowupFormat.PHONE_COPIED) },
-                )
+                FollowupCard(row, clients, messages, scope, now, onOpen = { onOpen(row.client.id) }, onForm = onForm, onPause = { pausing = row.client.id })
             }
         }
 
@@ -311,22 +276,90 @@ internal fun FollowupList(
             }
         }
 
-        val paused = followup.rows.firstOrNull { it.client.id == pausing }
-        if (paused != null) {
-            PausePanel(
-                row = paused,
-                today = today,
-                onDismiss = { pausing = null },
-                onSave = { until, note ->
-                    pausing = null
-                    scope.launch {
-                        val before = clients.followup.pause(paused.client.id, until, note) ?: return@launch
-                        messages.showUndo(FollowupFormat.pausedMessage(paused.short, until)) { scope.launch { clients.followup.undo(before) } }
-                    }
-                },
-            )
+        followup.rows.firstOrNull { it.client.id == pausing }?.let { paused ->
+            FollowupPause(paused, clients, messages, scope, today, onClose = { pausing = null })
         }
     }
+}
+
+/**
+ * Карточка «Не записаны дальше» с действиями (4.15): в «Клиентах» и в окне «Без записи» на «Главной» (шаг 3.16).
+ * «Записать» — форма тренировки с этим клиентом, тем же типом и местом на ближайший такой же день недели и время;
+ * «Написал», «Убрать из списка» и «Больше не ходит» — с «Отменить»; [onPause] — открыть «Пауза до…» ([FollowupPause]).
+ */
+@Composable
+internal fun FollowupCard(
+    row: FollowupRow,
+    clients: ClientRepository,
+    messages: MessageState,
+    scope: CoroutineScope,
+    now: LocalDateTime,
+    onOpen: () -> Unit,
+    onForm: (String) -> Unit,
+    onPause: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FollowupItem(
+        row = row,
+        today = now.date,
+        onOpen = onOpen,
+        onBook = {
+            val last = row.item.last
+            onForm(
+                TrainingFormKey.new(
+                    start = FollowupRules.bookingStart(last, now),
+                    clientId = row.client.id,
+                    typeId = last.typeId,
+                    locationId = last.locationId,
+                ),
+            )
+        },
+        onContacted = {
+            scope.launch {
+                val before = clients.followup.contacted(row.client.id) ?: return@launch
+                messages.showUndo(FollowupFormat.contactedMessage(row.short)) { scope.launch { clients.followup.undo(before) } }
+            }
+        },
+        onPause = onPause,
+        onDismiss = {
+            scope.launch {
+                val before = clients.followup.dismiss(row.client.id) ?: return@launch
+                messages.showUndo(FollowupFormat.dismissedMessage(row.short)) { scope.launch { clients.followup.undo(before) } }
+            }
+        },
+        onGone = {
+            scope.launch {
+                val undo = clients.archive(row.client.id) ?: return@launch
+                messages.showUndo("${row.short} в архиве") { scope.launch { clients.undoArchive(undo) } }
+            }
+        },
+        onCopied = { messages.show(FollowupFormat.PHONE_COPIED) },
+        modifier = modifier,
+    )
+}
+
+/** «Пауза до…» клиента [row] с сохранением и «Отменить»; [onClose] — окно закрыть. */
+@Composable
+internal fun FollowupPause(
+    row: FollowupRow,
+    clients: ClientRepository,
+    messages: MessageState,
+    scope: CoroutineScope,
+    today: LocalDate,
+    onClose: () -> Unit,
+) {
+    PausePanel(
+        row = row,
+        today = today,
+        onDismiss = onClose,
+        onSave = { until, note ->
+            onClose()
+            scope.launch {
+                val before = clients.followup.pause(row.client.id, until, note) ?: return@launch
+                messages.showUndo(FollowupFormat.pausedMessage(row.short, until)) { scope.launch { clients.followup.undo(before) } }
+            }
+        },
+    )
 }
 
 private val FollowupRow.name: ClientName get() = ClientName(client.lastName, client.firstName, client.middleName)
@@ -346,6 +379,7 @@ private fun FollowupItem(
     onDismiss: () -> Unit,
     onGone: () -> Unit,
     onCopied: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = PersonalkaTheme.colors
     val client = row.client
@@ -353,7 +387,7 @@ private fun FollowupItem(
     val phone = client.contactPhone
     var menu by remember { mutableStateOf(false) }
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.medium)
             .background(colors.surface)
@@ -626,7 +660,7 @@ private fun WaitItem(
 /** Звонок (5.8): нажатие открывает набор номера, долгое — копирует номер; для TalkBack — действие «Скопировать номер». */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CallButton(phone: String, onCopied: () -> Unit) {
+internal fun CallButton(phone: String, onCopied: () -> Unit) {
     val uri = LocalUriHandler.current
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current

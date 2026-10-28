@@ -1,6 +1,7 @@
 package com.akenory.personalka.ui.groups
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -223,7 +225,7 @@ fun GroupCard(
                 val absent = allAbsent.filter { it.group.id == groupId }
                 if (absent.isNotEmpty()) {
                     FormLabelSpaced("${GroupFormat.absentTitle(absent.map { it.absence })} · ${absent.size}")
-                    AbsentList(absent, groupId, groups, clients, messages, scope)
+                    AbsentList(absent, groups, clients, messages, scope)
                 }
 
                 Row(Modifier.fillMaxWidth().padding(top = Dimens.space5, bottom = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
@@ -325,23 +327,34 @@ private fun MemberList(list: List<GroupMemberEntity>, byId: Map<String, ClientRo
  * Кто не ходит в группу 30 дней и больше (шаг 3.9у): имя, «не была с 19.09» и три кнопки. «В архив» — клиент уходит
  * из всех групп (4.4), «Убрать из группы» — только из этой, «Оставить» — спросить ещё раз через 30 дней, после второго
  * раза — больше не спрашивать. У каждой — «Отменить».
+ *
+ * В окне «Не ходят в группу» на «Главной» (шаг 3.16) — дети всех групп: под именем ещё и группа ([showGroup]),
+ * нажатие на имя — карточка клиента ([onOpen]).
  */
 @Composable
-private fun AbsentList(
+internal fun AbsentList(
     list: List<AbsentMember>,
-    groupId: String,
     groups: GroupRepository,
     clients: ClientRepository,
     messages: MessageState,
     scope: CoroutineScope,
+    showGroup: Boolean = false,
+    onOpen: ((String) -> Unit)? = null,
 ) {
     val colors = PersonalkaTheme.colors
     ListCard {
         list.forEachIndexed { index, a ->
             if (index > 0) RowDivider()
             val name = "${a.client.lastName} ${a.client.firstName}"
+            val groupId = a.group.id
             Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space4, vertical = Dimens.space3).testTag(absentRowTag(name))) {
-                Text(name, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                Text(
+                    name,
+                    modifier = if (onOpen != null) Modifier.clickable(role = Role.Button) { onOpen(a.clientId) } else Modifier,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.text,
+                )
+                if (showGroup) Text(a.group.name, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
                 Text(GroupFormat.absentSince(a.absence, a.client.sex), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
                 FlowRow(
                     Modifier.padding(top = Dimens.space2),

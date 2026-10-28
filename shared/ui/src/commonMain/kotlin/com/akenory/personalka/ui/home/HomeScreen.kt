@@ -58,6 +58,8 @@ import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.NoticeRow
+import com.akenory.personalka.data.clients.ClientRepository
+import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.clients.Birthday
 import com.akenory.personalka.data.clients.ConfirmVisit
 import com.akenory.personalka.data.clients.Followup
@@ -315,6 +317,9 @@ fun homeTodos(
  * @param onAdvance пункт «Введите сумму аванса» — «Зарплата» → «Выплаты» с окном аванса.
  * @param notices пункт «Предупредить об отпуске» — окно со списком ([VacationNoticePanel]) здесь же.
  * @param birthdays блок «День рождения сегодня» (шаг 3.9р); нажатие на имя — карточка клиента ([onClient]).
+ * @param clients, groups пункты «Уточнить, придёт ли», «Клиенты без записи», «Не ходят в группу», «СПТ ждут покупки»
+ *   открывают окно со списком здесь же ([TodoListPanel], шаг 3.16); `null` (тесты без них) — как раньше, экран.
+ * @param onForm «Записать» в окне «Без записи» — форма тренировки.
  */
 @Composable
 fun HomeScreen(
@@ -340,9 +345,14 @@ fun HomeScreen(
     onAdvance: () -> Unit = onSalary,
     notices: List<NoticeRow> = emptyList(),
     birthdays: List<Birthday> = emptyList(),
+    clients: ClientRepository? = null,
+    groups: GroupRepository? = null,
+    onForm: (String) -> Unit = {},
 ) {
     val wide = LocalWide.current
     var noticesOpen by rememberSaveable { mutableStateOf(false) }
+    // Открытое окно пункта «Нужно сделать» (шаг 3.16): вид пункта.
+    var listOpen by rememberSaveable { mutableStateOf<String?>(null) }
     val scroll = rememberScrollState()
     val dayScroll = rememberScrollState()
     var showPast by rememberSaveable { mutableStateOf(false) }
@@ -363,6 +373,7 @@ fun HomeScreen(
         val id = todo.trainingId
         val client = todo.clientId
         when {
+            clients != null && todo.kind in PANEL_KINDS -> listOpen = todo.kind.name
             todo.kind == TodoKind.NOT_BOOKED || todo.kind == TodoKind.FREED_TIME || todo.kind == TodoKind.WAIT_REMIND -> onNoBooking()
             todo.kind == TodoKind.ADVANCE -> onAdvance()
             todo.kind == TodoKind.RECONCILE -> onReconcile()
@@ -459,6 +470,22 @@ fun HomeScreen(
                 },
                 onCopied = { messages.show(CalendarSettingsFormat.NOTICE_COPIED) },
                 onClose = { noticesOpen = false },
+            )
+        }
+        val listKind = listOpen?.let { name -> TodoKind.entries.firstOrNull { it.name == name } }
+        if (listKind != null && clients != null) {
+            TodoListPanel(
+                kind = listKind,
+                title = todos.firstOrNull { it.kind == listKind }?.title.orEmpty(),
+                clients = clients,
+                groups = groups,
+                now = now,
+                messages = messages,
+                scope = scope,
+                onClose = { listOpen = null },
+                onClient = onClient,
+                onCard = onCard,
+                onForm = onForm,
             )
         }
       }

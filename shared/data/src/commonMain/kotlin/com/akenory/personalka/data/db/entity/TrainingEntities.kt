@@ -77,6 +77,11 @@ data class ParticipationEntity(
     val notifiedAt: LocalDateTime? = null,
     /** Статус списания изменён вручную. */
     val chargeOverridden: Boolean = false,
+    /**
+     * «Придёт» в «Уточнить, придёт ли» (шаг 3.16): начало тренировки, на которое клиент подтвердил приход. Перенесли
+     * тренировку — начало другое, и клиент снова в списке.
+     */
+    val confirmedStart: LocalDateTime? = null,
 )
 
 /** Результат на дистанции. Время — сотые доли секунды: 52,16 с = 5216. */

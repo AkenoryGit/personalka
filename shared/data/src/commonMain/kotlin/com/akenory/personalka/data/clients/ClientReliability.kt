@@ -19,8 +19,21 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
 
-/** Кого спросить, придёт ли (шаг 3.14): клиент, «Иванов И.» и начало сегодняшней тренировки. */
-data class ConfirmVisit(val clientId: String, val name: String, val start: LocalDateTime)
+/**
+ * Кого спросить, придёт ли (шаг 3.14): клиент, «Иванов И.» и начало сегодняшней тренировки. С шага 3.16 — для окна
+ * со списком: участие и тренировка («Придёт», «Не придёт»), тип и место, надёжность и телефон для звонка.
+ */
+data class ConfirmVisit(
+    val clientId: String,
+    val name: String,
+    val start: LocalDateTime,
+    val participationId: String = "",
+    val trainingId: String = "",
+    val typeShort: String = "",
+    val placeShort: String = "",
+    val reliability: Reliability? = null,
+    val phone: String? = null,
+)
 
 /**
  * Надёжность клиентов (шаг 3.14): не хранится, а считается из тренировок при каждом их изменении. Только для тренера —
@@ -68,7 +81,7 @@ class ClientReliability internal constructor(db: PersonalkaDatabase) {
 
     /**
      * «Уточнить, придёт ли» на «Главной»: сегодняшние ещё не начавшиеся ПТ, сплиты и мини-группы, где клиента ждут,
-     * а его надёжность красная. По началу.
+     * а его надёжность красная. По началу. Ответивший «Придёт» на это начало тренировки — не в списке (шаг 3.16).
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun confirm(now: LocalDateTime): Flow<List<ConfirmVisit>> = enabled.flatMapLatest { on ->
@@ -82,10 +95,22 @@ class ClientReliability internal constructor(db: PersonalkaDatabase) {
             .filter { it.start.date == now.date && it.start > now }
             .filter { it.trainingStatus == TrainingStatus.PLANNED && it.participationStatus == ParticipationStatus.EXPECTED }
             .filter { ReliabilityRules.counts(it.kind, it.typeName, it.typeShort) }
-            .filter { ReliabilityRules.ask(ReliabilityRules.of(byClient[it.clientId].orEmpty())) }
+            .filter { it.confirmedStart != it.start }
             .mapNotNull { row ->
+                val reliability = ReliabilityRules.of(byClient[row.clientId].orEmpty())
+                if (!ReliabilityRules.ask(reliability)) return@mapNotNull null
                 val c = names[row.clientId] ?: return@mapNotNull null
-                ConfirmVisit(row.clientId, CalendarFormat.client(ClientName(c.lastName, c.firstName)), row.start)
+                ConfirmVisit(
+                    clientId = row.clientId,
+                    name = CalendarFormat.client(ClientName(c.lastName, c.firstName)),
+                    start = row.start,
+                    participationId = row.participationId,
+                    trainingId = row.trainingId,
+                    typeShort = row.typeShort,
+                    placeShort = row.placeShort.orEmpty(),
+                    reliability = reliability,
+                    phone = c.contactPhone,
+                )
             }
             .sortedBy { it.start }
             .toList()

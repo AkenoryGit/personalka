@@ -474,8 +474,37 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion14() {
-        assertEquals(14, PersonalkaDatabase.VERSION)
-        assertTrue((1..13).all { schemaFile(it).exists() }, "Схемы версий 1–13 хранятся: по ним строятся переходы")
+    fun version14KeepsParticipationsUnconfirmed(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v14", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.14а–3.15а: «Придёт» у участия ещё нет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 14)
+                raw.exec(
+                    "INSERT INTO participation (id, trainingId, clientId, status, behavior, cancelReason, notifiedAt, chargeOverridden, " +
+                        "coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('p1', 't1', 'k1', 'EXPECTED', NULL, NULL, NULL, 0, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val p = db.trainingDao().participation("p1")!!
+                assertEquals("k1", p.clientId, "Участие не тронуто")
+                assertNull(p.confirmedStart, "Никто ещё не подтверждал приход")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion15() {
+        assertEquals(15, PersonalkaDatabase.VERSION)
+        assertTrue((1..14).all { schemaFile(it).exists() }, "Схемы версий 1–14 хранятся: по ним строятся переходы")
     }
 }

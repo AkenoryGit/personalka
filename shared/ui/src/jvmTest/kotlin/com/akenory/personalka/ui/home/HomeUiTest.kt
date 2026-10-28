@@ -28,6 +28,7 @@ import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.TodoListFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.home.TodoKind
@@ -45,6 +46,7 @@ import com.akenory.personalka.ui.settings.CREATE_NOW_TAG
 import com.akenory.personalka.ui.settings.PlatformFiles
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import com.akenory.personalka.ui.training.CANCEL_PANEL_TAG
 import com.akenory.personalka.ui.training.CARD_BIRTHDAY_TAG
 import com.akenory.personalka.ui.training.TRAINING_CARD_TAG
 import kotlin.test.Test
@@ -185,6 +187,38 @@ class HomeUiTest {
         // Имя ведёт в карточку клиента: там та же надёжность.
         onNode(inCard(s("Орлов_М."))).performClick()
         awaitNode(hasText(s("Надёжность 60_%")))
+    }
+
+    @Test
+    fun confirmTodoOpensListComingAndNotComing() = runComposeUiTest {
+        // Шаг 3.16: пункт открывает окно — пояснение, время, тип и место, надёжность. «Придёт» убирает Орлова до начала
+        // этой тренировки, «Не придёт» у Белова — окно отмены его тренировки.
+        val orlov = client("Орлов", "Максим")
+        val belov = client("Белов", "Кирилл")
+        (1..10).forEach { past(orlov, it, came = it > 4) }
+        (1..10).forEach { past(belov, it, came = it > 3, time = "12:00") }
+        val orlovTraining = training("17:00", orlov)
+        training("18:30", belov)
+        openHome()
+
+        awaitNode(hasTestTag(todoTag(TodoKind.CONFIRM_VISIT)))
+        onNodeWithTag(todoTag(TodoKind.CONFIRM_VISIT)).performClick()
+        val panel = hasAnyAncestor(hasTestTag(todoPanelTag(TodoKind.CONFIRM_VISIT)))
+        awaitNode(hasText(TodoListFormat.CONFIRM_WHY) and panel)
+        onNode(hasText(s("Орлов_М.")) and panel).assertIsDisplayed()
+        onNode(hasText("сегодня 17:00") and panel).assertIsDisplayed()
+        onNode(hasText(s("Надёжность 60_% · 4_отмены из 10")) and panel).assertIsDisplayed()
+        onNode(hasText(s("Надёжность 70_% · 3_отмены из 10")) and panel).assertIsDisplayed()
+
+        onNodeWithTag(confirmComingTag(orlov)).performClick()
+        awaitNode(hasText(TodoListFormat.comingMessage(s("Орлов_М."))))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText(s("Орлов_М.")) and panel).fetchSemanticsNodes().isEmpty() }
+        val p = runBlocking { db.trainingDao().participationsOf(orlovTraining).single() }
+        assertEquals(at("17:00"), p.confirmedStart)
+
+        onNodeWithTag(confirmNotComingTag(belov)).performClick()
+        awaitNode(hasTestTag(CANCEL_PANEL_TAG))
+        assertEquals(0, onAllNodes(hasTestTag(todoPanelTag(TodoKind.CONFIRM_VISIT))).fetchSemanticsNodes().size)
     }
 
     @Test

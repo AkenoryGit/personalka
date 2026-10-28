@@ -226,6 +226,23 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     }
 
     /**
+     * «Придёт» в «Уточнить, придёт ли» (шаг 3.16): клиент подтвердил приход на это начало тренировки — до него он
+     * в списке не появится. Возвращает участие до правки для «Отменить» ([undoConfirm]); участия нет — `null`.
+     */
+    suspend fun confirmVisit(participationId: String): ParticipationEntity? {
+        val p = trainings.participation(participationId) ?: return null
+        val t = trainings.training(p.trainingId) ?: return null
+        trainings.upsertParticipation(p.copy(confirmedStart = t.start, sync = p.sync.touched(clock())))
+        return p
+    }
+
+    /** «Отменить» после «Придёт»: участие как было, клиент снова в списке. */
+    suspend fun undoConfirm(before: ParticipationEntity) {
+        val current = trainings.participation(before.id) ?: return
+        trainings.upsertParticipation(current.copy(confirmedStart = before.confirmedStart, sync = current.sync.touched(clock())))
+    }
+
+    /**
      * «В архив» (5.9): клиент остаётся в связях и истории, из групп уходит через состав (4.4) — последний день
      * в группе вчерашний, в будущих тренировках групп его больше не ждут; прошлое не меняется. Его серии ПТ, сплита
      * и СПТ заканчиваются сегодня, будущие тренировки удаляются (и сегодняшние, если ещё не начались), их планы —

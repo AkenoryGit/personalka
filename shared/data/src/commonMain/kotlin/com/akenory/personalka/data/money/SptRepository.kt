@@ -39,8 +39,19 @@ data class SptCaseView(
     val bonus: Long,
 )
 
-/** СПТ ждёт покупки — пункт «Главной» (5.2): [name] — «Яковлева Т.»; [remind] — до конца окна 3 дня или меньше. */
-data class SptWaiting(val case: SptCase, val name: ClientName, val remind: Boolean)
+/**
+ * СПТ ждёт покупки — пункт «Главной» (5.2): [name] — «Яковлева Т.»; [remind] — до конца окна 3 дня или меньше.
+ * С шага 3.16 — для окна со списком: тип и место СПТ, доплата за покупку в день СПТ и телефон клиента.
+ */
+data class SptWaiting(
+    val case: SptCase,
+    val name: ClientName,
+    val remind: Boolean,
+    val typeShort: String = "",
+    val placeShort: String = "",
+    val bonus: Long = 0,
+    val phone: String? = null,
+)
 
 /** Вопрос на первой оплаченной ПТ клиента (4.9, п. 4–5): [name] — «Орлов М.», [bonus] — доплата за покупку. */
 data class SptAsk(val prompt: SptPrompt, val name: String, val bonus: Long) {
@@ -102,14 +113,28 @@ class SptRepository internal constructor(private val db: PersonalkaDatabase, pri
     fun waiting(today: LocalDate): Flow<List<SptWaiting>> = combine(
         trainings.observeSptCases(),
         clients.observeAllClients(),
-    ) { cases, all ->
+        reference.observeTrainingTypes(),
+        reference.observeLocations(),
+        reference.observeRateVersions(),
+    ) { cases, all, types, places, rates ->
         val byId = all.associateBy { it.id }
+        val typeOf = types.associateBy { it.id }
+        val placeOf = places.associateBy { it.id }
+        val pay = rates.map { it.pay() }
         cases.mapNotNull { entity ->
             val client = byId[entity.clientId]?.takeIf { it.sync.deletedAt == null } ?: return@mapNotNull null
             val t = trainings.training(entity.sptTrainingId) ?: return@mapNotNull null
             val case = entity.domain(t)
             if (SptRules.statusOn(case, today) != SptCaseStatus.OPEN) return@mapNotNull null
-            SptWaiting(case, ClientName(client.lastName, client.firstName), SptRules.remind(case, today))
+            SptWaiting(
+                case = case,
+                name = ClientName(client.lastName, client.firstName),
+                remind = SptRules.remind(case, today),
+                typeShort = typeOf[t.typeId]?.shortName.orEmpty(),
+                placeShort = placeOf[t.locationId]?.shortName.orEmpty(),
+                bonus = SptRules.bonus(case.copy(status = SptCaseStatus.CLOSED, purchaseDate = case.sptDate), pay),
+                phone = client.contactPhone,
+            )
         }.sortedWith(compareBy({ it.case.windowUntil }, { it.case.sptDate }))
     }
 

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
@@ -26,7 +27,9 @@ import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.TodoListFormat
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.model.ClientStatus
@@ -37,17 +40,19 @@ import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.home.homeTodos
+import com.akenory.personalka.ui.home.todoPanelTag
+import com.akenory.personalka.ui.home.todoTag
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 
@@ -230,6 +235,24 @@ class GroupsUiTest {
         openGroups()
         awaitNode(hasTestTag(groupRowTag("Сб 9:00 ББ")))
         onNodeWithTag(groupRowTag("Сб 9:00 ББ")).performClick()
+    }
+
+    @Test
+    fun absentTodoOpensListAndLeaveClearsIt() = runComposeUiTest {
+        // Шаг 3.16: пункт «Не ходят в группу» открывает окно — пояснение, Ева с группой; «Убрать из группы» — пункт уходит.
+        absentEva()
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, clients, groups, TestData.calendarOf(settings), clock = TestData.clock) } }
+        awaitNode(hasTestTag(todoTag(TodoKind.GROUP_ABSENT)))
+        onNodeWithTag(todoTag(TodoKind.GROUP_ABSENT)).performClick()
+        awaitNode(hasTestTag(todoPanelTag(TodoKind.GROUP_ABSENT)))
+        onNodeWithText(TodoListFormat.ABSENT_WHY).assertIsDisplayed()
+        onNode(hasText("Сб 9:00 ББ") and hasAnyAncestor(hasTestTag(todoPanelTag(TodoKind.GROUP_ABSENT)))).assertIsDisplayed()
+        onNodeWithText("не была с 05.09").assertIsDisplayed()
+
+        onNodeWithText(GroupFormat.LEAVE).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.GROUP_ABSENT))).fetchSemanticsNodes().isEmpty() }
+        assertEquals(0, onAllNodes(hasTestTag(todoPanelTag(TodoKind.GROUP_ABSENT))).fetchSemanticsNodes().size)
+        assertTrue(runBlocking { groups.absent(today).first() }.isEmpty())
     }
 
     @Test

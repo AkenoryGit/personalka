@@ -10,7 +10,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.db.SyncFields
@@ -20,6 +19,7 @@ import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.format.SptFormat
+import com.akenory.personalka.domain.format.TodoListFormat
 import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.SptCaseStatus
@@ -27,13 +27,15 @@ import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.home.sptBoughtTag
+import com.akenory.personalka.ui.home.todoPanelTag
 import com.akenory.personalka.ui.home.todoTag
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 /**
  * СПТ в приложении (шаг 3.7а, ТЗ 4.9, 5.2, 5.9; макеты HomeEvening, ClCardInfo). «Сейчас» — вт 20.10.2026 15:40.
@@ -66,7 +68,7 @@ class SptUiTest {
     private fun case() = runBlocking { db.trainingDao().sptCases().single() }
 
     @Test
-    fun homeTodoOpensInfoAndPurchaseCloses() = runComposeUiTest {
+    fun homeTodoOpensListAndPurchaseCloses() = runComposeUiTest {
         sptDone("Яковлева", "Татьяна", LocalDateTime(2026, 10, 12, 10, 0))
         setContent { Box(Modifier.size(412.dp, 960.dp)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), calendar, clock = TestData.clock) } }
 
@@ -75,13 +77,12 @@ class SptUiTest {
         onNodeWithText(SptFormat.TODO).assertIsDisplayed()
         onNodeWithText(SptFormat.todoNote(LocalDate(2026, 11, 12), ClientName("Яковлева", "Татьяна"))).assertIsDisplayed()
 
-        // Нажатие — карточка клиента сразу на «Инфо» с блоком «Стартовая тренировка».
+        // Нажатие — окно (шаг 3.16): пояснение, сколько осталось, день СПТ и окно; «Купил блок» — окно даты покупки.
         onNodeWithTag(todoTag(TodoKind.SPT_PURCHASE)).performClick()
-        awaitNode(hasTestTag(SPT_BLOCK_TAG))
-        onNodeWithTag(SPT_BLOCK_TAG).performScrollTo()
-        onNodeWithText(SptFormat.status(SptCaseStatus.OPEN, LocalDate(2026, 11, 12), null)).assertIsDisplayed()
-
-        onNodeWithTag(SPT_BUTTON_TAG).performScrollTo().performClick()
+        awaitNode(hasTestTag(todoPanelTag(TodoKind.SPT_PURCHASE)))
+        onNodeWithText(TodoListFormat.SPT_WHY).assertIsDisplayed()
+        onNodeWithText(TodoListFormat.sptLeft(LocalDate(2026, 11, 12), LocalDate(2026, 10, 20))).assertIsDisplayed()
+        onNodeWithTag(sptBoughtTag(case().clientId)).performClick()
         awaitNode(hasTestTag(SPT_SAVE_TAG))
         onNodeWithText(SptFormat.window(LocalDate(2026, 10, 12), LocalDate(2026, 11, 12))).assertIsDisplayed()
         onNodeWithTag(SPT_SAVE_TAG).performClick()
@@ -89,7 +90,8 @@ class SptUiTest {
         // По умолчанию — сегодня: блок куплен 20.10, СПТ закрыта.
         waitUntil(timeoutMillis = 5_000) { case().status == SptCaseStatus.CLOSED }
         assertEquals(LocalDate(2026, 10, 20), case().purchaseDate)
-        awaitNode(hasText(SptFormat.status(SptCaseStatus.CLOSED, LocalDate(2026, 11, 12), LocalDate(2026, 10, 20))))
-        awaitNode(hasText(SptFormat.CHANGE))
+        // Последний — окно закрылось, пункт ушёл; в «Инфо» клиента блок куплен.
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.SPT_PURCHASE))).fetchSemanticsNodes().isEmpty() }
+        assertEquals(0, onAllNodes(hasTestTag(todoPanelTag(TodoKind.SPT_PURCHASE))).fetchSemanticsNodes().size)
     }
 }

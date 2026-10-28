@@ -229,6 +229,9 @@ fun SectionScreen(
             },
             notices = notices,
             birthdays = birthdays,
+            clients = clients,
+            groups = groups,
+            onForm = onForm,
         )
         }
         Section.CALENDAR -> CalendarScreen(
