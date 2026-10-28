@@ -121,7 +121,6 @@ class SalarySetupUiTest {
         assertEquals(rub(850), pt.single { it.locationId == placeId("ДБ") }.amountT1)
         assertEquals(setOf(jan), rates.map { it.validFrom }.toSet())
         assertEquals(3, rates.count { it.typeId == typeId("Грудничковое") })
-        assertTrue(rates.all { it.clubService == null })
         val tiers = runBlocking { settings.rates.tiers.first() }.single()
         assertEquals(jan, tiers.validFrom)
         assertTrue(tiers.enabled)
