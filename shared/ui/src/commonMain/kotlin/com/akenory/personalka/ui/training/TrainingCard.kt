@@ -469,8 +469,13 @@ fun TrainingCardHost(
             )
         }
         if (shown != null && askDelete) {
-            Panel(title = TrainingCardFormat.DELETE_TITLE, onDismiss = { askDelete = false }) {
-                Text(TrainingCardFormat.deleteText(shown.title, shown.state.start), style = MaterialTheme.typography.bodyLarge.tabular(), color = PersonalkaTheme.colors.text)
+            val doneOne = shown.state.status == TrainingStatus.DONE
+            Panel(title = if (doneOne) TrainingCardFormat.DELETE_DONE_TITLE else TrainingCardFormat.DELETE_TITLE, onDismiss = { askDelete = false }) {
+                Text(
+                    if (doneOne) TrainingCardFormat.deleteDoneText(shown.title, shown.state.start) else TrainingCardFormat.deleteText(shown.title, shown.state.start),
+                    style = MaterialTheme.typography.bodyLarge.tabular(),
+                    color = PersonalkaTheme.colors.text,
+                )
                 waitLine?.let { Note(it, Modifier.testTag(WAIT_LINE_TAG)) }
                 val deleteOne = {
                     askDelete = false
@@ -481,7 +486,8 @@ fun TrainingCardHost(
                     }
                     Unit
                 }
-                if ((followingCount ?: 0) > 1) {
+                // «Эту и все следующие» — только у будущей серии; проведённая удаляется одна.
+                if (!doneOne && (followingCount ?: 0) > 1) {
                     Column(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                         PrimaryButton(TrainingCardFormat.deleteOnly(shown.state.start.date), deleteOne, Modifier.fillMaxWidth())
                         OutlineButton(

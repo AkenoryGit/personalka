@@ -396,6 +396,23 @@ class TrainingCardUiTest {
     }
 
     @Test
+    fun deleteDoneTraining() = runComposeUiTest {
+        // Шаг 5.3в: прошедшая ПТ закрылась сама «Проведено» — её тоже можно удалить, со своим окном.
+        val orlov = client("Орлов", "Максим")
+        val id = training("10:00", orlov)
+        openCalendar()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.trainingDao().training(id)!!.status == TrainingStatus.DONE } }
+        tapBlock("Орлов Максим")
+        awaitNode(hasTestTag(CARD_MENU_TAG))
+        onNodeWithTag(CARD_MENU_TAG).performClick()
+        onNodeWithText(TrainingCardFormat.menu(CardMenu.DELETE)).performClick()
+        onNodeWithText(TrainingCardFormat.DELETE_DONE_TITLE).assertIsDisplayed()
+        onNode(hasText(TrainingCardFormat.DELETE) and hasAnyAncestor(hasTestTag(PANEL_TAG))).performClick()
+        awaitNode(hasText(TrainingCardFormat.DELETED))
+        waitUntil(timeoutMillis = 5_000) { runBlocking { db.trainingDao().training(id)!!.sync.deletedAt != null } }
+    }
+
+    @Test
     fun deleteSeriesTrainingAndFollowing() = runComposeUiTest {
         val orlov = client("Орлов", "Максим")
         val id = runBlocking {

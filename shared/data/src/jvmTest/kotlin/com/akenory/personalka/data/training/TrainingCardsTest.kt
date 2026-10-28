@@ -334,12 +334,16 @@ class TrainingCardsTest {
     }
 
     @Test
-    fun doneCannotBeDeleted(): Unit = runBlocking {
+    fun doneDeletedAndBackWithUndo(): Unit = runBlocking {
+        // Шаг 5.3в: проведённую можно удалить — например, внесённую по ошибке; «Отменить» возвращает её проведённой.
         val orlov = client("Орлов", "Максим")
         val id = training(at(tuesday, 15, 0), orlov)
         assertNotNull(cards.markDone(id))
-        assertNull(cards.delete(id))
-        assertNotNull(cards.card(id).first())
+        val deleted = assertNotNull(cards.delete(id))
+        assertNull(cards.card(id).first())
+        cards.undo(deleted.undo)
+        assertEquals(TrainingStatus.DONE, card(id).state.status)
+        assertEquals(ParticipationStatus.ATTENDED, statusOf(id, orlov))
     }
 
     @Test

@@ -511,7 +511,8 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
     }
 
     /**
-     * «Удалить» (5.4): проведённую нельзя. Тренировка серии оставляет свою дату пропущенной — продление серии
+     * «Удалить» (5.4): любую, и проведённую тоже (шаг 5.3в) — она уходит из зарплаты, истории клиента и кабинета;
+     * «Отменить» в сообщении возвращает её. Тренировка серии оставляет свою дату пропущенной — продление серии
      * её не вернёт (4.4).
      */
     suspend fun delete(id: String): CardResult? {
@@ -520,7 +521,6 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
-            if (!TrainingCardRules.canDelete(t.status)) return@withWriteTransaction
             val recorder = Recorder(db, now)
             recorder.deleteTraining(id)
             val series = t.seriesId?.let { schedule.series(it) }?.takeIf { it.sync.deletedAt == null }

@@ -67,7 +67,7 @@ object TrainingCardRules {
             training.status == TrainingStatus.CANCELLED -> CardButtons(listOf(CardAction.RETURN), listOf(CardMenu.COPY, CardMenu.DELETE))
             training.status == TrainingStatus.DONE -> CardButtons(
                 diary + listOf(CardAction.EDIT, CardAction.CANCEL),
-                listOfNotNull(CardMenu.UNMARK_DONE.takeIf { StatusRules.canUnmarkDone(training, now, settings) }) + result + CardMenu.COPY,
+                listOfNotNull(CardMenu.UNMARK_DONE.takeIf { StatusRules.canUnmarkDone(training, now, settings) }) + result + CardMenu.COPY + CardMenu.DELETE,
             )
             StatusRules.canMarkDone(training, now) -> CardButtons(
                 listOf(if (training.kind == TrainingKind.GROUP) CardAction.ALL_CAME else CardAction.DONE) + diary + CardAction.CANCEL,
@@ -76,9 +76,6 @@ object TrainingCardRules {
             else -> CardButtons(listOf(CardAction.CANCEL, CardAction.EDIT), listOf(CardMenu.COPY) + skip + CardMenu.DELETE)
         }
     }
-
-    /** Удалить можно всё, кроме проведённой (5.4). */
-    fun canDelete(status: TrainingStatus): Boolean = status != TrainingStatus.DONE
 
     /**
      * Нажатие на ребёнка в группе (5.4): с начала минус 15 минут, пока группа не отменена; в проведённой —

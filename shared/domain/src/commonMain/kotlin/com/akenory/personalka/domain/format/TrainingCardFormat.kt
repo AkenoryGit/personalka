@@ -152,6 +152,12 @@ object TrainingCardFormat {
     // --- Удаление ---
 
     const val DELETE_TITLE = "Удалить тренировку?"
+    const val DELETE_DONE_TITLE = "Удалить проведённую тренировку?"
+
+    /** Проведённая (шаг 5.3в): уходит из зарплаты и истории клиента. */
+    fun deleteDoneText(title: String, start: LocalDateTime): String =
+        CalendarFormat.at(start) + DOT + title + ". Она уйдёт из зарплаты и истории клиента. " +
+            "Вернуть её можно только сразу — кнопкой «Отменить» в сообщении."
     const val DELETE = "Удалить"
     const val KEEP = "Не удалять"
 
