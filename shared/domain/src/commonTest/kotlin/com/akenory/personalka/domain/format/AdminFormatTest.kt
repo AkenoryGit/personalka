@@ -51,9 +51,13 @@ class AdminFormatTest {
         val s = status(BackupMark(LocalDateTime(2026, 10, 28, 3, 30), ok = true, detail = "28.10.2026: trener.dump.age"))
         assertEquals("Сервер 0.1.377 · диск 7,4 из 19,6${NBSP}ГБ (38${NBSP}%) · копия базы сегодня 03:30", AdminFormat.server(s, now))
         assertFalse(AdminFormat.serverAlarm(s, now))
+        // Ночью до новой копии вчерашняя ещё свежая; днём без сегодняшней — уже нет (36 часов).
+        val night = LocalDateTime(2026, 10, 28, 2, 0)
         val yesterday = status(BackupMark(LocalDateTime(2026, 10, 27, 3, 30), ok = true, detail = ""))
-        assertTrue(AdminFormat.server(yesterday, now).endsWith("копия базы вчера 03:30"))
-        assertFalse(AdminFormat.serverAlarm(yesterday, now))
+        assertTrue(AdminFormat.server(yesterday, night).endsWith("копия базы вчера 03:30"))
+        assertFalse(AdminFormat.serverAlarm(yesterday, night))
+        assertTrue(AdminFormat.server(yesterday, now).endsWith("копия базы вчера 03:30 — новой нет больше суток"))
+        assertTrue(AdminFormat.serverAlarm(yesterday, now))
     }
 
     @Test
