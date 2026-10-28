@@ -32,7 +32,7 @@ object TourFormat {
         "Клиент отменил — нажмите «Отменить». Предупредил хотя бы за ${DurationFormat.long(minutes.toLong())} — " +
             "отмена без списания, позже — со списанием. Это время вы задаёте сами: «Ещё → Календарь»."
 
-    const val CLIENTS_TITLE = "Клиенты"
+    const val CLIENTS_TITLE = "Ваши клиенты"
     const val CLIENTS_TEXT = "Клиент из тренировки уже в списке. Нажмите на него, чтобы открыть карточку."
     const val CLIENTS_GESTURE = "Нажмите на клиента"
     const val CLIENTS_OPEN_TEXT = "В карточке клиента — его тренировки, постоянное расписание и результаты."
