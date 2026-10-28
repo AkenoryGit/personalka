@@ -61,6 +61,8 @@ import com.akenory.personalka.domain.tour.TourStop
 import com.akenory.personalka.domain.format.TourFormat
 import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.theme.Dimens
+import com.akenory.personalka.ui.shell.NavBarHeight
+import com.akenory.personalka.ui.shell.WideFrom
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 
 const val TOUR_CARD_TAG = "tour-card"
@@ -169,7 +171,9 @@ fun TourOverlay(tour: TourState, card: TourCard) {
             Modifier.fillMaxSize().padding(horizontal = Dimens.space3),
             contentAlignment = if (low) Alignment.TopCenter else Alignment.BottomCenter,
         ) {
-            val bottom = if (card.aboveFab) Dimens.navBar + Dimens.fab + Dimens.space4 * 2 else Dimens.space3
+            // На сложенном внизу — панель разделов: карточка стоит над ней, разделы остаются под рукой.
+            val nav = if (maxWidth >= WideFrom) 0.dp else NavBarHeight
+            val bottom = nav + if (card.aboveFab) Dimens.fab + Dimens.space4 * 2 else Dimens.space3
             TourCardView(
                 card,
                 if (low) Modifier.statusBarsPadding().padding(top = Dimens.space3) else Modifier.navigationBarsPadding().padding(bottom = bottom),
