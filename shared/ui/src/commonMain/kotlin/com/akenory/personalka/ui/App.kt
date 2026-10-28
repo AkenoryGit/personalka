@@ -226,8 +226,8 @@ fun App(
         val slotToday = tourHours?.let { h ->
             TourRules.slotMinute(
                 nowMinute = now.hour * 60 + now.minute,
-                startMinute = h.workDayStart.hour * 60 + h.workDayStart.minute,
-                endMinute = h.workDayEnd.hour * 60 + h.workDayEnd.minute,
+                startMinute = h.workStart.hour * 60 + h.workStart.minute,
+                endMinute = h.workEnd.hour * 60 + h.workEnd.minute,
                 busy = home.filter { it.start.date == now.date }.map { t ->
                     val from = t.start.hour * 60 + t.start.minute
                     from..(from + t.durationMin)
