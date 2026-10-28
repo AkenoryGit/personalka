@@ -37,8 +37,7 @@ import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
-import com.akenory.personalka.ui.settings.PLACES_ROW_TAG
-import com.akenory.personalka.ui.settings.PROFILE_ROW_TAG
+import com.akenory.personalka.ui.settings.WORK_START_TAG
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.training.TRAINING_FORM_TAG
 import kotlinx.datetime.LocalDateTime
@@ -99,25 +98,25 @@ class ShellUiTest {
         awaitShell()
 
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
-        awaitNode(hasTestTag(PROFILE_ROW_TAG))
-        onNodeWithTag(PLACES_ROW_TAG).assertIsDisplayed()
+        awaitNode(hasTestTag(moreRowTag(MoreItem.CALENDAR)))
+        onNodeWithTag(moreRowTag(MoreItem.CALENDAR)).performClick()
+        awaitNode(hasTestTag(WORK_START_TAG))
         onNodeWithContentDescription("Назад").assertIsDisplayed()
 
-        // Разложили: список «Ещё» слева, «Настройки» справа, «Назад» не нужен.
+        // Разложили: список «Ещё» слева, «Календарь» справа, «Назад» не нужен.
         width = unfolded
         waitForIdle()
         onNodeWithTag(navTag(Section.MORE)).assertIsSelected()
         onNodeWithTag(moreRowTag(MoreItem.GROUPS)).assertIsDisplayed()
-        onNodeWithTag(PROFILE_ROW_TAG).assertIsDisplayed()
+        onNodeWithTag(WORK_START_TAG).assertIsDisplayed()
         onNodeWithContentDescription("Назад").assertDoesNotExist()
 
-        // Сложили обратно: снова «Настройки» с «Назад», а «Назад» ведёт к списку.
+        // Сложили обратно: снова «Календарь» с «Назад», а «Назад» ведёт к списку.
         width = folded
         waitForIdle()
-        onNodeWithTag(PROFILE_ROW_TAG).assertIsDisplayed()
+        onNodeWithTag(WORK_START_TAG).assertIsDisplayed()
         onNodeWithContentDescription("Назад").performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).assertIsDisplayed()
+        onNodeWithTag(moreRowTag(MoreItem.CALENDAR)).assertIsDisplayed()
     }
 
     @Test

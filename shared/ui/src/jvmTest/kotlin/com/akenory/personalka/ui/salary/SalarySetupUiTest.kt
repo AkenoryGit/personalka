@@ -153,7 +153,6 @@ class SalarySetupUiTest {
     fun profileHidesSchemeWithoutChoice() = runComposeUiTest {
         start()
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
         awaitNode(hasTestTag(PROFILE_ROW_TAG))
         onNodeWithTag(PROFILE_ROW_TAG).performClick()
         awaitNode(hasTestTag(CATEGORY_ROW_TAG))
@@ -169,7 +168,6 @@ class SalarySetupUiTest {
     fun profileSchemeWithHiddenScheme() = runComposeUiTest {
         start(signedIn = true)
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
         awaitNode(hasTestTag(PROFILE_ROW_TAG))
         onNodeWithTag(PROFILE_ROW_TAG).performClick()
         awaitNode(hasTestTag(SCHEME_ROW_TAG))

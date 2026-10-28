@@ -94,10 +94,6 @@ private fun cells(type: TrainingTypeEntity, places: List<LocationEntity>, saved:
     return slots(type, places, own).map { slot -> (slot?.let { names[it] }) to RateRules.activeAt(own, slot, date)?.amounts }
 }
 
-/** Типы без единой ставки на сегодня — для строки раздела в «Настройках». */
-internal fun missingRates(types: List<TrainingTypeEntity>, places: List<LocationEntity>, saved: List<SavedRate>, today: LocalDate): Int =
-    types.count { type -> cells(type, places, saved, today).all { it.second == null } }
-
 /** Ступени, действующие в этом месяце, или по умолчанию. */
 internal fun currentTiers(types: List<TrainingTypeEntity>, tiers: List<TierScheme>, today: LocalDate): TierDraft =
     RateRules.tierDraft(tiers, today.yearMonth, defaultPtTypes(types))
@@ -116,7 +112,7 @@ internal fun RatesScreen(
     types: List<TrainingTypeEntity>,
     today: LocalDate,
     shell: ShellState,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     val saved by remember(rates) { rates.rates }.collectAsState(initial = null)
     val tiers by remember(rates) { rates.tiers }.collectAsState(initial = null)

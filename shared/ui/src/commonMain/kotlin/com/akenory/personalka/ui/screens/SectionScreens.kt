@@ -43,6 +43,7 @@ import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.calendar.ZoneKind
+import com.akenory.personalka.domain.format.MoreFormat
 import com.akenory.personalka.domain.money.SalarySetupRules
 import com.akenory.personalka.ui.calendar.CalendarScreen
 import com.akenory.personalka.ui.clients.CabinetTools
@@ -51,7 +52,6 @@ import com.akenory.personalka.ui.clients.ClientListState
 import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.clients.rememberClientListState
-import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
@@ -66,6 +66,16 @@ import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
 import com.akenory.personalka.ui.salary.SalaryScreen
 import com.akenory.personalka.ui.settings.BackupTools
+import com.akenory.personalka.ui.settings.CABINETS_ROW_TAG
+import com.akenory.personalka.ui.settings.CALENDAR_ROW_TAG
+import com.akenory.personalka.ui.settings.COLLEAGUES_ROW_TAG
+import com.akenory.personalka.ui.settings.DATA_ROW_TAG
+import com.akenory.personalka.ui.settings.EXPORTS_ROW_TAG
+import com.akenory.personalka.ui.settings.PLACES_ROW_TAG
+import com.akenory.personalka.ui.settings.PROFILE_ROW_TAG
+import com.akenory.personalka.ui.settings.RATES_ROW_TAG
+import com.akenory.personalka.ui.settings.REMINDERS_ROW_TAG
+import com.akenory.personalka.ui.settings.SERVER_ROW_TAG
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
 import com.akenory.personalka.ui.settings.SyncTools
@@ -97,7 +107,7 @@ import kotlinx.datetime.yearMonth
  * @param card открытая карточка тренировки в календаре (шаг 1.14); [onCard] — открыть или закрыть её.
  * @param backup резервная копия для «Настройки → Данные» (шаг 1.15); `null` — раздела нет.
  * @param account аккаунт на сервере для «Настройки → Данные → Аккаунт» (шаг 2.8а); `null` — строки нет.
- * @param sync синхронизация для «Настройки → Данные → Сервер» (шаг 2.10а); `null` — раздела нет.
+ * @param sync синхронизация для «Ещё → Аккаунт → Сервер» (шаг 2.10а); `null` — раздела нет.
  * @param home тренировки «Главной» и [todos] — пункты «Нужно сделать» (шаг 1.16); [homeCard] — карточка, открытая
  *   с «Главной», [onHomeCard] — открыть или закрыть её.
  * @param calendarDay день, который «Главная» попросила открыть в «Календаре»; [onCalendarDay] — открыть его
@@ -186,8 +196,7 @@ fun SectionScreen(
             onDay = { date -> onCalendarDay(date) },
             onBackup = {
                 shell.select(Section.MORE)
-                shell.reset(SettingsRoute.HOME)
-                shell.open(SettingsRoute.DATA)
+                shell.reset(SettingsRoute.DATA)
             },
             onNoBooking = {
                 clientList.filter = ClientFilter.NO_BOOKING
@@ -254,10 +263,20 @@ fun SectionScreen(
         }
         Section.SALARY -> SalaryScreen(settings, account, now.date, messages, scope, shareText, advanceAsk, { onAdvanceAsk(false) }, { openSlots(SlotsRoute.ROOT) }) {
             shell.select(Section.MORE)
-            shell.reset(SettingsRoute.HOME)
-            shell.open(SettingsRoute.RATES)
+            shell.reset(SettingsRoute.RATES)
         }
-        Section.MORE -> MoreScreen(shell, versionName) { route, onBack ->
+        Section.MORE -> {
+            val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
+            val items = MoreItem.entries.filter { item ->
+                when (item) {
+                    MoreItem.COLLEAGUES -> coCoaching
+                    MoreItem.CABINETS -> cabinets != null
+                    MoreItem.ACCOUNT -> account != null && backup != null
+                    MoreItem.BACKUP, MoreItem.EXPORTS -> backup != null
+                    else -> true
+                }
+            }
+            MoreScreen(shell, versionName, items) { route, onBack ->
             when {
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
@@ -266,36 +285,58 @@ fun SectionScreen(
                 }
                 SlotsRoute.isSlots(route) -> SlotsScreen(calendar, prefs, now, messages, onBack, onForm, shareText, SlotsRoute.waitOf(route))
                 Report1cRoute.idOf(route) != null -> Report1cResultScreen(settings.report1c, Report1cRoute.idOf(route)!!, messages, scope, onBack, shareText)
-                else -> MoreItem.entries.firstOrNull { it.route == route }?.let { MoreDetail(it, onBack) }
             }
+        }
         }
     }
 }
 
-/** Пункты «Ещё» (ТЗ 5.1). Экран в стопке раздела называется [route]. */
+/** Группы пунктов «Ещё» (шаг 3.15а): что делаю, как устроена работа, где данные. */
+enum class MoreGroup(val title: String) {
+    WORK(MoreFormat.WORK),
+    SETUP(MoreFormat.SETUP),
+    DATA(MoreFormat.DATA),
+}
+
+/**
+ * Пункты «Ещё» (ТЗ 5.1, 5.16) по порядку на экране. Экран в стопке раздела называется [route], под названием —
+ * [note]: что внутри (шаг 3.15а, «Настроек» отдельным пунктом больше нет). [tag] у бывших строк «Настроек» прежний.
+ */
 enum class MoreItem(
     val route: String,
     val title: String,
+    val note: String,
     val icon: ImageVector,
-    val heading: String,
-    val text: String,
+    val group: MoreGroup,
+    val tag: String = "more-$route",
 ) {
-    // У «Групп» с шага 1.8 свой экран (ui/groups), заготовка не показывается.
-    GROUPS("groups", "Группы", PIcons.Groups, "Группы", "Состав с датами."),
+    // У «Групп» с шага 1.8 свой экран (ui/groups).
+    GROUPS(GroupRoute.LIST, MoreFormat.GROUPS, MoreFormat.GROUPS_NOTE, PIcons.Groups, MoreGroup.WORK),
     // «Свободные слоты» (4.13, 5.13, шаг 4.3) — свой экран (ui/slots).
-    SLOTS(SlotsRoute.ROOT, "Свободные слоты", PIcons.EventAvailable, "Свободные слоты", "Окна за период."),
+    SLOTS(SlotsRoute.ROOT, MoreFormat.SLOTS, MoreFormat.SLOTS_NOTE, PIcons.EventAvailable, MoreGroup.WORK),
     // «Сверки» (5.14, шаг 3.9в) — свой экран (ui/reconcile): месяц зарплаты, дежурства, с шага 4.2 — отчёт 1С.
-    RECONCILE("reconcile", "Сверки", PIcons.FactCheck, "Сверки", "Месяц зарплаты, дежурства, отчёт 1С."),
-    // У «Настроек» с шага 1.6 свой экран (ui/settings), заготовка не показывается.
-    SETTINGS("settings", "Настройки", PIcons.Settings, "Настройки", "Профиль, места и типы, календарь."),
+    RECONCILE("reconcile", MoreFormat.RECONCILE, MoreFormat.RECONCILE_NOTE, PIcons.FactCheck, MoreGroup.WORK),
+    VACATION(SettingsRoute.VACATION, MoreFormat.VACATION, MoreFormat.VACATION_NOTE, PIcons.EventBusy, MoreGroup.WORK),
+    PROFILE(SettingsRoute.PROFILE, MoreFormat.PROFILE, MoreFormat.PROFILE_NOTE, PIcons.Person, MoreGroup.SETUP, PROFILE_ROW_TAG),
+    PLACES(SettingsRoute.PLACES, MoreFormat.PLACES, MoreFormat.PLACES_NOTE, PIcons.LocationOn, MoreGroup.SETUP, PLACES_ROW_TAG),
+    RATES(SettingsRoute.RATES, MoreFormat.RATES, MoreFormat.RATES_NOTE, PIcons.CurrencyRuble, MoreGroup.SETUP, RATES_ROW_TAG),
+    // Только с совместным ведением групп (5.16, шаг 3.7г).
+    COLLEAGUES(SettingsRoute.COLLEAGUES, MoreFormat.COLLEAGUES, MoreFormat.COLLEAGUES_NOTE, PIcons.Handshake, MoreGroup.SETUP, COLLEAGUES_ROW_TAG),
+    CALENDAR(SettingsRoute.CALENDAR, MoreFormat.CALENDAR, MoreFormat.CALENDAR_NOTE, PIcons.CalendarMonth, MoreGroup.SETUP, CALENDAR_ROW_TAG),
+    REMINDERS(SettingsRoute.REMINDERS, MoreFormat.REMINDERS, MoreFormat.REMINDERS_NOTE, PIcons.Notifications, MoreGroup.SETUP, REMINDERS_ROW_TAG),
+    // Только когда сервер подключён и «Кабинеты» открыты у аккаунта (шаг 2.13).
+    CABINETS(SettingsRoute.CABINETS, MoreFormat.CABINETS, MoreFormat.CABINETS_NOTE, PIcons.Link, MoreGroup.SETUP, CABINETS_ROW_TAG),
+    ACCOUNT(SettingsRoute.SERVER, MoreFormat.ACCOUNT, MoreFormat.ACCOUNT_NOTE, PIcons.Cloud, MoreGroup.DATA, SERVER_ROW_TAG),
+    BACKUP(SettingsRoute.DATA, MoreFormat.BACKUP, MoreFormat.BACKUP_NOTE, PIcons.Save, MoreGroup.DATA, DATA_ROW_TAG),
+    EXPORTS(SettingsRoute.EXPORTS, MoreFormat.EXPORTS, MoreFormat.EXPORTS_NOTE, PIcons.Download, MoreGroup.DATA, EXPORTS_ROW_TAG),
 }
 
-internal fun moreRowTag(item: MoreItem) = "more-${item.route}"
+internal fun moreRowTag(item: MoreItem) = item.tag
 
 /**
  * «Ещё»: на узком экране — список, пункт открывается поверх с «Назад»; на широком — список слева
- * и открытый пункт справа (ТЗ 5.1). У пункта бывают вложенные экраны («Настройки» → «Места и типы» →
- * тип): справа виден верхний, «Назад» ведёт к предыдущему.
+ * и открытый пункт справа (ТЗ 5.1). У пункта бывают вложенные экраны («Места и типы» → тип,
+ * «Ставки» → ставка типа): справа виден верхний, «Назад» ведёт к предыдущему.
  *
  * Открытый экран при сложении и разложении стоит на одном месте дерева — в правой части ряда, а список
  * слева то появляется, то нет. Поэтому форма с недописанным текстом переживает сложение, как и прокрутка
@@ -305,6 +346,7 @@ internal fun moreRowTag(item: MoreItem) = "more-${item.route}"
 private fun MoreScreen(
     shell: ShellState,
     versionName: String,
+    items: List<MoreItem>,
     detail: @Composable (route: String, onBack: (() -> Unit)?) -> Unit,
 ) {
     val wide = LocalWide.current
@@ -317,7 +359,7 @@ private fun MoreScreen(
     Row(Modifier.fillMaxSize()) {
         if (wide || top == null) {
             MoreList(
-                items = MoreItem.entries,
+                items = items,
                 selected = root,
                 scroll = listScroll,
                 versionName = versionName,
@@ -346,58 +388,42 @@ private fun MoreList(
 ) {
     val colors = PersonalkaTheme.colors
     Column(modifier.verticalScroll(scroll)) {
-        TopBar("Ещё")
-        items.forEach { item ->
-            val isSelected = item == selected
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .background(if (isSelected) colors.surfaceAlt else Color.Transparent)
-                    .clickable(role = Role.Button) { onOpen(item) }
-                    .semantics { this.selected = isSelected }
-                    .testTag(moreRowTag(item))
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(item.icon, contentDescription = null, tint = colors.textMuted)
-                Spacer(Modifier.width(16.dp))
-                Text(
-                    text = item.title,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colors.text,
-                )
-                Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+        TopBar(MoreFormat.TITLE)
+        items.groupBy { it.group }.forEach { (group, rows) ->
+            Text(
+                text = group.title,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.textMuted,
+            )
+            rows.forEach { item ->
+                val isSelected = item == selected
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .background(if (isSelected) colors.surfaceAlt else Color.Transparent)
+                        .clickable(role = Role.Button) { onOpen(item) }
+                        .semantics { this.selected = isSelected }
+                        .testTag(moreRowTag(item))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(item.icon, contentDescription = null, tint = colors.textMuted)
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(item.title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                        Text(item.note, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+                    }
+                    Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+                }
             }
         }
         Text(
-            text = "Версия $versionName",
+            text = MoreFormat.version(versionName),
             modifier = Modifier.padding(16.dp),
             style = MaterialTheme.typography.bodySmall.tabular(),
             color = colors.textMuted,
         )
-    }
-}
-
-@Composable
-private fun MoreDetail(item: MoreItem, onBack: (() -> Unit)?) {
-    Placeholder(title = item.title, icon = item.icon, heading = item.heading, text = item.text, onBack = onBack)
-}
-
-/** Заготовка раздела: верхняя панель и пустой экран по центру. */
-@Composable
-private fun Placeholder(
-    title: String,
-    icon: ImageVector,
-    heading: String,
-    text: String,
-    onBack: (() -> Unit)? = null,
-) {
-    Column(Modifier.fillMaxSize()) {
-        TopBar(title, onBack = onBack)
-        Box(Modifier.weight(1f).fillMaxWidth().padding(bottom = 56.dp), contentAlignment = Alignment.Center) {
-            EmptyState(icon = icon, title = heading, text = text)
-        }
     }
 }

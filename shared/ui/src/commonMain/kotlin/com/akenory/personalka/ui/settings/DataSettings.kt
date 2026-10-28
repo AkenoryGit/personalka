@@ -35,6 +35,7 @@ import com.akenory.personalka.domain.backup.Xlsx
 import com.akenory.personalka.domain.format.AccountFormat
 import com.akenory.personalka.domain.format.BackupFormat
 import com.akenory.personalka.domain.format.ExcelFormat
+import com.akenory.personalka.domain.format.MoreFormat
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
@@ -105,22 +106,28 @@ internal const val PASSWORD_FIELD_TAG = "backup-password-field"
 internal const val PASSWORD_REPEAT_TAG = "backup-password-repeat"
 internal fun frequencyTag(f: BackupFrequency) = "backup-${f.code}"
 
+/** Какой пункт «Данных» в «Ещё» открыт (шаг 3.15а): у каждого свой экран. */
+internal enum class DataPart { SERVER, BACKUP, EXPORTS }
+
 /** Что сделать, когда пароль будет задан: копия ждала пароля. */
 private enum class AfterPassword { NOTHING, SAVE, SHARE }
 
 /**
- * «Настройки → Данные» (ТЗ 5.16, 7.6, шаг 1.15): папка для копий, частота автокопии, шифрование паролем,
- * «Создать копию сейчас», «Поделиться копией», «Восстановить из копии» и выгрузка в календарь (.ics).
- * Сверху — «Аккаунт» (шаг 2.8а), если платформа дала [account]: строка открывает экран входа ([onAccount]).
- * Под ним — «Сервер» (шаг 2.10а, [SyncSection]), если платформа дала [sync]: виден только после входа — с открытой
- * «Копией на сервере» или когда она уже подключена (10.7, шаг 5.1а).
+ * «Данные» (ТЗ 5.16, 7.6, шаг 1.15) — с шага 3.15а три пункта «Ещё», [part]:
+ * - [DataPart.BACKUP] «Резервная копия»: папка для копий, частота автокопии, шифрование паролем, «Создать копию сейчас»,
+ *   «Поделиться копией», «Восстановить из копии»;
+ * - [DataPart.EXPORTS] «Выгрузки»: календарь (.ics) и Excel;
+ * - [DataPart.SERVER] «Аккаунт»: строка аккаунта (шаг 2.8а, если платформа дала [account]) открывает экран входа
+ *   ([onAccount]); под ней — «Сервер» (шаг 2.10а, [SyncSection]), если платформа дала [sync]: виден только после входа —
+ *   с открытой «Копией на сервере» или когда она уже подключена (10.7, шаг 5.1а).
  */
 @Composable
 internal fun DataSettingsScreen(
     tools: BackupTools,
+    part: DataPart,
     messages: MessageState,
     scope: CoroutineScope,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     account: AccountRepository? = null,
     now: LocalDateTime? = null,
     sync: SyncTools? = null,
@@ -187,12 +194,16 @@ internal fun DataSettingsScreen(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            TopBar(BackupFormat.TITLE, onBack = onBack)
+            val title = when (part) {
+                DataPart.SERVER -> MoreFormat.ACCOUNT
+                DataPart.BACKUP -> MoreFormat.BACKUP
+                DataPart.EXPORTS -> MoreFormat.EXPORTS
+            }
+            TopBar(title, onBack = onBack)
             Column(Modifier.padding(horizontal = Dimens.space4)) {
-                if (account != null) {
+                if (part == DataPart.SERVER && account != null) {
                     val signedIn by account.account.collectAsState()
-                    SectionLabel(AccountFormat.TITLE)
-                    ListCard {
+                    ListCard(Modifier.padding(top = Dimens.space2)) {
                         NavRow(
                             title = AccountFormat.TITLE,
                             subtitle = AccountFormat.summary(signedIn?.name, signedIn?.email),
@@ -205,25 +216,25 @@ internal fun DataSettingsScreen(
                         SyncSection(sync.repository, now, messages, scope, onPanel = { sync.panel = it }, onSyncNow = sync.now)
                     }
                 }
-                SectionLabel(BackupFormat.BACKUP)
-                Text(BackupFormat.last(state.last), style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
-                Spacer(Modifier.height(Dimens.space3))
-                ListCard {
-                    NavRow(
-                        title = BackupFormat.FOLDER,
-                        subtitle = state.folderName ?: BackupFormat.FOLDER_NONE,
-                        onClick = { pickFolder() },
-                        modifier = Modifier.testTag(FOLDER_ROW_TAG),
-                    )
-                    if (state.encrypt) {
-                        RowDivider()
+                if (part == DataPart.BACKUP) {
+                    Text(BackupFormat.last(state.last), style = MaterialTheme.typography.bodyMedium, color = PersonalkaTheme.colors.text)
+                    Spacer(Modifier.height(Dimens.space3))
+                    ListCard {
                         NavRow(
-                            title = BackupFormat.PASSWORD,
-                            subtitle = if (state.hasPassword) BackupFormat.PASSWORD_SET else BackupFormat.PASSWORD_NONE,
-                            onClick = { passwordFor = AfterPassword.NOTHING },
-                            modifier = Modifier.testTag(PASSWORD_ROW_TAG),
+                            title = BackupFormat.FOLDER,
+                            subtitle = state.folderName ?: BackupFormat.FOLDER_NONE,
+                            onClick = { pickFolder() },
+                            modifier = Modifier.testTag(FOLDER_ROW_TAG),
                         )
-                    }
+                        if (state.encrypt) {
+                            RowDivider()
+                            NavRow(
+                                title = BackupFormat.PASSWORD,
+                                subtitle = if (state.hasPassword) BackupFormat.PASSWORD_SET else BackupFormat.PASSWORD_NONE,
+                                onClick = { passwordFor = AfterPassword.NOTHING },
+                                modifier = Modifier.testTag(PASSWORD_ROW_TAG),
+                            )
+                        }
                 }
                 Hint(BackupFormat.FOLDER_NOTE)
 
@@ -298,31 +309,33 @@ internal fun DataSettingsScreen(
                     )
                     Hint(BackupFormat.updateCopyNote(updateCopy))
                 }
+                }
 
-                SectionLabel(BackupFormat.EXPORTS)
-                OutlineButton(
-                    BackupFormat.CALENDAR,
-                    {
-                        work {
-                            val (name, text) = backup.calendar()
-                            files.share(name, ICS, text.encodeToByteArray())
-                        }
-                    },
-                    Modifier.fillMaxWidth().testTag(CALENDAR_EXPORT_TAG),
-                )
-                Hint(BackupFormat.CALENDAR_NOTE)
-                // Excel для чтения (7.6, шаг 3.8в): тем же «Поделиться» — в Google Таблицы, на почту или себе в мессенджер.
-                OutlineButton(
-                    ExcelFormat.BUTTON,
-                    {
-                        work {
-                            val made = backup.excel()
-                            files.share(made.name, Xlsx.MIME, made.bytes)
-                        }
-                    },
-                    Modifier.fillMaxWidth().padding(top = Dimens.space4).testTag(EXCEL_EXPORT_TAG),
-                )
-                Hint(ExcelFormat.NOTE)
+                if (part == DataPart.EXPORTS) {
+                    OutlineButton(
+                        BackupFormat.CALENDAR,
+                        {
+                            work {
+                                val (name, text) = backup.calendar()
+                                files.share(name, ICS, text.encodeToByteArray())
+                            }
+                        },
+                        Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(CALENDAR_EXPORT_TAG),
+                    )
+                    Hint(BackupFormat.CALENDAR_NOTE)
+                    // Excel для чтения (7.6, шаг 3.8в): тем же «Поделиться» — в Google Таблицы, на почту или себе в мессенджер.
+                    OutlineButton(
+                        ExcelFormat.BUTTON,
+                        {
+                            work {
+                                val made = backup.excel()
+                                files.share(made.name, Xlsx.MIME, made.bytes)
+                            }
+                        },
+                        Modifier.fillMaxWidth().padding(top = Dimens.space4).testTag(EXCEL_EXPORT_TAG),
+                    )
+                    Hint(ExcelFormat.NOTE)
+                }
                 Spacer(Modifier.height(Dimens.space6))
             }
         }
@@ -441,7 +454,6 @@ private fun Hint(text: String) {
 }
 
 /** Строка раздела в «Настройках». */
-internal fun dataSummary(state: BackupState): String = BackupFormat.summary(state.last, state.folder != null, state.frequency)
 
 private const val ZIP = "application/zip"
 private const val ICS = "text/calendar"

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
@@ -91,7 +92,6 @@ class CabinetUiTest {
     private fun ComposeUiTest.openSettings() {
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
     }
 
     private fun ComposeUiTest.openCard(name: String) {
@@ -110,7 +110,7 @@ class CabinetUiTest {
         // «Настройки → Кабинеты»: без контакта не включаются.
         openSettings()
         awaitNode(hasTestTag("settings-cabinets"))
-        onNodeWithTag("settings-cabinets").performClick()
+        onNodeWithTag("settings-cabinets").performScrollTo().performClick()
         awaitNode(hasTestTag("cabinets-switch"))
         onNodeWithTag("cabinets-switch").performClick()
         onNodeWithText(CabinetLinkFormat.CONTACT_NEEDED).assertExists()

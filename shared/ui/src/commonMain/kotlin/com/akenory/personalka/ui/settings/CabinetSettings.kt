@@ -43,7 +43,7 @@ internal const val CABINETS_CONTACT_TAG = "cabinets-contact"
  * кабинет приветствия не показывает. Сколько ближайших тренировок видно — то же число, что в карточке.
  */
 @Composable
-internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: MessageState, scope: CoroutineScope, onBack: () -> Unit) {
+internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: MessageState, scope: CoroutineScope, onBack: (() -> Unit)?, onClose: () -> Unit) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
     val on by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = null)
     val loadedCoach = coach ?: return
@@ -82,7 +82,7 @@ internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: Messa
             hint = if (enabled && noContact) CabinetLinkFormat.CONTACT_NEEDED else null,
             onClick = {
                 scope.launch { settings.saveCabinets(enabled, contact) }
-                onBack()
+                onClose()
                 messages.show("Сохранено")
             },
         )

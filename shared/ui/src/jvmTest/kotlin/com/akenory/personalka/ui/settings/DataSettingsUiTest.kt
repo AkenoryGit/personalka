@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -83,10 +84,8 @@ class DataSettingsUiTest {
     private fun ComposeUiTest.openData() {
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
         awaitNode(hasTestTag(DATA_ROW_TAG))
-        onNodeWithText("Папка для копий не выбрана").assertIsDisplayed()
-        onNodeWithTag(DATA_ROW_TAG).performClick()
+        onNodeWithTag(DATA_ROW_TAG).performScrollTo().performClick()
         awaitNode(hasTestTag(CREATE_NOW_TAG))
     }
 
@@ -128,6 +127,12 @@ class DataSettingsUiTest {
         onNodeWithText(BackupFormat.RESTORE_CONFIRM).performClick()
         awaitNode(hasText("Данные восстановлены из копии от 20.10.2026"))
 
+        // Выгрузки с шага 3.15а — свой пункт «Ещё».
+        onNodeWithContentDescription("Назад").performClick()
+        awaitNode(hasTestTag(EXPORTS_ROW_TAG))
+        // Внизу ещё видно сообщение о восстановлении — нажатие действием строки.
+        onNodeWithTag(EXPORTS_ROW_TAG).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        awaitNode(hasTestTag(CALENDAR_EXPORT_TAG))
         // Выгрузка в календарь — через «Поделиться». Внизу экрана ещё видно сообщение — нажатие действием кнопки.
         onNodeWithTag(CALENDAR_EXPORT_TAG).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         waitUntil(timeoutMillis = 5_000) { files.shared.isNotEmpty() }

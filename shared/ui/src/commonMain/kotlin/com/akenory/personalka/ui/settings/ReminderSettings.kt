@@ -77,7 +77,7 @@ internal fun ReminderSettingsScreen(
     reminders: Reminders?,
     notifications: NotificationAccess?,
     scope: CoroutineScope,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     val prefs by remember(settings) { settings.prefs }.collectAsState(initial = null)
     val loaded = prefs ?: return
@@ -216,5 +216,3 @@ private fun MoreRow(open: Boolean, onToggle: () -> Unit) {
     }
 }
 
-/** Строка раздела в «Настройках»: «Дневник · сводка в 21:00». */
-internal fun reminderSummary(prefs: DiaryPrefs): String = ReminderFormat.summary(prefs.diary, prefs.digest, prefs.digestTime)

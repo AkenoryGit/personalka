@@ -93,12 +93,14 @@ import kotlinx.datetime.LocalDateTime
 
 /** Экраны настроек в стопке раздела «Ещё». */
 object SettingsRoute {
-    const val HOME = "settings"
     const val PROFILE = "settings/profile"
     const val PLACES = "settings/places"
     const val CALENDAR = "settings/calendar"
     const val REMINDERS = "settings/reminders"
     const val DATA = "settings/data"
+    const val SERVER = "settings/server"
+    const val EXPORTS = "settings/exports"
+    const val VACATION = "settings/vacation"
     const val ACCOUNT = "settings/account"
     const val CABINETS = "settings/cabinets"
     const val RATES = "settings/rates"
@@ -120,7 +122,7 @@ object SettingsRoute {
     fun colleague(id: String) = COLLEAGUE + id
 
     fun isSettings(route: String): Boolean =
-        route == HOME || route.startsWith("settings/") || route.startsWith(PLACE) || route.startsWith(TYPE) || route.startsWith(RATE) ||
+        route.startsWith("settings/") || route.startsWith(PLACE) || route.startsWith(TYPE) || route.startsWith(RATE) ||
             route.startsWith(COLLEAGUE)
 
     /** Форма с «✕» во весь экран: на сложенном Fold нижняя панель прячется (макеты «Новый тип»). */
@@ -133,6 +135,8 @@ object SettingsRoute {
 }
 
 internal const val PROFILE_ROW_TAG = "settings-profile"
+internal const val SERVER_ROW_TAG = "settings-server"
+internal const val EXPORTS_ROW_TAG = "settings-exports"
 internal const val PLACES_ROW_TAG = "settings-places"
 internal const val ADD_PLACE_TAG = "add-place"
 internal const val ADD_TYPE_TAG = "add-type"
@@ -140,10 +144,10 @@ internal fun placeRowTag(shortName: String) = "place-$shortName"
 internal fun typeRowTag(name: String) = "type-$name"
 
 /**
- * Экран настроек по маршруту (ТЗ 5.16). Пока есть «Профиль», «Места и типы», «Календарь» (шаг 1.13г) и «Данные»
- * (шаг 1.15, если платформа дала [backup]; в них — «Аккаунт», шаг 2.8а, если есть [account], и «Сервер», шаг 2.10а,
- * если есть [sync]), «Кабинеты» (шаг 2.13, если [cabinets] — сервер подключён и «Кабинеты» открыты) и «Ставки и ступени»
- * (шаг 3.6), «Коллеги» (шаг 3.7г, с совместным ведением групп); остальные разделы появятся в своих шагах, до этого их не видно (10.7).
+ * Экран настроек по маршруту (ТЗ 5.16). Своего списка «Настроек» нет (шаг 3.15а): каждый раздел — пункт «Ещё»
+ * ([com.akenory.personalka.ui.screens.MoreItem]). «Данные» разделены на «Аккаунт» ([SettingsRoute.SERVER], если есть
+ * [account]; «Сервер» — если есть [sync]), «Резервную копию» ([SettingsRoute.DATA]) и «Выгрузки» — если платформа дала
+ * [backup]; «Отпуск» — тот же экран, что «Календарь», только с отпуском. «Кабинеты» — если [cabinets].
  *
  * @param onForm открыть форму тренировки, дежурства или своего запрета ([com.akenory.personalka.ui.training.TrainingFormKey])
  *   из списков раздела «Календарь».
@@ -176,25 +180,27 @@ fun SettingsScreen(
     val close: () -> Unit = { shell.back() }
 
     when {
-        route == SettingsRoute.HOME -> SettingsHome(settings, calendar, backup, activePlaces, activeTypes, now, shell, onBack, cabinets)
-        route == SettingsRoute.RATES -> RatesScreen(settings.rates, activePlaces, activeTypes, now.date, shell, close)
+        route == SettingsRoute.RATES -> RatesScreen(settings.rates, activePlaces, activeTypes, now.date, shell, onBack)
         route == SettingsRoute.TIERS -> TierEditor(settings.rates, loadedTypes, now.date, messages, scope, close)
         SettingsRoute.rateTypeId(route) != null -> {
             val type = loadedTypes.firstOrNull { it.id == SettingsRoute.rateTypeId(route) } ?: return
             RateEditor(settings.rates, type, activePlaces, loadedTypes, now.date, messages, scope, close)
         }
-        route == SettingsRoute.COLLEAGUES -> ColleaguesScreen(settings, openFeatures(account, now.date), now.date, shell, close)
+        route == SettingsRoute.COLLEAGUES -> ColleaguesScreen(settings, openFeatures(account, now.date), now.date, shell, onBack)
         route == SettingsRoute.NEW_COLLEAGUE -> ColleagueEditor(settings, null, openFeatures(account, now.date), now.date, messages, scope, close)
         SettingsRoute.colleagueId(route) != null -> ColleagueEditor(settings, SettingsRoute.colleagueId(route), openFeatures(account, now.date), now.date, messages, scope, close)
-        route == SettingsRoute.CABINETS -> if (cabinets) CabinetSettingsScreen(settings, messages, scope, close)
-        route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, close)
-        route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, close)
-        route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, messages, scope, close, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
+        route == SettingsRoute.CABINETS -> if (cabinets) CabinetSettingsScreen(settings, messages, scope, onBack, close)
+        route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, onBack)
+        route == SettingsRoute.VACATION -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, onBack, vacation = true)
+        route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, onBack)
+        route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, DataPart.BACKUP, messages, scope, onBack) }
+        route == SettingsRoute.EXPORTS -> backup?.let { DataSettingsScreen(it, DataPart.EXPORTS, messages, scope, onBack) }
+        route == SettingsRoute.SERVER -> backup?.let { DataSettingsScreen(it, DataPart.SERVER, messages, scope, onBack, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
         route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close, sync) }
-        route == SettingsRoute.PROFILE -> ProfileScreen(settings, openFeatures(account, now.date), now.date, shell, scope, messages, close)
+        route == SettingsRoute.PROFILE -> ProfileScreen(settings, openFeatures(account, now.date), now.date, shell, scope, messages, onBack, close)
         route == SettingsRoute.CATEGORY -> CategoryEditor(settings, now.date, messages, scope, close)
         route == SettingsRoute.SCHEME -> SchemeEditor(settings, openFeatures(account, now.date), now.date, messages, scope, close)
-        route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = close)
+        route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = onBack)
         route == SettingsRoute.NEW_PLACE -> PlaceEditor(
             title = "Новое место",
             initial = ReferenceRules.newPlace(activePlaces.map { it.color }),
@@ -270,103 +276,12 @@ fun SettingsScreen(
     }
 }
 
-/** «Настройки»: разделы строками со стрелкой. */
-@Composable
-private fun SettingsHome(
-    settings: SettingsRepository,
-    calendar: CalendarRepository,
-    backup: BackupTools?,
-    places: List<LocationEntity>,
-    types: List<TrainingTypeEntity>,
-    now: LocalDateTime,
-    shell: ShellState,
-    onBack: (() -> Unit)?,
-    cabinets: Boolean,
-) {
-    val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
-    val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
-    val prefs by remember(calendar) { calendar.settings.prefs }.collectAsState(initial = null)
-    val diary by remember(calendar) { calendar.reminders.prefs }.collectAsState(initial = null)
-    val rates by remember(settings) { settings.rates.rates }.collectAsState(initial = null)
-    val tiers by remember(settings) { settings.rates.tiers }.collectAsState(initial = null)
-    val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
-    val colleagues by remember(settings, now.date) { settings.colleagues.rows(now.date) }.collectAsState(initial = null)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        TopBar("Настройки", onBack = onBack)
-        ListCard(Modifier.padding(horizontal = Dimens.space4)) {
-            NavRow(
-                title = "Профиль",
-                subtitle = coach?.let { CoachName(it.lastName, it.firstName, it.middleName).full },
-                onClick = { shell.open(SettingsRoute.PROFILE) },
-                modifier = Modifier.testTag(PROFILE_ROW_TAG),
-            )
-            RowDivider()
-            NavRow(
-                title = "Места и типы",
-                subtitle = TypeFormat.placesAndTypes(places.size, types.size),
-                onClick = { shell.open(SettingsRoute.PLACES) },
-                modifier = Modifier.testTag(PLACES_ROW_TAG),
-            )
-            RowDivider()
-            NavRow(
-                title = RateFormat.TITLE,
-                subtitle = rates?.let { r -> tiers?.let { t -> RateFormat.settingsRow(missingRates(types, places, r, now.date), currentTiers(types, t, now.date)) } },
-                onClick = { shell.open(SettingsRoute.RATES) },
-                modifier = Modifier.testTag(RATES_ROW_TAG),
-            )
-            // «Коллеги» — только с совместным ведением групп (5.16, шаг 3.7г).
-            if (coCoaching) {
-                RowDivider()
-                NavRow(
-                    title = CoCoachingFormat.COLLEAGUES,
-                    subtitle = colleagues?.let { list -> CoCoachingFormat.count(list.count { !it.colleague.archived }) },
-                    onClick = { shell.open(SettingsRoute.COLLEAGUES) },
-                    modifier = Modifier.testTag(COLLEAGUES_ROW_TAG),
-                )
-            }
-            RowDivider()
-            NavRow(
-                title = CalendarSettingsFormat.TITLE,
-                subtitle = prefs?.let { calendarSummary(it) },
-                onClick = { shell.open(SettingsRoute.CALENDAR) },
-                modifier = Modifier.testTag(CALENDAR_ROW_TAG),
-            )
-            RowDivider()
-            NavRow(
-                title = ReminderFormat.TITLE,
-                subtitle = diary?.let { reminderSummary(it) },
-                onClick = { shell.open(SettingsRoute.REMINDERS) },
-                modifier = Modifier.testTag(REMINDERS_ROW_TAG),
-            )
-            if (cabinets) {
-                RowDivider()
-                NavRow(
-                    title = CabinetLinkFormat.SETTINGS_TITLE,
-                    subtitle = if (cabinetsOn) CabinetLinkFormat.ON else CabinetLinkFormat.OFF,
-                    onClick = { shell.open(SettingsRoute.CABINETS) },
-                    modifier = Modifier.testTag(CABINETS_ROW_TAG),
-                )
-            }
-            if (backup != null) {
-                val data by backup.repository.state.collectAsState()
-                RowDivider()
-                NavRow(
-                    title = BackupFormat.TITLE,
-                    subtitle = dataSummary(data),
-                    onClick = { shell.open(SettingsRoute.DATA) },
-                    modifier = Modifier.testTag(DATA_ROW_TAG),
-                )
-            }
-        }
-    }
-}
-
 /**
  * «Профиль» (5.16): ФИО тренера с «Сохранить»; ниже — категория и схема выплат с датой, ожидаемый аванс
  * (в схеме) и «Совместное ведение групп» (шаг 3.6б).
  */
 @Composable
-private fun ProfileScreen(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, scope: CoroutineScope, messages: MessageState, onBack: () -> Unit) {
+private fun ProfileScreen(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, scope: CoroutineScope, messages: MessageState, onBack: (() -> Unit)?, onClose: () -> Unit) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
     val loaded = coach ?: return
     var last by rememberSaveable(loaded.id) { mutableStateOf(loaded.lastName) }
@@ -404,7 +319,7 @@ private fun ProfileScreen(settings: SettingsRepository, open: Set<Feature>, toda
             enabled = name.isComplete,
             onClick = {
                 scope.launch { settings.saveName(name) }
-                onBack()
+                onClose()
                 messages.show("Сохранено")
             },
         )
@@ -423,7 +338,7 @@ private fun PlacesAndTypes(
     shell: ShellState,
     settings: SettingsRepository,
     scope: CoroutineScope,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     val colors = PersonalkaTheme.colors
     val active = places.filter { !it.archived }

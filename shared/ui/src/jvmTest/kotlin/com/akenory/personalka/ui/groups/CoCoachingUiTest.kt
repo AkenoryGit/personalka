@@ -1,6 +1,7 @@
 package com.akenory.personalka.ui.groups
 
 import com.akenory.personalka.data.prefs.MemoryPrefs
+import com.akenory.personalka.domain.format.MoreFormat
 import com.akenory.personalka.domain.format.SalarySetupFormat
 import com.akenory.personalka.data.account.MemoryTokens
 import com.akenory.personalka.data.account.FakeServer
@@ -59,11 +60,12 @@ class CoCoachingUiTest {
     private val today = TestData.now.date
 
     /** [account] — вошедший администратор: у него открыты виды оплаты (решение Дмитрия 27.10.2026). */
-    private fun ComposeUiTest.openMore(item: MoreItem, account: AccountRepository? = null) {
+    /** [item] — `null`: только список «Ещё». */
+    private fun ComposeUiTest.openMore(item: MoreItem?, account: AccountRepository? = null) {
         setContent { Box(Modifier.size(412.dp, 900.dp)) { App("0.1.0", settings, clients, groups, TestData.calendarOf(settings), account = account, clock = TestData.clock) } }
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(item)).performClick()
+        if (item != null) onNodeWithTag(moreRowTag(item)).performClick()
     }
 
     private fun group(): String = runBlocking {
@@ -89,13 +91,13 @@ class CoCoachingUiTest {
 
     @Test
     fun colleagueAddedInSettings() = runComposeUiTest {
-        openMore(MoreItem.SETTINGS)
+        openMore(null)
         awaitNode(hasText("Профиль"))
         // Выключено — раздела нет (10.7).
         onNodeWithTag(COLLEAGUES_ROW_TAG).assertDoesNotExist()
         runBlocking { settings.salary.saveCoCoaching(true) }
         awaitNode(hasTestTag(COLLEAGUES_ROW_TAG))
-        onNodeWithTag(COLLEAGUES_ROW_TAG).assertTextContains("Пока нет", substring = true).performClick()
+        onNodeWithTag(COLLEAGUES_ROW_TAG).assertTextContains(MoreFormat.COLLEAGUES_NOTE, substring = true).performClick()
 
         awaitNode(hasText(CoCoachingFormat.EMPTY))
         onNodeWithText(CoCoachingFormat.NEW).performClick()
@@ -125,7 +127,7 @@ class CoCoachingUiTest {
         val account = AccountRepository(server.api(), MemoryTokens(), MemoryPrefs(), "Samsung SM-F976B") { "coach-1" }
         runBlocking { account.login("coach@example.ru", "длинный-пароль") }
         runBlocking { settings.salary.saveCoCoaching(true) }
-        openMore(MoreItem.SETTINGS, account)
+        openMore(null, account)
         awaitNode(hasTestTag(COLLEAGUES_ROW_TAG))
         onNodeWithTag(COLLEAGUES_ROW_TAG).performClick()
         awaitNode(hasText(CoCoachingFormat.EMPTY))

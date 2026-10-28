@@ -81,6 +81,8 @@ private enum class Picker { START, END, FROM, TO }
  * как только выбраны; «Отпуск с … по …» — окно с двумя датами и «Отменить» после записи; списки своих запретов,
  * запретов клуба и дежурств. Свой запрет и дежурство открывают ту же форму, что из календаря ([onForm]); запрет
  * клуба — только строкой. Пустой список не показывается (10.7).
+ *
+ * С шага 3.15а «Отпуск» — свой пункт «Ещё»: при [vacation] экран показывает только его, а «Календарь» — всё, кроме него.
  */
 @Composable
 internal fun CalendarSettingsScreen(
@@ -89,7 +91,8 @@ internal fun CalendarSettingsScreen(
     messages: MessageState,
     scope: CoroutineScope,
     onForm: (String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
+    vacation: Boolean = false,
 ) {
     val prefs by remember(settings) { settings.prefs }.collectAsState(initial = null)
     val zones by remember(settings, now.date) { settings.zones(now) }.collectAsState(initial = null)
@@ -116,24 +119,38 @@ internal fun CalendarSettingsScreen(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            TopBar(CalendarSettingsFormat.TITLE, onBack = onBack)
+            TopBar(if (vacation) CalendarSettingsFormat.VACATION else CalendarSettingsFormat.TITLE, onBack = onBack)
             Column(Modifier.padding(horizontal = Dimens.space4)) {
-                SectionLabel(CalendarSettingsFormat.WORK_HOURS)
-                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                    PickBox(
-                        text = CalendarSettingsFormat.from(workStart),
-                        icon = PIcons.Schedule,
-                        onClick = { picker = Picker.START },
-                        modifier = Modifier.weight(1f).testTag(WORK_START_TAG),
-                        error = hoursProblem,
+                if (vacation) {
+                    OutlineButton(
+                        CalendarSettingsFormat.VACATION_BUTTON,
+                        {
+                            val week = CalendarSettingsRules.defaultVacation(today)
+                            from = week.from.toString()
+                            to = week.to.toString()
+                            vacationOpen = true
+                        },
+                        modifier = Modifier.padding(top = Dimens.space2).testTag(VACATION_TAG),
+                        icon = PIcons.CalendarMonth,
                     )
-                    PickBox(
-                        text = CalendarSettingsFormat.to(workEnd),
-                        icon = null,
-                        onClick = { picker = Picker.END },
-                        modifier = Modifier.weight(1f).testTag(WORK_END_TAG),
-                        error = hoursProblem,
-                    )
+                    Hint(CalendarSettingsFormat.VACATION_NOTE)
+                } else {
+                    SectionLabel(CalendarSettingsFormat.WORK_HOURS)
+                    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        PickBox(
+                            text = CalendarSettingsFormat.from(workStart),
+                            icon = PIcons.Schedule,
+                            onClick = { picker = Picker.START },
+                            modifier = Modifier.weight(1f).testTag(WORK_START_TAG),
+                            error = hoursProblem,
+                        )
+                        PickBox(
+                            text = CalendarSettingsFormat.to(workEnd),
+                            icon = null,
+                            onClick = { picker = Picker.END },
+                            modifier = Modifier.weight(1f).testTag(WORK_END_TAG),
+                            error = hoursProblem,
+                        )
                 }
                 hoursProblem?.let { ErrorText(it) }
                 Hint(CalendarSettingsFormat.WORK_HOURS_NOTE)
@@ -155,23 +172,11 @@ internal fun CalendarSettingsScreen(
                 }
                 Hint(CalendarSettingsFormat.CANCEL_NOTICE_NOTE)
 
-                SectionLabel(CalendarSettingsFormat.VACATION)
-                OutlineButton(
-                    CalendarSettingsFormat.VACATION_BUTTON,
-                    {
-                        val week = CalendarSettingsRules.defaultVacation(today)
-                        from = week.from.toString()
-                        to = week.to.toString()
-                        vacationOpen = true
-                    },
-                    modifier = Modifier.testTag(VACATION_TAG),
-                    icon = PIcons.CalendarMonth,
-                )
-
                 zones?.let { lists ->
                     ZoneList(CalendarSettingsFormat.OWN_RESTRICTIONS, lists.own) { onForm(TrainingFormKey.restriction(it)) }
                     ZoneList(CalendarSettingsFormat.CLUB_RESTRICTIONS, lists.club, onOpen = null)
                     ZoneList(CalendarSettingsFormat.DUTIES, lists.duties) { onForm(TrainingFormKey.edit(it)) }
+                }
                 }
                 Spacer(Modifier.height(Dimens.space6))
             }
@@ -309,10 +314,6 @@ internal fun InfoRow(title: String, subtitle: String, modifier: Modifier = Modif
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
     }
 }
-
-/** Строка раздела в «Настройках». */
-internal fun calendarSummary(prefs: CalendarPrefs): String =
-    CalendarSettingsFormat.summary(prefs.workStart, prefs.workEnd, prefs.dragStep, prefs.horizonWeeks)
 
 private const val START_TITLE = "Начало"
 private const val END_TITLE = "Конец"

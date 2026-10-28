@@ -71,10 +71,25 @@ class CalendarSettingsUiTest {
         }
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
-        awaitNode(hasText(s("07:00–23:00 · шаг 15_мин · серии на 8_недель")))
+        awaitNode(hasTestTag(CALENDAR_ROW_TAG))
         onNodeWithTag(CALENDAR_ROW_TAG).performClick()
         awaitNode(hasTestTag(WORK_START_TAG))
+        // «Отпуск» с шага 3.15а — свой пункт «Ещё», в «Календаре» его нет.
+        onNodeWithTag(VACATION_TAG).assertDoesNotExist()
+    }
+
+    private fun ComposeUiTest.openVacation() {
+        setContent {
+            Box(Modifier.size(412.dp, 900.dp)) {
+                App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), calendar, clock = TestData.clock)
+            }
+        }
+        awaitNode(hasTestTag(navTag(Section.MORE)))
+        onNodeWithTag(navTag(Section.MORE)).performClick()
+        awaitNode(hasTestTag(moreRowTag(MoreItem.VACATION)))
+        onNodeWithTag(moreRowTag(MoreItem.VACATION)).performClick()
+        awaitNode(hasTestTag(VACATION_TAG))
+        onNodeWithTag(WORK_START_TAG).assertDoesNotExist()
     }
 
     @Test
@@ -104,7 +119,7 @@ class CalendarSettingsUiTest {
         // Серия по четвергам 13:30 с чт 22.10: в неделю отпуска попадает одна тренировка.
         runBlocking { calendar.forms.create(TrainingDraft(LocalDateTime(day(2), LocalTime(13, 30)), pt, listOf(client), null, placeId("ББ"), 50, Repeat(setOf(DayOfWeek.THURSDAY)))) }
         val before = trainings().size
-        openCalendarSettings()
+        openVacation()
 
         onNodeWithTag(VACATION_TAG).performScrollTo().performClick()
         onNodeWithTag(VACATION_FROM_TAG).assertIsDisplayed()
@@ -128,7 +143,7 @@ class CalendarSettingsUiTest {
         val client = runBlocking { TestData.clientsOf(settings).create(ClientDraft("Орлова", "Ксения")) }
         val pt = runBlocking { settings.types.first().single { it.shortName == "ПТ" }.id }
         runBlocking { calendar.forms.create(TrainingDraft(LocalDateTime(day(2), LocalTime(13, 30)), pt, listOf(client), null, placeId("ББ"), 50, Repeat(setOf(DayOfWeek.THURSDAY)))) }
-        openCalendarSettings()
+        openVacation()
         onNodeWithTag(VACATION_TAG).performScrollTo().performClick()
         awaitNode(hasTestTag(vacationRowTag(client)))
         onNodeWithText(s("Удалить 1_тренировку")).performScrollTo().performClick()

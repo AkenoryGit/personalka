@@ -53,8 +53,7 @@ class RateSettingsUiTest {
         }
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
-        awaitNode(hasText(RateFormat.TITLE))
+        awaitNode(hasTestTag(RATES_ROW_TAG))
         onNodeWithTag(RATES_ROW_TAG).performClick()
         awaitNode(hasTestTag(rateTypeTag("ПТ")))
     }

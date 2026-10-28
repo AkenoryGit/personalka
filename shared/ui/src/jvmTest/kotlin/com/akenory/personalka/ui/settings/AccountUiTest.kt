@@ -71,9 +71,8 @@ class AccountUiTest {
         }
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
-        awaitNode(hasTestTag(DATA_ROW_TAG))
-        onNodeWithTag(DATA_ROW_TAG).performClick()
+        awaitNode(hasTestTag(SERVER_ROW_TAG))
+        onNodeWithTag(SERVER_ROW_TAG).performScrollTo().performClick()
         awaitNode(hasTestTag(ACCOUNT_ROW_TAG))
         onNodeWithTag(ACCOUNT_ROW_TAG).assertTextContains(AccountFormat.SIGNED_OUT, substring = true)
         onNodeWithTag(ACCOUNT_ROW_TAG).performClick()

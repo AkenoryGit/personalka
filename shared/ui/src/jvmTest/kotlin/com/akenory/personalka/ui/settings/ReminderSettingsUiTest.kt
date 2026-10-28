@@ -81,8 +81,7 @@ class ReminderSettingsUiTest {
         }
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
-        onNodeWithTag(moreRowTag(MoreItem.SETTINGS)).performClick()
-        awaitNode(hasText(s("Без дневника · сводка в_21:00")))
+        awaitNode(hasTestTag(REMINDERS_ROW_TAG))
         onNodeWithTag(REMINDERS_ROW_TAG).performClick()
         awaitNode(hasTestTag(DIGEST_TAG))
     }

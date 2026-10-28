@@ -78,7 +78,7 @@ internal fun colleagueSchemeTag(k: PaySchemeKind) = "colleague-scheme-${k.name}"
  * архивные — ниже, в «В архиве». Нажатие — форма коллеги.
  */
 @Composable
-internal fun ColleaguesScreen(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, onBack: () -> Unit) {
+internal fun ColleaguesScreen(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, onBack: (() -> Unit)?) {
     val rows by remember(settings, today) { settings.colleagues.rows(today) }.collectAsState(initial = null)
     val loaded = rows ?: return
     val colors = PersonalkaTheme.colors
