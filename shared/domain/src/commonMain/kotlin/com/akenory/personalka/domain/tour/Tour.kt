@@ -20,7 +20,7 @@ enum class TourStop {
     /** «Зарплата»: мастер «Настроить зарплату» или «Позже»; зарплата уже настроена — остановки нет. */
     SALARY,
 
-    /** Резервная копия: папка в телефоне; без неё «Пропустить» спрашивает «Без копии?». */
+    /** Резервная копия: папка в телефоне; без неё «Дальше» спрашивает «Без копии?»; выбрана раньше — только «Готово». */
     BACKUP,
     ;
 
@@ -36,12 +36,14 @@ enum class TourStop {
 
 object TourRules {
     /**
-     * Следующая остановка или `null` — знакомство кончилось. Зарплата уже настроена ([salaryNeeded] = false) —
-     * «Зарплата» пропускается: настраивать нечего.
+     * Следующая остановка или `null` — знакомство кончилось. «Дальше» есть на каждой остановке, поэтому её можно
+     * пройти и без действия: тренировку не добавили ([hasTraining] = false) — карточки показывать нечего, сразу
+     * «Клиенты»; зарплата уже настроена ([salaryNeeded] = false) — «Зарплата» пропускается.
      */
-    fun next(stop: TourStop, salaryNeeded: Boolean): TourStop? {
+    fun next(stop: TourStop, salaryNeeded: Boolean, hasTraining: Boolean = true): TourStop? {
         val after = TourStop.entries.getOrNull(stop.ordinal + 1) ?: return null
-        return if (after == TourStop.SALARY && !salaryNeeded) next(after, salaryNeeded) else after
+        val skip = after == TourStop.SALARY && !salaryNeeded || after == TourStop.CARD && !hasTraining
+        return if (skip) next(after, salaryNeeded, hasTraining) else after
     }
 
     /**
@@ -61,6 +63,6 @@ object TourRules {
 
     const val SLOT_MINUTES = 50
 
-    /** «Пропустить» без выбранной папки копии спрашивает «Без копии?» (5.18); с папкой знакомство просто закрывается. */
+    /** «Дальше» на последней остановке без выбранной папки копии спрашивает «Без копии?» (5.18). */
     fun asksAboutBackup(folderChosen: Boolean): Boolean = !folderChosen
 }

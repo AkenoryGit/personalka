@@ -52,14 +52,25 @@ class TourRulesTest {
     }
 
     @Test
+    fun noTrainingSkipsTheCard() {
+        assertEquals(TourStop.CLIENTS, TourRules.next(TourStop.CALENDAR, salaryNeeded = true, hasTraining = false))
+        assertEquals(TourStop.CARD, TourRules.next(TourStop.CALENDAR, salaryNeeded = true, hasTraining = true))
+    }
+
+    @Test
     fun texts() {
         assertEquals("Знакомство · 1 из 6", TourFormat.step(TourStop.CALENDAR))
         assertEquals("Знакомство · 6 из 6", TourFormat.step(TourStop.BACKUP))
         val nb = RuText.NBSP
         assertEquals(
-            "Клиент отменил — «Отменить». Списание считается само: предупредили меньше чем за 1${nb}час — со списанием, раньше — без.",
+            "Клиент отменил — нажмите «Отменить». Предупредил хотя бы за 1${nb}час — отмена без списания, позже — " +
+                "со списанием. Это время вы задаёте сами: «Ещё → Календарь».",
             TourFormat.cardCancel(60),
         )
         assertTrue(TourFormat.cardCancel(90).contains("1${nb}час 30${nb}минут"))
+        // Дневник выключен по умолчанию — о нём ни слова; включён — есть.
+        assertFalse(TourFormat.homeText(diary = false).contains("дневник"))
+        assertTrue(TourFormat.homeText(diary = true).contains("дневник"))
+        assertTrue(TourFormat.cardDone(autoDone = false).contains("нажмите «Проведено»"))
     }
 }

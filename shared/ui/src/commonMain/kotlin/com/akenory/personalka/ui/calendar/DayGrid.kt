@@ -978,12 +978,13 @@ private fun DayColumn(
             day.more.forEach { drawMore(it, measurer, styles.more, colors) }
             if (date == now.date) drawNow(hours, hourDp, now, colors)
         }
-        // Знакомство (5.18): рамка вокруг пустого часа сегодня. Нажатия не ловит — удержание идёт в сетку.
+        // Знакомство (5.18): рамка вокруг пустого часа — сегодня или, если сегодня места нет, завтра с начала дня.
+        // Нажатия не ловит — удержание идёт в сетку.
         val tour = LocalTour.current
-        if (date == now.date && tour?.stop == TourStop.CALENDAR) {
-            val slot = remember(items, hours, now.hour) {
+        if (tour?.stop == TourStop.CALENDAR && date == tour.slotDay) {
+            val slot = remember(items, hours, now.hour, date) {
                 TourRules.slotMinute(
-                    nowMinute = now.hour * 60 + now.minute,
+                    nowMinute = if (date == now.date) now.hour * 60 + now.minute else -60,
                     startMinute = hours.startMinute,
                     endMinute = hours.endMinute,
                     busy = items.filter { it.start.date == date }.map { t ->

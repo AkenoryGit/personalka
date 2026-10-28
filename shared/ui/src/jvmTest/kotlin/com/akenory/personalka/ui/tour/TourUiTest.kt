@@ -95,15 +95,22 @@ class TourUiTest {
 
     private fun startedAt(stop: TourStop) = MemoryPrefs().apply { putString(TourState.KEY, stop.name) }
 
+    private fun backupWith(settings: SettingsRepository, files: Files, folder: Boolean = false): BackupTools {
+        val repo = BackupRepository(TestData.dbOf(settings), MemoryPrefs(), Folder(), clock = TestData.clock)
+        if (folder) repo.chooseFolder("content://old", "Копии телефона")
+        return BackupTools(repo, files)
+    }
+
     @Test
     fun sixStopsWithRealActions() = runComposeUiTest {
         val settings = TestData.ready()
         val prefs = startedAt(TourStop.CALENDAR)
-        val backup = BackupTools(BackupRepository(TestData.dbOf(settings), MemoryPrefs(), Folder(), clock = TestData.clock), Files())
+        val backup = backupWith(settings, Files())
         show(settings, prefs, backup)
 
         // 1. Календарь: тренировка с новым клиентом прямо в форме; пока форма открыта, карточки знакомства нет.
         atStop(TourStop.CALENDAR, TourFormat.CALENDAR_TITLE)
+        onNodeWithText(TourFormat.CALENDAR_GESTURE).assertIsDisplayed()
         onNodeWithTag(FAB_TAG).performClick()
         awaitNode(hasTestTag(FORM_SEARCH_TAG))
         onNodeWithTag(TOUR_CARD_TAG).assertDoesNotExist()
@@ -111,29 +118,30 @@ class TourUiTest {
         onNodeWithText("Новый клиент «Петров Игорь»").performScrollTo().performClick()
         onNodeWithText(TrainingFormat.SAVE).performClick()
 
-        // 2. Сама открылась карточка этой тренировки; правило списания — из настройки, 1 час.
+        // 2. Сама открылась карточка этой тренировки; «Проведено» ставится само, время списания — из настройки, 1 час.
         atStop(TourStop.CARD, TourFormat.CARD_TITLE)
+        onNodeWithText(TourFormat.cardDone(true)).assertIsDisplayed()
         onNodeWithText(TourFormat.cardCancel(60)).assertIsDisplayed()
         onNodeWithTag(TOUR_NEXT_TAG).performClick()
 
-        // 3. Клиенты: клиент из тренировки уже в списке — открыть карточку, тогда «Дальше».
+        // 3. Клиенты: клиент из тренировки уже в списке — открыть карточку.
         atStop(TourStop.CLIENTS, TourFormat.CLIENTS_TITLE)
         onNodeWithTag(navTag(Section.CLIENTS)).assertIsSelected()
         onNodeWithText(TourFormat.CLIENTS_TEXT).assertIsDisplayed()
-        onNodeWithTag(TOUR_NEXT_TAG).assertDoesNotExist()
         onNodeWithTag(clientRowTag("Петров Игорь")).performClick()
         awaitNode(hasText(TourFormat.CLIENTS_OPEN_TEXT))
         onNodeWithTag(TOUR_NEXT_TAG).performClick()
 
-        // 4. Главная.
+        // 4. Главная: дневник выключен — о нём ни слова.
         atStop(TourStop.HOME, TourFormat.HOME_TITLE)
         onNodeWithTag(navTag(Section.HOME)).assertIsSelected()
+        onNodeWithText(TourFormat.homeText(diary = false)).assertIsDisplayed()
         onNodeWithTag(TOUR_NEXT_TAG).performClick()
 
-        // 5. Зарплата не настроена — остановка есть; «Позже» ведёт к копии.
+        // 5. Зарплата не настроена — «Настроить» главной, «Дальше» рядом.
         atStop(TourStop.SALARY, TourFormat.SALARY_TITLE)
         onNodeWithTag(navTag(Section.SALARY)).assertIsSelected()
-        onNodeWithTag(TOUR_SKIP_TAG).performClick()
+        onNodeWithTag(TOUR_SECOND_TAG).performClick()
 
         // 6. Копия: «Выбрать папку» — системный выбор, папка выбрана — знакомство кончилось.
         atStop(TourStop.BACKUP, TourFormat.BACKUP_TITLE)
@@ -146,15 +154,27 @@ class TourUiTest {
     }
 
     @Test
-    fun skipWithoutFolderAsksAboutBackup() = runComposeUiTest {
+    fun nextWithoutTrainingSkipsTheCard() = runComposeUiTest {
+        // «Дальше» на каждой остановке: тренировку не добавили — карточки нет, сразу «Клиенты».
         val settings = TestData.ready()
-        val prefs = startedAt(TourStop.HOME)
-        val files = Files()
-        val backup = BackupTools(BackupRepository(TestData.dbOf(settings), MemoryPrefs(), Folder(), clock = TestData.clock), files)
-        show(settings, prefs, backup)
+        show(settings, startedAt(TourStop.CALENDAR))
+        atStop(TourStop.CALENDAR, TourFormat.CALENDAR_TITLE)
+        onNodeWithTag(TOUR_NEXT_TAG).performClick()
+        awaitNode(hasText(TourFormat.step(TourStop.CLIENTS)))
+        onNodeWithTag(navTag(Section.CLIENTS)).assertIsSelected()
+    }
 
-        atStop(TourStop.HOME, TourFormat.HOME_TITLE)
-        onNodeWithTag(TOUR_SKIP_TAG).performClick()
+    @Test
+    fun nextWithoutFolderAsksAboutBackup() = runComposeUiTest {
+        val settings = TestData.ready()
+        val prefs = startedAt(TourStop.SALARY)
+        val files = Files()
+        show(settings, prefs, backupWith(settings, files))
+
+        atStop(TourStop.SALARY, TourFormat.SALARY_TITLE)
+        onNodeWithTag(TOUR_SECOND_TAG).performClick()
+        atStop(TourStop.BACKUP, TourFormat.BACKUP_TITLE)
+        onNodeWithTag(TOUR_SECOND_TAG).performClick()
         awaitNode(hasText(TourFormat.NO_BACKUP_TITLE))
         onNodeWithTag(TOUR_CARD_TAG).assertDoesNotExist()
         onNodeWithText(TourFormat.NO_BACKUP).performClick()
@@ -164,20 +184,37 @@ class TourUiTest {
     }
 
     @Test
-    fun skipWithoutFolderCanPickIt() = runComposeUiTest {
+    fun noBackupWindowCanPickFolder() = runComposeUiTest {
         val settings = TestData.ready()
-        val prefs = startedAt(TourStop.CARD)
+        val prefs = startedAt(TourStop.SALARY)
         val files = Files()
-        val backup = BackupTools(BackupRepository(TestData.dbOf(settings), MemoryPrefs(), Folder(), clock = TestData.clock), files)
-        show(settings, prefs, backup)
+        show(settings, prefs, backupWith(settings, files))
 
-        awaitNode(hasTestTag(TOUR_SKIP_TAG))
-        onNodeWithTag(TOUR_SKIP_TAG).performClick()
+        awaitNode(hasTestTag(TOUR_SECOND_TAG))
+        onNodeWithTag(TOUR_SECOND_TAG).performClick()
+        atStop(TourStop.BACKUP, TourFormat.BACKUP_TITLE)
+        onNodeWithTag(TOUR_SECOND_TAG).performClick()
         awaitNode(hasText(TourFormat.NO_BACKUP_TITLE))
         onNodeWithText(TourFormat.PICK_FOLDER).performClick()
         awaitNode(hasText(TourFormat.DONE))
         assertEquals(1, files.picked)
         assertEquals("", prefs.string(TourState.KEY))
+    }
+
+    @Test
+    fun folderChosenBeforeOnlySaysWhere() = runComposeUiTest {
+        // Папка выбрана раньше: на последней остановке — куда ложится копия и «Готово», знакомство не закрывается само.
+        val settings = TestData.ready()
+        val prefs = startedAt(TourStop.SALARY)
+        val files = Files()
+        show(settings, prefs, backupWith(settings, files, folder = true))
+        awaitNode(hasTestTag(TOUR_SECOND_TAG))
+        onNodeWithTag(TOUR_SECOND_TAG).performClick()
+        atStop(TourStop.BACKUP, TourFormat.BACKUP_TITLE)
+        onNodeWithText(TourFormat.backupDone("Копии телефона")).assertIsDisplayed()
+        onNodeWithText(TourFormat.FINISH).performClick()
+        awaitNode(hasText(TourFormat.DONE))
+        assertEquals(0, files.picked)
     }
 
     @Test
@@ -189,7 +226,7 @@ class TourUiTest {
         atStop(TourStop.HOME, TourFormat.HOME_TITLE)
         onNodeWithTag(TOUR_NEXT_TAG).performClick()
         atStop(TourStop.SALARY, TourFormat.SALARY_TITLE)
-        onNodeWithTag(TOUR_SKIP_TAG).performClick()
+        onNodeWithTag(TOUR_SECOND_TAG).performClick()
         awaitNode(hasText(TourFormat.DONE))
         assertEquals("", prefs.string(TourState.KEY))
     }

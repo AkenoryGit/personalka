@@ -64,9 +64,17 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.shell.NavBarHeight
 import com.akenory.personalka.ui.shell.WideFrom
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.material3.Icon
+import androidx.compose.ui.layout.onSizeChanged
+import kotlinx.datetime.LocalDate
+import com.akenory.personalka.ui.icons.PIcons
 
 const val TOUR_CARD_TAG = "tour-card"
-const val TOUR_SKIP_TAG = "tour-skip"
+const val TOUR_SECOND_TAG = "tour-second"
 const val TOUR_NEXT_TAG = "tour-next"
 
 /** Места, которые знакомство обводит рамкой (макет `docs/mockups/tour`). */
@@ -92,13 +100,17 @@ object TourTarget {
 }
 
 /**
- * Где знакомство (5.18, шаг 5.3б): текущая остановка или `null` — знакомства нет. Остановка хранится в настройках
- * телефона, поэтому переживает выгрузку приложения; знакомство — про этот телефон, в копию и на сервер не уходит.
+ * Где знакомство (5.18, шаги 5.3б, 5.3г): текущая остановка или `null` — знакомства нет. Остановка хранится
+ * в настройках телефона, поэтому переживает выгрузку приложения; знакомство — про этот телефон, в копию и на сервер
+ * не уходит.
  */
 @Stable
 class TourState(private val prefs: DevicePrefs) {
     var stop: TourStop? by mutableStateOf(TourStop.of(prefs.string(KEY)))
         private set
+
+    /** День, на котором первая остановка обводит пустой час: сегодня, а если сегодня места нет — завтра. */
+    var slotDay: LocalDate? by mutableStateOf(null)
 
     /** Места на экране, которые сейчас видны, — в координатах окна. */
     internal val targets = mutableStateMapOf<String, Rect>()
@@ -123,63 +135,86 @@ fun Modifier.tourTarget(key: String): Modifier = composed {
     onGloballyPositioned { tour.targets[key] = it.boundsInRoot() }
 }
 
-/** Карточка остановки: что сделать и кнопки. [main] — главная кнопка или `null`, если ждём жест ([gesture]). */
+/**
+ * Карточка остановки. [main] — главная кнопка, есть всегда: «Дальше» проходит остановку и без действия (полного
+ * пропуска знакомства нет — решение Дмитрия 28.10.2026). [second] — второе действие текстом («Дальше» рядом
+ * с «Настроить» и «Выбрать папку»). [gesture] — что сделать на экране, строкой над кнопками.
+ */
 class TourCard(
     val stop: TourStop,
     val title: String,
     val texts: List<String>,
+    val main: Pair<String, () -> Unit>,
+    val second: Pair<String, () -> Unit>? = null,
     val gesture: String? = null,
-    val main: Pair<String, () -> Unit>? = null,
-    val skip: Pair<String, () -> Unit>,
     /** Обводить ли места: в открытой карточке клиента рамка вокруг списка слева только мешает. */
     val holes: Boolean = true,
-    /** Карточка стоит выше «+»: в «Календаре» тренировку можно добавить и им. */
+    /** Карточка снизу стоит выше «+»: в «Календаре» тренировку можно добавить и им. */
     val aboveFab: Boolean = false,
 )
 
 /**
- * Знакомство поверх приложения: затемнение с вырезами вокруг мест остановки и карточка снизу (или сверху, если
- * места внизу экрана — например, кнопки карточки тренировки). Затемнение нажатия не ловит: тренер делает настоящее
- * действие на экране под ним. Мест на экране нет (раздел ушёл, остановка без рамки) — нет и затемнения.
+ * Знакомство поверх приложения: затемнение с вырезами вокруг мест остановки и карточка. Затемнение есть всегда —
+ * карточка не сливается с экраном; нажатия оно не ловит: тренер делает настоящее действие на экране под ним.
+ * Карточка встаёт снизу (над панелью разделов) или сверху — где она меньше закрывает обведённые места.
  */
 @Composable
 fun TourOverlay(tour: TourState, card: TourCard) {
     val colors = PersonalkaTheme.colors
     val density = LocalDensity.current
     var origin by remember { mutableStateOf(Offset.Zero) }
+    var cardHeight by remember { mutableStateOf(0) }
     val keys = if (card.holes) TourTarget.of(card.stop) else emptySet()
     val holes = keys.mapNotNull { tour.targets[it] }.filter { it.width > 0f && it.height > 0f }
+        .map { it.translate(-origin.x, -origin.y) }
+    val statusTop = WindowInsets.statusBars.getTop(density)
+    val navBottom = WindowInsets.navigationBars.getBottom(density)
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         val heightPx = with(density) { maxHeight.toPx() }
         val wide = maxWidth >= WideFrom
-        if (holes.isNotEmpty()) {
-            val pad = with(density) { 6.dp.toPx() }
-            val ring = with(density) { 2.dp.toPx() }
-            val radius = with(density) { 12.dp.toPx() }
-            Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
-                drawRect(colors.scrim)
-                holes.forEach { r ->
-                    val topLeft = Offset(r.left - origin.x - pad, r.top - origin.y - pad)
-                    val size = Size(r.width + 2 * pad, r.height + 2 * pad)
-                    drawRoundRect(Color.Transparent, topLeft, size, CornerRadius(radius), blendMode = BlendMode.Clear)
-                    drawRoundRect(colors.primary, topLeft, size, CornerRadius(radius), style = Stroke(ring))
-                }
+        val pad = with(density) { 6.dp.toPx() }
+        Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
+            drawRect(colors.scrim)
+            val ring = 2.dp.toPx()
+            val radius = 12.dp.toPx()
+            holes.forEach { r ->
+                val topLeft = Offset(r.left - pad, r.top - pad)
+                val size = Size(r.width + 2 * pad, r.height + 2 * pad)
+                drawRoundRect(Color.Transparent, topLeft, size, CornerRadius(radius), blendMode = BlendMode.Clear)
+                drawRoundRect(colors.primary, topLeft, size, CornerRadius(radius), style = Stroke(ring))
             }
         }
-        // Места в нижней половине — карточка сверху, чтобы не закрыть их.
-        val low = holes.isNotEmpty() && holes.minOf { it.top - origin.y } > heightPx / 2
+        // На сложенном внизу — панель разделов: карточка стоит над ней, разделы остаются под рукой.
+        val nav = if (wide) 0.dp else NavBarHeight
+        val bottomGap = nav + if (card.aboveFab) Dimens.fab + Dimens.space4 * 2 else Dimens.space3
+        val gapPx = with(density) { bottomGap.toPx() } + navBottom
+        val topPx = statusTop + with(density) { Dimens.space3.toPx() }
+        val top = TourPlacement.atTop(
+            holes = holes.map { (it.top - pad)..(it.bottom + pad) },
+            card = cardHeight.toFloat(),
+            topStart = topPx,
+            bottomEnd = heightPx - gapPx,
+        )
         Box(
             Modifier.fillMaxSize().padding(horizontal = Dimens.space3),
-            contentAlignment = if (low) Alignment.TopCenter else Alignment.BottomCenter,
+            contentAlignment = if (top) Alignment.TopCenter else Alignment.BottomCenter,
         ) {
-            // На сложенном внизу — панель разделов: карточка стоит над ней, разделы остаются под рукой.
-            val nav = if (wide) 0.dp else NavBarHeight
-            val bottom = nav + if (card.aboveFab) Dimens.fab + Dimens.space4 * 2 else Dimens.space3
             TourCardView(
                 card,
-                if (low) Modifier.statusBarsPadding().padding(top = Dimens.space3) else Modifier.navigationBarsPadding().padding(bottom = bottom),
+                Modifier
+                    .then(if (top) Modifier.statusBarsPadding().padding(top = Dimens.space3) else Modifier.navigationBarsPadding().padding(bottom = bottomGap))
+                    .onSizeChanged { cardHeight = it.height },
             )
         }
+    }
+}
+
+/** Куда поставить карточку: сверху, только если там она закроет обведённые места меньше, чем снизу. */
+internal object TourPlacement {
+    fun atTop(holes: List<ClosedFloatingPointRange<Float>>, card: Float, topStart: Float, bottomEnd: Float): Boolean {
+        if (holes.isEmpty() || card <= 0f) return false
+        fun covered(from: Float, to: Float) = holes.sumOf { h -> maxOf(0f, minOf(to, h.endInclusive) - maxOf(from, h.start)).toDouble() }
+        return covered(topStart, topStart + card) < covered(bottomEnd - card, bottomEnd)
     }
 }
 
@@ -188,11 +223,12 @@ private fun TourCardView(card: TourCard, modifier: Modifier) {
     val colors = PersonalkaTheme.colors
     Column(
         modifier
-            .widthIn(max = 420.dp)
+            .widthIn(max = 440.dp)
             .fillMaxWidth()
-            .shadow(8.dp, MaterialTheme.shapes.extraLarge)
+            .shadow(12.dp, MaterialTheme.shapes.extraLarge)
             .clip(MaterialTheme.shapes.extraLarge)
             .background(colors.surface)
+            .border(1.dp, colors.outline, MaterialTheme.shapes.extraLarge)
             // Нажатие по карточке не уходит на экран под ней.
             .pointerInput(Unit) { detectTapGestures { } }
             .semantics {
@@ -200,40 +236,46 @@ private fun TourCardView(card: TourCard, modifier: Modifier) {
                 liveRegion = LiveRegionMode.Polite
             }
             .testTag(TOUR_CARD_TAG)
-            .padding(start = Dimens.space4, end = Dimens.space2, top = Dimens.space4, bottom = Dimens.space2),
+            .padding(start = Dimens.space5, end = Dimens.space5, top = Dimens.space4, bottom = Dimens.space4),
         verticalArrangement = Arrangement.spacedBy(Dimens.space2),
     ) {
-        Row(Modifier.fillMaxWidth().padding(end = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
-            Text(TourFormat.step(card.stop), style = MaterialTheme.typography.bodySmall, color = colors.textMuted, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(TourFormat.step(card.stop), style = MaterialTheme.typography.labelMedium, color = colors.textMuted, modifier = Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TourStop.entries.forEach { s ->
                     Box(
-                        Modifier.size(width = 14.dp, height = 4.dp)
+                        Modifier.size(width = 16.dp, height = 4.dp)
                             .background(if (s.ordinal <= card.stop.ordinal) colors.primary else colors.divider, RoundedCornerShape(2.dp)),
                     )
                 }
             }
         }
-        Text(card.title, style = MaterialTheme.typography.titleMedium, color = colors.text, modifier = Modifier.padding(end = Dimens.space2))
+        Text(card.title, style = MaterialTheme.typography.headlineSmall, color = colors.text)
         card.texts.forEach {
-            Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text, modifier = Modifier.padding(end = Dimens.space2))
+            Text(it, style = MaterialTheme.typography.bodyLarge, color = colors.text)
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = card.skip.second, modifier = Modifier.heightIn(min = Dimens.button).testTag(TOUR_SKIP_TAG)) {
-                Text(card.skip.first, style = MaterialTheme.typography.labelLarge, color = colors.text)
+        card.gesture?.let {
+            Row(
+                Modifier.fillMaxWidth().background(colors.surfaceAlt, MaterialTheme.shapes.medium).padding(horizontal = Dimens.space3, vertical = Dimens.space2),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+            ) {
+                Icon(PIcons.Info, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.text)
             }
-            Spacer(Modifier.weight(1f))
-            val main = card.main
-            if (main != null) {
-                PrimaryButton(main.first, main.second, Modifier.padding(end = Dimens.space2).testTag(TOUR_NEXT_TAG))
-            } else if (card.gesture != null) {
-                Text(
-                    card.gesture,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textMuted,
-                    modifier = Modifier.weight(3f, fill = false).padding(end = Dimens.space2),
-                )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = Dimens.space1),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
+        ) {
+            card.second?.let { (label, action) ->
+                TextButton(onClick = action, modifier = Modifier.heightIn(min = Dimens.button).testTag(TOUR_SECOND_TAG)) {
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = colors.text)
+                }
+                Spacer(Modifier.width(Dimens.space2))
             }
+            PrimaryButton(card.main.first, card.main.second, Modifier.testTag(TOUR_NEXT_TAG))
         }
     }
 }
