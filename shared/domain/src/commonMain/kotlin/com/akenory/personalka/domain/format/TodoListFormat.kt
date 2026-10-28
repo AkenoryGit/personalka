@@ -67,4 +67,31 @@ object TodoListFormat {
 
     /** «доплата за покупку 500 ₽»; без доплаты — пусто. */
     fun sptBonus(bonus: Long): String = if (bonus > 0) "доплата за покупку " + MoneyFormat.rub(bonus) else ""
+
+    /** Время тренировки справа: сегодня — «сегодня 18:00», раньше — «пн 26.10 18:00». */
+    fun at(start: LocalDateTime, today: LocalDate): String =
+        if (start.date == today) TodoListFormat.today(start) else DateFormat.short(start.date) + " " + DateFormat.time(start.time)
+
+    /** «Без дневника» (шаг 3.16а). */
+    const val DIARY_WHY =
+        "Эти тренировки проведены, а дневник не заполнен — без него в истории клиента и в кабинете родителя пусто. " +
+            "Заполните, пока помните."
+
+    const val FILL = "Заполнить"
+
+    /** «Группа без отметки» (шаг 3.16а). */
+    const val GROUPS_WHY =
+        "Эти группы закончились, а кто пришёл — не отмечено. Без отметки не считаются зарплата и посещаемость детей."
+
+    const val MARK = "Отметить, кто пришёл"
+
+    /** «Удалить данные клиента» (шаг 3.16а). */
+    const val CONSENT_WHY =
+        "Эти клиенты отозвали согласие на обработку данных — их данные нужно удалить до срока. Откройте карточку, " +
+            "меню «…» → «Удалить полностью»."
+
+    const val OPEN_CARD = "Открыть карточку"
+
+    /** «удалить до 12.11». */
+    fun deleteBy(date: LocalDate): String = "удалить до " + DateFormat.dayMonth(date)
 }

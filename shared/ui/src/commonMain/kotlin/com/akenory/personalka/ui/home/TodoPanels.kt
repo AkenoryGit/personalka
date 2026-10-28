@@ -27,15 +27,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.data.calendar.CalendarRepository
+import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.ConfirmVisit
 import com.akenory.personalka.data.clients.FollowupRow
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.money.SptWaiting
+import com.akenory.personalka.domain.cabinet.ConsentDue
+import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TodoListFormat
+import com.akenory.personalka.domain.home.HomeRules
 import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.money.SptRules
 import com.akenory.personalka.ui.clients.CallButton
@@ -65,7 +70,19 @@ internal fun confirmNotComingTag(clientId: String) = "confirm-not-coming-$client
 internal fun sptBoughtTag(clientId: String) = "todo-spt-bought-$clientId"
 
 /** Пункты «Нужно сделать», которые открывают своё окно со списком (шаг 3.16), а не экран. */
-internal val PANEL_KINDS = setOf(TodoKind.CONFIRM_VISIT, TodoKind.NOT_BOOKED, TodoKind.GROUP_ABSENT, TodoKind.SPT_PURCHASE)
+internal val PANEL_KINDS = setOf(
+    TodoKind.CONFIRM_VISIT,
+    TodoKind.UNMARKED_GROUPS,
+    TodoKind.NO_DIARY,
+    TodoKind.NOT_BOOKED,
+    TodoKind.GROUP_ABSENT,
+    TodoKind.SPT_PURCHASE,
+    TodoKind.CONSENT_REVOKED,
+)
+
+internal fun todoFillTag(id: String) = "todo-fill-$id"
+internal fun todoMarkTag(id: String) = "todo-mark-$id"
+internal fun todoOpenCardTag(clientId: String) = "todo-open-card-$clientId"
 
 /**
  * Окно пункта «Нужно сделать» (ТЗ 5.2, шаг 3.16): заголовок — как у пункта, сверху — почему эти люди здесь и что
@@ -87,8 +104,28 @@ internal fun TodoListPanel(
     onClient: (String) -> Unit,
     onCard: (String) -> Unit,
     onForm: (String) -> Unit,
+    calendar: CalendarRepository,
+    trainings: List<CalendarTraining>,
+    consents: List<ConsentDue>,
+    onDiary: (String) -> Unit,
 ) {
     when (kind) {
+        TodoKind.UNMARKED_GROUPS -> {
+            val byId = trainings.associateBy { it.id }
+            val list = HomeRules.unmarkedGroups(trainings.map { it.slot() }, now).mapNotNull { byId[it.id] }
+            ListPanel(kind, title, TodoListFormat.GROUPS_WHY, list, onClose) { groups ->
+                TrainingRows(groups.map { Triple(it.id, it.title, it.start) }, now, TodoListFormat.MARK, ::todoMarkTag) { id -> onClose(); onCard(TrainingCardKey.card(id)) }
+            }
+        }
+        TodoKind.NO_DIARY -> {
+            val list by remember(calendar) { calendar.diaries.missing }.collectAsState(initial = null)
+            ListPanel(kind, title, TodoListFormat.DIARY_WHY, list, onClose) { missing ->
+                TrainingRows(missing.map { Triple(it.id, it.title, it.start) }, now, TodoListFormat.FILL, ::todoFillTag) { id -> onClose(); onDiary(id) }
+            }
+        }
+        TodoKind.CONSENT_REVOKED -> ListPanel(kind, title, TodoListFormat.CONSENT_WHY, consents, onClose) { list ->
+            ConsentRows(list, now) { id -> onClose(); onClient(id) }
+        }
         TodoKind.CONFIRM_VISIT -> {
             val list by remember(clients, now) { clients.reliability.confirm(now) }.collectAsState(initial = null)
             ListPanel(kind, title, TodoListFormat.CONFIRM_WHY, list, onClose) { visits ->
@@ -233,6 +270,41 @@ private fun ConfirmList(
                     Spacer(Modifier.weight(1f))
                     v.phone?.let { CallButton(it) { messages.show(FollowupFormat.PHONE_COPIED) } }
                 }
+            }
+        }
+    }
+}
+
+/** Тренировки «Без дневника» и «Группа без отметки»: кто или какая группа, когда, одна кнопка. */
+@Composable
+private fun TrainingRows(
+    rows: List<Triple<String, String, LocalDateTime>>,
+    now: LocalDateTime,
+    action: String,
+    tag: (String) -> String,
+    onAction: (String) -> Unit,
+) {
+    BorderedList {
+        rows.forEachIndexed { index, (id, title, start) ->
+            if (index > 0) RowDivider(start = 0.dp)
+            Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space3, vertical = Dimens.space3)) {
+                NameLine(title, TodoListFormat.at(start, now.date)) { onAction(id) }
+                SecondaryButton(action, { onAction(id) }, Modifier.padding(top = Dimens.space2).testTag(tag(id)))
+            }
+        }
+    }
+}
+
+/** «Удалить данные клиента»: имя, до какого дня удалить и сколько осталось; удаление — в карточке, с подтверждением. */
+@Composable
+private fun ConsentRows(list: List<ConsentDue>, now: LocalDateTime, onOpen: (String) -> Unit) {
+    BorderedList {
+        list.forEachIndexed { index, c ->
+            if (index > 0) RowDivider(start = 0.dp)
+            Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space3, vertical = Dimens.space3)) {
+                NameLine(c.name.short, CabinetLinkFormat.left(c.deleteBy, now.date)) { onOpen(c.clientId) }
+                Muted(TodoListFormat.deleteBy(c.deleteBy))
+                SecondaryButton(TodoListFormat.OPEN_CARD, { onOpen(c.clientId) }, Modifier.padding(top = Dimens.space2).testTag(todoOpenCardTag(c.clientId)))
             }
         }
     }

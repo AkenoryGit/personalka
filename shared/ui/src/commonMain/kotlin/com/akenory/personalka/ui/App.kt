@@ -289,6 +289,7 @@ fun App(
                             home = home,
                             todos = todos,
                             notices = notices,
+                            consents = consentDue,
                             homeCard = homeCard,
                             onHomeCard = { homeCard = it },
                             calendarDay = calendarDay?.let(LocalDate::parse),

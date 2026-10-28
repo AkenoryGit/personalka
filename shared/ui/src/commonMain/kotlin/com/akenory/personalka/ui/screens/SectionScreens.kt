@@ -57,6 +57,7 @@ import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.home.HomeMoney
 import com.akenory.personalka.ui.home.HomeScreen
+import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reconcile.ReconcileScreen
@@ -141,6 +142,7 @@ fun SectionScreen(
     home: List<CalendarTraining> = emptyList(),
     todos: List<HomeTodo> = emptyList(),
     notices: List<NoticeRow> = emptyList(),
+    consents: List<ConsentDue> = emptyList(),
     homeCard: String? = null,
     onHomeCard: (String?) -> Unit = {},
     calendarDay: LocalDate? = null,
@@ -232,6 +234,7 @@ fun SectionScreen(
             clients = clients,
             groups = groups,
             onForm = onForm,
+            consents = consents,
         )
         }
         Section.CALENDAR -> CalendarScreen(

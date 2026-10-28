@@ -22,6 +22,7 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.DiaryFormat
 import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.TodoListFormat
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.domain.training.TrainingDraft
@@ -29,15 +30,17 @@ import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
 import com.akenory.personalka.ui.home.NEAREST_TAG
+import com.akenory.personalka.ui.home.todoFillTag
+import com.akenory.personalka.ui.home.todoPanelTag
 import com.akenory.personalka.ui.home.todoTag
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 /**
  * Дневник (шаг 2.1, ТЗ 5.7, макеты «Дневник ПТ», «Дневник сплита», «Дневник группы»). «Сейчас» — вт 20.10.2026 15:40.
@@ -108,8 +111,11 @@ class DiaryUiTest {
         onNodeWithText(HomeFormat.NO_DIARY).assertIsDisplayed()
         onNodeWithText(s("Яковлева_Т. 09:00 · Орлова_К. 13:30")).assertIsDisplayed()
 
-        // Одно нажатие — дневник самой ранней; «ещё 1 без дневника».
+        // Пункт — окно со списком (шаг 3.16а), «Заполнить» у самой ранней — её дневник; «ещё 1 без дневника».
         onNodeWithTag(todoTag(TodoKind.NO_DIARY)).performClick()
+        awaitNode(hasTestTag(todoPanelTag(TodoKind.NO_DIARY)))
+        onNodeWithText(TodoListFormat.DIARY_WHY).assertIsDisplayed()
+        onNodeWithTag(todoFillTag(morning)).performClick()
         awaitNode(inDiary(s("Яковлева_Т.")))
         onNode(inDiary("ещё 1 без дневника")).assertIsDisplayed()
         onNode(inDiary(DiaryFormat.NO_HEALTH)).assertIsDisplayed()

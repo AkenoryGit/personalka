@@ -30,24 +30,28 @@ import com.akenory.personalka.data.sync.SyncApi
 import com.akenory.personalka.data.sync.SyncRepository
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.CabinetLinkFormat
+import com.akenory.personalka.domain.format.TodoListFormat
 import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.home.todoOpenCardTag
+import com.akenory.personalka.ui.home.todoPanelTag
 import com.akenory.personalka.ui.home.todoTag
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.moreRowTag
 import com.akenory.personalka.ui.settings.SyncTools
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Кабинет в приложении (шаг 2.13, ТЗ 5.9, 5.16): «Кабинеты» в настройках с контактом, кнопка «Кабинет» в карточке,
@@ -170,7 +174,12 @@ class CabinetUiTest {
         awaitNode(hasTestTag(todoTag(TodoKind.CONSENT_REVOKED)))
         onNodeWithText("Удалить данные клиента").assertExists()
         onNodeWithText("Соколов\u00A0П. · осталось 30\u00A0дней").assertExists()
+        // Нажатие — окно со сроком (шаг 3.16а), «Открыть карточку» — карточка клиента, там «Удалить полностью».
         onNodeWithTag(todoTag(TodoKind.CONSENT_REVOKED)).performClick()
+        awaitNode(hasTestTag(todoPanelTag(TodoKind.CONSENT_REVOKED)))
+        onNodeWithText(TodoListFormat.deleteBy(LocalDate(2026, 11, 19))).assertExists()
+        onNodeWithTag(todoOpenCardTag(revoked)).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoPanelTag(TodoKind.CONSENT_REVOKED))).fetchSemanticsNodes().isEmpty() }
         awaitNode(hasText("Соколов Пётр"))
 
         // «Инфо»: у ссылки на фото — «Нет согласия на фото»; у клиента с согласием на фото пометки бы не было.

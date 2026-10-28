@@ -40,4 +40,12 @@ class TodoListFormatTest {
         assertEquals(s("доплата за покупку 500_₽"), TodoListFormat.sptBonus(50_000))
         assertEquals("", TodoListFormat.sptBonus(0))
     }
+
+    @Test
+    fun diaryGroupsConsents() {
+        val today = LocalDate(2026, 10, 28)
+        assertEquals("сегодня 09:00", TodoListFormat.at(LocalDateTime(2026, 10, 28, 9, 0), today))
+        assertEquals(s("пн_26.10 18:00"), TodoListFormat.at(LocalDateTime(2026, 10, 26, 18, 0), today))
+        assertEquals("удалить до 12.11", TodoListFormat.deleteBy(LocalDate(2026, 11, 12)))
+    }
 }

@@ -312,8 +312,12 @@ class HomeUiTest {
         onNode(hasContentDescription("Нужно сделать: 1") and hasAnyAncestor(hasTestTag(TODO_TAG))).assertIsDisplayed()
         onNode(hasContentDescription("Нужно сделать: 1") and hasAnyAncestor(hasTestTag(navTag(Section.HOME))), useUnmergedTree = true).assertIsDisplayed()
 
-        // Нажатие — карточка группы; «Все пришли» — пункт уходит сам, а проведённая группа ждёт дневника (шаг 2.1).
+        // Нажатие — окно (шаг 3.16а), «Отметить, кто пришёл» — карточка группы; «Все пришли» — пункт уходит сам,
+        // а проведённая группа ждёт дневника (шаг 2.1).
         onNodeWithTag(todoTag(TodoKind.UNMARKED_GROUPS)).performClick()
+        awaitNode(hasTestTag(todoPanelTag(TodoKind.UNMARKED_GROUPS)))
+        onNodeWithText(TodoListFormat.GROUPS_WHY).assertIsDisplayed()
+        onNodeWithTag(todoMarkTag(id)).performClick()
         awaitNode(inCard(TrainingCardFormat.action(CardAction.ALL_CAME)))
         onNode(inCard(TrainingCardFormat.action(CardAction.ALL_CAME))).performClick()
         waitUntil(timeoutMillis = 5_000) { statusOf(id) == TrainingStatus.DONE }

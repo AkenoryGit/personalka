@@ -317,9 +317,10 @@ fun homeTodos(
  * @param onAdvance пункт «Введите сумму аванса» — «Зарплата» → «Выплаты» с окном аванса.
  * @param notices пункт «Предупредить об отпуске» — окно со списком ([VacationNoticePanel]) здесь же.
  * @param birthdays блок «День рождения сегодня» (шаг 3.9р); нажатие на имя — карточка клиента ([onClient]).
- * @param clients, groups пункты «Уточнить, придёт ли», «Клиенты без записи», «Не ходят в группу», «СПТ ждут покупки»
- *   открывают окно со списком здесь же ([TodoListPanel], шаг 3.16); `null` (тесты без них) — как раньше, экран.
+ * @param clients, groups пункты из [PANEL_KINDS] открывают окно со списком здесь же ([TodoListPanel], шаги 3.16,
+ *   3.16а); `null` (тесты без них) — как раньше, экран.
  * @param onForm «Записать» в окне «Без записи» — форма тренировки.
+ * @param consents окно «Удалить данные клиента» (шаг 3.16а): отозванные согласия.
  */
 @Composable
 fun HomeScreen(
@@ -348,6 +349,7 @@ fun HomeScreen(
     clients: ClientRepository? = null,
     groups: GroupRepository? = null,
     onForm: (String) -> Unit = {},
+    consents: List<ConsentDue> = emptyList(),
 ) {
     val wide = LocalWide.current
     var noticesOpen by rememberSaveable { mutableStateOf(false) }
@@ -486,6 +488,10 @@ fun HomeScreen(
                 onClient = onClient,
                 onCard = onCard,
                 onForm = onForm,
+                calendar = calendar,
+                trainings = trainings,
+                consents = consents,
+                onDiary = onDiary,
             )
         }
       }
