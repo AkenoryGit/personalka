@@ -7,6 +7,7 @@ import com.akenory.personalka.domain.format.AccountFormat
 import com.akenory.personalka.domain.format.AdminFormat
 import com.akenory.personalka.domain.format.ClubFormat
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.html.ButtonType
 import kotlinx.html.FlowContent
 import kotlinx.html.FormMethod
@@ -79,7 +80,8 @@ object AdminHtml {
     }
 
     /** Тренеры сервера с «Приостановить» / «Возобновить» и журнал. */
-    fun coaches(html: HTML, page: AdminPage, today: LocalDate) = html.shell(narrow = false) {
+    fun coaches(html: HTML, page: AdminPage, now: LocalDateTime) = html.shell(narrow = false) {
+        val today = now.date
         header("hd adm-top") {
             h1 { +AdminFormat.coaches(page.coaches.size) }
             form(action = "/admin/logout", method = FormMethod.post) {
@@ -87,6 +89,7 @@ object AdminHtml {
                 button(type = ButtonType.submit, classes = "btn sec adm-small") { +AdminFormat.SIGN_OUT }
             }
         }
+        p(if (AdminFormat.serverAlarm(page.server, now)) "adm-srv msg" else "adm-srv mut num") { +AdminFormat.server(page.server, now) }
         section("sec") {
             p("mut") { +ClubFormat.PRIVATE }
             ul("card lst") {

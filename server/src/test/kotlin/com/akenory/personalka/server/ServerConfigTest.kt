@@ -25,12 +25,14 @@ class ServerConfigTest {
         assertEquals("127.0.0.1", config.host)
         assertEquals(8090, config.port)
         assertNull(config.backupPublicKey)
+        assertEquals("/var/lib/trener/backup-status", config.backupStatus)
     }
 
     @Test
     fun optionalValuesAreRead() {
-        val config = ServerConfig.fromEnv(full + mapOf("TRENER_PORT" to "8123", "TRENER_HOST" to "0.0.0.0", "TRENER_BACKUP_PUBLIC_KEY" to "ключ"))
+        val config = ServerConfig.fromEnv(full + mapOf("TRENER_PORT" to "8123", "TRENER_HOST" to "0.0.0.0", "TRENER_BACKUP_PUBLIC_KEY" to "ключ", "TRENER_BACKUP_STATUS" to "/tmp/status"))
         assertEquals(8123, config.port)
+        assertEquals("/tmp/status", config.backupStatus)
         assertEquals("0.0.0.0", config.host)
         assertEquals("ключ", config.backupPublicKey)
     }

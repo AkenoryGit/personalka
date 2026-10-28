@@ -34,9 +34,12 @@ class AdminSiteTest {
     private val admin = "admin@example.ru"
     private val coachEmail = "lena@example.ru"
 
-    private fun withServer(block: suspend ApplicationTestBuilder.(Database, HttpClient) -> Unit) = testApplication {
+    private fun withServer(
+        server: ServerState = ServerState("0.1.test", null),
+        block: suspend ApplicationTestBuilder.(Database, HttpClient) -> Unit,
+    ) = testApplication {
         val database = Database.connect(TestDb.fresh())
-        application { trener(database, auth = Auth(mailer, setOf(admin), Passwords(memoryKb = 1024, iterations = 1))) }
+        application { trener(database, auth = Auth(mailer, setOf(admin), Passwords(memoryKb = 1024, iterations = 1)), server = server) }
         block(database, createClient { followRedirects = false })
     }
 
@@ -250,5 +253,34 @@ class AdminSiteTest {
         val ivan = client.signUp(database, "ivan@example.ru", "Иван")
         assertEquals(emptyList(), client.me(ivan))
         assertTrue("Новым тренерам: всё закрыто" in client.page(cookie).html())
+    }
+
+    /** Шаг 5.3: строка «Сервер» — версия, диск, последняя копия базы; сбой копии — цветом ошибки. */
+    @Test
+    fun serverLineShowsBackup() {
+        val status = kotlin.io.path.createTempFile("backup-status").toFile().apply { deleteOnExit() }
+        status.writeText("2026-10-28T03:31:05+05:00\tошибка\tшифрование\n")
+        withServer(ServerState("0.1.test", status)) { database, client ->
+            client.signUp(database, admin, "Дмитрий")
+            val cookie = client.signIn(database)
+            val failed = client.page(cookie).html()
+            assertTrue("Сервер 0.1.test" in failed, failed)
+            assertTrue("копия базы не сделана" in failed && "шифрование" in failed, failed)
+            assertTrue("adm-srv msg" in failed, "сбой копии — цветом ошибки")
+
+            val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.ofHours(5)).withNano(0)
+            status.writeText("$now\tok\t28.10.2026: trener.dump.age, 1 байт\n")
+            val fresh = client.page(cookie).html()
+            assertTrue("копия базы сегодня" in fresh, fresh)
+            assertFalse("trener.dump.age" in fresh, "у удачной копии имена файлов не показываются")
+            assertTrue("диск " in fresh, "место на диске видно")
+        }
+    }
+
+    @Test
+    fun serverLineWithoutBackups() = withServer { database, client ->
+        client.signUp(database, admin, "Дмитрий")
+        val html = client.page(client.signIn(database)).html()
+        assertTrue("копий базы ещё не было" in html, html)
     }
 }

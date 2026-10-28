@@ -6,6 +6,7 @@ import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.account.FeatureGrant
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.AdminFormat
+import com.akenory.personalka.domain.format.ServerStatus
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
@@ -112,7 +113,7 @@ class AdminSessions(private val accounts: Accounts, private val random: SecureRa
  * Администратор — только почта из `TRENER_ADMIN_EMAIL` (отметка в базе её не заменит). Пароль и код считаются
  * попытками входа (5 в минуту на почту и на IP), у кода — 5 попыток. Каждый вход и действие пишутся в журнал.
  */
-fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
+fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit, server: ServerState) {
     val accounts = auth.accounts
     val codes = auth.codes
     val sessions = AdminSessions(accounts)
@@ -128,9 +129,9 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit) {
         val page = database.tx { c ->
             val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
             val coaches = accounts.summaries(c)
-            AdminPage(session, coaches, sessions.recent(c), coaches.associate { it.coach.id to accounts.grants(c, it.coach) }, accounts.defaults(c))
+            AdminPage(session, coaches, sessions.recent(c), coaches.associate { it.coach.id to accounts.grants(c, it.coach) }, accounts.defaults(c), server.read())
         }
-        if (page == null) call.adminHtml { AdminHtml.login(this, null) } else call.adminHtml { AdminHtml.coaches(this, page, ClubTime.today(System.currentTimeMillis())) }
+        if (page == null) call.adminHtml { AdminHtml.login(this, null) } else call.adminHtml { AdminHtml.coaches(this, page, ClubTime.now(System.currentTimeMillis())) }
     }
 
     post("/admin/login") {
@@ -306,6 +307,8 @@ data class AdminPage(
     val log: List<AdminLogRow>,
     val grants: Map<String, List<FeatureGrant>>,
     val defaults: Set<Feature>,
+    /** Строка «Сервер» над тренерами (шаг 5.3). */
+    val server: ServerStatus,
 )
 
 /** Страница тренера: его возможности; [error] — что не так с формой. */

@@ -1,8 +1,12 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.Feature
+import com.akenory.personalka.domain.format.RuText.NBSP
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.minus
 
 /**
  * Строки админки на сайте сервера (решение Дмитрия 27.10.2026, шаг 5.2б; ТЗ 5.17, 1.5): вход почтой, паролем и кодом
@@ -86,4 +90,63 @@ object AdminFormat {
         val day = if (at.year == thisYear) DateFormat.dayMonth(at.date) else DateFormat.full(at.date)
         return (listOf(day + " " + DateFormat.time(at.time)) + parts.filter { it.isNotBlank() }).joinToString(DOT)
     }
+
+    /** Копия старше этого — строка «Сервер» красная (ночная копия идёт раз в сутки, запас на сбой одной ночи). */
+    const val BACKUP_STALE_HOURS = 36L
+
+    /** Диск занят на столько процентов и больше — строка «Сервер» красная. */
+    const val DISK_ALARM_PERCENT = 85L
+
+    /**
+     * Строка «Сервер» над тренерами (шаг 5.3, ТЗ 5.17): «Сервер 0.1.377 · диск 7,4 из 19,6 ГБ (38 %) · копия базы
+     * сегодня 03:30». Копия с ошибкой — «копия базы не сделана 28.10 03:31 — шифрование», старше суток с половиной —
+     * «… — новой нет больше суток», не было ни одной — «копий базы ещё не было».
+     */
+    fun server(s: ServerStatus, now: LocalDateTime): String {
+        val parts = mutableListOf("Сервер ${s.version}")
+        if (s.diskTotal > 0) parts += "диск ${gb(s.diskUsed)} из ${gb(s.diskTotal)}${NBSP}ГБ (${diskPercent(s)}${NBSP}%)"
+        val b = s.backup
+        parts += when {
+            b == null -> "копий базы ещё не было"
+            !b.ok -> "копия базы не сделана ${moment(b.at, now)}" + (b.detail.takeIf { it.isNotBlank() }?.let { " — $it" } ?: "")
+            stale(b, now) -> "копия базы ${moment(b.at, now)} — новой нет больше суток"
+            else -> "копия базы ${moment(b.at, now)}"
+        }
+        return parts.joinToString(DOT)
+    }
+
+    /** Красная ли строка «Сервер»: копии нет, она с ошибкой или старая, диск занят на [DISK_ALARM_PERCENT] %. */
+    fun serverAlarm(s: ServerStatus, now: LocalDateTime): Boolean {
+        val b = s.backup
+        return b == null || !b.ok || stale(b, now) || (s.diskTotal > 0 && diskPercent(s) >= DISK_ALARM_PERCENT)
+    }
+
+    private fun stale(b: BackupMark, now: LocalDateTime): Boolean =
+        ClubTime.minutesBetween(b.at, now) >= BACKUP_STALE_HOURS * 60
+
+    private fun diskPercent(s: ServerStatus): Long = (s.diskUsed * 100 + s.diskTotal / 2) / s.diskTotal
+
+    /** Гигабайты (1024³) с одним знаком: «7,4». */
+    private fun gb(bytes: Long): String {
+        val tenths = (bytes * 10 + GB / 2) / GB
+        return "${tenths / 10},${tenths % 10}"
+    }
+
+    /** «сегодня 03:30», «вчера 03:30», «26.10 03:30», прошлый год — «30.12.2025 03:30». */
+    private fun moment(at: LocalDateTime, now: LocalDateTime): String {
+        val day = when (at.date) {
+            now.date -> "сегодня"
+            now.date.minus(DatePeriod(days = 1)) -> "вчера"
+            else -> if (at.year == now.year) DateFormat.dayMonth(at.date) else DateFormat.full(at.date)
+        }
+        return day + " " + DateFormat.time(at.time)
+    }
+
+    private const val GB = 1024L * 1024 * 1024
 }
+
+/** Что показывает строка «Сервер» в админке: [backup] — последняя ночная копия базы из `backup-status` (ТЗ 7.5). */
+data class ServerStatus(val version: String, val diskUsed: Long, val diskTotal: Long, val backup: BackupMark?)
+
+/** Отметка ночной копии: время по клубу, удалась ли, подробности (у ошибки — этап, на котором сорвалась). */
+data class BackupMark(val at: LocalDateTime, val ok: Boolean, val detail: String)

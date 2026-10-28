@@ -25,6 +25,7 @@ fun Application.trener(
     sync: Sync = Sync(),
     cabinets: Cabinets = Cabinets(sync.now),
     limit: RateLimit = RateLimit(now = sync.now),
+    server: ServerState = ServerState(version, null),
 ) {
     install(CallLogging) {
         // Токен кабинета в журнал не попадает (6.2): ссылка — как пароль.
@@ -38,7 +39,7 @@ fun Application.trener(
         sync(database, auth, sync)
         cabinets(database, auth, cabinets, limit)
         admin(database, auth)
-        adminSite(database, auth, limit)
+        adminSite(database, auth, limit, server)
     }
 }
 
@@ -81,7 +82,7 @@ fun main() {
     val auth = Auth(config.mailer(), config.adminEmails)
     val sync = Sync()
     embeddedServer(Netty, port = config.port, host = config.host) {
-        trener(database, auth = auth, sync = sync)
+        trener(database, auth = auth, sync = sync, server = ServerState(serverVersion, java.io.File(config.backupStatus)))
         purgeDaily(database, sync)
     }.start(wait = true)
 }

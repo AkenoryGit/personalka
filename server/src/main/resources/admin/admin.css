@@ -15,3 +15,5 @@
 .adm-feat .chk{padding:4px 0}
 .adm-until{display:flex;flex-direction:column;gap:4px;margin-left:38px}
 .adm-until .inp{height:48px;max-width:220px}
+/* Шаг 5.3: строка «Сервер» над тренерами; при сбое — .msg (цвет ошибки). */
+.adm-srv{margin:0 0 8px;overflow-wrap:anywhere}

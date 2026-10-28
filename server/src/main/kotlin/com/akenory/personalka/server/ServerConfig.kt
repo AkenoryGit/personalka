@@ -22,10 +22,13 @@ data class ServerConfig(
     val smtp: SmtpSettings? = null,
     /** Почта администратора (через запятую можно несколько): его аккаунт — тоже через регистрацию, но с отметкой. */
     val adminEmails: Set<String> = emptySet(),
+    /** Отметка ночной копии базы (`deploy/backup.sh`, ТЗ 7.5) — для строки «Сервер» в админке (шаг 5.3). */
+    val backupStatus: String = DEFAULT_BACKUP_STATUS,
 ) {
     companion object {
         const val DEFAULT_HOST = "127.0.0.1"
         const val DEFAULT_PORT = 8090
+        const val DEFAULT_BACKUP_STATUS = "/var/lib/trener/backup-status"
 
         /** Все ошибки сразу, а не по одной: на сервере каждый запуск — это перезапуск службы. */
         fun fromEnv(env: Map<String, String> = System.getenv()): ServerConfig {
@@ -59,6 +62,7 @@ data class ServerConfig(
                     null
                 },
                 adminEmails = value(ADMIN_EMAIL)?.split(',', ' ')?.mapNotNull { AccountRules.email(it) }?.toSet().orEmpty(),
+                backupStatus = value(BACKUP_STATUS) ?: DEFAULT_BACKUP_STATUS,
             )
         }
 
@@ -76,6 +80,7 @@ data class ServerConfig(
         const val SMTP_PASSWORD = "TRENER_SMTP_PASSWORD"
         const val MAIL_FROM = "TRENER_MAIL_FROM"
         const val ADMIN_EMAIL = "TRENER_ADMIN_EMAIL"
+        const val BACKUP_STATUS = "TRENER_BACKUP_STATUS"
     }
 
     override fun toString() =
