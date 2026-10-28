@@ -397,9 +397,9 @@ class TrainingCardUiTest {
 
     @Test
     fun deleteDoneTraining() = runComposeUiTest {
-        // Шаг 5.3в: прошедшая ПТ закрылась сама «Проведено» — её тоже можно удалить, со своим окном.
+        // Шаг 5.3в: проведённую ПТ тоже можно удалить, со своим окном. 15:00 — видна в календаре, открытом на «сейчас».
         val orlov = client("Орлов", "Максим")
-        val id = training("10:00", orlov)
+        val id = training("15:00", orlov)
         runBlocking { calendar.cards.markDone(id) }
         assertEquals(TrainingStatus.DONE, runBlocking { db.trainingDao().training(id)!!.status })
         openCalendar()
