@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +42,20 @@ import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.sync.SyncRules
 import com.akenory.personalka.ui.setup.FirstRun
+import com.akenory.personalka.domain.format.TourFormat
+import com.akenory.personalka.domain.money.SalarySetupRules
+import com.akenory.personalka.domain.tour.TourRules
+import com.akenory.personalka.domain.tour.TourStop
+import com.akenory.personalka.ui.clients.ClientScreen
+import com.akenory.personalka.ui.components.Panel
+import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.tour.LocalTour
+import com.akenory.personalka.ui.tour.TourCard
+import com.akenory.personalka.ui.tour.TourOverlay
+import com.akenory.personalka.ui.tour.TourState
+import com.akenory.personalka.ui.tour.TourTarget
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import com.akenory.personalka.ui.shell.AppShell
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.rememberClubNow
@@ -54,6 +69,7 @@ import com.akenory.personalka.ui.training.VoiceInput
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.yearMonth
 
@@ -185,6 +201,69 @@ fun App(
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()
 
+        // Знакомство с приложением (5.18, шаг 5.3б): после первого запуска и из «Ещё».
+        val tour = remember(prefs) { TourState(prefs) }
+        val tourSchemes by remember(settings, hasCoach) {
+            if (hasCoach == true) settings.salary.schemes else flowOf(null)
+        }.collectAsState(initial = null)
+        val tourNotice by remember(calendar, hasCoach) {
+            if (hasCoach == true) calendar.settings.prefs.map { it.cancelNoticeMinutes } else flowOf(null)
+        }.collectAsState(initial = null)
+        var askNoBackup by rememberSaveable { mutableStateOf(false) }
+        var salaryStarted by rememberSaveable { mutableStateOf(false) }
+        val salaryNeeded = tourSchemes?.let(SalarySetupRules::needed) ?: true
+        val folderChosen = backupState?.folder != null
+        fun tourGo(next: TourStop?) {
+            tour.go(next)
+            when (next) {
+                TourStop.CALENDAR -> {
+                    card = null
+                    homeCard = null
+                    shell.selectRoot(Section.CALENDAR)
+                }
+                TourStop.CARD -> Unit
+                TourStop.CLIENTS -> {
+                    card = null
+                    shell.selectRoot(Section.CLIENTS)
+                }
+                TourStop.HOME -> {
+                    homeCard = null
+                    shell.selectRoot(Section.HOME)
+                }
+                TourStop.SALARY -> {
+                    salaryStarted = false
+                    shell.selectRoot(Section.SALARY)
+                }
+                TourStop.BACKUP -> {
+                    shell.select(Section.MORE)
+                    shell.reset(SettingsRoute.DATA)
+                }
+                null -> Unit
+            }
+        }
+        fun tourFinish() {
+            tour.go(null)
+            messages.show(TourFormat.DONE)
+        }
+        fun tourNext(from: TourStop) {
+            val next = TourRules.next(from, salaryNeeded)
+            // Без резервной копии (тесты) остановки «Копия» нет.
+            if (next == null || next == TourStop.BACKUP && backup == null) tourFinish() else tourGo(next)
+        }
+        fun tourSkip() {
+            if (backup != null && TourRules.asksAboutBackup(folderChosen)) askNoBackup = true else tourFinish()
+        }
+        fun pickFolder() {
+            backup?.files?.pickFolder { uri, name -> backup.repository.chooseFolder(uri, name) }
+        }
+        // Мастер зарплаты закончен — дальше копия; папка выбрана на остановке «Копия» — знакомство кончилось.
+        LaunchedEffect(tour.stop, salaryNeeded, tourSchemes != null) {
+            if (tour.stop == TourStop.SALARY && tourSchemes != null && !salaryNeeded) tourNext(TourStop.SALARY)
+        }
+        LaunchedEffect(tour.stop, folderChosen) {
+            if (tour.stop == TourStop.BACKUP && folderChosen) tourFinish()
+        }
+
         // Серии продлеваются до горизонта при открытии приложения и при смене дня (4.4).
         LaunchedEffect(calendar, hasCoach, now.date) {
             if (hasCoach == true) calendar.forms.extendSeries()
@@ -243,11 +322,54 @@ fun App(
             if (hasCoach == true) backup?.repository?.autoBackup()
         }
 
+        fun tourCard(stop: TourStop): TourCard {
+            val skip = TourFormat.SKIP to { tourSkip() }
+            val next = TourFormat.NEXT to { tourNext(stop) }
+            return when (stop) {
+                TourStop.CALENDAR -> TourCard(
+                    stop, TourFormat.CALENDAR_TITLE, listOf(TourFormat.CALENDAR_TEXT),
+                    gesture = TourFormat.CALENDAR_GESTURE, skip = skip, aboveFab = true,
+                )
+                TourStop.CARD -> TourCard(
+                    stop, TourFormat.CARD_TITLE,
+                    listOf(TourFormat.CARD_TEXT, TourFormat.cardCancel(tourNotice ?: DEFAULT_NOTICE)),
+                    main = next, skip = skip,
+                )
+                TourStop.CLIENTS -> {
+                    val opened = shell.section == Section.CLIENTS &&
+                        shell.top(Section.CLIENTS)?.let { ClientRoute.parse(it) is ClientScreen.Card } == true
+                    when {
+                        opened -> TourCard(stop, TourFormat.CLIENTS_TITLE, listOf(TourFormat.CLIENTS_OPEN_TEXT), main = next, skip = skip, holes = false)
+                        TourTarget.ADD_CLIENT in tour.targets ->
+                            TourCard(stop, TourFormat.CLIENTS_EMPTY_TITLE, listOf(TourFormat.CLIENTS_EMPTY_TEXT), gesture = TourFormat.CLIENTS_EMPTY_GESTURE, skip = skip)
+                        else -> TourCard(stop, TourFormat.CLIENTS_TITLE, listOf(TourFormat.CLIENTS_TEXT), gesture = TourFormat.CLIENTS_GESTURE, skip = skip)
+                    }
+                }
+                TourStop.HOME -> TourCard(stop, TourFormat.HOME_TITLE, listOf(TourFormat.HOME_TEXT), main = next, skip = skip)
+                TourStop.SALARY -> TourCard(
+                    stop, TourFormat.SALARY_TITLE, listOf(TourFormat.SALARY_TEXT),
+                    main = TourFormat.SETUP to {
+                        salaryStarted = true
+                        shell.selectRoot(Section.SALARY)
+                    },
+                    skip = TourFormat.LATER to { tourNext(stop) },
+                )
+                TourStop.BACKUP -> TourCard(
+                    stop, TourFormat.BACKUP_TITLE, listOf(TourFormat.BACKUP_TEXT),
+                    main = TourFormat.PICK_FOLDER to {
+                        if (shell.section != Section.MORE || shell.top(Section.MORE) != SettingsRoute.DATA) tourGo(TourStop.BACKUP)
+                        pickFolder()
+                    },
+                    skip = skip,
+                )
+            }
+        }
+
         Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
             when (hasCoach) {
                 null -> Unit
-                false -> FirstRun(settings, backHandler, onDone = { shell.select(Section.CALENDAR) }, account, sync?.repository, clock)
-                true -> {
+                false -> FirstRun(settings, backHandler, onDone = { tourGo(TourStop.CALENDAR) }, account, sync?.repository, clock)
+                true -> CompositionLocalProvider(LocalTour provides tour) {
                     backHandler(shell.canGoBack) { shell.back() }
                     backHandler(card != null && shell.section == Section.CALENDAR) { card = null }
                     backHandler(homeCard != null && shell.section == Section.HOME) { homeCard = null }
@@ -309,6 +431,7 @@ fun App(
                             waiting = waiting,
                             advanceAsk = advanceAsk,
                             onAdvanceAsk = { advanceAsk = it },
+                            onTour = { tourGo(TourStop.CALENDAR) },
                         )
                     }
                     form?.let { key ->
@@ -321,6 +444,14 @@ fun App(
                             messages = messages,
                             scope = scope,
                             onClose = { form = null },
+                            onCreated = { id ->
+                                // Знакомство: новая тренировка с первой остановки — сразу её карточка.
+                                if (tour.stop == TourStop.CALENDAR) {
+                                    tour.go(TourStop.CARD)
+                                    shell.selectRoot(Section.CALENDAR)
+                                    card = id
+                                }
+                            },
                         )
                     }
                     diary?.let { id ->
@@ -349,8 +480,36 @@ fun App(
                             onClose = { diary = null },
                         )
                     }
+                    val stop = tour.stop
+                    val tourHidden = form != null || diary != null || askNoBackup ||
+                        stop == TourStop.SALARY && salaryStarted && shell.section == Section.SALARY
+                    if (stop != null && !tourHidden) {
+                        TourOverlay(tour, tourCard(stop))
+                    }
+                    if (askNoBackup) {
+                        Panel(TourFormat.NO_BACKUP_TITLE, onDismiss = { askNoBackup = false }) {
+                            Text(TourFormat.NO_BACKUP_TEXT, style = MaterialTheme.typography.bodyLarge, color = PersonalkaTheme.colors.text)
+                            Text(TourFormat.NO_BACKUP_NOTE, style = MaterialTheme.typography.bodyLarge, color = PersonalkaTheme.colors.textMuted)
+                            PanelActions(
+                                primary = TourFormat.PICK_FOLDER,
+                                onPrimary = {
+                                    askNoBackup = false
+                                    tourGo(TourStop.BACKUP)
+                                    pickFolder()
+                                },
+                                secondary = TourFormat.NO_BACKUP,
+                                onSecondary = {
+                                    askNoBackup = false
+                                    tourFinish()
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+/** Правило списания по умолчанию, пока настройка не прочитана (4.2): 1 час. */
+private const val DEFAULT_NOTICE = 60

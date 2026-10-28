@@ -117,6 +117,8 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.yearMonth
+import com.akenory.personalka.ui.tour.TourTarget
+import com.akenory.personalka.ui.tour.tourTarget
 
 const val TRAINING_CARD_TAG = "training-card"
 const val CANCEL_PANEL_TAG = "cancel-panel"
@@ -722,11 +724,13 @@ private fun ColumnScope.CardBody(
         Text(TrainingCardFormat.typeLine(card.typeShort, card.placeShort, card.seriesWeekdays), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
 
         val came = if (isGroup) state.participants.count { it.came } else null
-        StatusLine(
-            outcome = card.outcome,
-            phase = phase,
-            note = TrainingCardFormat.statusNote(card.outcome, phase, now, state.start, end, came, TrainingCardRules.groupTotal(state), state.doneAt),
-        )
+        Box(Modifier.tourTarget(TourTarget.STATUS)) {
+            StatusLine(
+                outcome = card.outcome,
+                phase = phase,
+                note = TrainingCardFormat.statusNote(card.outcome, phase, now, state.start, end, came, TrainingCardRules.groupTotal(state), state.doneAt),
+            )
+        }
         card.warnings.forEach { WarningLine(it) }
         // Шаг 3.9р: именинник среди клиентов — строкой с тортом, как на блоке календаря.
         card.birthdays.forEach { BirthdayLine(it) }
@@ -1129,9 +1133,9 @@ private fun CardButtonsRow(actions: List<CardAction>, diaryFirst: Boolean, onAct
                     CardAction.EDIT -> OutlineButton(text, { onAction(action) }, modifier, icon = PIcons.Edit.takeIf { actions.size < 3 })
                     CardAction.CANCEL ->
                         if (i == 0) {
-                            SecondaryButton(text, { onAction(action) }, modifier, icon = PIcons.EventBusy)
+                            SecondaryButton(text, { onAction(action) }, modifier.tourTarget(TourTarget.CANCEL), icon = PIcons.EventBusy)
                         } else {
-                            TextButton(onClick = { onAction(action) }, modifier = modifier.heightIn(min = Dimens.button)) {
+                            TextButton(onClick = { onAction(action) }, modifier = modifier.tourTarget(TourTarget.CANCEL).heightIn(min = Dimens.button)) {
                                 Text(text, style = MaterialTheme.typography.labelLarge, color = colors.text)
                             }
                         }

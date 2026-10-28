@@ -119,6 +119,8 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.plus
+import com.akenory.personalka.ui.tour.TourTarget
+import com.akenory.personalka.ui.tour.tourTarget
 
 internal const val NEAREST_TAG = "home-nearest"
 internal const val NEAREST_OPEN_TAG = "home-nearest-open"
@@ -695,7 +697,7 @@ private fun BirthdayBlock(birthdays: List<Birthday>, onClient: (String) -> Unit)
 @Composable
 private fun TodoBlock(todos: List<HomeTodo>, onClick: (HomeTodo) -> Unit) {
     val colors = PersonalkaTheme.colors
-    Block(Modifier.testTag(TODO_TAG)) {
+    Block(Modifier.tourTarget(TourTarget.TODO).testTag(TODO_TAG)) {
         Row(
             Modifier.padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space4, bottom = Dimens.space1),
             verticalAlignment = Alignment.CenterVertically,
@@ -786,7 +788,7 @@ private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: ()
 private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit) {
     val colors = PersonalkaTheme.colors
     when (money) {
-        HomeMoney.NotSet -> Block(Modifier.testTag(MONEY_TAG)) {
+        HomeMoney.NotSet -> Block(Modifier.tourTarget(TourTarget.MONEY).testTag(MONEY_TAG)) {
             Padded {
                 Text(HomeFormat.MONEY, style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
                 Text(HomeFormat.SALARY_NOT_SET, style = MaterialTheme.typography.titleMedium, color = colors.text)
@@ -801,7 +803,7 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
         is HomeMoney.Month -> {
             val view = money.view
             val tier = view.tiers?.tier ?: 1
-            Block(Modifier.clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
+            Block(Modifier.tourTarget(TourTarget.MONEY).clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
                 Padded {
                     Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(HomeFormat.moneyTitle(today), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)

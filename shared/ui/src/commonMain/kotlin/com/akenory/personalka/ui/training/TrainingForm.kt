@@ -231,6 +231,7 @@ fun TrainingFormSheet(
     messages: MessageState,
     scope: CoroutineScope,
     onClose: () -> Unit,
+    onCreated: (String) -> Unit = {},
 ) {
     val editId = TrainingFormKey.editId(key)
     val restrictionId = TrainingFormKey.restrictionId(key)
@@ -442,6 +443,7 @@ private fun TrainingFields(
             when (result) {
                 is SaveResult.Saved -> {
                     onClose()
+                    if (isNew) result.createdId?.let(onCreated)
                     messages.showUndo(result.message) { scope.launch { forms.undo(result.undo) } }
                     // «Записать» из листа ожидания разово (4.16): запись «только разово» закрывается с «Вернуть».
                     val waitId = TrainingFormKey.waitId(key)

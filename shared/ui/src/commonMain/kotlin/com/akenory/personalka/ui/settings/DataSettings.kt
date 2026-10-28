@@ -56,6 +56,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
+import com.akenory.personalka.ui.tour.TourTarget
+import com.akenory.personalka.ui.tour.tourTarget
 
 /**
  * Системные окна платформы для копий: выбор папки и файла, «Поделиться». На Android — Storage Access Framework
@@ -224,7 +226,7 @@ internal fun DataSettingsScreen(
                             title = BackupFormat.FOLDER,
                             subtitle = state.folderName ?: BackupFormat.FOLDER_NONE,
                             onClick = { pickFolder() },
-                            modifier = Modifier.testTag(FOLDER_ROW_TAG),
+                            modifier = Modifier.tourTarget(TourTarget.BACKUP_FOLDER).testTag(FOLDER_ROW_TAG),
                         )
                         if (state.encrypt) {
                             RowDivider()

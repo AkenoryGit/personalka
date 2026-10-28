@@ -68,6 +68,8 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.datetime.LocalDate
+import com.akenory.personalka.ui.tour.TourTarget
+import com.akenory.personalka.ui.tour.tourTarget
 
 const val CLIENT_SEARCH_TAG = "client-search"
 const val CLIENT_ADD_TAG = "client-add"
@@ -104,6 +106,7 @@ fun ClientList(
             Box(Modifier.weight(1f).fillMaxWidth().padding(bottom = 56.dp), contentAlignment = Alignment.Center) {
                 // Макет ClEmpty. «Или введите имя прямо при создании тренировки» — когда появится форма тренировки (1.13).
                 EmptyState(
+                    modifier = Modifier.tourTarget(TourTarget.ADD_CLIENT),
                     icon = PIcons.Group,
                     title = "Пока нет клиентов",
                     text = "Добавьте первого клиента — его карточка появится в этом списке.",
@@ -190,7 +193,7 @@ fun ClientList(
                     index == visible.lastIndex -> RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
                     else -> RoundedCornerShape(0.dp)
                 }
-                Column(Modifier.clip(shape).background(colors.surface)) {
+                Column(Modifier.then(if (index == 0) Modifier.tourTarget(TourTarget.CLIENT) else Modifier).clip(shape).background(colors.surface)) {
                     if (index > 0) HorizontalDivider(Modifier.padding(start = Dimens.space4), thickness = 1.dp, color = colors.divider)
                     PersonRow(
                         title = row.client.let { "${it.lastName} ${it.firstName}" },

@@ -44,6 +44,7 @@ import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.MoreFormat
+import com.akenory.personalka.domain.format.TourFormat
 import com.akenory.personalka.domain.money.SalarySetupRules
 import com.akenory.personalka.ui.calendar.CalendarScreen
 import com.akenory.personalka.ui.clients.CabinetTools
@@ -158,6 +159,7 @@ fun SectionScreen(
     shareText: ((String) -> Unit)? = null,
     advanceAsk: Boolean = false,
     onAdvanceAsk: (Boolean) -> Unit = {},
+    onTour: () -> Unit = {},
 ) {
     // «Кабинет» в карточке — только при включённых кабинетах (5.9); раздел «Кабинеты» в настройках — чтобы их включить.
     val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
@@ -282,7 +284,7 @@ fun SectionScreen(
                     else -> true
                 }
             }
-            MoreScreen(shell, versionName, items) { route, onBack ->
+            MoreScreen(shell, versionName, items, onTour) { route, onBack ->
             when {
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
@@ -302,6 +304,7 @@ enum class MoreGroup(val title: String) {
     WORK(MoreFormat.WORK),
     SETUP(MoreFormat.SETUP),
     DATA(MoreFormat.DATA),
+    HELP(TourFormat.HELP),
 }
 
 /**
@@ -335,6 +338,8 @@ enum class MoreItem(
     ACCOUNT(SettingsRoute.SERVER, MoreFormat.ACCOUNT, MoreFormat.ACCOUNT_NOTE, PIcons.Cloud, MoreGroup.DATA, SERVER_ROW_TAG),
     BACKUP(SettingsRoute.DATA, MoreFormat.BACKUP, MoreFormat.BACKUP_NOTE, PIcons.Save, MoreGroup.DATA, DATA_ROW_TAG),
     EXPORTS(SettingsRoute.EXPORTS, MoreFormat.EXPORTS, MoreFormat.EXPORTS_NOTE, PIcons.Download, MoreGroup.DATA, EXPORTS_ROW_TAG),
+    // Знакомство с приложением (5.18, шаг 5.3б): своего экрана нет — пункт запускает знакомство заново.
+    TOUR("tour", TourFormat.MORE_ITEM, TourFormat.MORE_NOTE, PIcons.Info, MoreGroup.HELP),
 }
 
 internal fun moreRowTag(item: MoreItem) = item.tag
@@ -353,6 +358,7 @@ private fun MoreScreen(
     shell: ShellState,
     versionName: String,
     items: List<MoreItem>,
+    onTour: () -> Unit,
     detail: @Composable (route: String, onBack: (() -> Unit)?) -> Unit,
 ) {
     val wide = LocalWide.current
@@ -369,7 +375,13 @@ private fun MoreScreen(
                 selected = root,
                 scroll = listScroll,
                 versionName = versionName,
-                onOpen = { if (wide) shell.reset(it.route) else shell.open(it.route) },
+                onOpen = {
+                    when {
+                        it == MoreItem.TOUR -> onTour()
+                        wide -> shell.reset(it.route)
+                        else -> shell.open(it.route)
+                    }
+                },
                 modifier = if (wide) Modifier.width(360.dp).fillMaxHeight() else Modifier.weight(1f).fillMaxHeight(),
             )
             if (wide) VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)

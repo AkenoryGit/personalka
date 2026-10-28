@@ -121,8 +121,11 @@ enum class EditScope { ONLY_THIS, FOLLOWING }
 
 /** Что вышло из сохранения формы. Ничего не записано, кроме [Saved]. */
 sealed interface SaveResult {
-    /** Записано; [message] — для сообщения с «Отменить» (5.20). */
-    data class Saved(val message: String, val undo: Undo) : SaveResult
+    /**
+     * Записано; [message] — для сообщения с «Отменить» (5.20). [createdId] — новая тренировка (у серии — та,
+     * что на время из формы): знакомство с приложением открывает её карточку (5.18, шаг 5.3б).
+     */
+    data class Saved(val message: String, val undo: Undo, val createdId: String? = null) : SaveResult
 
     /** Изменение тренировки серии: нужен ответ «Только эту — [date]» или «Эту и следующие». */
     data class AskScope(val question: String, val date: LocalDate) : SaveResult
@@ -290,7 +293,7 @@ class TrainingRepository internal constructor(
                 )
                 recorder.saveTraining(entity)
                 recorder.setParticipants(entity, clientsOn(draft.groupId, draft.clientIds, draft.start.date))
-                result = SaveResult.Saved(TrainingFormat.created(draft.start), recorder.alignedUndo(db, now))
+                result = SaveResult.Saved(TrainingFormat.created(draft.start), recorder.alignedUndo(db, now), entity.id)
             } else {
                 val pattern = draft.pattern(repeat)
                 val created = SeriesRules.create(
@@ -316,7 +319,9 @@ class TrainingRepository internal constructor(
                 recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty = { duty })
                 // Серия для клиента закрывает его запись «постоянно» в листе ожидания (4.16).
                 if (draft.groupId == null && !duty) db.closeWaitForSeries(draft.clientIds, now)
-                result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now))
+                val firstId = trainings.trainingsBetween(draft.start, ClubTime.plusMinutes(draft.start, 1))
+                    .firstOrNull { it.locationId == locationId && it.typeId == type.id }?.id
+                result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now), firstId)
             }
         }
         return result
@@ -467,7 +472,9 @@ class TrainingRepository internal constructor(
                     if (edit.groupId == null || edit.groupId != t.groupId) {
                         recorder.setParticipants(entity, clientsOn(edit.groupId, edit.clientIds, edit.start.date))
                     }
-                    result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now))
+                    val firstId = trainings.trainingsBetween(draft.start, ClubTime.plusMinutes(draft.start, 1))
+                    .firstOrNull { it.locationId == locationId && it.typeId == type.id }?.id
+                result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now), firstId)
                 }
             }
         }

@@ -132,6 +132,12 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
+import com.akenory.personalka.domain.tour.TourRules
+import com.akenory.personalka.domain.tour.TourStop
+import com.akenory.personalka.ui.tour.LocalTour
+import com.akenory.personalka.ui.tour.TourTarget
+import com.akenory.personalka.ui.tour.tourTarget
+import androidx.compose.ui.unit.IntOffset
 
 const val CALENDAR_GRID_TAG = "calendar-grid"
 const val CALENDAR_PAGER_TAG = "calendar-pager"
@@ -971,6 +977,32 @@ private fun DayColumn(
             }
             day.more.forEach { drawMore(it, measurer, styles.more, colors) }
             if (date == now.date) drawNow(hours, hourDp, now, colors)
+        }
+        // Знакомство (5.18): рамка вокруг пустого часа сегодня. Нажатия не ловит — удержание идёт в сетку.
+        val tour = LocalTour.current
+        if (date == now.date && tour?.stop == TourStop.CALENDAR) {
+            val slot = remember(items, hours, now.hour) {
+                TourRules.slotMinute(
+                    nowMinute = now.hour * 60 + now.minute,
+                    startMinute = hours.startMinute,
+                    endMinute = hours.endMinute,
+                    busy = items.filter { it.start.date == date }.map { t ->
+                        val from = t.start.hour * 60 + t.start.minute
+                        from..(from + t.durationMin)
+                    },
+                )
+            }
+            if (slot != null) {
+                val inset = Dimens.blockInset
+                Box(
+                    Modifier
+                        .padding(start = inset, end = inset)
+                        .fillMaxWidth()
+                        .height((TourRules.SLOT_MINUTES * hourDp / 60f).dp)
+                        .offset { IntOffset(0, (((slot - hours.startMinute) * hourDp / 60f).dp.toPx() - scrollPx()).roundToInt()) }
+                        .tourTarget(TourTarget.SLOT),
+                )
+            }
         }
     }
 }
