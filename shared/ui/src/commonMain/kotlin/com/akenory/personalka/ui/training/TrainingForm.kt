@@ -281,7 +281,7 @@ fun TrainingFormSheet(
     val holder = rememberSaveableStateHolder()
     holder.SaveableStateProvider(mode.name) {
         when (mode) {
-            FormMode.TRAINING -> TrainingFields(key, editId, stored, storedSeries, data, forms, clients, now, messages, scope, onClose, switch)
+            FormMode.TRAINING -> TrainingFields(key, editId, stored, storedSeries, data, forms, clients, now, messages, scope, onClose, switch, onCreated)
             FormMode.DUTY -> DutyFields(key, editId, stored, data, forms, messages, scope, onClose, switch)
             FormMode.RESTRICTION -> RestrictionFields(key, restrictionId, storedRestriction, data, restrictions, forms, messages, scope, onClose, switch)
         }
@@ -376,6 +376,7 @@ private fun TrainingFields(
     scope: CoroutineScope,
     onClose: () -> Unit,
     switch: @Composable () -> Unit,
+    onCreated: (String) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val copied by forms.copied.collectAsState()
@@ -443,7 +444,7 @@ private fun TrainingFields(
             when (result) {
                 is SaveResult.Saved -> {
                     onClose()
-                    if (isNew) result.createdId?.let(onCreated)
+                    if (editId == null && series == null) result.createdId?.let(onCreated)
                     messages.showUndo(result.message) { scope.launch { forms.undo(result.undo) } }
                     // «Записать» из листа ожидания разово (4.16): запись «только разово» закрывается с «Вернуть».
                     val waitId = TrainingFormKey.waitId(key)

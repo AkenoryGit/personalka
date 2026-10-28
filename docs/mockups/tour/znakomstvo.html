@@ -1,0 +1,322 @@
+<title>Знакомство с Персоналкой</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+<style>
+/* Лента телефонов по порядку остановок; цвета — дизайн-система «Персоналка» (шаг 0.2) */
+:root{
+  --bg:#F3EFE6;--surface:#FBFAF7;--alt:#EAE6DC;--divider:#DCD9D0;--outline:#86837B;
+  --text:#15171A;--muted:#69665E;--primary:#15171A;--onPrimary:#F3EFE6;
+  --accent:#FF5A1F;--onAccent:#15171A;--accentG:#F55111;
+  --done:#007634;--error:#C22540;--errorC:#FFDDDD;--onErrorC:#862430;
+  --scrim:rgba(21,23,26,.42);--blueB:#D3E7FF;--blueS:#2D84E0;--blueT:#264F7C;
+  --page:#E4DFD3;
+  --font:"Roboto",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#15171A;--surface:#1E2124;--alt:#2A2D31;--divider:#34373B;--outline:#72767C;
+  --text:#F3EFE6;--muted:#98958D;--primary:#F3EFE6;--onPrimary:#15171A;--accentG:#FF5A1F;
+  --done:#64B376;--error:#F26F78;--errorC:#50282A;--onErrorC:#FFC7C8;
+  --scrim:rgba(0,0,0,.64);--blueB:#18395D;--blueS:#57A1F6;--blueT:#C3DAF5;--page:#0E0F11;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15171A;--surface:#1E2124;--alt:#2A2D31;--divider:#34373B;--outline:#72767C;
+  --text:#F3EFE6;--muted:#98958D;--primary:#F3EFE6;--onPrimary:#15171A;--accentG:#FF5A1F;
+  --done:#64B376;--error:#F26F78;--errorC:#50282A;--onErrorC:#FFC7C8;
+  --scrim:rgba(0,0,0,.64);--blueB:#18395D;--blueS:#57A1F6;--blueT:#C3DAF5;--page:#0E0F11;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+header h1{font-size:26px;font-weight:500;margin:0 0 6px;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:68ch}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.note{background:var(--surface);border-radius:12px;padding:16px 18px;min-width:0}
+.note h2{font-size:15px;font-weight:500;margin:0 0 8px}
+.note ul,.note ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.note li{color:var(--text)}
+.q{counter-reset:q}
+.strip{display:flex;flex-wrap:wrap;gap:28px 22px;justify-content:center}
+figure{margin:0;display:flex;flex-direction:column;gap:10px;width:340px;max-width:100%}
+figcaption{font-size:13px;color:var(--muted)}
+figcaption b{color:var(--text);font-weight:500;font-size:15px;display:block}
+/* телефон */
+.ph{position:relative;width:100%;aspect-ratio:340/720;background:var(--bg);border-radius:28px;overflow:hidden;
+  border:6px solid var(--text);display:flex;flex-direction:column;font-size:13px;isolation:isolate}
+.sb{height:22px;display:flex;justify-content:space-between;padding:4px 16px 0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tb{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.tb h3{margin:0;font-size:18px;font-weight:500}
+.tb .ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--muted);font-size:16px}
+.body{flex:1;min-height:0;padding:0 12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.nav{height:56px;background:var(--surface);display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--divider)}
+.nav span{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;color:var(--muted)}
+.nav span i{width:36px;height:20px;border-radius:10px;display:block;border:1.5px solid var(--muted);opacity:.7}
+.nav span.on{color:var(--text);font-weight:500}
+.nav span.on i{background:var(--alt);border-color:var(--text);opacity:1}
+.fab{position:absolute;right:14px;bottom:70px;width:48px;height:48px;border-radius:14px;background:var(--accent);color:var(--onAccent);
+  display:grid;place-items:center;font-size:26px;font-weight:400;z-index:1}
+/* календарь */
+.week{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--muted);gap:2px}
+.week b{display:block;font-size:14px;font-weight:500;color:var(--text);width:26px;height:26px;line-height:26px;margin:2px auto 0;border-radius:50%}
+.week .today b{background:var(--accent);color:var(--onAccent)}
+.grid{position:relative;flex:1;background:var(--surface);border-radius:10px;overflow:hidden}
+.hr{position:absolute;left:0;right:0;height:52px;border-top:1px solid var(--divider)}
+.hr em{position:absolute;left:6px;top:-8px;font-style:normal;font-size:10px;color:var(--muted);background:var(--surface);padding:0 2px;font-variant-numeric:tabular-nums}
+.now{position:absolute;left:38px;right:0;height:2px;background:var(--accentG)}
+.now:before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--accentG)}
+.slot{position:absolute;left:42px;right:8px;height:44px;border-radius:6px}
+.blk{position:absolute;left:42px;right:8px;border-radius:6px;background:var(--blueB);color:var(--blueT);border-left:3px solid var(--blueS);padding:4px 8px;font-size:12px;line-height:1.3}
+.blk b{font-weight:500;display:block}
+/* карточки */
+.card{background:var(--surface);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.card h4{margin:0;font-size:15px;font-weight:500}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.mut{color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accentG);display:inline-block;margin-right:6px}
+.cnt{background:var(--accent);color:var(--onAccent);border-radius:9px;padding:0 7px;font-size:12px;font-weight:500}
+.btn{height:38px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;padding:0 14px;font-size:13px;font-weight:500;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--onPrimary)}
+.btn.o{border:1px solid var(--outline);color:var(--text)}
+.btn.t{color:var(--text);padding:0 8px}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:11px;padding:2px 8px;border-radius:8px;background:var(--alt);color:var(--text);align-self:flex-start}
+.line{height:8px;border-radius:4px;background:var(--alt)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{height:28px;border-radius:8px;background:var(--alt);padding:0 10px;display:inline-flex;align-items:center;font-size:12px}
+.chip.on{background:var(--primary);color:var(--onPrimary)}
+.li{display:flex;justify-content:space-between;gap:8px;padding:10px 4px;border-bottom:1px solid var(--divider)}
+.li small{display:block;color:var(--muted);font-size:11px}
+.grp{font-size:11px;color:var(--muted);letter-spacing:.04em;padding:8px 4px 2px;text-transform:uppercase}
+/* знакомство */
+.spot{position:relative;z-index:3;box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--primary)}
+.dim:after{content:"";position:absolute;inset:0;background:var(--scrim);z-index:2}
+.tour{position:absolute;left:10px;right:10px;bottom:10px;z-index:4;background:var(--surface);border-radius:20px;padding:14px 14px 10px;
+  display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 28px rgba(0,0,0,.28)}
+.tour .k{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.steps{display:flex;gap:4px}
+.steps i{width:14px;height:4px;border-radius:2px;background:var(--divider)}
+.steps i.f{background:var(--primary)}
+.tour h5{margin:0;font-size:16px;font-weight:500}
+.tour p{margin:0;font-size:13px;line-height:1.45}
+.tour .act{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:2px}
+.gest{font-size:12px;color:var(--muted)}
+.dlg{position:absolute;left:18px;right:18px;top:50%;transform:translateY(-50%);z-index:4;background:var(--surface);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.dlg h5{margin:0;font-size:17px;font-weight:500}
+.dlg p{margin:0;font-size:13px}
+.snack{position:absolute;left:10px;right:10px;bottom:68px;z-index:4;background:var(--text);color:var(--bg);border-radius:12px;padding:12px 14px;font-size:13px}
+.err{color:var(--error)}
+@media (prefers-reduced-motion:no-preference){.spot{transition:box-shadow .2s}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Знакомство с приложением · шаг 5.3б</h1>
+  <p>Макет на согласование. Сразу после первого запуска тренер проходит 6 остановок и на каждой делает одно настоящее действие. Внизу — карточка остановки, вокруг нужного места — рамка, остальное затемнено. Время в макете — ср 28.10, 10:20.</p>
+</header>
+
+<div class="notes">
+  <section class="note">
+    <h2>Как работает</h2>
+    <ul>
+      <li>Начинается само после «Готово» в первом запуске, без вопроса «Пройти?».</li>
+      <li>Остановка с жестом идёт дальше сама, когда жест сделан. Остальные — кнопкой.</li>
+      <li>«Пропустить» на любой остановке заканчивает знакомство. Если папка копии не выбрана — одно окно с предупреждением.</li>
+      <li>Повторить — «Ещё → Знакомство с приложением». У вас само не откроется: вы уже настроены.</li>
+      <li>Подсказки 5.20, которые знакомство уже показало (пустой календарь, первая карточка ПТ, первая отмена), второй раз не появляются.</li>
+    </ul>
+  </section>
+  <section class="note">
+    <h2>Где я поменял план — проверьте</h2>
+    <ol>
+      <li><b>Клиентов на 3-й остановке не добавляем, а открываем.</b> Тренировка на 1-й требует клиента, его заводят прямо в форме («Новый клиент «Соколова»»). Второй раз заводить клиента — лишняя минута.</li>
+      <li><b>Тренировка на 1-й остановке — настоящая.</b> В тексте прошу внести реальную, например завтрашнюю, чтобы не пришлось её потом удалять.</li>
+      <li><b>«Отменить» на карточке только показываем.</b> Иначе первая же тренировка окажется отменённой.</li>
+      <li><b>Строка «Копия на сервере»</b> видна всегда; без аккаунта нажатие ведёт ко входу. Облако не упоминается.</li>
+    </ol>
+  </section>
+</div>
+
+<div class="strip">
+
+<!-- 1 Календарь -->
+<figure>
+<div class="ph dim">
+  <div class="sb"><span>10:20</span><span>●●●</span></div>
+  <div class="tb"><h3>Октябрь</h3><span class="ic">⌕</span></div>
+  <div class="body">
+    <div class="week"><span>пн<b>26</b></span><span>вт<b>27</b></span><span class="today">ср<b>28</b></span><span>чт<b>29</b></span><span>пт<b>30</b></span><span>сб<b>31</b></span><span>вс<b>1</b></span></div>
+    <div class="grid">
+      <div class="hr" style="top:8px"><em>10:00</em></div>
+      <div class="hr" style="top:60px"><em>11:00</em></div>
+      <div class="hr" style="top:112px"><em>12:00</em></div>
+      <div class="hr" style="top:164px"><em>13:00</em></div>
+      <div class="hr" style="top:216px"><em>14:00</em></div>
+      <div class="hr" style="top:268px"><em>15:00</em></div>
+      <div class="now" style="top:25px"></div>
+      <div class="slot spot" style="top:114px"></div>
+    </div>
+  </div>
+  <div class="fab">+</div>
+  <div class="nav"><span><i></i>Главная</span><span class="on"><i></i>Календарь</span><span><i></i>Клиенты</span><span><i></i>Зарплата</span><span><i></i>Ещё</span></div>
+  <div class="tour">
+    <div class="k"><span>Знакомство · 1 из 6</span><span class="steps"><i class="f"></i><i></i><i></i><i></i><i></i><i></i></span></div>
+    <h5>Добавьте тренировку</h5>
+    <p>Удерживайте пустое место в календаре. Внесите настоящую тренировку, например завтрашнюю. Клиента можно завести прямо в форме — впишите фамилию.</p>
+    <div class="act"><span class="gest">Удерживайте выделенное место</span><span class="btn t">Пропустить</span></div>
+  </div>
+</div>
+<figcaption><b>1. Календарь</b>Действие — удержание. После «Сохранить» знакомство само переходит ко 2-й остановке. Кнопка «+» тоже засчитывается.</figcaption>
+</figure>
+
+<!-- 2 Карточка -->
+<figure>
+<div class="ph dim">
+  <div class="sb"><span>10:21</span><span>●●●</span></div>
+  <div class="tb"><h3>Тренировка</h3><span class="ic">⋯</span></div>
+  <div class="body">
+    <div class="card" style="gap:8px">
+      <h4>Соколова Вера</h4>
+      <span class="mut">ПТ · Большой бассейн</span>
+      <span>чт 29.10 · 12:00–12:50</span>
+      <div class="spot" style="border-radius:10px;padding:6px 8px;background:var(--surface)">Запланировано · через 1 день<br><span class="mut">Отметится проведённой сама в 12:50</span></div>
+      <div class="btns"><span class="btn o spot">Отменить</span><span class="btn o">Изменить</span></div>
+    </div>
+  </div>
+  <div class="tour">
+    <div class="k"><span>Знакомство · 2 из 6</span><span class="steps"><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i></span></div>
+    <h5>Проведено — само</h5>
+    <p>В конце тренировки она отметится проведённой, нажимать ничего не нужно.</p>
+    <p>Клиент отменил — «Отменить». Со списанием или без, считается само: кто предупредил меньше чем за 1 час — со списанием.</p>
+    <div class="act"><span class="btn t">Пропустить</span><span class="btn p">Дальше</span></div>
+  </div>
+</div>
+<figcaption><b>2. Карточка тренировки</b>Открывается сама после сохранения. Дневника нет — он выключен по умолчанию. «1 час» — из настройки тренера.</figcaption>
+</figure>
+
+<!-- 3 Клиенты -->
+<figure>
+<div class="ph dim">
+  <div class="sb"><span>10:21</span><span>●●●</span></div>
+  <div class="tb"><h3>Клиенты</h3><span class="ic">⌕</span></div>
+  <div class="body">
+    <div class="chips"><span class="chip on">Активные · 1</span><span class="chip">Без записи · 0</span></div>
+    <div class="li spot" style="background:var(--surface);border-radius:10px;border:0;padding:10px 8px"><span>Соколова Вера<small>ПТ · без расписания</small></span><span class="mut">чт 29.10</span></div>
+  </div>
+  <div class="fab">+</div>
+  <div class="nav"><span><i></i>Главная</span><span><i></i>Календарь</span><span class="on"><i></i>Клиенты</span><span><i></i>Зарплата</span><span><i></i>Ещё</span></div>
+  <div class="tour">
+    <div class="k"><span>Знакомство · 3 из 6</span><span class="steps"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></div>
+    <h5>Все клиенты здесь</h5>
+    <p>Соколова уже в списке — вы завели её в тренировке. Откройте её: тренировки, расписание, результаты, кабинет для родителей.</p>
+    <div class="act"><span class="gest">Нажмите на клиента</span><span class="btn t">Пропустить</span></div>
+  </div>
+</div>
+<figcaption><b>3. Клиенты</b>Если 1-ю остановку пропустили и клиентов нет — выделена кнопка «Добавить клиента», текст «Добавьте первого клиента».</figcaption>
+</figure>
+
+<!-- 4 Главная -->
+<figure>
+<div class="ph dim">
+  <div class="sb"><span>10:22</span><span>●●●</span></div>
+  <div class="tb"><h3>Среда, 28 октября</h3><span class="ic"></span></div>
+  <div class="body">
+    <div class="card"><span class="mut">Ближайшая</span><h4>Соколова Вера · завтра 12:00</h4><span class="mut">ПТ · Большой бассейн</span></div>
+    <div class="card spot"><div class="row"><h4>Нужно сделать</h4><span class="cnt">1</span></div>
+      <div class="row"><span>Выберите папку для копии</span><span class="mut">›</span></div></div>
+    <div class="card spot"><h4>Деньги</h4><span class="mut">Зарплата ещё не настроена</span></div>
+  </div>
+  <div class="fab">+</div>
+  <div class="nav"><span class="on"><i></i>Главная</span><span><i></i>Календарь</span><span><i></i>Клиенты</span><span><i></i>Зарплата</span><span><i></i>Ещё</span></div>
+  <div class="tour">
+    <div class="k"><span>Знакомство · 4 из 6</span><span class="steps"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></span></div>
+    <h5>Главная — с неё начинается день</h5>
+    <p>«Нужно сделать» — что ждёт вас: дневник, кого записать, кто ждёт время. Нажмите на пункт — там пояснение и список. «Деньги» — заработок за месяц.</p>
+    <div class="act"><span class="btn t">Пропустить</span><span class="btn p">Дальше</span></div>
+  </div>
+</div>
+<figcaption><b>4. Главная</b>Две рамки сразу. Действие не нужно — только «Дальше».</figcaption>
+</figure>
+
+<!-- 5 Зарплата -->
+<figure>
+<div class="ph dim">
+  <div class="sb"><span>10:22</span><span>●●●</span></div>
+  <div class="tb"><h3>Зарплата</h3><span class="ic"></span></div>
+  <div class="body">
+    <div class="card" style="gap:10px;padding:18px 16px">
+      <h4>Зарплата ещё не настроена</h4>
+      <p class="mut" style="margin:0">Посчитаю заработок, ступень и выплаты по вашим тренировкам.</p>
+      <span class="btn p spot" style="align-self:flex-start">Настроить зарплату</span>
+    </div>
+  </div>
+  <div class="fab" style="display:none"></div>
+  <div class="nav"><span><i></i>Главная</span><span><i></i>Календарь</span><span><i></i>Клиенты</span><span class="on"><i></i>Зарплата</span><span><i></i>Ещё</span></div>
+  <div class="tour">
+    <div class="k"><span>Знакомство · 5 из 6</span><span class="steps"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span></div>
+    <h5>Настройте зарплату</h5>
+    <p>День зарплаты и ставки. Можно взять ставки-пример и поправить по расчётному листку — около минуты.</p>
+    <div class="act"><span class="btn t">Позже</span><span class="btn p">Настроить</span></div>
+  </div>
+</div>
+<figcaption><b>5. Зарплата</b>«Настроить» открывает мастер 5.3а; после «Готово» — 6-я остановка. «Позже» — тоже к 6-й. Зарплата уже настроена — остановка пропускается.</figcaption>
+</figure>
+
+<!-- 6 Копия -->
+<figure>
+<div class="ph dim">
+  <div class="sb"><span>10:24</span><span>●●●</span></div>
+  <div class="tb"><h3>Резервная копия</h3><span class="ic"></span></div>
+  <div class="body">
+    <div class="card spot"><div class="row"><span>Папка для копий<br><span class="mut">Не выбрана</span></span><span class="mut">›</span></div></div>
+    <div class="card spot"><div class="row"><span>Копия на сервере<br><span class="mut">Нужен вход в аккаунт</span></span><span class="mut">›</span></div></div>
+    <div class="card"><span class="mut">Автокопия</span><div class="chips"><span class="chip on">Каждый день</span><span class="chip">Раз в неделю</span></div></div>
+  </div>
+  <div class="nav"><span><i></i>Главная</span><span><i></i>Календарь</span><span><i></i>Клиенты</span><span><i></i>Зарплата</span><span class="on"><i></i>Ещё</span></div>
+  <div class="tour">
+    <div class="k"><span>Знакомство · 6 из 6</span><span class="steps"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></div>
+    <h5>Сохраните данные</h5>
+    <p>Всё хранится только в этом телефоне. Выберите папку — копия будет ложиться в неё сама каждый день. Есть аккаунт — копия будет и на сервере.</p>
+    <div class="act"><span class="btn t">Пропустить</span><span class="btn p">Выбрать папку</span></div>
+  </div>
+</div>
+<figcaption><b>6. Резервная копия</b>«Выбрать папку» — системный выбор папки. Выбрана — «Готово, копия сделана», конец знакомства.</figcaption>
+</figure>
+
+<!-- 7 Предупреждение -->
+<figure>
+<div class="ph dim">
+  <div class="sb"><span>10:24</span><span>●●●</span></div>
+  <div class="tb"><h3>Резервная копия</h3><span class="ic"></span></div>
+  <div class="body">
+    <div class="card"><div class="row"><span>Папка для копий<br><span class="mut">Не выбрана</span></span><span class="mut">›</span></div></div>
+  </div>
+  <div class="nav"><span><i></i>Главная</span><span><i></i>Календарь</span><span><i></i>Клиенты</span><span><i></i>Зарплата</span><span class="on"><i></i>Ещё</span></div>
+  <div class="dlg">
+    <h5>Без копии?</h5>
+    <p>Если телефон потеряется или сломается, клиенты, расписание и дневник пропадут насовсем.</p>
+    <p class="mut">Выбрать папку можно потом — пункт останется в «Нужно сделать».</p>
+    <div class="btns" style="justify-content:flex-end"><span class="btn t err">Без копии</span><span class="btn p">Выбрать папку</span></div>
+  </div>
+</div>
+<figcaption><b>Пропустить без папки</b>Это окно — после «Пропустить» на любой остановке, пока папка не выбрана. С выбранной папкой знакомство просто закрывается.</figcaption>
+</figure>
+
+<!-- 8 Ещё -->
+<figure>
+<div class="ph">
+  <div class="sb"><span>10:25</span><span>●●●</span></div>
+  <div class="tb"><h3>Ещё</h3><span class="ic"></span></div>
+  <div class="body" style="gap:0">
+    <div class="grp">Данные</div>
+    <div class="li"><span>Аккаунт<small>Вход и копия на сервере</small></span></div>
+    <div class="li"><span>Резервная копия<small>Папка, автокопия, восстановление</small></span></div>
+    <div class="li"><span>Выгрузки<small>Календарь .ics и Excel</small></span></div>
+    <div class="grp">Помощь</div>
+    <div class="li"><span>Знакомство с приложением<small>6 шагов, около 2 минут</small></span></div>
+  </div>
+  <div class="nav"><span><i></i>Главная</span><span><i></i>Календарь</span><span><i></i>Клиенты</span><span><i></i>Зарплата</span><span class="on"><i></i>Ещё</span></div>
+  <div class="snack">Готово. Повторить — «Ещё → Знакомство с приложением».</div>
+</div>
+<figcaption><b>Конец и повтор</b>Сообщение на 5 секунд после последней остановки. Пункт — в новой группе «Помощь» внизу «Ещё».</figcaption>
+</figure>
+
+</div>
+</div>

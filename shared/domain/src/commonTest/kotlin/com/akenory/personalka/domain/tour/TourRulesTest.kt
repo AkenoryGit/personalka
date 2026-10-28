@@ -19,7 +19,7 @@ class TourRulesTest {
             passed += stop
             stop = TourRules.next(stop, salaryNeeded = true)
         }
-        assertEquals(TourStop.entries, passed)
+        assertEquals(TourStop.entries.toList(), passed.toList())
     }
 
     @Test
