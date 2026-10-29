@@ -63,8 +63,8 @@ class TourRulesTest {
         assertEquals("Знакомство · 6 из 6", TourFormat.step(TourStop.BACKUP))
         val nb = RuText.NBSP
         assertEquals(
-            "Клиент отменил — нажмите «Отменить». Предупредил хотя бы за 1${nb}час — отмена без списания, позже — " +
-                "со списанием. Это время вы задаёте сами: «Ещё → Календарь».",
+            "Если клиент отменил, нажмите «Отменить». Предупредил за 1${nb}час или раньше — без списания, позже — " +
+                "со списанием. Это время вы задаёте сами в «Ещё → Календарь».",
             TourFormat.cardCancel(60),
         )
         assertTrue(TourFormat.cardCancel(90).contains("1${nb}час 30${nb}минут"))
@@ -72,5 +72,6 @@ class TourRulesTest {
         assertFalse(TourFormat.homeText(diary = false).contains("дневник"))
         assertTrue(TourFormat.homeText(diary = true).contains("дневник"))
         assertTrue(TourFormat.cardDone(autoDone = false).contains("нажмите «Проведено»"))
+        assertTrue(TourFormat.cardDone(autoDone = true).startsWith("Когда тренировка закончится, она сама отметится как проведённая."))
     }
 }

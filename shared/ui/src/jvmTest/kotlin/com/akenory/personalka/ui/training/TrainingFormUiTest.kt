@@ -208,6 +208,19 @@ class TrainingFormUiTest {
     }
 
     @Test
+    fun oneWordShowsHowToAddClient() = runComposeUiTest {
+        // Шаг 5.3е: одно слово — «Новый клиент» не появляется, вместо пустоты подсказка; фамилия и имя — строка есть.
+        openCalendar()
+        onNodeWithTag(FAB_TAG).performClick()
+        awaitNode(hasTestTag(FORM_SEARCH_TAG))
+        onNodeWithTag(FORM_SEARCH_TAG).performTextInput("Вася")
+        onNodeWithTag(NEW_CLIENT_HINT_TAG).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(FORM_SEARCH_TAG).performTextInput(" Петров")
+        onNodeWithText("Новый клиент «Вася Петров»").performScrollTo().assertIsDisplayed()
+        onNodeWithTag(NEW_CLIENT_HINT_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun archivedClientIsFoundInsteadOfDuplicate() = runComposeUiTest {
         // Раньше форма искала похожих только среди действующих — архивный заводился второй раз (шаг 3.9о).
         val alisa = client("Дельфинурова", "Алиса")

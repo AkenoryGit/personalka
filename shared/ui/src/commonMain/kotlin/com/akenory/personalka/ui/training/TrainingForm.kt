@@ -119,6 +119,7 @@ const val FORM_OWN_DURATION_TAG = "form-own-duration"
 const val FORM_WEEKLY_TAG = "form-weekly"
 const val FORM_MODE_TAG = "form-mode"
 
+const val NEW_CLIENT_HINT_TAG = "form-new-client-hint"
 fun formTypeTag(id: String) = "form-type-$id"
 fun formClientTag(id: String) = "form-client-$id"
 fun formGroupTag(id: String) = "form-group-$id"
@@ -854,9 +855,19 @@ private fun People(
             found.forEach { c ->
                 PersonRow(title = c.name.full(), subtitle = null, onClick = { onClient(c) })
             }
-            newClientName(query)?.let { name ->
+            val name = newClientName(query)
+            if (name != null) {
                 PersonRow(title = TrainingFormat.newClient(query), subtitle = null, onClick = { onNewClient(name) }, leading = PIcons.PersonAdd)
             }
+        }
+        // Одно слово — «Новый клиент» не появится: подсказка, а не пустое место (шаг 5.3е).
+        if (newClientName(query) == null) {
+            Text(
+                TrainingFormat.NEW_CLIENT_HINT,
+                modifier = Modifier.padding(top = Dimens.space2).testTag(NEW_CLIENT_HINT_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+                color = PersonalkaTheme.colors.textMuted,
+            )
         }
     }
     error?.let { ErrorText(it) }

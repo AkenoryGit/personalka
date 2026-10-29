@@ -83,6 +83,9 @@ object TrainingFormat {
     /** Строка «Новый клиент «Иванов Пётр»» под поиском. */
     fun newClient(text: String): String = "Новый клиент «${text.trim()}»"
 
+    /** Одно слово в поиске — нового клиента не завести (шаг 5.3е): подсказка, как это сделать. */
+    const val NEW_CLIENT_HINT = "Нового клиента не нашли? Впишите фамилию и имя через пробел, например «Петров Петя»."
+
     /** Повтор тренировки серии, когда его не изменить в этой форме: «Каждый вт и чт · бессрочно». */
     fun seriesRepeat(weekdays: Set<DayOfWeek>, validTo: LocalDate?): String =
         ZoneFormat.repeat(weekdays, validTo).let { if (validTo == null) it + DOT + "бессрочно" else it }

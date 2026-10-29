@@ -492,8 +492,7 @@ private fun NamePage(state: FirstRunState) {
                 tag = MIDDLE_NAME_TAG,
             )
             Text(
-                "Имя и фамилию родители увидят в кабинете, полное ФИО войдёт в согласие на обработку данных. " +
-                    "Поменять можно в настройках.",
+                "Впишите настоящие фамилию, имя и отчество. Поменять можно потом в «Ещё → Профиль».",
                 style = MaterialTheme.typography.bodySmall,
                 color = PersonalkaTheme.colors.textMuted,
             )
