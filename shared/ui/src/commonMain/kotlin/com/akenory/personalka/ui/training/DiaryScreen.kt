@@ -2,7 +2,6 @@ package com.akenory.personalka.ui.training
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +63,7 @@ import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import com.akenory.personalka.ui.components.swallowTaps
 
 const val DIARY_TAG = "diary"
 const val DIARY_PLAN_TAG = "diary-plan"
@@ -146,7 +146,7 @@ fun DiaryScreen(
         Modifier
             .fillMaxSize()
             .background(colors.bg)
-            .pointerInput(Unit) { detectTapGestures { } }
+            .swallowTaps()
             .testTag(DIARY_TAG),
         contentAlignment = Alignment.TopCenter,
     ) {

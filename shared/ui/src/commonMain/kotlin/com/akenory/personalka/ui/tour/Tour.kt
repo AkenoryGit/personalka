@@ -2,7 +2,6 @@ package com.akenory.personalka.ui.tour
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -72,6 +71,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.datetime.LocalDate
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.components.swallowTaps
 
 const val TOUR_CARD_TAG = "tour-card"
 const val TOUR_SECOND_TAG = "tour-second"
@@ -230,7 +230,7 @@ private fun TourCardView(card: TourCard, modifier: Modifier) {
             .background(colors.surface)
             .border(1.dp, colors.outline, MaterialTheme.shapes.extraLarge)
             // Нажатие по карточке не уходит на экран под ней.
-            .pointerInput(Unit) { detectTapGestures { } }
+            .swallowTaps()
             .semantics {
                 paneTitle = card.title
                 liveRegion = LiveRegionMode.Polite

@@ -41,6 +41,7 @@ import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import com.akenory.personalka.ui.components.swallowTaps
 
 // Окна формы тренировки (5.5) и переноса в календаре (5.3): вопрос для серии, запрет, выбор даты и времени.
 
@@ -146,7 +147,7 @@ private fun PickerCard(title: String, onDismiss: () -> Unit, content: @Composabl
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.extraLarge)
                 .background(colors.surface)
-                .pointerInput(Unit) { detectTapGestures { } }
+                .swallowTaps()
                 .verticalScroll(rememberScrollState())
                 .semantics { paneTitle = title }
                 .testTag(PICKER_TAG)

@@ -3,7 +3,6 @@ package com.akenory.personalka.ui.training
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,6 +107,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import com.akenory.personalka.ui.components.swallowTaps
 
 const val TRAINING_FORM_TAG = "training-form"
 const val FORM_SEARCH_TAG = "form-search"
@@ -311,7 +311,7 @@ internal fun FormFrame(
         Modifier
             .fillMaxSize()
             .background(colors.scrim)
-            .pointerInput(Unit) { detectTapGestures { } },
+            .swallowTaps(),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(

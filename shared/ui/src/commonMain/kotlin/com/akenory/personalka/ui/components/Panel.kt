@@ -56,7 +56,7 @@ fun Panel(title: String, onDismiss: () -> Unit, modifier: Modifier = Modifier, c
                 .clip(MaterialTheme.shapes.extraLarge)
                 .background(colors.surface)
                 // Нажатие внутри карточки окно не закрывает.
-                .pointerInput(Unit) { detectTapGestures { } }
+                .swallowTaps()
                 .verticalScroll(rememberScrollState())
                 .semantics { paneTitle = title }
                 .testTag(PANEL_TAG)

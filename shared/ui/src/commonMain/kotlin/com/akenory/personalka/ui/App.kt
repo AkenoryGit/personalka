@@ -27,6 +27,7 @@ import com.akenory.personalka.ui.clients.CabinetTools
 import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.hideKeyboardOnTap
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.home.homeTodos
 import com.akenory.personalka.ui.reminders.AppLink
@@ -401,7 +402,8 @@ fun App(
             }
         }
 
-        Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
+        // Нажатие мимо поля ввода убирает клавиатуру — на всех экранах (5.20, шаг 5.3д).
+        Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg).hideKeyboardOnTap()) {
             when (hasCoach) {
                 null -> Unit
                 false -> FirstRun(settings, backHandler, onDone = { tourGo(TourStop.CALENDAR) }, account, sync?.repository, clock)

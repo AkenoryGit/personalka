@@ -119,6 +119,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.yearMonth
 import com.akenory.personalka.ui.tour.TourTarget
 import com.akenory.personalka.ui.tour.tourTarget
+import com.akenory.personalka.ui.components.swallowTaps
 
 const val TRAINING_CARD_TAG = "training-card"
 const val CANCEL_PANEL_TAG = "cancel-panel"
@@ -424,7 +425,7 @@ fun TrainingCardHost(
                                 .heightIn(max = maxHeight * 0.88f)
                                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                                 .background(PersonalkaTheme.colors.bg)
-                                .pointerInput(Unit) { detectTapGestures { } }
+                                .swallowTaps()
                                 .semantics { paneTitle = shown?.title.orEmpty() }
                                 .testTag(TRAINING_CARD_TAG),
                         ) {
