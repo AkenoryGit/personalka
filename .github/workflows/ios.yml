@@ -108,6 +108,16 @@ jobs:
             2>&1 | tee -a ios-log.txt | grep -E "error|Upload succeeded|EXPORT" || true
           grep -q "Upload succeeded" ios-log.txt
 
+      # Xcode на чистой машине каждый раз создаёт новый сертификат разработчика; у Apple их число ограничено —
+      # временный отзывается в конце, даже если сборка упала (шаг 5.3ж).
+      - name: Отзыв временного сертификата
+        if: always() && steps.key.outputs.ready == 'true'
+        shell: bash
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography 2>/dev/null \
+            || python3 -m pip install --quiet --user pyjwt cryptography
+          python3 .github/scripts/revoke_runner_cert.py "${{ steps.key.outputs.path }}"
+
       - name: Итоги в отметки
         if: always() && steps.key.outputs.ready == 'true'
         shell: bash
@@ -119,6 +129,9 @@ jobs:
             echo "::notice title=iPhone: TestFlight::Сборка $VERSION ($BUILD) выгружена; после обработки Apple (10–30 мин) — в TestFlight"
           else
             ERRORS=$(grep -E "error:|error " ios-log.txt 2>/dev/null | grep -v "^\s*$" | sort -u | tail -15)
+            if grep -q "maximum number of certificates" ios-log.txt 2>/dev/null; then
+              ERRORS="Лимит сертификатов разработчика: отзовите старые «Apple Development» на developer.apple.com → Certificates и перезапустите сборку."$'\n'"$ERRORS"
+            fi
             ERRORS="${ERRORS//'%'/'%25'}"
             ERRORS="${ERRORS//$'\n'/'%0A'}"
             echo "::error title=iPhone: ошибка::${ERRORS:-нет журнала сборки}"

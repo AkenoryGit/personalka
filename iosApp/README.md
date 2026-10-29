@@ -28,7 +28,9 @@
 
 ## TestFlight
 
-Обычно — само (шаг 5.1в): после push в `main` workflow «iPhone» (`.github/workflows/ios.yml`) собирает приложение на машине Mac GitHub и выгружает в TestFlight по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, ключ с ролью «Администратор»). Вручную с Mac (шаг 5.1б) — так:
+Обычно — само (шаг 5.1в): после push в `main` workflow «iPhone» (`.github/workflows/ios.yml`) собирает приложение на машине Mac GitHub и выгружает в TestFlight по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, ключ с ролью «Администратор»). **Сертификаты (шаг 5.3ж).** Машина GitHub каждый раз чистая, и Xcode при архивации создаёт по ключу API новый сертификат «Apple Development»; у Apple их число ограничено, и 29.10.2026 сборка упала с «maximum number of certificates». Теперь шаг «Отзыв временного сертификата» в конце каждой сборки отзывает сертификат этой машины (`.github/scripts/revoke_runner_cert.py`, по серийному номеру из её связки ключей — чужие не трогает). Выпуск подписывается облачным сертификатом Apple и от этого не зависит. Если ошибка всё же повторится: developer.apple.com → Certificates → отозвать старые «Apple Development» с пометкой «Created via API» → перезапустить сборку «iPhone».
+
+Вручную с Mac (шаг 5.1б) — так:
 
 Приложение в App Store Connect — «Персоналка», Bundle ID `com.akenory.personalka`, SKU `personalka`. Номер сборки — число коммитов, версия — `MARKETING_VERSION` в `Config.xcconfig`.
 
