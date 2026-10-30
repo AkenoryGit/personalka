@@ -102,7 +102,7 @@ class ReportsUiTest {
         awaitNode(hasTestTag(TRAINING_CARD_TAG))
 
         // Ноябрь пуст.
-        onNodeWithTag(REPORTS_NEXT_TAG).performClick()
+        onNodeWithTag(REPORTS_NEXT_TAG).performSemanticsAction(SemanticsActions.OnClick)
         awaitNode(hasTestTag(REPORTS_EMPTY_TAG))
     }
 

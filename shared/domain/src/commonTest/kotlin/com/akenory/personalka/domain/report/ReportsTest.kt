@@ -160,7 +160,7 @@ class ReportsTest {
         val table = ReportRules.month(listOf(inp to pay), october, now)
         val breakdown = SalaryMonthRules.breakdown(inp, pay).filter { it.typeId != null }
         val bySalary = breakdown.groupBy { Triple(it.typeId, it.locationId, it.groupCase) }.mapValues { (_, l) -> l.sumOf { it.count } }
-        val byReport = table.rows.filter { it.counts.inSalary > 0 }
+        val byReport: Map<Triple<String?, String?, GroupCase?>, Int> = table.rows.filter { it.counts.inSalary > 0 }
             .associate { Triple(it.key.typeId, it.key.locationId, it.key.groupCase) to it.counts.inSalary }
         assertEquals(bySalary, byReport)
         // Счётчик ступени — тот же, что на «Деньгах».
