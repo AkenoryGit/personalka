@@ -44,6 +44,7 @@ import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.MoreFormat
+import com.akenory.personalka.domain.format.ReportFormat
 import com.akenory.personalka.domain.format.TourFormat
 import com.akenory.personalka.domain.money.SalarySetupRules
 import com.akenory.personalka.ui.calendar.CalendarScreen
@@ -62,6 +63,7 @@ import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reconcile.ReconcileScreen
+import com.akenory.personalka.ui.reports.ReportsScreen
 import com.akenory.personalka.ui.reconcile.Report1cResultScreen
 import com.akenory.personalka.ui.reconcile.Report1cRoute
 import com.akenory.personalka.ui.reminders.NotificationAccess
@@ -291,6 +293,19 @@ fun SectionScreen(
                 route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText, backup?.files) { id ->
                     shell.open(Report1cRoute.of(id))
                 }
+                route == MoreItem.REPORTS.route -> ReportsScreen(
+                    reports = settings.reports,
+                    calendar = calendar,
+                    now = now,
+                    messages = messages,
+                    scope = scope,
+                    onBack = onBack,
+                    shareText = shareText,
+                    onEdit = { id -> onForm(TrainingFormKey.edit(id)) },
+                    onClient = openClient,
+                    onGroup = openGroup,
+                    onDiary = onDiary,
+                )
                 SlotsRoute.isSlots(route) -> SlotsScreen(calendar, prefs, now, messages, onBack, onForm, shareText, SlotsRoute.waitOf(route))
                 Report1cRoute.idOf(route) != null -> Report1cResultScreen(settings.report1c, Report1cRoute.idOf(route)!!, messages, scope, onBack, shareText)
             }
@@ -325,6 +340,8 @@ enum class MoreItem(
     SLOTS(SlotsRoute.ROOT, MoreFormat.SLOTS, MoreFormat.SLOTS_NOTE, PIcons.EventAvailable, MoreGroup.WORK),
     // «Сверки» (5.14, шаг 3.9в) — свой экран (ui/reconcile): месяц зарплаты, дежурства, с шага 4.2 — отчёт 1С.
     RECONCILE("reconcile", MoreFormat.RECONCILE, MoreFormat.RECONCILE_NOTE, PIcons.FactCheck, MoreGroup.WORK),
+    // «Отчёты» (5.15, шаг 5.3и) — свой экран (ui/reports): сколько тренировок проведено, отменено и списано.
+    REPORTS("reports", ReportFormat.TITLE, ReportFormat.MORE_NOTE, PIcons.BarChart, MoreGroup.WORK),
     VACATION(SettingsRoute.VACATION, MoreFormat.VACATION, MoreFormat.VACATION_NOTE, PIcons.EventBusy, MoreGroup.WORK),
     PROFILE(SettingsRoute.PROFILE, MoreFormat.PROFILE, MoreFormat.PROFILE_NOTE, PIcons.Person, MoreGroup.SETUP, PROFILE_ROW_TAG),
     PLACES(SettingsRoute.PLACES, MoreFormat.PLACES, MoreFormat.PLACES_NOTE, PIcons.LocationOn, MoreGroup.SETUP, PLACES_ROW_TAG),

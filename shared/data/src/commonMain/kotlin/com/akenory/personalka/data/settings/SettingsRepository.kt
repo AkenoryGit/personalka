@@ -11,6 +11,7 @@ import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.money.ColleagueRepository
 import com.akenory.personalka.data.money.RatesRepository
 import com.akenory.personalka.data.money.SalaryRepository
+import com.akenory.personalka.data.report.ReportRepository
 import com.akenory.personalka.data.money.SalarySetupRepository
 import com.akenory.personalka.data.reconcile.Report1cRepository
 import com.akenory.personalka.domain.Ids
@@ -49,6 +50,9 @@ class SettingsRepository(
 
     /** Месяц и выплаты экрана «Зарплата» (5.12, шаг 3.7). */
     val months: SalaryRepository = SalaryRepository(db, clock, payTypes)
+
+    /** «Отчёты» (5.15, шаг 5.3и): тем же расчётом, что «Зарплата». */
+    val reports: ReportRepository = ReportRepository(db, months)
 
     /** Сверка с отчётом 1С (5.14, ТЗ 8, шаг 4.2а). */
     val report1c: Report1cRepository = Report1cRepository(db, clock)

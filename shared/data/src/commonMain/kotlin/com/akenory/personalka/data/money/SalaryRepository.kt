@@ -140,6 +140,13 @@ class SalaryRepository(
         return months(list, today).map { all -> SalaryYearRules.build(year, all.map { it.view }, today) }.flowOn(Dispatchers.Default)
     }
 
+    /**
+     * Месяцы [list] тем же расчётом, что «Зарплата», — для «Отчётов» (5.15, шаг 5.3и): числа отчёта и разбивки
+     * зарплаты считаются из одних и тех же MonthInput и MonthPay.
+     */
+    fun monthsData(list: List<YearMonth>, today: LocalDate): Flow<List<SalaryMonthData>> =
+        if (list.isEmpty()) flowOf(emptyList()) else months(list, today)
+
     /** Месяцы [list] (по возрастанию) одним чтением базы: тренировки — с двух месяцев до первого по конец последнего. */
     private fun months(list: List<YearMonth>, today: LocalDate): Flow<List<SalaryMonthData>> {
         val first = list.first()
