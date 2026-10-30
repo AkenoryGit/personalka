@@ -221,6 +221,6 @@ class ReportsTest {
             listOf(YearMonth(2025, 11), YearMonth(2025, 12), YearMonth(2026, 1)),
             ReportRules.monthsOf(LocalDate(2025, 11, 20), LocalDate(2026, 1, 5)),
         )
-        assertEquals(emptyList(), ReportRules.monthsOf(LocalDate(2026, 2, 1), LocalDate(2026, 1, 1)))
+        assertEquals(emptyList<YearMonth>(), ReportRules.monthsOf(LocalDate(2026, 2, 1), LocalDate(2026, 1, 1)))
     }
 }

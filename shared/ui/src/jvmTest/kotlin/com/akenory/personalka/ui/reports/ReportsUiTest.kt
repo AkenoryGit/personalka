@@ -102,7 +102,7 @@ class ReportsUiTest {
         awaitNode(hasTestTag(TRAINING_CARD_TAG))
 
         // Ноябрь пуст.
-        onNodeWithTag(REPORTS_NEXT_TAG).press()
+        onNodeWithTag(REPORTS_NEXT_TAG).performClick()
         awaitNode(hasTestTag(REPORTS_EMPTY_TAG))
     }
 
@@ -113,7 +113,7 @@ class ReportsUiTest {
         onNodeWithTag(reportPeriodTag(ReportPeriod.YEAR)).performClick()
         awaitNode(hasTestTag(reportMonthTag(october)))
         onNodeWithTag(reportMonthTag(october)).assertTextContains("3")
-        onNodeWithTag(reportWhatTag(key)).press()
+        onNodeWithTag(reportWhatTag(key)).performClick()
         onNodeWithTag(REPORTS_TOTAL_TAG).assertTextContains("проведено 2 · со списанием 1 · отменено 1", substring = true)
         // Месяц года — открывает его отчёт.
         onNodeWithTag(reportMonthTag(october)).press()

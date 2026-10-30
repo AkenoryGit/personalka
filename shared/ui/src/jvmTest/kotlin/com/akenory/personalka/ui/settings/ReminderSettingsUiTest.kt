@@ -82,7 +82,7 @@ class ReminderSettingsUiTest {
         awaitNode(hasTestTag(navTag(Section.MORE)))
         onNodeWithTag(navTag(Section.MORE)).performClick()
         awaitNode(hasTestTag(REMINDERS_ROW_TAG))
-        onNodeWithTag(REMINDERS_ROW_TAG).performClick()
+        onNodeWithTag(REMINDERS_ROW_TAG).performScrollTo().performClick()
         awaitNode(hasTestTag(DIGEST_TAG))
     }
 
