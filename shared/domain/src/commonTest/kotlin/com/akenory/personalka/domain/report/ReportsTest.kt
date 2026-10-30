@@ -103,11 +103,11 @@ class ReportsTest {
         SptCase("c1", "kid", "spt-sep", "spt", "bb", LocalDate(2026, 9, 28), purchaseDate = LocalDate(2026, 10, 2), status = SptCaseStatus.CLOSED),
     )
 
-    private fun input(month: YearMonth, trainings: List<PayTraining>) =
-        MonthInput(month, trainings, types, rates, tiers, spt = sptCases)
+    private fun input(month: YearMonth, trainings: List<PayTraining>, spt: List<SptCase> = sptCases) =
+        MonthInput(month, trainings, types, rates, tiers, spt = spt)
 
-    private fun months(trainings: List<PayTraining>): List<Pair<MonthInput, MonthPay>> =
-        listOf(september, october).map { m -> input(m, trainings).let { it to it.pay() } }
+    private fun months(trainings: List<PayTraining>, spt: List<SptCase> = sptCases): List<Pair<MonthInput, MonthPay>> =
+        listOf(september, october).map { m -> input(m, trainings, spt).let { it to it.pay() } }
 
     private val sept = List(4) { t("pt", "bb", 10 + it, DONE, listOf(ATTENDED), month = september) } +
         t("pt", "bb", 20, CANCELLED, listOf(ParticipationStatus.CANCELLED), month = september)
@@ -204,7 +204,9 @@ class ReportsTest {
 
     @Test
     fun emptyAndShare() {
-        val empty = ReportRules.month(months(emptyList()), october, now)
+        // Закрытая покупкой СПТ — уже не пусто: строка «закрыто 1».
+        assertTrue(!ReportRules.month(months(emptyList()), october, now).isEmpty)
+        val empty = ReportRules.month(months(emptyList(), spt = emptyList()), october, now)
         assertTrue(empty.isEmpty)
         assertEquals("Отчёт: Октябрь 2026 (по 20.10)\n${ReportFormat.EMPTY}", ReportFormat.shareText("Октябрь 2026", empty) { "" })
 
