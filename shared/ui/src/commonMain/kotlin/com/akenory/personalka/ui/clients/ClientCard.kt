@@ -67,6 +67,7 @@ import com.akenory.personalka.domain.client.ClientStats
 import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.format.CabinetLinkFormat
+import com.akenory.personalka.domain.format.ClientReportFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
@@ -165,6 +166,7 @@ fun ClientCard(
     waiting: List<WaitRow> = emptyList(),
     cabinet: CabinetTools? = null,
     startTab: CardTab = CardTab.TRAININGS,
+    onReport: ((String) -> Unit)? = null,
 ) {
     val today = now.date
     val waits = waiting.firstOrNull { it.client.id == clientId }
@@ -223,6 +225,13 @@ fun ClientCard(
                     MenuAction(if (waits == null) WaitFormat.TO_WAITLIST else WaitFormat.TITLE_EDIT, PIcons.Schedule, {
                         close()
                         nav.open(waits?.let { ClientRoute.waitEdit(it.entry.id) } ?: ClientRoute.waitNew(clientId))
+                    })
+                }
+                // «Отчёт» (5.15, шаг 5.3к): тренировки клиента по парам за месяц — когда они есть.
+                if (onReport != null && hasTrainings) {
+                    MenuAction(ClientReportFormat.MENU, PIcons.BarChart, {
+                        close()
+                        onReport(clientId)
                     })
                 }
                 if (rows.size > 1) {

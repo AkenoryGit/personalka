@@ -214,6 +214,7 @@ fun ClientsScreen(
     waiting: List<WaitRow> = emptyList(),
     cabinet: CabinetTools? = null,
     onFindTime: ((String) -> Unit)? = null,
+    onReport: ((String) -> Unit)? = null,
 ) {
     val wide = LocalWide.current
     val scroll = rememberLazyListState()
@@ -262,6 +263,7 @@ fun ClientsScreen(
                         now = now,
                         onForm = onForm,
                         cabinet = cabinet,
+                        onReport = onReport,
                         // На разложенном у первого экрана «Назад» нет: список и так слева.
                         onBack = if (!wide || stack.size > 1) nav::back else null,
                     )
@@ -326,12 +328,14 @@ private fun ClientDetail(
     now: LocalDateTime,
     onForm: (String) -> Unit,
     cabinet: CabinetTools?,
+    onReport: ((String) -> Unit)?,
     onBack: (() -> Unit)?,
 ) {
     when (screen) {
         is ClientScreen.Card -> ClientCard(
             screen.clientId, rows, clients, forms, nav, messages, scope, now, onForm, onBack, followup, waiting, cabinet,
             startTab = if (screen.info) CardTab.INFO else CardTab.TRAININGS,
+            onReport = onReport,
         )
         is ClientScreen.Wait -> WaitEditor(screen.entryId, screen.clientId, rows, followup, clients, nav, messages, scope, now.date, voice)
         is ClientScreen.New -> ClientEditor(

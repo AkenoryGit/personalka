@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.report.ReportNames
 import com.akenory.personalka.data.report.ReportRepository
+import com.akenory.personalka.domain.format.ClientReportFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.ReportFormat
 import com.akenory.personalka.domain.money.GroupCase
@@ -102,6 +103,18 @@ private fun keyOf(text: String): ReportKey {
 
 private enum class PickEnd { FROM, TO }
 
+/** Маршруты «Отчётов» в «Ещё»: сам раздел и отчёт по клиенту из его карточки («⋮ → Отчёт», шаг 5.3к). */
+object ReportsRoute {
+    const val ROOT = "reports"
+    private const val CLIENT = "reports:client:"
+
+    fun forClient(clientId: String): String = CLIENT + clientId
+
+    fun isReports(route: String?): Boolean = route == ROOT || route?.startsWith(CLIENT) == true
+
+    fun clientOf(route: String?): String? = route?.takeIf { it.startsWith(CLIENT) }?.removePrefix(CLIENT)
+}
+
 /**
  * «Отчёты» (ТЗ 5.15, шаг 5.3и) — пункт «Ещё → Работа». Сверху период: «Месяц» и «Год» со стрелками, «Свой период»
  * с датами «С» и «По». Месяц и свой период — строки «тип · место» с числом «В зарплату» справа и «проведено · со
@@ -122,8 +135,14 @@ internal fun ReportsScreen(
     onClient: (String) -> Unit = {},
     onGroup: (String) -> Unit = {},
     onDiary: (String) -> Unit = {},
+    initialClient: String? = null,
 ) {
     val today = now.date
+    // Вкладка и клиент (шаг 5.3к): из карточки клиента «⋮ → Отчёт» открывает «Клиент» с ним и текущим месяцем.
+    var tabText by rememberSaveable(initialClient) { mutableStateOf(if (initialClient != null) ReportTab.CLIENT.name else ReportTab.TRAININGS.name) }
+    val tab = ReportTab.valueOf(tabText)
+    var clientId by rememberSaveable(initialClient) { mutableStateOf(initialClient) }
+    var query by rememberSaveable { mutableStateOf("") }
     var periodText by rememberSaveable { mutableStateOf(ReportPeriod.MONTH.name) }
     val period = ReportPeriod.valueOf(periodText)
     var monthText by rememberSaveable { mutableStateOf(today.yearMonth.toString()) }
@@ -151,14 +170,31 @@ internal fun ReportsScreen(
     }
     // «Сейчас» — с точностью до часа: отчёт не перечитывает базу каждую минуту.
     val hour = LocalDateTime(today, LocalTime(now.hour, 0))
-    val data by remember(reports, period, month, year, from, to, hour, problem) {
+    val data by remember(reports, period, month, year, from, to, hour, problem, tab) {
         when {
-            problem != null -> emptyFlow()
+            problem != null || tab == ReportTab.CLIENT -> emptyFlow()
             period == ReportPeriod.MONTH -> reports.table(month.firstDay, month.lastDay, now)
             period == ReportPeriod.YEAR -> reports.year(year, now)
             else -> reports.table(from, to, now)
         }
     }.collectAsState(initial = null)
+    // Период вкладки «Клиент»: у года — весь год одним отчётом.
+    val clientFrom = when (period) {
+        ReportPeriod.MONTH -> month.firstDay
+        ReportPeriod.YEAR -> LocalDate(year, 1, 1)
+        ReportPeriod.CUSTOM -> from
+    }
+    val clientTo = when (period) {
+        ReportPeriod.MONTH -> month.lastDay
+        ReportPeriod.YEAR -> LocalDate(year, 12, 31)
+        ReportPeriod.CUSTOM -> to
+    }
+    val shownClient = clientId
+    val clientData by remember(reports, tab, shownClient, clientFrom, clientTo, hour, problem) {
+        if (tab != ReportTab.CLIENT || shownClient == null || problem != null) emptyFlow() else reports.client(shownClient, clientFrom, clientTo, now)
+    }.collectAsState(initial = null)
+    val clientView = clientData?.takeIf { it.report.clientId == shownClient && it.report.from == clientFrom && it.report.to == clientTo }
+    val clientList by remember(reports, tab) { if (tab == ReportTab.CLIENT) reports.clients() else emptyFlow() }.collectAsState(initial = emptyList())
     val title = when (period) {
         ReportPeriod.MONTH -> ReportFormat.month(month)
         ReportPeriod.YEAR -> year.toString()
@@ -178,6 +214,17 @@ internal fun ReportsScreen(
 
     fun share() {
         val text = when {
+            tab == ReportTab.CLIENT -> {
+                val view = clientView ?: return
+                val name = view.client?.title ?: return
+                ClientReportFormat.shareText(
+                    name,
+                    title,
+                    view.report,
+                    rowName = { ClientReportFormat.rowTitle(it, view.names.type(it.key.typeId), view.names.place(it.key.locationId)) },
+                    visitName = { ClientReportFormat.rowTitle(it, view.names.type(it.key.typeId), view.names.place(it.key.locationId)) },
+                )
+            }
             yearView != null -> ReportFormat.shareYear(yearView, what, what?.let(names::row))
             table != null -> ReportFormat.shareText(title, table, names::row)
             else -> return
@@ -215,7 +262,8 @@ internal fun ReportsScreen(
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxWidth()) {
                     TopBar(ReportFormat.TITLE, onBack = onBack)
-                    if (table != null || yearView != null) {
+                    val canShare = if (tab == ReportTab.CLIENT) clientView?.client != null else table != null || yearView != null
+                    if (canShare) {
                         IconButton(
                             onClick = ::share,
                             modifier = Modifier.align(Alignment.CenterEnd).padding(end = Dimens.space1).testTag(REPORTS_SHARE_TAG),
@@ -252,6 +300,10 @@ internal fun ReportsScreen(
                         DateRow(ReportFormat.TO, to, Modifier.testTag(REPORTS_TO_TAG)) { picking = PickEnd.TO.name }
                     }
                 }
+                ReportTabs(tab) {
+                    tabText = it.name
+                    openRow = null
+                }
                 Column(
                     Modifier
                         .weight(1f)
@@ -264,6 +316,19 @@ internal fun ReportsScreen(
                 ) {
                     when {
                         problem != null -> Text(problem, style = MaterialTheme.typography.bodyMedium, color = colors.error)
+                        tab == ReportTab.CLIENT -> ClientReportContent(
+                            clientId = clientId,
+                            view = clientView,
+                            clients = clientList,
+                            query = query,
+                            onQuery = { query = it },
+                            onPick = { clientId = it },
+                            onChange = {
+                                clientId = null
+                                query = ""
+                            },
+                            onTraining = { card = it },
+                        )
                         table != null -> TableContent(table, names) { openRow = keyText(it) }
                         yearView != null -> YearContent(yearView, names, what, wide, onWhat = { whatText = it?.let(::keyText) }) { m ->
                             monthText = m.toString()
@@ -273,7 +338,7 @@ internal fun ReportsScreen(
                 }
             }
             val shownRow = openRow?.let(::keyOf)
-            if (table != null && shownRow != null && table.row(shownRow) != null) {
+            if (tab == ReportTab.TRAININGS && table != null && shownRow != null && table.row(shownRow) != null) {
                 Panel(ReportFormat.itemsTitle(names.row(shownRow), title), onDismiss = { openRow = null }) {
                     table.itemsOf(shownRow).forEachIndexed { i, item ->
                         if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
