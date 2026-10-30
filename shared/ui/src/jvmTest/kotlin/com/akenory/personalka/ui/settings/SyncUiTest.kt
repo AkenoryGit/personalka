@@ -29,6 +29,7 @@ import com.akenory.personalka.data.sync.Attach
 import com.akenory.personalka.data.sync.SignOutCheck
 import com.akenory.personalka.data.sync.SyncApi
 import com.akenory.personalka.data.sync.SyncRepository
+import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.format.SyncFormat
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.ui.App
@@ -209,6 +210,28 @@ class SyncUiTest {
         onNodeWithText(SyncFormat.SECTION).assertDoesNotExist()
         assertTrue(server.liveRows(EMAIL, "coach").isEmpty(), "Данные на сервере стёрты")
         assertTrue(runBlocking { phone.settings.coach.first() } != null, "В телефоне всё осталось")
+    }
+
+    /** Шаг 5.3з: возможность, открытая в админке, приходит с синхронизацией — экран «Сервер» не открывали. */
+    @Test
+    fun featureFromAdminArrivesWithSync() = runComposeUiTest {
+        coach()
+        val phone = Phone(TestData.ready())
+        phone.signIn()
+        assertTrue(runBlocking { phone.sync.attach() } == Attach.Done)
+        fun cabinets() = phone.account.account.value?.features.orEmpty().any { it.feature == Feature.CABINETS }
+        show(phone)
+        awaitNode(hasTestTag(navTag(Section.MORE)))
+        // Профиль при запуске перечитан, кабинетов пока нет.
+        waitForIdle()
+        Thread.sleep(500)
+        waitForIdle()
+        assertTrue(!cabinets())
+
+        // Администратор открыл «Кабинеты родителей» — после обмена они есть в телефоне.
+        server.cabinetAccess += EMAIL
+        runBlocking { phone.sync.sync() }
+        waitUntil(timeoutMillis = 5_000) { cabinets() }
     }
 
     @Test

@@ -187,6 +187,13 @@ fun App(
         LaunchedEffect(cabinets, cabinetsOpen, syncState?.lastSync) {
             if (cabinetsOpen) cabinets?.repository?.refresh()
         }
+        // Возможности из админки (1.5, шаг 5.3з): профиль `/me` перечитывается при запуске и после каждой синхронизации,
+        // чтобы галочка в админке доходила до тренера без захода в «Сервер». Без связи остаётся сохранённый профиль.
+        // Ключи — число удачных обменов и проблема обмена: срабатывает при запуске, после каждого обмена (даже с тем же
+        // временем) и когда сервер ответил «закрыто» или «приостановлен».
+        LaunchedEffect(account, syncState?.completed, syncState?.problem) {
+            if (account?.account?.value != null) account.refresh()
+        }
         // Расхождения с 1С (8.4, шаг 4.2в): пункт «Нужно сделать».
         val report1c by remember(settings, hasCoach) {
             if (hasCoach == true) settings.report1c.unresolved() else flowOf(emptyList())

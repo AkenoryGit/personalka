@@ -73,6 +73,8 @@ data class SyncState(
     val failures: Int = 0,
     /** Текст ошибки при [SyncProblem.FAILED] — чтобы тренер мог его прислать. */
     val error: String? = null,
+    /** Обменов, закончившихся удачно, с запуска приложения: по нему экраны узнают о каждом обмене (шаг 5.3з). */
+    val completed: Int = 0,
 )
 
 /**
@@ -438,7 +440,7 @@ class SyncRepository(
     private fun done(): Boolean {
         val now = clock()
         prefs.putString(LAST, now.toString())
-        _state.update { it.copy(lastSync = now, problem = null, failures = 0, progress = null, error = null) }
+        _state.update { it.copy(lastSync = now, problem = null, failures = 0, progress = null, error = null, completed = it.completed + 1) }
         return true
     }
 
