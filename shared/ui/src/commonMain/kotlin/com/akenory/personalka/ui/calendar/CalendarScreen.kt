@@ -100,6 +100,7 @@ internal const val TODAY_LABEL = "Сегодня"
 /** Кнопки окна зоны (ТЗ 5.3, макет «Нажатие на запрет»). */
 internal const val EDIT_ZONE = "Изменить"
 internal const val SKIP_DAY = "Пропустить этот день"
+internal const val DELETE_ZONE = "Удалить"
 
 /** Меню по длительному нажатию на тренировку (ТЗ 5.3, макет «Удержание на тренировке»). */
 internal const val NEW_AT_THIS_TIME = "Новая тренировка на это время"
@@ -183,6 +184,8 @@ fun CalendarScreen(
     }
     var moreIds by rememberSaveable { mutableStateOf<String?>(null) }
     var zoneKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // «Удалить» из окна зоны (шаг 5.3р): ключ зоны, чьё удаление спрашивается.
+    var zoneDeleteKey by rememberSaveable { mutableStateOf<String?>(null) }
     var menuId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingKey by rememberSaveable { mutableStateOf<String?>(null) }
     var askKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -484,8 +487,9 @@ fun CalendarScreen(
             if (zone != null) {
                 ZonePanel(
                     zone = zone,
-                    // Пропустить можно сегодняшний и будущий день запрета: прошлый уже ни на что не влияет.
-                    canSkip = zone.kind == ZoneKind.RESTRICTION && zone.date >= today,
+                    // Пропустить день у запрета клуба (его не удалить): сегодняшний и будущий, прошлый ни на что не влияет.
+                    // Свой запрет и дежурство пропускаются через «Удалить → Только этот день».
+                    canSkip = zone.kind == ZoneKind.RESTRICTION && !zone.editable && zone.date >= today,
                     onDismiss = { zoneKey = null },
                     onEdit = {
                         zoneKey = null
@@ -496,7 +500,15 @@ fun CalendarScreen(
                         scope.launch { calendar.skipRestrictionDay(zone.id, zone.date) }
                         messages.showUndo(ZoneFormat.skipped(zone.date)) { scope.launch { calendar.unskipRestrictionDay(zone.id, zone.date) } }
                     },
+                    onDelete = {
+                        zoneKey = null
+                        zoneDeleteKey = zoneKeyOf(zone)
+                    },
                 )
+            }
+            val deleting = zoneDeleteKey?.let { key -> zonesOf(zoneDateOf(key)).firstOrNull { zoneKeyOf(it) == key } }
+            if (deleting != null) {
+                ZoneDelete(deleting, today, calendar, messages, scope, onDismiss = { zoneDeleteKey = null })
             }
 
             val ask = askKey?.let(::decodeAsk)
@@ -635,17 +647,25 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
 
 /**
  * Окно зоны (ТЗ 5.3, макет «Нажатие на запрет»): «ДБ 17:00–18:00 — групповая тренировка», как повторяется,
- * «Изменить» (дежурство и свой запрет — форма, шаг 1.13а) и «Пропустить этот день». Запрет клуба меняет только
- * администратор (этап 2): у него «Изменить» нет (10.7).
+ * «Изменить» (дежурство и свой запрет — форма, шаг 1.13а) и «Удалить» (шаг 5.3р, [ZoneDelete]). Запрет клуба меняет
+ * только администратор (этап 2): у него «Изменить» и «Удалить» нет, есть «Пропустить этот день» (10.7).
  */
 @Composable
-private fun ZonePanel(zone: CalendarZone, canSkip: Boolean, onDismiss: () -> Unit, onEdit: () -> Unit, onSkip: () -> Unit) {
+private fun ZonePanel(
+    zone: CalendarZone,
+    canSkip: Boolean,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onSkip: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val colors = PersonalkaTheme.colors
     Panel(title = zone.title, onDismiss = onDismiss) {
         Text(text = zone.text, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text)
         zone.repeat?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted) }
         if (zone.editable) PrimaryButton(EDIT_ZONE, onEdit, Modifier.fillMaxWidth())
         if (canSkip) SecondaryButton(SKIP_DAY, onSkip, Modifier.fillMaxWidth(), icon = PIcons.EventBusy)
+        if (zone.editable) SecondaryButton(DELETE_ZONE, onDelete, Modifier.fillMaxWidth(), icon = PIcons.Delete)
     }
 }
 

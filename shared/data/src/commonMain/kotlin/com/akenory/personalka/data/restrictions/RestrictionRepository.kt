@@ -6,10 +6,13 @@ import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
 import com.akenory.personalka.domain.restriction.RestrictionFormRules
+import com.akenory.personalka.domain.restriction.RestrictionRules
+import kotlinx.datetime.LocalDate
 
 /**
  * «Отменить» после записи запрета (5.20): каким был каждый запрет до неё (id → запрет); `null` — его не было.
@@ -93,6 +96,30 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
             undo = RestrictionUndo(mapOf(id to before))
         }
         return undo
+    }
+
+    /**
+     * «Удалить → Этот и все следующие» в окне запрета (5.3, шаг 5.3р): свой запрет действует до дня перед [date].
+     * До [date] он не действовал ни разу или он разовый — удаляется целиком. Возвращает сообщение и «Отменить»;
+     * `null` — запрета уже нет или он клуба.
+     */
+    suspend fun endBefore(id: String, date: LocalDate): Pair<String, RestrictionUndo>? {
+        val now = clock()
+        var result: Pair<String, RestrictionUndo>? = null
+        db.withWriteTransaction {
+            val before = own(id) ?: return@withWriteTransaction
+            val cut = RestrictionRules.endBefore(before.toRestriction(), date)
+            val after = if (cut == null) {
+                before.copy(sync = before.sync.deleted(now))
+            } else {
+                before.copy(validTo = cut.validTo, skipDates = cut.skipDates.sorted(), sync = before.sync.touched(now))
+            }
+            schedule.upsertBlock(after)
+            db.recalcRestrictionFlags(now)
+            val message = if (cut == null) ZoneFormat.RESTRICTION_DELETED else ZoneFormat.restrictionEnded(date)
+            result = message to RestrictionUndo(mapOf(id to before))
+        }
+        return result
     }
 
     /** «Отменить»: запреты как были до записи — новые удаляются, изменённый и удалённый возвращаются. */

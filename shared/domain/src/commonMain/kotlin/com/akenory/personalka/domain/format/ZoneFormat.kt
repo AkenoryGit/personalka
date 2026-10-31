@@ -71,6 +71,46 @@ object ZoneFormat {
         return if (reason.isBlank()) head else "$head: ${inPhrase(reason)}"
     }
 
+    // --- Удаление из окна зоны (шаг 5.3р) ---
+
+    const val DELETE = "Удалить"
+    const val KEEP = "Не удалять"
+
+    const val RESTRICTION_DELETE_TITLE = "Удалить запрет?"
+
+    /** «Только этот день — сб 31.10»: запрет снят на один день, как «Пропустить этот день». */
+    fun onlyThisDay(date: LocalDate): String = "Только этот день — ${DateFormat.short(date)}"
+    const val THIS_AND_FOLLOWING = "Этот и все следующие"
+
+    /** «Запрет удалён с сб 31.10». */
+    fun restrictionEnded(date: LocalDate): String = "Запрет удалён с ${DateFormat.short(date)}"
+    const val RESTRICTION_DELETED = "Запрет удалён"
+
+    const val DUTY_DELETE_TITLE = "Удалить дежурство?"
+    const val DUTY_DELETE_DONE_TITLE = "Удалить прошедшее дежурство?"
+    const val DUTY_DELETE_TEXT = "Вернуть его можно только сразу — кнопкой «Отменить» в сообщении."
+    const val DUTY_DELETE_DONE_TEXT = "Оно уйдёт из зарплаты. Вернуть его можно только сразу — кнопкой «Отменить» в сообщении."
+
+    /** «Только это — сб 31.10». */
+    fun dutyOnly(date: LocalDate): String = "Только это — ${DateFormat.short(date)}"
+    const val DUTY_FOLLOWING = "Это и все следующие"
+    const val DUTY_FOLLOWING_TITLE = "Удалить это и все следующие?"
+
+    /** «Дежурства серии с сб 31.10 — всего 9 дежурств. Новые по ней больше не появятся. Прошедшие не меняются.» */
+    fun dutyFollowingText(count: Int, from: LocalDate): String =
+        "Дежурства серии с ${DateFormat.short(from)} — всего ${duties(count)}. Новые по ней больше не появятся. " +
+            "Прошедшие не меняются."
+
+    /** «Удалить 9 дежурств». */
+    fun deleteDuties(count: Int): String = "Удалить ${duties(count)}"
+
+    const val DUTY_DELETED = "Дежурство удалено"
+
+    /** «Удалено: 9 дежурств с сб 31.10». */
+    fun dutiesDeleted(count: Int, from: LocalDate): String = "Удалено: ${duties(count)} с ${DateFormat.short(from)}"
+
+    private fun duties(n: Int): String = RuText.count(n, "дежурство", "дежурства", "дежурств")
+
     /** Сообщение после «Пропустить этот день»: «Запрет снят на вт 20.10». */
     fun skipped(date: LocalDate): String = "Запрет снят на ${DateFormat.short(date)}"
 

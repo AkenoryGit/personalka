@@ -751,6 +751,26 @@ class CalendarUiTest {
         onNodeWithText("до 15:00").assertIsDisplayed()
     }
 
+    /** Шаг 5.3р: «Удалить» в окне дежурства — подтверждение, сообщение с «Отменить». */
+    @Test
+    fun dutyDeletedFromZoneWindow() = runComposeUiTest {
+        // Вечером: дежурство ещё впереди, «Удалить дежурство?», а не «прошедшее».
+        training("18:00", 120, type = "Деж")
+        openCalendar()
+        awaitZones(1)
+        val duty = day().zones.single()
+
+        tapDay(360f, duty.y + duty.height - 20f)
+        onNodeWithText(DELETE_ZONE).performClick()
+        onNodeWithText(ZoneFormat.DUTY_DELETE_TITLE).assertIsDisplayed()
+        onNodeWithText(ZoneFormat.DELETE).performClick()
+        onNodeWithText(ZoneFormat.DUTY_DELETED).assertIsDisplayed()
+        awaitZones(0)
+
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        awaitZones(1)
+    }
+
     @Test
     fun badgesByHeightAndImportance() = runComposeUiTest {
         training("09:00", 60, "Морозов Даниил", status = TrainingStatus.DONE)

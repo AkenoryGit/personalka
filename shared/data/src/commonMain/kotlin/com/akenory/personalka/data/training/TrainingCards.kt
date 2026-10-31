@@ -572,7 +572,9 @@ class TrainingCardRepository internal constructor(
                 val stored = series.toSeries(seriesClientIds(series.id))
                 recorder.saveSeries(stored.copy(skipDates = stored.skipDates + t.start.date), coach.id)
             }
-            result = CardResult(TrainingCardFormat.DELETED, recorder.alignedUndo(db, now))
+            // Дежурство удаляется из окна зоны (5.3, шаг 5.3р) — сообщение его словами.
+            val duty = reference.trainingType(t.typeId)?.kind == TrainingKind.DUTY
+            result = CardResult(if (duty) ZoneFormat.DUTY_DELETED else TrainingCardFormat.DELETED, recorder.alignedUndo(db, now))
             result?.let { db.recordFreed(it.undo, now) }
             db.reconcileSpt(now)
         }
@@ -613,11 +615,14 @@ class TrainingCardRepository internal constructor(
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val (stored, changes) = followingChanges(id, clubNow) ?: return@withWriteTransaction
+            val duty = trainings.training(id)?.let { reference.trainingType(it.typeId) }?.kind == TrainingKind.DUTY
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val recorder = Recorder(db, now)
             recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
             val from = changes.deleted.minOf { it.date }
-            result = CardResult(TrainingCardFormat.deletedFollowing(changes.deleted.size, from), recorder.alignedUndo(db, now))
+            val message = if (duty) ZoneFormat.dutiesDeleted(changes.deleted.size, from)
+                else TrainingCardFormat.deletedFollowing(changes.deleted.size, from)
+            result = CardResult(message, recorder.alignedUndo(db, now))
             result?.let { db.recordFreed(it.undo, now) }
             db.reconcileSpt(now)
         }

@@ -161,6 +161,10 @@ data class CalendarZone(
     val repeat: String?,
     val editable: Boolean = true,
     val coverFor: String? = null,
+    /** Дежурство уже «Проведено» — удаление спрашивает «Удалить прошедшее дежурство?» (шаг 5.3р). */
+    val done: Boolean = false,
+    /** Запрет повторяется — удаление спрашивает «Только этот день / Этот и все следующие» (шаг 5.3р). */
+    val repeating: Boolean = false,
 ) {
     val span: ZoneSpan get() = ZoneSpan(id, kind, start, end)
 
@@ -182,6 +186,7 @@ data class CalendarZone(
                 label = ZoneFormat.restrictionLabel(placeShort, r.reason),
                 repeat = ZoneFormat.repeat(r.weekdays, r.validTo),
                 editable = editable,
+                repeating = !r.isOneOff,
             )
         }
 
@@ -195,6 +200,7 @@ data class CalendarZone(
             placeShort: String,
             color: String,
             coverFor: String? = null,
+            done: Boolean = false,
         ): CalendarZone {
             val from = ClubTime.minuteOfDay(start)
             val to = minOf(from + minutes, ClubTime.MINUTES_PER_DAY)
@@ -212,6 +218,7 @@ data class CalendarZone(
                 label = ZoneFormat.dutyLabel(typeName, placeShort, coverFor),
                 repeat = null,
                 coverFor = coverFor,
+                done = done,
             )
         }
     }
@@ -402,7 +409,10 @@ class CalendarRepository(
                 val place = placeById[t.locationId]
                 // Свой цвет дежурства (шаг 3.9е) — чтобы заливка не сливалась с тренировками того же места.
                 val color = type.dutyColor ?: place?.color.orEmpty()
-                CalendarZone.duty(t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), color, t.coverFor)
+                CalendarZone.duty(
+                    t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), color, t.coverFor,
+                    done = t.status == TrainingStatus.DONE,
+                )
             }
             val restrictions = blocks.map { it.toRestriction() }
             val own = blocks.filter { it.scope == Scope.COACH }.map { it.id }.toSet()

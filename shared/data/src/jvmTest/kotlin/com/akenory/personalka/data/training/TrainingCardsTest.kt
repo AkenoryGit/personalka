@@ -11,6 +11,7 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.domain.reference.ReferenceRules
@@ -394,6 +395,33 @@ class TrainingCardsTest {
         assertEquals(all.size - 1, cards.followingCount(next.id))
         assertNotNull(cards.deleteFollowing(next.id))
         assertEquals(listOf(all[0].id), db.trainingDao().trainingsOfGroup(group).map { it.id })
+    }
+
+    /** Шаг 5.3р: дежурство удаляется так же, как тренировка, — одно или «это и все следующие», сообщения его словами. */
+    @Test
+    fun dutySeriesDeletedOneAndFollowing(): Unit = runBlocking {
+        val repeat = Repeat(setOf(DayOfWeek.TUESDAY), null)
+        assertIs<SaveResult.Saved>(calendar.forms.create(TrainingDraft(at(tuesday, 11, 0), typeId("Деж"), emptyList(), null, placeId("ББ"), 240, repeat)))
+        val all = db.trainingDao().trainingsBetween(at(tuesday, 0), at(tuesday.plus(200, DateTimeUnit.DAY), 0)).sortedBy { it.start }
+        val seriesId = all.first().seriesId!!
+
+        val one = assertNotNull(cards.delete(all[1].id))
+        assertEquals(ZoneFormat.DUTY_DELETED, one.message)
+        calendar.forms.extendSeries()
+        assertTrue(all[1].start.date !in db.trainingDao().trainingsOfSeries(seriesId).map { it.start.date })
+
+        val left = db.trainingDao().trainingsOfSeries(seriesId).sortedBy { it.start }
+        assertEquals(left.size - 2, cards.followingCount(left[2].id))
+        val following = assertNotNull(cards.deleteFollowing(left[2].id))
+        assertEquals(ZoneFormat.dutiesDeleted(left.size - 2, left[2].start.date), following.message)
+        assertEquals(left.take(2).map { it.id }, db.trainingDao().trainingsOfSeries(seriesId).sortedBy { it.start }.map { it.id })
+
+        // Проведённое дежурство удаляется одно и уходит из зарплаты; «Отменить» возвращает его.
+        assertNotNull(cards.markDone(left[0].id))
+        assertNull(cards.followingCount(left[0].id))
+        val done = assertNotNull(cards.delete(left[0].id))
+        cards.undo(done.undo)
+        assertEquals(TrainingStatus.DONE, db.trainingDao().training(left[0].id)!!.status)
     }
 
     @Test

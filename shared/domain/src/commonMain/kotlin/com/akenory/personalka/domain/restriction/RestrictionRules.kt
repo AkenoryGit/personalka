@@ -1,9 +1,11 @@
 package com.akenory.personalka.domain.restriction
 
 import com.akenory.personalka.domain.ClubTime
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.minus
 
 /**
  * Запреты, дежурства и наложения (ТЗ 4.5). Правила ничего не сохраняют и не знают о Room: слой данных
@@ -40,6 +42,26 @@ object RestrictionRules {
                 (restriction.validTo == null || date <= restriction.validTo) &&
                 date.dayOfWeek in restriction.weekdays
         }
+    }
+
+    /**
+     * «Удалить → Этот и все следующие» (5.3, шаг 5.3р): запрет действует до дня перед [date] — последний день
+     * повторения `validTo` = накануне, пропуски после него отбрасываются. До [date] запрет не действовал ни разу
+     * или он разовый — `null`: удаляется целиком.
+     */
+    fun endBefore(restriction: Restriction, date: LocalDate): Restriction? {
+        if (restriction.isOneOff) return null
+        val last = date.minus(1, DateTimeUnit.DAY)
+        val cut = restriction.copy(
+            validTo = restriction.validTo?.let { minOf(it, last) } ?: last,
+            skipDates = restriction.skipDates.filter { it <= last }.toSet(),
+        )
+        var day: LocalDate = cut.validTo ?: return null
+        while (day >= cut.validFrom) {
+            if (occursOn(cut, day)) return cut
+            day = day.minus(1, DateTimeUnit.DAY)
+        }
+        return null
     }
 
     /**

@@ -10,6 +10,7 @@ import com.akenory.personalka.data.training.SaveResult
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.domain.reference.ReferenceRules
@@ -137,6 +138,31 @@ class RestrictionRepositoryTest {
         restrictions.undo(undo)
         assertEquals(id, db.scheduleDao().blocks().single().id)
         assertTrue(flag(later))
+    }
+
+    /** «Удалить → Этот и все следующие» (шаг 5.3р): с чт 22.10 запрета нет, во вт 20.10 он остаётся. */
+    @Test
+    fun endBeforeAndUndo(): Unit = runBlocking {
+        val today = training(tuesday, 17, 15)
+        val thursday = training(LocalDate(2026, 10, 22), 17, 15)
+        restrictions.save(null, group())
+        val id = db.scheduleDao().blocks().single().id
+        assertTrue(flag(thursday))
+
+        val (message, undo) = assertNotNull(restrictions.endBefore(id, LocalDate(2026, 10, 22)))
+        assertEquals(ZoneFormat.restrictionEnded(LocalDate(2026, 10, 22)), message)
+        assertEquals(LocalDate(2026, 10, 21), db.scheduleDao().block(id)!!.validTo)
+        assertTrue(flag(today))
+        assertFalse(flag(thursday))
+
+        restrictions.undo(undo)
+        assertNull(db.scheduleDao().block(id)!!.validTo)
+        assertTrue(flag(thursday))
+
+        // С первого дня — удаляется целиком.
+        val (whole, _) = assertNotNull(restrictions.endBefore(id, LocalDate(2026, 9, 1)))
+        assertEquals(ZoneFormat.RESTRICTION_DELETED, whole)
+        assertEquals(emptyList(), db.scheduleDao().blocks())
     }
 
     @Test

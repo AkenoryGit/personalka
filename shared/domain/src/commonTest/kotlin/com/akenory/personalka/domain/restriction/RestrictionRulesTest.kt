@@ -286,4 +286,33 @@ class RestrictionRulesTest {
         )
         assertEquals(listOf("duty-bb"), RestrictionRules.dutyOverlaps(pt(day(20), 14, 30), twoDuties).map { it.id })
     }
+
+    // --- «Удалить → Этот и все следующие» (шаг 5.3р) ---
+
+    /** С чт 22.10: последний день — ср 21.10, запрет ещё действовал во вт 20.10; пропуски после конца отброшены. */
+    @Test
+    fun endBeforeCutsPeriodAndSkips() {
+        val withSkips = dbGroup.copy(skipDates = setOf(day(13), day(27)))
+        val cut = RestrictionRules.endBefore(withSkips, day(22))!!
+        assertEquals(day(21), cut.validTo)
+        assertEquals(setOf(day(13)), cut.skipDates)
+        assertTrue(RestrictionRules.occursOn(cut, day(20)))
+        assertFalse(RestrictionRules.occursOn(cut, day(22)))
+        assertFalse(RestrictionRules.occursOn(cut, day(27)))
+    }
+
+    /** С первого дня запрета, разовый, или до этого дня все дни пропущены — удаляется целиком. */
+    @Test
+    fun endBeforeFirstDayOrOneOffDeletesWhole() {
+        assertNull(RestrictionRules.endBefore(dbGroup, day(1, 9)))
+        assertNull(RestrictionRules.endBefore(dbGroup.copy(skipDates = setOf(day(1, 9))), day(3, 9)))
+        assertNull(RestrictionRules.endBefore(oneOff("pool", "bb", day(20), time(10), time(12)), day(20)))
+    }
+
+    /** Конец раньше — не переносится позже: у запрета до 15.10 «с 22.10» его не продлевает. */
+    @Test
+    fun endBeforeKeepsEarlierEnd() {
+        val cut = RestrictionRules.endBefore(dbGroup.copy(validTo = day(15)), day(22))!!
+        assertEquals(day(15), cut.validTo)
+    }
 }
