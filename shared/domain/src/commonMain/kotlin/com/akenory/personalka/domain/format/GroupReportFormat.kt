@@ -117,7 +117,8 @@ object GroupReportFormat {
         val names = HashSet<String>()
         names += "итоги"
         val journals = report.blocks.map { b ->
-            val base = b.group.name.filterNot { it in "[]:*?/\\" }.trim().ifEmpty { "Группа" }.take(31)
+            // В имени листа нельзя «:» и «[]*?/\\»: «Сб 9:00 ББ» → «Сб 9.00 ББ».
+            val base = b.group.name.replace(':', '.').filterNot { it in "[]*?/\\" }.trim().ifEmpty { "Группа" }.take(31)
             var sheetName = base
             var n = 2
             while (!names.add(sheetName.lowercase())) {

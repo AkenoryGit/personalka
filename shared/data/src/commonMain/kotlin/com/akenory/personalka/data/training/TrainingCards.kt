@@ -210,9 +210,9 @@ data class UncarryAsk(
  */
 class TrainingCardRepository internal constructor(
     private val db: PersonalkaDatabase,
-    private val clock: () -> Long,
     // Виды оплаты аккаунта — для строки оплаты «Каждый своих» тем же расчётом, что «Зарплата» (шаг 5.3м).
     payTypes: Flow<Boolean> = flowOf(true),
+    private val clock: () -> Long,
 ) {
     private val salary by lazy { SalaryRepository(db, clock, payTypes) }
     private val trainings = db.trainingDao()

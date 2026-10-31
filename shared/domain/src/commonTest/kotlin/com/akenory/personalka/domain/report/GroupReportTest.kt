@@ -129,7 +129,7 @@ class GroupReportTest {
         assertTrue("+7" !in text && "телефон" !in text.lowercase())
 
         val sheets = GroupReportFormat.sheets(r)
-        assertEquals(listOf("Итоги", "Сб 9:00 ББ"), sheets.map { it.name })
+        assertEquals(listOf("Итоги", "Сб 9.00 ББ"), sheets.map { it.name })
         assertEquals(13, sheets[0].rows.size, "12 в составе и ушедшая")
         val journal = sheets[1]
         assertEquals(listOf("Ребёнок", "03.10", "10.10", "17.10", "24.10", "Пришёл", "Из", "%"), journal.headers)
@@ -141,6 +141,6 @@ class GroupReportTest {
 
         // Повторы и запрещённые знаки в именах листов.
         val twins = GroupReport(from, to, listOf(r.blocks[0], r.blocks[0].copy(group = GroupReportGroup("x", "Сб 9:00 ББ")), r.blocks[0].copy(group = GroupReportGroup("y", "Итоги"))))
-        assertEquals(listOf("Итоги", "Сб 9:00 ББ", "Сб 9:00 ББ (2)", "Итоги (2)"), GroupReportFormat.sheets(twins).map { it.name })
+        assertEquals(listOf("Итоги", "Сб 9.00 ББ", "Сб 9.00 ББ (2)", "Итоги (2)"), GroupReportFormat.sheets(twins).map { it.name })
     }
 }

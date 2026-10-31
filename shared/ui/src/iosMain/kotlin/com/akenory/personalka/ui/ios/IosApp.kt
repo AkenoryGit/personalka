@@ -49,7 +49,7 @@ object IosApp {
     val settings: SettingsRepository by lazy { SettingsRepository(database, account.payTypes(::systemMillis), ::systemMillis) }
     val clients: ClientRepository by lazy { ClientRepository(database, ::systemMillis) }
     val groups: GroupRepository by lazy { GroupRepository(database, ::systemMillis) }
-    val calendar: CalendarRepository by lazy { CalendarRepository(database, ::systemMillis, account.payTypes(::systemMillis)) }
+    val calendar: CalendarRepository by lazy { CalendarRepository(database, account.payTypes(::systemMillis), ::systemMillis) }
     val prefs: DevicePrefs by lazy { devicePrefs() }
 
     /** Копии: папка — выбранная в «Файлах» (закладка); копии перед обновлением базы — в личной папке. */
