@@ -31,7 +31,7 @@ internal object TestData {
         return SettingsRepository(db, clock = clock).also {
             clients[it] = ClientRepository(db, clock)
             groups[it] = GroupRepository(db, clock)
-            calendars[it] = CalendarRepository(db, clock)
+            calendars[it] = CalendarRepository(db, clock = clock)
             databases[it] = db
         }
     }
