@@ -17,8 +17,11 @@ enum class MonthPeriod { PAST, CURRENT, FUTURE }
 /** Раздел разбивки месяца (4.10) в порядке экрана: в счёт ступени, стартовые, остальные, группы, дежурства. */
 enum class BreakdownSection { PT, SPT, OTHER, GROUPS, DUTY }
 
-/** Случай группы из таблицы 4.8. Группа коллеги, проведённая коллегой, в разбивку не попадает: там всё по нулям. */
-enum class GroupCase { MINE_ALONE, MINE_TOGETHER, MINE_REPLACED, THEIRS_TOGETHER, THEIRS_BY_ME }
+/**
+ * Случай группы из таблицы 4.8. Группа коллеги, проведённая коллегой, в разбивку не попадает: там всё по нулям.
+ * [MINE_EACH_OWN] и [THEIRS_EACH_OWN] — «Каждый своих» (решение 31.10.2026).
+ */
+enum class GroupCase { MINE_ALONE, MINE_TOGETHER, MINE_EACH_OWN, MINE_REPLACED, THEIRS_TOGETHER, THEIRS_EACH_OWN, THEIRS_BY_ME }
 
 /**
  * Строка разбивки месяца (4.10). [count] — тренировок, [unit] — оплата одной (у дежурств — ставка за час),
@@ -272,6 +275,8 @@ object SalaryMonthRules {
                 TrainingKind.GROUP -> {
                     if (p.paidClients == 0) return@forEach
                     val case = groupCase(t) ?: return@forEach
+                    // В группе коллеги «Каждый своих» без моих детей мне ничего не причитается (4.8).
+                    if (case == GroupCase.THEIRS_EACH_OWN && p.paidClients == p.colleagueClients) return@forEach
                     val colleague = if (t.owner == Owner.SELF) t.colleagueId else t.ownerColleagueId
                     val key = listOf(BreakdownSection.GROUPS, case, t.typeId, t.locationId, colleague, p.rateMissing)
                     val line = lines[key] ?: BreakdownLine(
@@ -279,7 +284,9 @@ object SalaryMonthRules {
                         colleagueId = colleague.takeIf { case != GroupCase.MINE_ALONE }, missing = p.rateMissing,
                         unit = unitRate(t, type, pay.tier, input.rates),
                     )
-                    lines[key] = line.copy(count = line.count + 1, children = line.children + p.paidClients, gross = line.gross + p.amount, amount = line.amount + p.earned)
+                    // У «Каждый своих» — только мои дети: по ним заработано n₁ × R (4.8).
+                    val children = p.paidClients - p.colleagueClients
+                    lines[key] = line.copy(count = line.count + 1, children = line.children + children, gross = line.gross + p.amount, amount = line.amount + p.earned)
                 }
                 TrainingKind.DUTY -> {
                     if (t.status != TrainingStatus.DONE) return@forEach
@@ -333,11 +340,13 @@ object SalaryMonthRules {
             ConductedBy.SELF -> GroupCase.MINE_ALONE
             ConductedBy.SELF_AND_COLLEAGUE -> GroupCase.MINE_TOGETHER
             ConductedBy.COLLEAGUE -> GroupCase.MINE_REPLACED
+            ConductedBy.EACH_OWN -> GroupCase.MINE_EACH_OWN
         }
         Owner.COLLEAGUE -> when (t.conductedBy) {
             ConductedBy.SELF_AND_COLLEAGUE -> GroupCase.THEIRS_TOGETHER
             ConductedBy.SELF -> GroupCase.THEIRS_BY_ME
             ConductedBy.COLLEAGUE -> null
+            ConductedBy.EACH_OWN -> GroupCase.THEIRS_EACH_OWN
         }
     }
 

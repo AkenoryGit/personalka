@@ -85,6 +85,8 @@ data class GroupMemberEntity(
     /** Вопрос «Не ходит 30 дней» (шаг 3.9у): когда последний раз нажали «Оставить» и сколько раз; после двух — не спрашивать. */
     val absenceKeptOn: LocalDate? = null,
     @ColumnInfo(defaultValue = "0") val absenceKeeps: Int = 0,
+    /** Чей ребёнок в группе «Каждый своих» (4.8, шаг 5.3л): мой или коллеги; копируется в участие тренировки. */
+    val coach: Owner = Owner.SELF,
 )
 
 /**

@@ -48,6 +48,7 @@ object ExcelFormat {
         ConductedBy.SELF -> "я"
         ConductedBy.SELF_AND_COLLEAGUE -> "я и ${colleague ?: "коллега"}"
         ConductedBy.COLLEAGUE -> colleague ?: "коллега"
+        ConductedBy.EACH_OWN -> "я и ${colleague ?: "коллега"}, каждый своих"
     }
 
     fun where(kind: ResultKind): String = when (kind) {

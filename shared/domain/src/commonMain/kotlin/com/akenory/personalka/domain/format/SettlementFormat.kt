@@ -35,6 +35,8 @@ object SettlementFormat {
     fun caseTitle(case: GroupCase): String = when (case) {
         GroupCase.MINE_ALONE -> "Моя группа"
         GroupCase.MINE_TOGETHER -> "Моя группа${DOT}провели вместе"
+        GroupCase.MINE_EACH_OWN -> "Моя группа${DOT}каждый своих"
+        GroupCase.THEIRS_EACH_OWN -> "Группа коллеги${DOT}каждый своих"
         GroupCase.MINE_REPLACED -> "Моя группа${DOT}провели без вас"
         GroupCase.THEIRS_TOGETHER -> "Группа коллеги${DOT}провели вместе"
         GroupCase.THEIRS_BY_ME -> "Группа коллеги${DOT}провели вы"
@@ -65,6 +67,8 @@ object SettlementFormat {
         val tax = c.tax ?: return null
         val rest = if (tax == 0L) null else "(1 − ${taxShare(tax)})"
         return when {
+            c.eachOwn && rest != null -> "$rest от суммы за детей"
+            c.eachOwn -> "вся сумма за детей"
             c.together && rest != null -> "½ × $rest от каждой"
             c.together -> "½ от каждой"
             rest != null -> "$rest от каждой"
@@ -136,6 +140,8 @@ object SettlementFormat {
     private fun shareCase(case: GroupCase): String = when (case) {
         GroupCase.MINE_ALONE -> "Моя группа"
         GroupCase.MINE_TOGETHER -> "Моя группа, вели вместе"
+        GroupCase.MINE_EACH_OWN -> "Моя группа, каждый своих"
+        GroupCase.THEIRS_EACH_OWN -> "Твоя группа, каждый своих"
         GroupCase.MINE_REPLACED -> "Моя группа, замена"
         GroupCase.THEIRS_TOGETHER -> "Твоя группа, вели вместе"
         GroupCase.THEIRS_BY_ME -> "Твоя группа, замена"

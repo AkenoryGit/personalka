@@ -79,6 +79,8 @@ data class OwnerSchemes(
  * учитываются только у групп. [groupId] — группа тренировки: по ней прогноз берёт ожидаемое число детей (4.12).
  * [coverFor] — за кого дежурство (3.5): в разбивке месяца такие дежурства идут отдельными строками (4.10).
  * [byUs] — отменена по инициативе тренера или клуба: в долю отмен клиентов (4.12) не входит.
+ * [coaches] — чей каждый клиент из [clients] (по тому же номеру): нужно только группе «Каждый своих» (4.8,
+ * `Participation.coach`); короче списка клиентов или пусто — остальные мои.
  */
 data class PayTraining(
     val id: String,
@@ -96,7 +98,11 @@ data class PayTraining(
     val groupId: String? = null,
     val coverFor: String? = null,
     val byUs: Boolean = false,
-)
+    val coaches: List<Owner> = emptyList(),
+) {
+    /** Чей клиент номер [index]: нет пометки — мой. */
+    fun coachOf(index: Int): Owner = coaches.getOrNull(index) ?: Owner.SELF
+}
 
 /**
  * Доплата ([amount] больше нуля) или удержание месяца (ТЗ 3.6); [inClubAccrual] — входит в начисление клуба.
@@ -111,6 +117,7 @@ enum class SplitMark { AS_PT, HALF }
  * Оплата одной тренировки: [amount] — G по 4.7, пометка сплита и «нет ставки» (0 ₽ и пункт в «Нужно сделать»).
  * По 4.8: [earned] — заработано мной, [accrued] — начислено мне клубом, [settlement] — взаиморасчёт с коллегой
  * [colleagueId]: больше нуля — коллега отдаёт мне, меньше — я коллеге. Не у групп — всё моё: G, G, 0.
+ * [colleagueClients] — сколько из [paidClients] детей коллеги у группы «Каждый своих» (4.8), у остальных 0.
  */
 data class TrainingPay(
     val trainingId: String,
@@ -122,13 +129,20 @@ data class TrainingPay(
     val accrued: Long = amount,
     val colleagueId: String? = null,
     val settlement: Long = 0,
+    val colleagueClients: Int = 0,
 )
+
+/**
+ * Сколько детей ждать на запланированной группе (ТЗ 4.12): [total] — всех, из них [colleague] — детей коллеги у
+ * группы «Каждый своих» (4.8), у остальных 0.
+ */
+data class ExpectedKids(val total: Int, val colleague: Int = 0)
 
 /**
  * Деньги месяца по 4.6: счётчик и ступень по проведённым и прогнозные, заработок по текущей ступени, прогноз — по
  * прогнозной. [accrued] — начислено клубом (группы коллег — 0, мои группы — целиком, 4.8), [settlements] — итог
  * взаиморасчёта по каждому коллеге: больше нуля — коллега должен мне. [groupChildren] — оплаченные дети в группах,
- * которые я вёл (один или вместе), [dutyMinutes] — проведённые дежурства. [sptBonus] — доплаты за СПТ, закрытые
+ * которые я вёл (один или вместе; у «Каждый своих» — только мои), [dutyMinutes] — проведённые дежурства. [sptBonus] — доплаты за СПТ, закрытые
  * покупкой в этом месяце (4.9): входят в заработано, начислено и прогноз. [adjustments] — доплаты и удержания месяца
  * (4.10): все — в заработано и прогноз, с `in_club_accrual` — ещё и в начислено. [forecastTrainings],
  * [forecastAccrued] и [forecastSettlements] — то же по прогнозной ступени, будто все запланированные состоялись:
@@ -187,17 +201,37 @@ object PayRules {
     }
 
     /**
+     * Сколько из оплаченных детей — коллеги (4.8): только у группы «Каждый своих», у остальных 0. В прогнозе у
+     * запланированной считаются и ожидаемые; с [expected] — оно.
+     */
+    fun paidColleague(training: PayTraining, forecast: Boolean = false, expected: Int? = null): Int {
+        if (training.conductedBy != ConductedBy.EACH_OWN) return 0
+        val planned = forecast && training.status == TrainingStatus.PLANNED
+        if (planned && expected != null) return expected
+        return training.clients.withIndex().count { (i, status) ->
+            training.coachOf(i) == Owner.COLLEAGUE && (isPaid(status) || (planned && status == ParticipationStatus.EXPECTED))
+        }
+    }
+
+    /**
      * Ожидаемое число детей запланированной группы (ТЗ 4.12): среднее оплаченных по последним 4 проведённым
      * тренировкам этой группы до неё, до целого, половина вверх. Истории нет — `null`, и прогноз берёт состав.
+     * У группы «Каждый своих» (4.8) — по последним 4 проведённым «Каждый своих», свои и дети коллеги отдельно.
      */
-    fun expectedChildren(training: PayTraining, history: List<PayTraining>): Int? {
+    fun expectedChildren(training: PayTraining, history: List<PayTraining>): ExpectedKids? {
         val groupId = training.groupId ?: return null
+        val eachOwn = training.conductedBy == ConductedBy.EACH_OWN
         val last = history
             .filter { it.groupId == groupId && it.status == TrainingStatus.DONE && it.start < training.start }
+            .filter { !eachOwn || it.conductedBy == ConductedBy.EACH_OWN }
             .sortedByDescending { it.start }
             .take(EXPECTED_FROM_LAST)
         if (last.isEmpty()) return null
-        return roundDiv(last.sumOf { paidClients(it).toLong() }, last.size.toLong()).toInt()
+        val size = last.size.toLong()
+        if (!eachOwn) return ExpectedKids(roundDiv(last.sumOf { paidClients(it).toLong() }, size).toInt())
+        val colleague = roundDiv(last.sumOf { paidColleague(it).toLong() }, size).toInt()
+        val own = roundDiv(last.sumOf { (paidClients(it) - paidColleague(it)).toLong() }, size).toInt()
+        return ExpectedKids(own + colleague, colleague)
     }
 
     /** Тренировки месяца [month] — по дате начала в поясе клуба. */
@@ -239,10 +273,10 @@ object PayRules {
         tier: Int,
         forecast: Boolean = false,
         owners: OwnerSchemes = OwnerSchemes(),
-        expected: Int? = null,
+        expected: ExpectedKids? = null,
     ): TrainingPay {
         val type = types[training.typeId]
-        val p = paidClients(training, forecast, expected)
+        val p = paidClients(training, forecast, expected?.total)
         val happened = when (training.status) {
             TrainingStatus.DONE -> true
             TrainingStatus.PLANNED -> forecast
@@ -265,7 +299,9 @@ object PayRules {
                 else -> type.splitFallbackTypeId?.let { types[it] }?.let(::amountOf)
                     ?.let { result(it, SplitMark.AS_PT) } ?: missing
             }
-            TrainingKind.GROUP -> if (p == 0) result(0) else amountOf(type)?.let { share(result(p * it), training, owners) } ?: missing
+            TrainingKind.GROUP -> if (p == 0) result(0) else amountOf(type)?.let {
+                share(result(p * it), training, owners, paidColleague(training, forecast, expected?.colleague))
+            } ?: missing
             TrainingKind.DUTY -> if (!happened) result(0) else amountOf(type)?.let { result(perHour(it, training.durationMin)) } ?: missing
             TrainingKind.OTHER -> {
                 val due = if (training.clients.isEmpty()) happened else p > 0
@@ -299,8 +335,10 @@ object PayRules {
      * Деление группы с коллегами (ТЗ 4.8). Доля каждого проводившего на руки — G × (1 − w(O)) / |C|, до копейки,
      * половина вверх. Заработано — G делённое на число проводивших, если я среди них; начислено клубом — G, если
      * группа моя. Коллега для взаиморасчёта — владелец, если группа его, иначе проводивший со мной или вместо меня.
+     * «Каждый своих» ([eachOwn]) делит по детям: [colleagueKids] из оплаченных — коллеги.
      */
-    fun share(pay: TrainingPay, training: PayTraining, owners: OwnerSchemes): TrainingPay {
+    fun share(pay: TrainingPay, training: PayTraining, owners: OwnerSchemes, colleagueKids: Int = 0): TrainingPay {
+        if (training.conductedBy == ConductedBy.EACH_OWN) return eachOwn(pay, training, owners, colleagueKids)
         val g = pay.amount
         val mine = training.owner == Owner.SELF
         val conductors = if (training.conductedBy == ConductedBy.SELF_AND_COLLEAGUE) 2L else 1L
@@ -319,6 +357,31 @@ object PayRules {
             accrued = if (mine) g else 0,
             colleagueId = colleague.takeIf { settlement != 0L },
             settlement = settlement,
+        )
+    }
+
+    /**
+     * «Каждый своих» (ТЗ 4.8, решение 31.10.2026): оплаченные дети — мои n₁ и коллеги n₂ ([colleagueKids]),
+     * R = G / (n₁ + n₂). Заработано — n₁ × R; начислено клубом — G, если группа моя. Взаиморасчёт по доле налога
+     * владельца w(O): в моей группе я отдаю коллеге n₂ × R × (1 − w), в группе коллеги он отдаёт мне n₁ × R × (1 − w);
+     * до копейки, половина вверх. Дети коллеги в его же группе мне ничего не дают.
+     */
+    private fun eachOwn(pay: TrainingPay, training: PayTraining, owners: OwnerSchemes, colleagueKids: Int): TrainingPay {
+        val g = pay.amount
+        val p = pay.paidClients.toLong()
+        val theirs = colleagueKids.toLong().coerceIn(0, p)
+        val mineSum = roundDiv(g * (p - theirs), p)
+        val theirsSum = g - mineSum
+        val keep = TAX_ONE - ownerTax(training, owners)
+        val mine = training.owner == Owner.SELF
+        val settlement = if (mine) -roundDiv(theirsSum * keep, TAX_ONE) else roundDiv(mineSum * keep, TAX_ONE)
+        val colleague = if (mine) training.colleagueId else training.ownerColleagueId
+        return pay.copy(
+            earned = mineSum,
+            accrued = if (mine) g else 0,
+            colleagueId = colleague.takeIf { settlement != 0L },
+            settlement = settlement,
+            colleagueClients = theirs.toInt(),
         )
     }
 
@@ -374,7 +437,7 @@ object PayRules {
             cut.sumOf { it.second.earned }.let { cancels?.keep(it) ?: it }
         val groupChildren = ofMonth.zip(pays)
             .filter { (t, _) -> kindOf(t) == TrainingKind.GROUP && t.conductedBy != ConductedBy.COLLEAGUE }
-            .sumOf { (_, pay) -> pay.paidClients }
+            .sumOf { (_, pay) -> pay.paidClients - pay.colleagueClients }
         val dutyMinutes = ofMonth
             .filter { kindOf(it) == TrainingKind.DUTY && it.status == TrainingStatus.DONE }
             .sumOf { it.durationMin }

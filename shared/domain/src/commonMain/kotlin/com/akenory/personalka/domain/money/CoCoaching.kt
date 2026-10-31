@@ -37,6 +37,12 @@ object CoCoachingRules {
      */
     val SCHEMES: List<PaySchemeKind> = listOf(PaySchemeKind.NONE, PaySchemeKind.HALF_OFFICIAL)
 
+    /**
+     * Варианты «Проводим» в форме группы и в карточке. «Каждый своих» (`EACH_OWN`, 4.8) расчёт уже знает (шаг 5.3л),
+     * а выбор с пометками детей появится на экранах в шаге 5.3м.
+     */
+    val CHOICES: List<ConductedBy> = listOf(ConductedBy.SELF, ConductedBy.SELF_AND_COLLEAGUE, ConductedBy.COLLEAGUE)
+
     /** Имя коллеги: не пустое и не повторяется среди [others] (без учёта регистра и «ё»). */
     fun nameProblem(name: String, others: List<String>): String? {
         val trimmed = name.trim()

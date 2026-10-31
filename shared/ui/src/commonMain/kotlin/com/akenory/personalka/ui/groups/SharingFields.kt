@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.money.Sharing
 import com.akenory.personalka.ui.clients.FormLabel
@@ -52,7 +53,7 @@ internal fun SharingFields(
     Column {
         FormLabel(conductedLabel)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            ConductedBy.entries.forEach { c ->
+            CoCoachingRules.CHOICES.forEach { c ->
                 ChoiceChip(CoCoachingFormat.conducted(c), sharing.conductedBy == c, onClick = {
                     onChange(sharing.copy(conductedBy = c, colleagueId = sharing.colleagueId ?: only))
                 }, modifier = Modifier.testTag(sharingConductedTag(c)))

@@ -48,8 +48,11 @@ enum class RecordSource { MANUAL, IMPORT }
 /** На ком числится группа или тренировка в 1С. */
 enum class Owner { SELF, COLLEAGUE }
 
-/** Кто ведёт или провёл: сам, вместе с коллегой, коллега (замена). */
-enum class ConductedBy { SELF, SELF_AND_COLLEAGUE, COLLEAGUE }
+/**
+ * Кто ведёт или провёл: сам, вместе с коллегой, коллега (замена), каждый своих детей (4.8, решение 31.10.2026):
+ * у [EACH_OWN] оба тренера на тренировке, и каждый получает за своих детей полную ставку.
+ */
+enum class ConductedBy { SELF, SELF_AND_COLLEAGUE, COLLEAGUE, EACH_OWN }
 
 /** Статус самой тренировки (4.1). «Отмена со списанием» — статус участия, а не тренировки. */
 enum class TrainingStatus { PLANNED, DONE, CANCELLED }

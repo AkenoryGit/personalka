@@ -154,8 +154,10 @@ object ReportRules {
                 TrainingStatus.DONE -> ReportStatus.DONE
                 TrainingStatus.CANCELLED -> if (kind != TrainingKind.DUTY && paid > 0) ReportStatus.CHARGED else ReportStatus.CANCELLED
             }
+            // У «Каждый своих» в зарплату идут мои дети; в группе коллеги без моих детей — ничего (4.8).
+            val ownChildren = p.paidClients - p.colleagueClients
             val inSalary = when (kind) {
-                TrainingKind.GROUP -> p.paidClients > 0
+                TrainingKind.GROUP -> p.paidClients > 0 && (case != GroupCase.THEIRS_EACH_OWN || ownChildren > 0)
                 TrainingKind.DUTY -> t.status == TrainingStatus.DONE
                 else -> p.amount > 0 || p.rateMissing
             }
@@ -169,7 +171,7 @@ object ReportRules {
                 durationMin = t.durationMin,
                 status = status,
                 inSalary = inSalary,
-                children = if (perClient && inSalary) p.paidClients else 0,
+                children = if (perClient && inSalary) ownChildren else 0,
                 countsPt = t.typeId in ptIds && paid > 0,
             )
         }

@@ -8,6 +8,8 @@ import kotlinx.datetime.LocalDateTime
 /**
  * Тренировка во взаиморасчёте: [children] — оплаченных детей, [gross] — G группы, [amount] — взаиморасчёт по ней
  * (больше нуля — коллега отдаёт мне), [tax] — доля налога владельца w в стомиллионных (`PayRules.ownerTax`).
+ * У «Каждый своих» (4.8) [children] — дети, за которых отдают (коллеги — в моей группе, мои — в его), [gross] — сумма
+ * за них по ставке.
  */
 data class SettlementTraining(
     val trainingId: String,
@@ -37,6 +39,9 @@ data class SettlementCase(
 
     /** Вели вдвоём: доля — половина. */
     val together: Boolean get() = case == GroupCase.MINE_TOGETHER || case == GroupCase.THEIRS_TOGETHER
+
+    /** «Каждый своих»: доля — за детей, а не от всей группы. */
+    val eachOwn: Boolean get() = case == GroupCase.MINE_EACH_OWN || case == GroupCase.THEIRS_EACH_OWN
 }
 
 /**
@@ -72,7 +77,12 @@ object SettlementRules {
             val t = byId[p.trainingId] ?: return@mapNotNull null
             val case = SalaryMonthRules.groupCase(t) ?: return@mapNotNull null
             if (p.settlement == 0L) return@mapNotNull null
-            Row(colleague, case, t, SettlementTraining(t.id, t.start, p.paidClients, p.amount, p.settlement, PayRules.ownerTax(t, input.owners)))
+            val (children, gross) = when (case) {
+                GroupCase.MINE_EACH_OWN -> p.colleagueClients to p.amount - p.earned
+                GroupCase.THEIRS_EACH_OWN -> p.paidClients - p.colleagueClients to p.earned
+                else -> p.paidClients to p.amount
+            }
+            Row(colleague, case, t, SettlementTraining(t.id, t.start, children, gross, p.settlement, PayRules.ownerTax(t, input.owners)))
         }
         val cases = rows.groupBy { it.colleague }.mapValues { (_, list) ->
             list.groupBy { Triple(it.case, it.training.groupId, if (it.training.groupId == null) "${it.training.typeId}@${it.training.locationId}" else "") }

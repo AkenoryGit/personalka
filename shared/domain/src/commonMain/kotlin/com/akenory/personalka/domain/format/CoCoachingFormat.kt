@@ -45,6 +45,7 @@ object CoCoachingFormat {
         ConductedBy.SELF -> "Один"
         ConductedBy.SELF_AND_COLLEAGUE -> "С коллегой"
         ConductedBy.COLLEAGUE -> "Коллега (замена)"
+        ConductedBy.EACH_OWN -> "Каждый своих"
     }
 
     /** «2 коллеги» в строке настроек; нет — «Пока нет». */
@@ -80,11 +81,14 @@ object CoCoachingFormat {
             ConductedBy.SELF_AND_COLLEAGUE ->
                 BlockWho(listOf(TOGETHER, owner ?: who).joinToString(DOT), TOGETHER, if (mine) WhoKind.MINE_TOGETHER else WhoKind.THEIRS)
             ConductedBy.COLLEAGUE -> "Ведёт $who".let { BlockWho(listOfNotNull(it, owner).joinToString(DOT), it, WhoKind.NOT_ME) }
+            ConductedBy.EACH_OWN ->
+                BlockWho(listOf(EACH_OWN, owner ?: who).joinToString(DOT), EACH_OWN, if (mine) WhoKind.MINE_TOGETHER else WhoKind.THEIRS)
         }
     }
 
     private const val ALONE = "Один"
     private const val TOGETHER = "Вдвоём"
+    private const val EACH_OWN = "Каждый своих"
 
     private fun name(id: String?, names: Map<String, String>): String = id?.let { names[it] } ?: SalaryFormat.COLLEAGUE
 }

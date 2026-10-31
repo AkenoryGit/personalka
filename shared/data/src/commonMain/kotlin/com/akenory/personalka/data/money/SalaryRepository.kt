@@ -372,6 +372,7 @@ fun TrainingEntity.pay(participations: List<ParticipationEntity>): PayTraining =
     durationMin = durationMin,
     status = status,
     clients = participations.map { it.status },
+    coaches = participations.map { it.coach },
     splitHalf = splitHalf,
     owner = owner,
     ownerColleagueId = ownerColleagueId,

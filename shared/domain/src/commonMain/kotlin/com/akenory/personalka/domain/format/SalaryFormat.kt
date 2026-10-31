@@ -216,6 +216,8 @@ object SalaryFormat {
         val case = when (line.groupCase) {
             GroupCase.MINE_ALONE, null -> "моя группа"
             GroupCase.MINE_TOGETHER -> "моя группа${DOT}вдвоём: $colleague"
+            GroupCase.MINE_EACH_OWN -> "моя группа${DOT}каждый своих: $colleague"
+            GroupCase.THEIRS_EACH_OWN -> "группа коллеги${DOT}каждый своих: $colleague"
             GroupCase.MINE_REPLACED -> "моя группа${DOT}замена: $colleague"
             GroupCase.THEIRS_TOGETHER -> "группа коллеги: $colleague${DOT}вдвоём"
             GroupCase.THEIRS_BY_ME -> "группа коллеги: $colleague${DOT}замена"

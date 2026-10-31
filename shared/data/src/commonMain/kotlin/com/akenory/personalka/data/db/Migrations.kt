@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -251,6 +251,17 @@ internal object Migration13To14 : Migration(13, 14) {
 internal object Migration14To15 : Migration(14, 15) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `participation` ADD COLUMN `confirmedStart` TEXT")
+    }
+}
+
+/**
+ * Версия 16 (шаг 5.3л): чей ребёнок — у места в составе группы и у участия, для групп «Каждый своих» (4.8). Прежние
+ * дети — мои: так их и считали.
+ */
+internal object Migration15To16 : Migration(15, 16) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `group_member` ADD COLUMN `coach` TEXT NOT NULL DEFAULT 'SELF'")
+        connection.exec("ALTER TABLE `participation` ADD COLUMN `coach` TEXT NOT NULL DEFAULT 'SELF'")
     }
 }
 

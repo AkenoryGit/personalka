@@ -22,6 +22,7 @@ import com.akenory.personalka.domain.group.GroupDraft
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.group.MemberChange
 import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.money.CoCoachingRules
@@ -312,6 +313,17 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
         if (member.sync.deletedAt == null) return
         val now = clock()
         changeMembers(member.groupId, now) { clients.upsertGroupMember(member.copy(sync = member.sync.restored(now))) }
+    }
+
+    /**
+     * Чей ребёнок в группе «Каждый своих» (4.8): мой или коллеги. Пометка переходит на будущие неотмеченные
+     * тренировки группы; прошедшие и отмеченные считаются, как были.
+     */
+    suspend fun setCoach(memberId: String, coach: Owner) {
+        val member = clients.groupMember(memberId) ?: return
+        if (member.sync.deletedAt != null || member.coach == coach) return
+        val now = clock()
+        changeMembers(member.groupId, now) { clients.upsertGroupMember(member.copy(coach = coach, sync = member.sync.touched(now))) }
     }
 
     private suspend fun changeMembers(groupId: String, now: Long, change: suspend () -> Unit) {

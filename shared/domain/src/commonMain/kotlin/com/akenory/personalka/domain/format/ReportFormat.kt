@@ -69,6 +69,8 @@ object ReportFormat {
     fun groupCase(case: GroupCase?): String? = when (case) {
         null, GroupCase.MINE_ALONE -> null
         GroupCase.MINE_TOGETHER -> "вдвоём с коллегой"
+        GroupCase.MINE_EACH_OWN -> "каждый своих"
+        GroupCase.THEIRS_EACH_OWN -> "группа коллеги, каждый своих"
         GroupCase.MINE_REPLACED -> "вёл коллега"
         GroupCase.THEIRS_TOGETHER -> "группа коллеги, вдвоём"
         GroupCase.THEIRS_BY_ME -> "группа коллеги, вёл я"

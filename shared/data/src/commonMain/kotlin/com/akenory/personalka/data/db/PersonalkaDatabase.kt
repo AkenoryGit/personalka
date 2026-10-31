@@ -108,7 +108,7 @@ import kotlin.coroutines.CoroutineContext
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -132,10 +132,11 @@ abstract class PersonalkaDatabase : RoomDatabase() {
          * 9 — свой цвет дежурства ([Migration8To9], шаг 3.9е); 10 — «Убрать из списка» «Без записи» ([Migration9To10], шаг 3.9н);
          * 11 — сверка с 1С: услуги, имена, сверки и пункты ([Migration10To11], шаг 4.2а); 12 — «Оставить» у места
          * в составе группы ([Migration11To12], шаг 3.9у); 13 — «Напомнить с» у листа ожидания ([Migration12To13], шаг 3.9х); 14 — выключатель надёжности
-         * клиентов ([Migration13To14], шаг 3.14а); 15 — «Придёт» у участия ([Migration14To15], шаг 3.16).
+         * клиентов ([Migration13To14], шаг 3.14а); 15 — «Придёт» у участия ([Migration14To15], шаг 3.16); 16 — чей ребёнок
+         * в группе «Каждый своих» ([Migration15To16], шаг 5.3л).
          * Перед переходом на новую версию — копия ([BeforeMigration], шаг 2.7б).
          */
-        const val VERSION = 15
+        const val VERSION = 16
         const val FILE_NAME = "personalka.db"
     }
 }

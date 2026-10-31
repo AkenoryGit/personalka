@@ -2,16 +2,18 @@ package com.akenory.personalka.data.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.akenory.personalka.data.db.entity.ClientAlias1cEntity
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.YearMonth
+import com.akenory.personalka.domain.model.Owner
+import com.akenory.personalka.domain.model.ParticipationStatus
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 
 /**
  * Переходы базы со старых версий: файл версии 1 (до шага 1.13в), 2 (до «За кого» у дежурства), 3 (до очереди
@@ -503,8 +505,46 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion15() {
-        assertEquals(15, PersonalkaDatabase.VERSION)
-        assertTrue((1..14).all { schemaFile(it).exists() }, "Схемы версий 1–14 хранятся: по ним строятся переходы")
+    fun version15KeepsGroupsAndChildrenAreMine(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v15", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 3.16–5.3к: «Каждый своих» ещё нет — чей ребёнок, не хранится.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 15)
+                raw.exec(
+                    "INSERT INTO group_member (id, groupId, clientId, fromDate, toDate, absenceKeptOn, absenceKeeps, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('m1', 'g1', 'k1', '2026-09-01', NULL, NULL, 0, 'c1', 1, 1, 1, NULL)",
+                )
+                raw.exec(
+                    "INSERT INTO participation (id, trainingId, clientId, status, behavior, cancelReason, notifiedAt, chargeOverridden, confirmedStart, " +
+                        "coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('p1', 't1', 'k1', 'ATTENDED', NULL, NULL, NULL, 0, NULL, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val member = db.clientDao().groupMember("m1")!!
+                assertEquals("k1", member.clientId, "Состав не тронут")
+                assertEquals(Owner.SELF, member.coach, "Прежние дети в группе — мои")
+                val p = db.trainingDao().participation("p1")!!
+                assertEquals(ParticipationStatus.ATTENDED, p.status, "Участие не тронуто")
+                assertEquals(Owner.SELF, p.coach, "Прежние участия — мои")
+                db.clientDao().upsertGroupMember(member.copy(coach = Owner.COLLEAGUE))
+                assertEquals(Owner.COLLEAGUE, db.clientDao().groupMember("m1")!!.coach, "Ребёнка коллеги можно отметить")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion16() {
+        assertEquals(16, PersonalkaDatabase.VERSION)
+        assertTrue((1..15).all { schemaFile(it).exists() }, "Схемы версий 1–15 хранятся: по ним строятся переходы")
     }
 }

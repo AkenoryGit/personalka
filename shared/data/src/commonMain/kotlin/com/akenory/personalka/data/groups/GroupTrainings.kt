@@ -8,7 +8,10 @@ import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.group.GroupMember
+import com.akenory.personalka.domain.group.coachOn
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.series.SeriesTraining
 import com.akenory.personalka.domain.training.ParticipantState
@@ -16,7 +19,7 @@ import com.akenory.personalka.domain.training.ParticipantState
 // Общее для групп и клиентов: состав группы меняется из карточки группы и при архиве клиента (4.4).
 
 /** Запись состава — для правил. */
-internal fun GroupMemberEntity.member(): GroupMember = GroupMember(clientId, fromDate, toDate)
+internal fun GroupMemberEntity.member(): GroupMember = GroupMember(clientId, fromDate, toDate, coach)
 
 /** Тренировка с участниками — для правил серий (1.3): то, что серия может и не может менять. */
 internal fun TrainingEntity.toSeriesTraining(participations: List<ParticipationEntity>): SeriesTraining = SeriesTraining(
@@ -57,6 +60,16 @@ internal suspend fun PersonalkaDatabase.syncGroupTrainings(groupId: String, befo
         val training = byId[u.id] ?: return@forEach
         writeParticipants(training, participations.getValue(u.id), u.participants.map { it.clientId }, nowMillis)
     }
+    // Чей ребёнок поменялся в составе (4.8, «Каждый своих») — в будущих неотмеченных тренировках тоже.
+    val now = ClubTime.now(nowMillis)
+    list.filter { it.status == TrainingStatus.PLANNED && it.start > now }.forEach { training ->
+        trainings.participationsOf(training.id)
+            .filter { it.status == ParticipationStatus.EXPECTED }
+            .forEach { p ->
+                val coach = after.coachOn(p.clientId, training.start.date)
+                if (coach != p.coach) trainings.upsertParticipation(p.copy(coach = coach, sync = p.sync.touched(nowMillis)))
+            }
+    }
 }
 
 /**
@@ -80,6 +93,10 @@ internal suspend fun PersonalkaDatabase.writeParticipants(
 internal suspend fun PersonalkaDatabase.addParticipant(training: TrainingEntity, clientId: String, nowMillis: Long) {
     val trainings = trainingDao()
     val row = trainings.participationRow(training.id, clientId)
+    // Чей ребёнок — из состава группы на день тренировки; «на раз» и не у групп — мой (4.8).
+    val coach = training.groupId?.let { groupId ->
+        clientDao().membersOf(groupId).map { it.member() }.coachOn(clientId, training.start.date)
+    } ?: Owner.SELF
     when {
         row == null -> trainings.upsertParticipation(
             ParticipationEntity(
@@ -87,6 +104,7 @@ internal suspend fun PersonalkaDatabase.addParticipant(training: TrainingEntity,
                 sync = SyncFields.new(training.sync.coachId, nowMillis),
                 trainingId = training.id,
                 clientId = clientId,
+                coach = coach,
             ),
         )
         row.sync.deletedAt != null -> trainings.upsertParticipation(
@@ -97,6 +115,7 @@ internal suspend fun PersonalkaDatabase.addParticipant(training: TrainingEntity,
                 cancelReason = null,
                 notifiedAt = null,
                 chargeOverridden = false,
+                coach = coach,
             ),
         )
     }
