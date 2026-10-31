@@ -1,6 +1,7 @@
 package com.akenory.personalka.domain.group
 
 import com.akenory.personalka.domain.client.ClientRules
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.money.Sharing
 import kotlinx.datetime.LocalDate
 
@@ -38,8 +39,40 @@ object GroupRules {
      * (4.4), в посещаемости они видны отдельно.
      */
     fun guests(participants: List<String>, members: List<GroupMember>, date: LocalDate): List<String> {
-        val inGroup = members.membersOn(date).toSet()
+        // Шаг 5.3н: кто в составе сейчас и пришёл позже этой даты — не «на раз»: прошедшие неотмеченные тренировки
+        // получают текущий состав без учёта «в группе с» (4.4).
+        val inGroup = members.membersOn(date).toSet() + members.filter { it.fromDate > date && it.toDate == null }.map { it.clientId }
         return participants.filter { it !in inGroup }.distinct()
+    }
+
+    /**
+     * Кого добавить ожидаемым в прошедшую неотмеченную тренировку группы (4.4, шаг 5.3н): текущий состав на [today]
+     * без учёта «в группе с». Тренировка — запланированная, уже начавшаяся ([started]), без единого «пришёл»;
+     * кто в ней уже есть (и отменённые), не трогается. Будущие тренировки получают состав на свою дату, как раньше.
+     */
+    fun pastFill(started: Boolean, planned: Boolean, participants: List<Pair<String, Boolean>>, members: List<GroupMember>, today: LocalDate): List<String> {
+        if (!started || !planned || participants.any { it.second }) return emptyList()
+        val inside = participants.map { it.first }.toSet()
+        return members.membersOn(today).filter { it !in inside }
+    }
+
+    /**
+     * Начало истории ребёнка в группах (4.4, шаг 5.3н): по каждой группе — дата первой тренировки, где он «пришёл».
+     * [visits] — его тренировки групп: id группы, день и «пришёл» ли.
+     */
+    fun historyStarts(visits: List<Triple<String, LocalDate, Boolean>>): Map<String, LocalDate> =
+        visits.filter { it.third }.groupBy { it.first }.mapValues { (_, list) -> list.minOf { it.second } }
+
+    /**
+     * Скрыта ли тренировка группы из истории ребёнка (шаг 5.3н): уже начавшаяся ([started]), раньше его первого
+     * «пришёл» в этой группе, а сам он «не пришёл», отменил или ещё не отмечен. Ни разу не приходил — скрыты все
+     * прошедшие. Списание видно всегда: это деньги. Будущие и не групповые ([groupId] `null`) видны.
+     */
+    fun hiddenFromHistory(groupId: String?, date: LocalDate, started: Boolean, status: ParticipationStatus, starts: Map<String, LocalDate>): Boolean {
+        if (groupId == null || !started) return false
+        if (status == ParticipationStatus.ATTENDED || status == ParticipationStatus.CANCELLED_CHARGED) return false
+        val from = starts[groupId] ?: return true
+        return date < from
     }
 
     /** Средняя посещаемость (5.10): сколько детей пришло на проведённую тренировку, в среднем, в десятых: 83 — «8,3». */

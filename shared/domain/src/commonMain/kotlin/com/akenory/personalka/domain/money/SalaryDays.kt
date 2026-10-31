@@ -111,7 +111,7 @@ object SalaryDaysRules {
     private fun merge(lines: List<BreakdownLine>, typeOrder: Map<String, Int>): List<BreakdownLine> {
         val merged = LinkedHashMap<BreakdownLine, BreakdownLine>()
         lines.forEach { line ->
-            val key = line.copy(count = 0, amount = 0, children = 0, gross = 0, minutes = 0, sptClosed = if (line.sptClosed > 0) 1 else 0)
+            val key = line.copy(count = 0, amount = 0, children = 0, gross = 0, minutes = 0, colleagueChildren = 0, sptClosed = if (line.sptClosed > 0) 1 else 0)
             val old = merged[key]
             merged[key] = if (old == null) {
                 line
@@ -120,6 +120,7 @@ object SalaryDaysRules {
                     count = old.count + line.count,
                     amount = old.amount + line.amount,
                     children = old.children + line.children,
+                    colleagueChildren = old.colleagueChildren + line.colleagueChildren,
                     gross = old.gross + line.gross,
                     minutes = old.minutes + line.minutes,
                     sptClosed = old.sptClosed + line.sptClosed,

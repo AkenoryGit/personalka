@@ -88,4 +88,28 @@ object RuText {
         }
         return declined + trimmed.substring(end)
     }
+
+    /**
+     * Имя коллеги в родительном падеже — «дети Лены» (шаг 5.3м): склоняется первое слово. Лена → Лены, Ольга → Ольги,
+     * Аня → Ани, Мария → Марии, Иван → Ивана, Андрей → Андрея, Игорь → Игоря; на о, е, и, у, ю, ы, э — не склоняется.
+     */
+    fun genitive(name: String): String {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return trimmed
+        val end = trimmed.indexOf(' ').let { if (it < 0) trimmed.length else it }
+        val word = trimmed.substring(0, end)
+        val lower = word.lowercase()
+        val last = lower.last()
+        val declined = when {
+            word.length < 2 -> word
+            last == 'а' && lower[lower.length - 2] in "гкхжшчщ" -> word.dropLast(1) + "и"
+            last == 'а' -> word.dropLast(1) + "ы"
+            last == 'я' -> word.dropLast(1) + "и"
+            last == 'й' || last == 'ь' -> word.dropLast(1) + "я"
+            last in "оеиуюыэё" -> word
+            last in "бвгджзклмнпрстфхцчшщ" -> word + "а"
+            else -> word
+        }
+        return declined + trimmed.substring(end)
+    }
 }

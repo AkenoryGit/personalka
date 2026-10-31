@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.training
 
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.akenory.personalka.domain.format.GroupShareFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -70,11 +74,13 @@ import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.ReliabilityFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -144,6 +150,13 @@ const val NEW_GUEST_TAG = "guest-new"
 const val NEW_GUEST_LAST_TAG = "guest-new-last"
 const val NEW_GUEST_FIRST_TAG = "guest-new-first"
 fun guestPickTag(id: String) = "guest-pick-$id"
+const val CARD_PAY_LINE_TAG = "card-pay-line"
+const val CARD_SHARE_TAG = "card-share"
+
+/** Системное «Поделиться» текстом (шаг 5.3п): даёт `App`; нет — текст копируется. */
+val LocalShareText = staticCompositionLocalOf<((String) -> Unit)?> { null }
+fun cardKidCoachTag(id: String) = "card-kid-coach-$id"
+fun guestWhoseTag(o: Owner) = "guest-whose-${o.name}"
 
 /**
  * Что открыто в карточке — строкой, чтобы пережить пересоздание окна: тренировка или сразу её панель отмены
@@ -219,6 +232,8 @@ fun TrainingCardHost(
     // Похожий на нового ребёнка «на раз» (5.8, шаг 3.9о): окно «Похожий клиент уже есть».
     var guestSimilar by rememberSaveable(key) { mutableStateOf<String?>(null) }
     var guestChecking by remember(key) { mutableStateOf(false) }
+    // «Чей» ребёнок «на раз» в группе «Каждый своих» (шаг 5.3м): по умолчанию мой.
+    var guestWhose by rememberSaveable(key) { mutableStateOf(Owner.SELF.name) }
 
     // Вопрос о переносе плана после отмены или «Вернуть» (4.3): ждёт ответа и после закрытия карточки.
     var asked by remember { mutableStateOf<CardResult?>(null) }
@@ -264,6 +279,7 @@ fun TrainingCardHost(
         guestLast = ""
         guestFirst = ""
         guestSimilar = null
+        guestWhose = Owner.SELF.name
     }
 
     fun done(result: CardResult?) {
@@ -303,9 +319,13 @@ fun TrainingCardHost(
                     },
                     onLastName = { guestLast = it },
                     onFirstName = { guestFirst = it },
+                    colleague = shown.eachOwnColleague,
+                    whose = Owner.valueOf(guestWhose),
+                    onWhose = { guestWhose = it.name },
                     onPick = { clientId ->
+                        val whose = Owner.valueOf(guestWhose)
                         closeGuest()
-                        guarded { scope.launch { done(cards.addGuest(shown.id, clientId)) } }
+                        guarded { scope.launch { done(cards.addGuest(shown.id, clientId, whose)) } }
                     },
                     onAddNew = {
                         val last = guestLast
@@ -319,8 +339,9 @@ fun TrainingCardHost(
                                 if (similar != null) {
                                     guestSimilar = similar.id
                                 } else {
+                                    val whose = Owner.valueOf(guestWhose)
                                     closeGuest()
-                                    guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first)) } }
+                                    guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first, whose)) } }
                                 }
                             }
                         }
@@ -457,14 +478,16 @@ fun TrainingCardHost(
                 load = cards::client,
                 today = now.date,
                 onPick = { client ->
+                    val whose = Owner.valueOf(guestWhose)
                     closeGuest()
-                    guarded { scope.launch { done(cards.addSimilarGuest(shown.id, client.id)) } }
+                    guarded { scope.launch { done(cards.addSimilarGuest(shown.id, client.id, whose)) } }
                 },
                 onCreate = {
                     val last = guestLast
                     val first = guestFirst
+                    val whose = Owner.valueOf(guestWhose)
                     closeGuest()
-                    guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first)) } }
+                    guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first, whose)) } }
                 },
                 onDismiss = { guestSimilar = null },
             )
@@ -724,6 +747,20 @@ private fun ColumnScope.CardBody(
                 )
                 if (titleLink != null) Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
             }
+            // «Поделиться» пришедшими на группу (шаг 5.3п): значок, не кнопка — лимит трёх кнопок не меняется (10.7).
+            if (GroupShareFormat.canShare(state)) {
+                val share = LocalShareText.current
+                val clipboard = LocalClipboardManager.current
+                IconButton(
+                    onClick = {
+                        val text = GroupShareFormat.text(state.start, card.groupName, card.clients.filter { it.state.came }.mapNotNull { it.fullName })
+                        if (share != null) share(text) else clipboard.setText(AnnotatedString(text))
+                    },
+                    modifier = Modifier.testTag(CARD_SHARE_TAG),
+                ) {
+                    Icon(PIcons.Share, contentDescription = GroupShareFormat.SHARE, tint = colors.text)
+                }
+            }
             CardMenuButton(buttons.menu, onMenu)
         }
         val end = state.end
@@ -743,6 +780,10 @@ private fun ColumnScope.CardBody(
         card.birthdays.forEach { BirthdayLine(it) }
         sptAsk?.let { SptAskRow(it, onSpt) }
         card.sharing?.let { SharingRow(it, onSharing) }
+        // «Каждый своих» (шаг 5.3м): «мои 7 × 270 ₽ = 1 890 ₽ · Лены 5: отдаёте 1 262,25 ₽».
+        card.payLine?.let {
+            Text(it, Modifier.padding(top = Dimens.space2).testTag(CARD_PAY_LINE_TAG), style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text)
+        }
         // Надёжность одного клиента (шаг 3.14): у сплита и мини-группы — в строке каждого.
         if (!isGroup && !TrainingCardRules.perClient(state)) {
             single?.let { c -> card.reliability[c.id]?.let { ReliabilityLine(c.id, it) } }
@@ -1106,6 +1147,16 @@ private fun GroupMembers(
                 Spacer(Modifier.width(Dimens.space3))
                 Text(c.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 card.reliability[c.id]?.let { ReliabilityChip(it, ReliabilityFormat.value(it), c.id, Modifier.padding(start = Dimens.space2)) }
+                // Ребёнок коллеги в группе «Каждый своих» (шаг 5.3м): подпись — имя коллеги.
+                val kidCoach = card.eachOwnColleague?.takeIf { c.colleagueKid }
+                if (kidCoach != null) {
+                    Text(
+                        kidCoach,
+                        modifier = Modifier.padding(start = Dimens.space2).testTag(cardKidCoachTag(c.id)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.textMuted,
+                    )
+                }
                 if (c.guest) {
                     Text(TrainingCardFormat.GUEST, modifier = Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
                 }
@@ -1174,6 +1225,9 @@ private fun ColumnScope.GuestBody(
     onPick: (String) -> Unit,
     onAddNew: () -> Unit,
     onBack: () -> Unit,
+    colleague: String? = null,
+    whose: Owner = Owner.SELF,
+    onWhose: (Owner) -> Unit = {},
 ) {
     val colors = PersonalkaTheme.colors
     val shown = if (query.isBlank()) {
@@ -1198,6 +1252,14 @@ private fun ColumnScope.GuestBody(
             IconButton(onClick = onBack) { Icon(PIcons.Close, contentDescription = "Закрыть", tint = colors.text) }
         }
         Text(TrainingCardFormat.GUEST_HINT, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+        // «Каждый своих» (шаг 5.3м): «Чей: Мой / Лена» — выбирается до нажатия на ребёнка.
+        if (colleague != null) {
+            Row(Modifier.padding(top = Dimens.space3), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                Text(CoCoachingFormat.WHOSE_GUEST, style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+                ChoiceChip(CoCoachingFormat.MY_KID, whose == Owner.SELF, onClick = { onWhose(Owner.SELF) }, modifier = Modifier.testTag(guestWhoseTag(Owner.SELF)))
+                ChoiceChip(colleague, whose == Owner.COLLEAGUE, onClick = { onWhose(Owner.COLLEAGUE) }, modifier = Modifier.testTag(guestWhoseTag(Owner.COLLEAGUE)))
+            }
+        }
         Spacer(Modifier.height(Dimens.space3))
         SearchField(query, onQuery, TrainingCardFormat.GUEST_SEARCH, Modifier.testTag(GUEST_SEARCH_TAG))
         Spacer(Modifier.height(Dimens.space2))

@@ -67,6 +67,10 @@ import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.group.GroupMember
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.model.Owner
+import com.akenory.personalka.domain.format.SalaryFormat
+import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.clients.FormLabel
@@ -103,6 +107,9 @@ const val NEW_MEMBER_FIRST_TAG = "member-new-first"
 fun memberRowTag(name: String) = "member-$name"
 fun memberPickTag(name: String) = "member-pick-$name"
 fun absentRowTag(name: String) = "absent-$name"
+const val MEMBER_SPLIT_TAG = "member-split"
+fun memberCoachTag(o: Owner) = "member-coach-${o.name}"
+fun memberCoachLabelTag(name: String) = "member-coach-label-$name"
 
 /** Сколько ближайших тренировок группы видно в карточке. */
 private const val UPCOMING = 4
@@ -110,7 +117,7 @@ private const val UPCOMING = 4
 /** Сколько прошедших тренировок видно в истории — дальше история уходит в календарь. */
 private const val HISTORY = 30
 
-private fun GroupMemberEntity.member() = GroupMember(clientId, fromDate, toDate)
+private fun GroupMemberEntity.member() = GroupMember(clientId, fromDate, toDate, coach)
 
 private fun ClientRow?.nameOrGone(): String = this?.let { "${it.client.lastName} ${it.client.firstName}" } ?: "Клиент удалён"
 
@@ -154,6 +161,10 @@ fun GroupCard(
     // Состав без дат (шаг 3.9т): все, кто в списке сейчас, и записанные прежде «с будущей даты» — тоже.
     val current = row.members.filter { (it.toDate ?: today) >= today }.distinctBy { it.clientId }
         .sortedBy { ClientRules.key(byId[it.clientId].nameOrGone()) }
+    // «Каждый своих» (шаг 5.3м): у каждого ребёнка в составе — чей он; без совместного ведения пометок не видно.
+    val sharingNow = row.group.sharing()
+    val eachOwn = colleagues?.takeIf { sharingNow.conductedBy == ConductedBy.EACH_OWN }
+        ?.let { names -> sharingNow.colleague?.let { names[it] } ?: SalaryFormat.COLLEAGUE }
     val trainings = history.orEmpty()
     val done = trainings.filter { it.training.status == TrainingStatus.DONE }
     val attended = done.map { t -> t.participations.count { it.status == ParticipationStatus.ATTENDED } }
@@ -240,7 +251,16 @@ fun GroupCard(
                 if (current.isEmpty()) {
                     Text("В группе пока никого", style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
                 } else {
-                    MemberList(current, byId, today) { leaving = it.clientId }
+                    if (eachOwn != null) {
+                        val theirs = current.count { it.coach == Owner.COLLEAGUE }
+                        Text(
+                            CoCoachingFormat.kidsSplit(current.size - theirs, theirs, eachOwn),
+                            Modifier.padding(bottom = Dimens.space2).testTag(MEMBER_SPLIT_TAG),
+                            style = MaterialTheme.typography.bodyMedium.tabular(),
+                            color = colors.text,
+                        )
+                    }
+                    MemberList(current, byId, today, eachOwn) { leaving = it.clientId }
                 }
 
                 val upcoming = trainings.filter { it.training.status == TrainingStatus.PLANNED && it.training.start >= now }
@@ -263,6 +283,20 @@ fun GroupCard(
             val kid = byId[clientId]
             val name = kid.nameOrGone()
             Panel(name, onDismiss = { leaving = null }) {
+                // «Чей ребёнок: Мой / Лена» (5.10, шаг 5.3м): пометка переходит на будущие неотмеченные тренировки.
+                val member = current.firstOrNull { it.clientId == clientId }
+                if (eachOwn != null && member != null) {
+                    FormLabel(CoCoachingFormat.WHOSE)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        listOf(Owner.SELF to CoCoachingFormat.MY_KID, Owner.COLLEAGUE to eachOwn).forEach { (o, label) ->
+                            ChoiceChip(label, member.coach == o, onClick = {
+                                scope.launch { groups.setCoach(member.id, o) }
+                                leaving = null
+                            }, modifier = Modifier.testTag(memberCoachTag(o)))
+                        }
+                    }
+                    Spacer(Modifier.height(Dimens.space3))
+                }
                 Text(GroupFormat.LEAVE_NOTE, style = MaterialTheme.typography.bodyLarge, color = colors.text)
                 PanelActions(
                     primary = GroupFormat.LEAVE,
@@ -303,7 +337,14 @@ fun GroupCard(
 }
 
 @Composable
-private fun MemberList(list: List<GroupMemberEntity>, byId: Map<String, ClientRow>, today: LocalDate, onOpen: (GroupMemberEntity) -> Unit) {
+private fun MemberList(
+    list: List<GroupMemberEntity>,
+    byId: Map<String, ClientRow>,
+    today: LocalDate,
+    eachOwn: String?,
+    onOpen: (GroupMemberEntity) -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
     ListCard {
         list.forEachIndexed { index, m ->
             if (index > 0) RowDivider()
@@ -318,6 +359,16 @@ private fun MemberList(list: List<GroupMemberEntity>, byId: Map<String, ClientRo
                 ).joinToString(" · "),
                 onClick = { onOpen(m) },
                 modifier = Modifier.testTag(memberRowTag(name)),
+                trailing = eachOwn?.let { colleague ->
+                    {
+                        Text(
+                            if (m.coach == Owner.COLLEAGUE) colleague else CoCoachingFormat.MY_KID_SHORT,
+                            Modifier.testTag(memberCoachLabelTag(name)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.textMuted,
+                        )
+                    }
+                },
             )
         }
     }

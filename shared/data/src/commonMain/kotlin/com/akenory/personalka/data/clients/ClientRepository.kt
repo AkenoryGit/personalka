@@ -190,8 +190,14 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         val typeOf = types.associateBy { it.id }
         val placeOf = places.associateBy { it.id }
         val diaryEnabled = settings?.diaryEnabled ?: false
+        // История в группе — с первого «пришёл» (4.4, шаг 5.3н): раньше прошедшие тренировки группы не видны.
+        val clubNow = ClubTime.now(clock())
+        val starts = GroupRules.historyStarts(
+            list.mapNotNull { t -> t.groupId?.let { g -> byTraining[t.id]?.let { Triple(g, t.start.date, it.status == ParticipationStatus.ATTENDED) } } },
+        )
         list.mapNotNull { t ->
             val p = byTraining[t.id] ?: return@mapNotNull null
+            if (GroupRules.hiddenFromHistory(t.groupId, t.start.date, t.start <= clubNow, p.status, starts)) return@mapNotNull null
             val type = typeOf[t.typeId]
             val noDiary = ClientOutcome.of(t.status, p.status) == ClientOutcome.DONE &&
                 DiaryRules.missing(t.status, diaryEnabled, type?.diaryFact == true, t.fact)

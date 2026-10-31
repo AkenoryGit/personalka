@@ -50,6 +50,7 @@ internal fun reportVisitTag(id: String) = "reports-visit-$id"
 internal enum class ReportTab(val title: String) {
     TRAININGS(ClientReportFormat.TAB_TRAININGS),
     CLIENT(ClientReportFormat.TAB_CLIENT),
+    GROUPS(com.akenory.personalka.domain.format.GroupReportFormat.TAB),
 }
 
 @Composable

@@ -1,5 +1,7 @@
 package com.akenory.personalka.domain.group
 
+import kotlin.test.assertFalse
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.client.ScheduleLine
 import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.format.RuText
@@ -36,8 +38,8 @@ class GroupRulesTest {
             GroupMember("boris", day(1, 9), toDate = day(10)),
             GroupMember("vera", day(24)),
         )
-        // Сб 17.10: Борис ещё в группе, Вера ещё нет — она «на раз», как и Гоша.
-        assertEquals(listOf("vera", "gosha"), GroupRules.guests(listOf("anya", "vera", "gosha", "gosha"), members, day(17)))
+        // Сб 17.10: Борис ещё в группе; Вера в составе с 24.10 и сейчас в группе — уже не «на раз» (шаг 5.3н), Гоша — «на раз».
+        assertEquals(listOf("gosha"), GroupRules.guests(listOf("anya", "vera", "gosha", "gosha"), members, day(17)))
         // Сб 24.10: Борис ушёл и пришёл «на раз», Вера уже в группе.
         assertEquals(listOf("boris"), GroupRules.guests(listOf("anya", "boris", "vera"), members, day(24)))
     }
@@ -73,5 +75,38 @@ class GroupRulesTest {
         assertEquals("Белова Ева убрана из группы", GroupFormat.left("Белова Ева", Sex.FEMALE))
         assertEquals("пришли 5 из 12", GroupFormat.attended(5, 12))
         assertEquals("1 на раз", GroupFormat.guests(1))
+    }
+
+    @Test
+    fun pastUnmarkedGetCurrentMembers() {
+        // Шаг 5.3н: Аня и Вера в составе сейчас (Вера — с 24.10), Борис ушёл 10.10.
+        val members = listOf(
+            GroupMember("anya", day(1, 9)),
+            GroupMember("boris", day(1, 9), toDate = day(10)),
+            GroupMember("vera", day(24)),
+        )
+        val today = day(31)
+        assertEquals(listOf("anya", "vera"), GroupRules.pastFill(true, true, emptyList(), members, today))
+        assertEquals(listOf("vera"), GroupRules.pastFill(true, true, listOf("anya" to false), members, today), "Кто есть — не трогается")
+        assertEquals(emptyList(), GroupRules.pastFill(true, true, listOf("gosha" to true), members, today), "Отмеченная не меняется")
+        assertEquals(emptyList(), GroupRules.pastFill(true, false, emptyList(), members, today), "Отменённая или проведённая — тоже")
+        assertEquals(emptyList(), GroupRules.pastFill(false, true, emptyList(), members, today), "Будущая — по составу на свою дату")
+    }
+
+    @Test
+    fun historyStartsAtFirstAttended() {
+        val starts = GroupRules.historyStarts(
+            listOf(Triple("sat", day(3), false), Triple("sat", day(17), true), Triple("sat", day(24), true), Triple("tue", day(6), false)),
+        )
+        assertEquals(mapOf("sat" to day(17)), starts)
+        fun hidden(group: String?, d: Int, status: ParticipationStatus, started: Boolean = true) =
+            GroupRules.hiddenFromHistory(group, day(d), started, status, starts)
+        assertTrue(hidden("sat", 10, ParticipationStatus.CANCELLED), "Не пришёл до первого «пришёл»")
+        assertTrue(hidden("sat", 3, ParticipationStatus.EXPECTED))
+        assertFalse(hidden("sat", 3, ParticipationStatus.CANCELLED_CHARGED), "Списание видно")
+        assertFalse(hidden("sat", 24, ParticipationStatus.CANCELLED), "После начала — видно")
+        assertTrue(hidden("tue", 6, ParticipationStatus.CANCELLED), "В группе ни разу не был — прошлых нет")
+        assertFalse(hidden("tue", 6, ParticipationStatus.EXPECTED, started = false), "Будущие видны")
+        assertFalse(hidden(null, 3, ParticipationStatus.CANCELLED), "У ПТ ничего не меняется")
     }
 }

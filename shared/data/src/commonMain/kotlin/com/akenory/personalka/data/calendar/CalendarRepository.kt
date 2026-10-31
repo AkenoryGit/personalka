@@ -49,6 +49,7 @@ import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.TrainingTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -229,7 +230,12 @@ data class WorkHours(val start: LocalTime = LocalTime(7, 0), val end: LocalTime 
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
-class CalendarRepository(private val db: PersonalkaDatabase, private val clock: () -> Long) {
+class CalendarRepository(
+    private val db: PersonalkaDatabase,
+    private val clock: () -> Long,
+    // Виды оплаты аккаунта: для строки оплаты «Каждый своих» в карточке (шаг 5.3м).
+    payTypes: Flow<Boolean> = flowOf(true),
+) {
     private val trainings = db.trainingDao()
     private val clients = db.clientDao()
     private val reference = db.referenceDao()
@@ -261,7 +267,7 @@ class CalendarRepository(private val db: PersonalkaDatabase, private val clock: 
     val forms: TrainingRepository = TrainingRepository(db, clock, copied)
 
     /** Карточка тренировки (5.4) и отмена (5.6): «Проведено», отметка детей, «Вернуть», «Удалить». */
-    val cards: TrainingCardRepository = TrainingCardRepository(db, clock)
+    val cards: TrainingCardRepository = TrainingCardRepository(db, clock, payTypes)
 
     /** Дневник (5.7): поля по типу, черновик при каждом вводе, «План на следующую», «Следующая без дневника». */
     val diaries: DiaryRepository = DiaryRepository(db, clock)

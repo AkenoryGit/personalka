@@ -12,6 +12,7 @@ import com.akenory.personalka.domain.cabinet.RevokeScreen
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.LegalDoc
 import com.akenory.personalka.domain.format.LegalText
+import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.ResultKind
 import com.akenory.personalka.domain.model.SwimStyle
@@ -385,8 +386,26 @@ class Cabinets(
             .associateBy { it.text("id") }
         val places = rows(c, listOf(owner, Sync.CLUB), "location", "id", trainings.values.map { it.text("locationId") })
             .associateBy { it.text("id") }
+        // История в группе — с первого «пришёл» (4.4, шаг 5.3н): раньше прошедшие тренировки группы не видны.
+        val clubNow = ClubTime.now(now(), zone)
+        val starts = GroupRules.historyStarts(
+            participations.mapNotNull { p ->
+                val training = trainings[p.text("trainingId")] ?: return@mapNotNull null
+                val group = training.textOrNull("groupId") ?: return@mapNotNull null
+                val date = runCatching { LocalDateTime.parse(training.text("start")) }.getOrNull()?.date ?: return@mapNotNull null
+                Triple(group, date, p.text("status") == ParticipationStatus.ATTENDED.name)
+            },
+        )
         val list = participations.mapNotNull { p ->
             val training = trainings[p.text("trainingId")] ?: return@mapNotNull null
+            val begins = runCatching { LocalDateTime.parse(training.text("start")) }.getOrNull()
+            if (begins != null && GroupRules.hiddenFromHistory(
+                    training.textOrNull("groupId"), begins.date, begins <= clubNow,
+                    enumOr(p.text("status"), ParticipationStatus.EXPECTED), starts,
+                )
+            ) {
+                return@mapNotNull null
+            }
             val type = types[training.text("typeId")] ?: return@mapNotNull null
             val place = places[training.text("locationId")] ?: return@mapNotNull null
             CabinetTraining(

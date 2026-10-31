@@ -1,5 +1,7 @@
 package com.akenory.personalka.data.training
 
+import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
@@ -25,6 +27,7 @@ import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.number
 import kotlinx.datetime.plus
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -426,5 +429,80 @@ class TrainingRepositoryTest {
     private companion object {
         /** Изменение без переноса. */
         const val SAVED = "Сохранено"
+    }
+
+    // --- Шаг 5.3н: состав группы в прошедших тренировках ---
+
+    private suspend fun groupSeriesFromOctober(groupId: String) = saved(
+        forms.create(
+            TrainingDraft(
+                at(LocalDate(2026, 10, 3), 9), typeId("Группа"), groupId = groupId, locationId = placeId("ББ"),
+                repeat = Repeat(setOf(DayOfWeek.SATURDAY)),
+            ),
+            confirmed = true,
+        ),
+    )
+
+    private suspend fun groupTrainings(groupId: String) = db.trainingDao().trainingsOfGroup(groupId)
+
+    @Test
+    fun groupSeriesInThePastGetsCurrentMembers(): Unit = runBlocking {
+        // Дети в составе с сегодня (вт 20.10), серия — с сб 03.10: прошлые субботы ждут тех же детей.
+        val group = groups.create(GroupDraft("Сб 9:00 ББ", typeId("Группа"), placeId("ББ")))
+        val kids = listOf(client("Белова", "Аня"), client("Гусев", "Борис"), client("Данилова", "Ева"))
+        kids.forEach { groups.addMember(group, it, tuesday) }
+        groupSeriesFromOctober(group)
+        val list = groupTrainings(group)
+        assertEquals(listOf(3, 10, 17), list.filter { it.start.date < tuesday }.map { it.start.date.day })
+        list.forEach { assertEquals(kids.toSet(), clientsOf(it.id).toSet(), "${it.start.date}") }
+    }
+
+    @Test
+    fun membersAddedAfterSeriesFillPastUnmarkedOnly(): Unit = runBlocking {
+        val group = groups.create(GroupDraft("Сб 9:00 ББ", typeId("Группа"), placeId("ББ")))
+        groupSeriesFromOctober(group)
+        val past = groupTrainings(group).filter { it.start.date < tuesday }
+        assertTrue(past.all { clientsOf(it.id).isEmpty() }, "Состава ещё нет — прошлые пустые")
+        // Сб 03.10 отменили — она не меняется.
+        val cancelled = past.first()
+        db.trainingDao().upsertTraining(cancelled.copy(status = TrainingStatus.CANCELLED))
+
+        val anya = client("Белова", "Аня")
+        val boris = client("Гусев", "Борис")
+        groups.addMember(group, anya, tuesday)
+        // Сб 10.10 Аню отметили «пришла» — эта тренировка отмечена, Борис в неё уже не встанет.
+        val oct10 = past[1].id
+        db.trainingDao().upsertParticipation(db.trainingDao().participationRow(oct10, anya)!!.copy(status = ParticipationStatus.ATTENDED))
+        groups.addMember(group, boris, tuesday)
+
+        assertEquals(emptyList(), clientsOf(cancelled.id))
+        assertEquals(listOf(anya), clientsOf(oct10))
+        assertEquals(setOf(anya, boris), clientsOf(past[2].id).toSet(), "Сб 17.10 не отмечена — оба")
+        groupTrainings(group).filter { it.start.date > tuesday }.forEach { assertEquals(setOf(anya, boris), clientsOf(it.id).toSet()) }
+        // В карточке прошедшей тренировки Борис — не «на раз»: он в составе сейчас.
+        val card = calendar.cards.card(past[2].id).first()!!
+        assertTrue(card.clients.none { it.guest })
+    }
+
+    @Test
+    fun groupHistoryStartsAtFirstAttended(): Unit = runBlocking {
+        val group = groups.create(GroupDraft("Сб 9:00 ББ", typeId("Группа"), placeId("ББ")))
+        val anya = client("Белова", "Аня")
+        groups.addMember(group, anya, tuesday)
+        groupSeriesFromOctober(group)
+        val past = groupTrainings(group).filter { it.start.date < tuesday }
+        saved(forms.create(pt(at(LocalDate(2026, 10, 5), 10), anya)))
+        suspend fun october() = clients.trainings(anya).first().map { it.training.start.date }.filter { it.month.number == 10 }.map { it.day }
+
+        // Ни разу не приходила: прошлых тренировок группы нет, ПТ и будущие — есть.
+        assertEquals(listOf(5, 24, 31), october())
+        // Пришла 17.10: 03.10 и 10.10 не видны, 17.10 — видна.
+        val oct17 = past.single { it.start.date.day == 17 }.id
+        val row = db.trainingDao().participationRow(oct17, anya)!!
+        db.trainingDao().upsertParticipation(row.copy(status = ParticipationStatus.ATTENDED))
+        assertEquals(listOf(5, 17, 24, 31), october())
+        // Снятая отметка сдвигает начало — снова ни одной прошлой.
+        db.trainingDao().upsertParticipation(row.copy(status = ParticipationStatus.EXPECTED))
+        assertEquals(listOf(5, 24, 31), october())
     }
 }

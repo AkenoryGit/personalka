@@ -1,5 +1,21 @@
 package com.akenory.personalka.data.report
 
+import com.akenory.personalka.data.backup.BackupMade
+import com.akenory.personalka.data.backup.BackupPlatform
+import com.akenory.personalka.data.groups.member
+import com.akenory.personalka.data.groups.sharing
+import com.akenory.personalka.domain.backup.Xlsx
+import com.akenory.personalka.domain.format.GroupReportFormat
+import com.akenory.personalka.domain.format.SalaryFormat
+import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.report.GroupReport
+import com.akenory.personalka.domain.report.GroupReportGroup
+import com.akenory.personalka.domain.report.GroupReportPerson
+import com.akenory.personalka.domain.report.GroupReportRules
+import com.akenory.personalka.domain.report.GroupReportTraining
+import kotlinx.coroutines.withContext
+import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.LocationEntity
@@ -53,6 +69,12 @@ data class ReportNames(
 /** Отчёт за период ([table]) или год ([year]) и названия к нему. */
 data class ReportView(val table: ReportTable? = null, val year: ReportYear? = null, val names: ReportNames = ReportNames())
 
+/**
+ * Вкладка «Группы» (шаг 5.3о): [report] — блоки выбранных групп, [groups] — все группы с тренировками в периоде для окна
+ * выбора («id» → название, по названию).
+ */
+data class GroupReportView(val report: GroupReport, val groups: List<Pair<String, String>>)
+
 /** Клиент в выборе вкладки «Клиент»: «Орлова Ксения», [name] — для поиска, [archived] — пометка «в архиве». */
 data class ReportClient(val id: String, val title: String, val name: ClientName, val archived: Boolean)
 
@@ -87,8 +109,17 @@ class ReportRepository(private val db: PersonalkaDatabase, private val salary: S
             trainingDao.observeParticipationsOfClient(clientId),
             clients.observeClient(clientId),
             reference.observeLocations(),
-        ) { list, participations, client, places ->
-            val mine = participations.associate { it.trainingId to ClientParticipation(it.trainingId, it.status, it.notifiedAt, it.cancelReason) }
+            trainingDao.observeTrainingsOfClient(clientId),
+        ) { list, participations, client, places, own ->
+            // История в группе — с первого «пришёл» (4.4, шаг 5.3н): раньше тренировки группы в отчёт не идут.
+            val byTraining = own.associateBy { it.id }
+            val starts = GroupRules.historyStarts(
+                participations.mapNotNull { p -> byTraining[p.trainingId]?.let { t -> t.groupId?.let { Triple(it, t.start.date, p.status == ParticipationStatus.ATTENDED) } } },
+            )
+            val mine = participations.filter { p ->
+                val t = byTraining[p.trainingId]
+                t == null || !GroupRules.hiddenFromHistory(t.groupId, t.start.date, t.start <= now, p.status, starts)
+            }.associate { it.trainingId to ClientParticipation(it.trainingId, it.status, it.notifiedAt, it.cancelReason) }
             val report = ClientReportRules.report(
                 clientId,
                 list.mapNotNull { d -> d.input?.let { it to d.view.pay } },
@@ -104,6 +135,57 @@ class ReportRepository(private val db: PersonalkaDatabase, private val salary: S
                 names = ReportNames(list.lastOrNull()?.types.orEmpty(), places),
             )
         }.flowOn(Dispatchers.Default)
+    }
+
+    /**
+     * Посещаемость групп за [from]–[to] (шаг 5.3о): [chosen] — выбранные группы, `null` — все. Тренировки и участия —
+     * все групповые: начало истории ребёнка считается по всем (4.4, шаг 5.3н).
+     */
+    fun groups(from: LocalDate, to: LocalDate, now: LocalDateTime, chosen: Set<String>?): Flow<GroupReportView> = combine(
+        clients.observeGroups(),
+        clients.observeAllMembers(),
+        clients.observeAllClients(),
+        trainingDao.observeGroupTrainings(),
+        trainingDao.observeGroupParticipations(),
+    ) { groups, members, people, trainings, participations ->
+        val colleagues = db.moneyDao().colleagues().associate { it.id to it.name }
+        val reportGroups = groups.filter { it.sync.deletedAt == null }.map { g ->
+            val sharing = g.sharing()
+            val colleague = if (sharing.conductedBy == ConductedBy.EACH_OWN) sharing.colleague?.let { colleagues[it] } ?: SalaryFormat.COLLEAGUE else null
+            GroupReportGroup(g.id, g.name, colleague)
+        }
+        val byTraining = participations.groupBy { it.trainingId }
+        val list = trainings.filter { it.groupId != null && it.sync.deletedAt == null }.map { t ->
+            GroupReportTraining(
+                id = t.id,
+                groupId = t.groupId!!,
+                start = t.start,
+                status = t.status,
+                people = byTraining[t.id].orEmpty().map { GroupReportPerson(it.clientId, it.status, it.notifiedAt != null) },
+            )
+        }
+        val withTrainings = GroupReportRules.withTrainings(list, from, to, now)
+        val names = people.associate { it.id to ClientName(it.lastName, it.firstName, it.middleName) }
+        val report = GroupReportRules.report(
+            reportGroups,
+            list,
+            members.filter { it.sync.deletedAt == null }.groupBy({ it.groupId }, { it.member() }),
+            names,
+            from,
+            to,
+            now,
+            chosen,
+        )
+        GroupReportView(
+            report,
+            reportGroups.filter { it.id in withTrainings }.sortedBy { ClientRules.key(it.name) }.map { it.id to it.name },
+        )
+    }.flowOn(Dispatchers.Default)
+
+    /** Файл Excel отчёта по группам (5.15): «Итоги» и журнал по группе — тем же писателем, что выгрузка 7.6. */
+    suspend fun groupsExcel(report: GroupReport, today: LocalDate): BackupMade = withContext(Dispatchers.Default) {
+        val sheets = GroupReportFormat.sheets(report)
+        BackupMade(GroupReportFormat.fileName(today), BackupPlatform.zip(Xlsx.files(sheets).mapValues { it.value.encodeToByteArray() }))
     }
 
     /** Клиенты для выбора — и в архиве, по фамилии (5.8). */

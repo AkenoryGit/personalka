@@ -312,6 +312,8 @@ fun SectionScreen(
                     onGroup = openGroup,
                     onDiary = onDiary,
                     initialClient = ReportsRoute.clientOf(route),
+                    prefs = prefs,
+                    files = backup?.files,
                 )
                 SlotsRoute.isSlots(route) -> SlotsScreen(calendar, prefs, now, messages, onBack, onForm, shareText, SlotsRoute.waitOf(route))
                 Report1cRoute.idOf(route) != null -> Report1cResultScreen(settings.report1c, Report1cRoute.idOf(route)!!, messages, scope, onBack, shareText)

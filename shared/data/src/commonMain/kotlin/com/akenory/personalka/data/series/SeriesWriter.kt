@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.series
 
+import com.akenory.personalka.data.groups.fillPastGroupTrainings
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ClientEntity
@@ -253,6 +254,10 @@ internal suspend fun Recorder.write(
         setParticipants(entity, t.participants.map { it.clientId })
     }
     changes.deleted.forEach { deleteTraining(it.id) }
+    // Шаг 5.3н: серия группы задним числом или «Изменить с даты» — прошедшие неотмеченные получают текущий состав.
+    (changes.created.mapNotNull { it.groupId } + changes.updated.mapNotNull { it.groupId }).distinct().forEach { groupId ->
+        db.fillPastGroupTrainings(groupId, now) { t, clientId -> addParticipant(t, clientId, ParticipationStatus.EXPECTED) }
+    }
     if (owner == null) return
     changes.pendingPlans.forEach { text ->
         val groupId = owner.groupId

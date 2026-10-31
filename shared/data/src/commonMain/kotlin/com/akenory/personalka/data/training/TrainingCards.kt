@@ -20,6 +20,7 @@ import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.sharing
 import com.akenory.personalka.data.groups.with
 import com.akenory.personalka.data.groups.toSeriesTraining
+import com.akenory.personalka.data.money.SalaryRepository
 import com.akenory.personalka.data.money.SptRepository
 import com.akenory.personalka.data.money.reconcileSpt
 import com.akenory.personalka.data.restrictions.placed
@@ -37,6 +38,8 @@ import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.client.ReliabilityRules
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
+import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.ZoneFormat
@@ -44,6 +47,8 @@ import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.money.Sharing
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.model.ClientStatus
+import com.akenory.personalka.domain.model.ConductedBy
+import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
@@ -77,6 +82,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.YearMonth
 import kotlinx.datetime.plus
+import kotlinx.datetime.yearMonth
 
 /**
  * Клиент в карточке тренировки: «Носова Е.» и его итог (4.1); [guest] — ребёнок «на раз» в группе (5.4, 5.10);
@@ -90,6 +96,10 @@ data class CardClient(
     val guest: Boolean = false,
     val behavior: String? = null,
     val erased: Boolean = false,
+    /** Ребёнок коллеги в группе «Каждый своих» (4.8, шаг 5.3м): в строке подпись с именем коллеги. */
+    val colleagueKid: Boolean = false,
+    /** Фамилия и имя полностью — для «Поделиться» пришедшими (шаг 5.3п); удалённый — `null`. */
+    val fullName: ClientName? = null,
 )
 
 /**
@@ -133,6 +143,12 @@ data class TrainingCard(
     val reliable: Boolean = false,
     /** Надёжность клиентов по id; только у [reliable]. */
     val reliability: Map<String, Reliability> = emptyMap(),
+    /** Группа «Каждый своих» с совместным ведением (шаг 5.3м): имя коллеги — для подписей «Лена» и «Чей». */
+    val eachOwnColleague: String? = null,
+    /** Строка оплаты «Каждый своих»: «мои 7 × 270 ₽ = 1 890 ₽ · Лены 5: отдаёте 1 262,25 ₽» (шаг 5.3м). */
+    val payLine: String? = null,
+    /** Название группы без числа детей — для «Поделиться» пришедшими (шаг 5.3п); без группы — название типа. */
+    val groupName: String = "",
 ) {
     /** Итог для метки статуса: у одного клиента — его итог («Отмена со списанием»), иначе — тренировки. */
     val outcome: ClientOutcome
@@ -192,7 +208,13 @@ data class UncarryAsk(
  *
  * @param clock миллисекунды UTC; тесты подставляют свои часы.
  */
-class TrainingCardRepository internal constructor(private val db: PersonalkaDatabase, private val clock: () -> Long) {
+class TrainingCardRepository internal constructor(
+    private val db: PersonalkaDatabase,
+    private val clock: () -> Long,
+    // Виды оплаты аккаунта — для строки оплаты «Каждый своих» тем же расчётом, что «Зарплата» (шаг 5.3м).
+    payTypes: Flow<Boolean> = flowOf(true),
+) {
+    private val salary by lazy { SalaryRepository(db, clock, payTypes) }
     private val trainings = db.trainingDao()
     private val clients = db.clientDao()
     private val reference = db.referenceDao()
@@ -256,6 +278,8 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                     guest = p.clientId in guests,
                     behavior = p.behavior?.takeIf { it.isNotBlank() },
                     erased = c == null,
+                    colleagueKid = p.coach == Owner.COLLEAGUE,
+                    fullName = c?.let { ClientName(it.lastName, it.firstName, it.middleName) },
                 )
             }
             val group = t.groupId?.let { clients.group(it) }
@@ -276,6 +300,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 }
                 restricted + overDuty
             }
+            val cardShare = if (kind == TrainingKind.GROUP && t.status != TrainingStatus.CANCELLED && settingsRow?.coCoachingEnabled == true) cardSharing(t.sharing()) else null
             TrainingCard(
                 id = t.id,
                 state = state,
@@ -287,6 +312,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 ),
                 typeShort = type?.shortName.orEmpty(),
                 placeShort = placeShort,
+                groupName = group?.name ?: type?.name.orEmpty(),
                 groupId = t.groupId,
                 seriesWeekdays = series?.weekdays,
                 clients = cardClients,
@@ -299,7 +325,10 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 keepsDiary = (settingsRow?.diaryEnabled ?: false) && type != null &&
                     DiaryRules.fields(kind, type.diaryPlan, type.diaryFact, type.diaryBehavior).any,
                 carriedTo = if (t.status == TrainingStatus.CANCELLED) trainings.trainingsCarriedFrom(t.id).firstOrNull()?.start?.date else null,
-                sharing = if (kind == TrainingKind.GROUP && t.status != TrainingStatus.CANCELLED && settingsRow?.coCoachingEnabled == true) cardSharing(t.sharing()) else null,
+                sharing = cardShare,
+                eachOwnColleague = cardShare?.takeIf { it.sharing.conductedBy == ConductedBy.EACH_OWN }?.let { cs ->
+                    cs.sharing.colleague?.let { cs.names[it] } ?: SalaryFormat.COLLEAGUE
+                },
                 // Именинники (шаг 3.9р): «Ковалёв А. · 9 лет» — у отменённой тренировки строки нет, как и торта на блоке.
                 birthdays = if (t.status == TrainingStatus.CANCELLED) emptyList() else inOrder.mapNotNull { p ->
                     val c = names[p.clientId]
@@ -319,6 +348,17 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
                 card.state.kind == TrainingKind.GROUP ->
                     if (group == null) card else card.copy(reliability = people.associate { it.id to (groups[group to it.id] ?: Reliability.NONE) })
                 else -> card.copy(reliability = people.associate { it.id to (all[it.id] ?: Reliability.NONE) })
+            }
+        }.flatMapLatest { card ->
+            // «Каждый своих» (шаг 5.3м): строка оплаты — тем же расчётом месяца, что «Зарплата».
+            val colleague = card.eachOwnColleague
+            if (colleague == null) {
+                flowOf(card)
+            } else {
+                salary.month(card.state.start.date.yearMonth, ClubTime.today(clock())).map { m ->
+                    val pay = m.view.pay.trainings.firstOrNull { it.trainingId == card.id }
+                    card.copy(payLine = pay?.let { CoCoachingFormat.eachOwnPay(it, t.owner == Owner.SELF, colleague) })
+                }
             }
         }
     }
@@ -341,14 +381,14 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
      * «Добавить на раз» (5.4, 5.10): ребёнок только в этой тренировке группы, состав не меняется. Отмечать уже
      * можно — сразу «пришёл» ([TrainingCardRules.guestStatus]). `null` — нельзя: группа отменена или он уже в ней.
      */
-    suspend fun addGuest(id: String, clientId: String): CardResult? = addGuest(id) { _, _ -> clientId }
+    suspend fun addGuest(id: String, clientId: String, coach: Owner = Owner.SELF): CardResult? = addGuest(id, coach) { _, _ -> clientId }
 
     /** То же с новым клиентом — «Новый клиент: Белов Артём»: клиент заводится по фамилии и имени (5.8). */
-    suspend fun addNewGuest(id: String, lastName: String, firstName: String): CardResult? {
+    suspend fun addNewGuest(id: String, lastName: String, firstName: String, coach: Owner = Owner.SELF): CardResult? {
         val last = lastName.trim()
         val first = firstName.trim()
         if (last.isEmpty() || first.isEmpty()) return null
-        return addGuest(id) { coachId, now ->
+        return addGuest(id, coach) { coachId, now ->
             val client = newClientEntity(coachId, now, ClientDraft(last, first, sex = ClientRules.guessSex(null, last)?.sex))
             clients.upsertClient(client)
             client.id
@@ -363,9 +403,9 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
     fun client(clientId: String): Flow<ClientEntity?> = clients.observeClient(clientId)
 
     /** «Да, выбрать» у похожего: архивный возвращается в действующие и добавляется «на раз», как [addGuest]. */
-    suspend fun addSimilarGuest(id: String, clientId: String): CardResult? {
+    suspend fun addSimilarGuest(id: String, clientId: String, coach: Owner = Owner.SELF): CardResult? {
         db.unarchiveClient(clientId, clock())
-        return addGuest(id, clientId)
+        return addGuest(id, clientId, coach)
     }
 
     /**
@@ -391,7 +431,7 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
     }
 
     /** Добавить «на раз» того, кого вернёт [who] (`null` — никого); [who] зовётся, только если добавить можно. */
-    private suspend fun addGuest(id: String, who: suspend (coachId: String, now: Long) -> String?): CardResult? {
+    private suspend fun addGuest(id: String, whose: Owner, who: suspend (coachId: String, now: Long) -> String?): CardResult? {
         val now = clock()
         var result: CardResult? = null
         db.withWriteTransaction {
@@ -404,6 +444,10 @@ class TrainingCardRepository internal constructor(private val db: PersonalkaData
             if (people.any { it.clientId == clientId }) return@withWriteTransaction
             val recorder = Recorder(db, now)
             recorder.addParticipant(t, clientId, TrainingCardRules.guestStatus(state, ClubTime.now(now)))
+            // «Чей» у ребёнка «на раз» в группе «Каждый своих» (шаг 5.3м): по умолчанию мой.
+            if (whose != Owner.SELF) {
+                trainings.participationRow(t.id, clientId)?.let { trainings.upsertParticipation(it.copy(coach = whose)) }
+            }
             result = CardResult(TrainingCardFormat.guestAdded(clientName(clientId)), recorder.undo())
         }
         return result

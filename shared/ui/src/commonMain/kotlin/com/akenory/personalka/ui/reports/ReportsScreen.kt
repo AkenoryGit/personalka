@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.reports
 
+import com.akenory.personalka.data.prefs.DevicePrefs
+import com.akenory.personalka.domain.backup.Xlsx
+import com.akenory.personalka.domain.format.GroupReportFormat
+import com.akenory.personalka.ui.settings.PlatformFiles
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -136,6 +140,8 @@ internal fun ReportsScreen(
     onGroup: (String) -> Unit = {},
     onDiary: (String) -> Unit = {},
     initialClient: String? = null,
+    prefs: DevicePrefs? = null,
+    files: PlatformFiles? = null,
 ) {
     val today = now.date
     // Вкладка и клиент (шаг 5.3к): из карточки клиента «⋮ → Отчёт» открывает «Клиент» с ним и текущим месяцем.
@@ -172,7 +178,7 @@ internal fun ReportsScreen(
     val hour = LocalDateTime(today, LocalTime(now.hour, 0))
     val data by remember(reports, period, month, year, from, to, hour, problem, tab) {
         when {
-            problem != null || tab == ReportTab.CLIENT -> emptyFlow()
+            problem != null || tab != ReportTab.TRAININGS -> emptyFlow()
             period == ReportPeriod.MONTH -> reports.table(month.firstDay, month.lastDay, now)
             period == ReportPeriod.YEAR -> reports.year(year, now)
             else -> reports.table(from, to, now)
@@ -194,6 +200,15 @@ internal fun ReportsScreen(
         if (tab != ReportTab.CLIENT || shownClient == null || problem != null) emptyFlow() else reports.client(shownClient, clientFrom, clientTo, now)
     }.collectAsState(initial = null)
     val clientView = clientData?.takeIf { it.report.clientId == shownClient && it.report.from == clientFrom && it.report.to == clientTo }
+    // Вкладка «Группы» (шаг 5.3о): выбор групп помнит телефон; нет записи — все.
+    var chosenText by remember(prefs) { mutableStateOf(prefs?.string(GROUPS_PREF)) }
+    val chosen = decodeGroups(chosenText)
+    var pickingGroups by rememberSaveable { mutableStateOf(false) }
+    var sharingGroups by rememberSaveable { mutableStateOf(false) }
+    val groupData by remember(reports, tab, clientFrom, clientTo, hour, problem, chosenText) {
+        if (tab != ReportTab.GROUPS || problem != null) emptyFlow() else reports.groups(clientFrom, clientTo, now, chosen)
+    }.collectAsState(initial = null)
+    val groupView = groupData?.takeIf { it.report.from == clientFrom && it.report.to == clientTo }
     val clientList by remember(reports, tab) { if (tab == ReportTab.CLIENT) reports.clients() else emptyFlow() }.collectAsState(initial = emptyList())
     val title = when (period) {
         ReportPeriod.MONTH -> ReportFormat.month(month)
@@ -213,6 +228,10 @@ internal fun ReportsScreen(
     val what = whatText?.let(::keyOf)?.takeIf { yearView == null || it in yearView.keys }
 
     fun share() {
+        if (tab == ReportTab.GROUPS) {
+            sharingGroups = true
+            return
+        }
         val text = when {
             tab == ReportTab.CLIENT -> {
                 val view = clientView ?: return
@@ -262,7 +281,11 @@ internal fun ReportsScreen(
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxWidth()) {
                     TopBar(ReportFormat.TITLE, onBack = onBack)
-                    val canShare = if (tab == ReportTab.CLIENT) clientView?.client != null else table != null || yearView != null
+                    val canShare = when (tab) {
+                        ReportTab.CLIENT -> clientView?.client != null
+                        ReportTab.GROUPS -> groupView?.report?.isEmpty == false
+                        ReportTab.TRAININGS -> table != null || yearView != null
+                    }
                     if (canShare) {
                         IconButton(
                             onClick = ::share,
@@ -329,6 +352,16 @@ internal fun ReportsScreen(
                             },
                             onTraining = { card = it },
                         )
+                        tab == ReportTab.GROUPS -> GroupReportContent(
+                            view = groupView,
+                            chosen = chosen,
+                            onPick = { pickingGroups = true },
+                            onGroup = onGroup,
+                            onKid = { id ->
+                                clientId = id
+                                tabText = ReportTab.CLIENT.name
+                            },
+                        )
                         table != null -> TableContent(table, names) { openRow = keyText(it) }
                         yearView != null -> YearContent(yearView, names, what, wide, onWhat = { whatText = it?.let(::keyText) }) { m ->
                             monthText = m.toString()
@@ -353,6 +386,45 @@ internal fun ReportsScreen(
                         Text(ReportFormat.CLOSE, style = MaterialTheme.typography.labelLarge, color = colors.text)
                     }
                 }
+            }
+            val pickGroups = groupView?.groups
+            if (pickingGroups && pickGroups != null) {
+                GroupPickPanel(
+                    groups = pickGroups,
+                    chosen = chosen,
+                    onSave = { picked ->
+                        pickingGroups = false
+                        val text = picked?.joinToString(",").orEmpty()
+                        prefs?.putString(GROUPS_PREF, text)
+                        chosenText = text.ifEmpty { null }
+                    },
+                    onDismiss = { pickingGroups = false },
+                )
+            }
+            val shownGroups = groupView
+            if (sharingGroups && shownGroups != null) {
+                GroupSharePanel(
+                    excel = files != null,
+                    onText = {
+                        sharingGroups = false
+                        val text = GroupReportFormat.shareText(title, shownGroups.report)
+                        if (shareText != null) {
+                            shareText(text)
+                        } else {
+                            clipboard.setText(AnnotatedString(text))
+                            messages.show(ReportFormat.COPIED)
+                        }
+                    },
+                    onExcel = {
+                        sharingGroups = false
+                        val platform = files ?: return@GroupSharePanel
+                        scope.launch {
+                            val made = reports.groupsExcel(shownGroups.report, today)
+                            platform.share(made.name, Xlsx.MIME, made.bytes)
+                        }
+                    },
+                    onDismiss = { sharingGroups = false },
+                )
             }
             picking?.let { end ->
                 val isFrom = end == PickEnd.FROM.name

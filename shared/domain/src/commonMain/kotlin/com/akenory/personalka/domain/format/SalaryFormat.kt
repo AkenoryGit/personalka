@@ -230,6 +230,12 @@ object SalaryFormat {
             else -> null
         }
         val childrenPart = if (money == null && line.unit != null) "$children × ${MoneyFormat.rub(line.unit)}" else children
+        // «Каждый своих» (шаг 5.3м): мои дети со ставкой и дети коллеги — «мои 28 × 270 ₽ · Лены 20».
+        if (line.groupCase == GroupCase.MINE_EACH_OWN || line.groupCase == GroupCase.THEIRS_EACH_OWN) {
+            val unit = line.unit?.let { " × ${MoneyFormat.rub(it)}" }.orEmpty()
+            val theirs = "${RuText.genitive(colleague)} ${RuText.digits(line.colleagueChildren.toLong())}"
+            return listOf(case, count, "мои ${RuText.digits(line.children.toLong())}$unit", theirs).joinToString(DOT)
+        }
         return listOfNotNull(case, count, childrenPart, money).joinToString(DOT)
     }
 

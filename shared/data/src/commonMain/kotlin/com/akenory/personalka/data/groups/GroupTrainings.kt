@@ -8,6 +8,7 @@ import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.group.GroupMember
+import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.group.coachOn
 import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
@@ -69,6 +70,27 @@ internal suspend fun PersonalkaDatabase.syncGroupTrainings(groupId: String, befo
                 val coach = after.coachOn(p.clientId, training.start.date)
                 if (coach != p.coach) trainings.upsertParticipation(p.copy(coach = coach, sync = p.sync.touched(nowMillis)))
             }
+    }
+    fillPastGroupTrainings(groupId, nowMillis)
+}
+
+/**
+ * Прошедшие неотмеченные тренировки группы [groupId] получают текущий состав без учёта «в группе с» (4.4, шаг 5.3н):
+ * ребёнок, добавленный сегодня, стоит и в них — для отметки. Отмеченные, отменённые и гости не меняются; кто уже есть
+ * в тренировке, не трогается. [add] — как добавить участника: у серий — через Recorder, чтобы работало «Отменить».
+ */
+internal suspend fun PersonalkaDatabase.fillPastGroupTrainings(
+    groupId: String,
+    nowMillis: Long,
+    add: (suspend (TrainingEntity, String) -> Unit)? = null,
+) {
+    val trainings = trainingDao()
+    val members = clientDao().membersOf(groupId).map { it.member() }
+    val now = ClubTime.now(nowMillis)
+    trainings.trainingsOfGroup(groupId).filter { it.status == TrainingStatus.PLANNED && it.start <= now }.forEach { t ->
+        val people = trainings.participationsOf(t.id).map { it.clientId to (it.status == ParticipationStatus.ATTENDED) }
+        GroupRules.pastFill(started = true, planned = true, participants = people, members = members, today = now.date)
+            .forEach { clientId -> if (add != null) add(t, clientId) else addParticipant(t, clientId, nowMillis) }
     }
 }
 

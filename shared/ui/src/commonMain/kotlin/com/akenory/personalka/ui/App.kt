@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import com.akenory.personalka.ui.training.LocalShareText
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -414,7 +415,7 @@ fun App(
             when (hasCoach) {
                 null -> Unit
                 false -> FirstRun(settings, backHandler, onDone = { tourGo(TourStop.CALENDAR) }, account, sync?.repository, clock)
-                true -> CompositionLocalProvider(LocalTour provides tour) {
+                true -> CompositionLocalProvider(LocalTour provides tour, LocalShareText provides shareText) {
                     backHandler(shell.canGoBack) { shell.back() }
                     backHandler(card != null && shell.section == Section.CALENDAR) { card = null }
                     backHandler(homeCard != null && shell.section == Section.HOME) { homeCard = null }

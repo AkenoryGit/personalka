@@ -46,6 +46,8 @@ data class BreakdownLine(
     val coverFor: String? = null,
     val missing: Boolean = false,
     val sptClosed: Int = 0,
+    /** У «Каждый своих» — оплаченные дети коллеги ([children] — только мои), для «мои 28 · Лены 20» (шаг 5.3м). */
+    val colleagueChildren: Int = 0,
 )
 
 /**
@@ -286,7 +288,10 @@ object SalaryMonthRules {
                     )
                     // У «Каждый своих» — только мои дети: по ним заработано n₁ × R (4.8).
                     val children = p.paidClients - p.colleagueClients
-                    lines[key] = line.copy(count = line.count + 1, children = line.children + children, gross = line.gross + p.amount, amount = line.amount + p.earned)
+                    lines[key] = line.copy(
+                        count = line.count + 1, children = line.children + children, gross = line.gross + p.amount,
+                        amount = line.amount + p.earned, colleagueChildren = line.colleagueChildren + p.colleagueClients,
+                    )
                 }
                 TrainingKind.DUTY -> {
                     if (t.status != TrainingStatus.DONE) return@forEach

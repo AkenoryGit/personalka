@@ -4,6 +4,7 @@ import com.akenory.personalka.domain.model.ConductedBy
 import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.money.Sharing
+import com.akenory.personalka.domain.money.TrainingPay
 
 /**
  * Цвет плашки «кто ведёт» (шаг 3.9п, просьба Дмитрия): своя группа один, своя вдвоём, группа коллеги (вдвоём или
@@ -84,6 +85,35 @@ object CoCoachingFormat {
             ConductedBy.EACH_OWN ->
                 BlockWho(listOf(EACH_OWN, owner ?: who).joinToString(DOT), EACH_OWN, if (mine) WhoKind.MINE_TOGETHER else WhoKind.THEIRS)
         }
+    }
+
+    /** Подпись в строке ребёнка коллеги и заголовок выбора «Чей ребёнок» (шаг 5.3м). */
+    const val WHOSE = "Чей ребёнок"
+    const val WHOSE_GUEST = "Чей"
+    const val MY_KID = "Мой"
+    const val MY_KID_SHORT = "мой"
+
+    /** Над составом группы «Каждый своих»: «Моих 7 · Лены 5» (5.10, шаг 5.3м). */
+    fun kidsSplit(mine: Int, theirs: Int, colleague: String): String =
+        "Моих ${RuText.digits(mine.toLong())}$DOT${RuText.genitive(colleague)} ${RuText.digits(theirs.toLong())}"
+
+    /**
+     * Строка оплаты в карточке группы «Каждый своих» (5.4, шаг 5.3м): «мои 7 × 270 ₽ = 1 890 ₽ · Лены 5: отдаёте
+     * 1 262,25 ₽»; в группе коллеги — «мои 7 × 270 ₽ = 1 890 ₽ · Лена отдаёт вам 1 767,15 ₽». Никто не пришёл — `null`.
+     */
+    fun eachOwnPay(pay: TrainingPay, mineGroup: Boolean, colleague: String): String? {
+        val paid = pay.paidClients
+        if (paid == 0 || pay.rateMissing) return null
+        val mine = paid - pay.colleagueClients
+        val rate = pay.amount / paid
+        val head = "мои ${RuText.digits(mine.toLong())} × ${MoneyFormat.rub(rate)} = ${MoneyFormat.rub(pay.earned)}"
+        val money = MoneyFormat.rub(kotlin.math.abs(pay.settlement))
+        val tail = when {
+            pay.settlement == 0L -> null
+            mineGroup -> "${RuText.genitive(colleague)} ${RuText.digits(pay.colleagueClients.toLong())}: отдаёте $money"
+            else -> "$colleague отдаёт вам $money"
+        }
+        return listOfNotNull(head, tail).joinToString(DOT)
     }
 
     private const val ALONE = "Один"

@@ -1,6 +1,9 @@
 package com.akenory.personalka.domain.money
 
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.ReportFormat
+import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.SettlementFormat
 import com.akenory.personalka.domain.group.GroupMember
 import com.akenory.personalka.domain.group.coachOn
@@ -222,5 +225,32 @@ class EachOwnTest {
         assertEquals(Owner.COLLEAGUE, members.coachOn("k2", LocalDate(2026, 10, 17)))
         assertEquals(Owner.SELF, members.coachOn("k3", LocalDate(2026, 10, 17)), "Ушёл из группы — «на раз», мой")
         assertEquals(Owner.SELF, members.coachOn("guest", LocalDate(2026, 10, 17)), "Ребёнок «на раз» — мой")
+    }
+
+    @Test
+    fun screenLinesOfExample27() {
+        // Шаг 5.3м: на придуманной группе 7 + 5 детей карточка, «Зарплата» и «Коллеги» показывают числа примера 27.
+        val nb = '\u00A0'
+        val pay = single(t(mine = 7, lenas = 5))
+        assertEquals("мои 7 × 270${nb}₽ = 1${RuText.THIN}890${nb}₽ · Лены 5: отдаёте 1${RuText.THIN}262,25${nb}₽", CoCoachingFormat.eachOwnPay(pay, mineGroup = true, colleague = "Лена"))
+        val theirs = single(t(mine = 4, lenas = 6, owner = Owner.COLLEAGUE))
+        assertEquals("мои 4 × 270${nb}₽ = 1${RuText.THIN}080${nb}₽ · Лена отдаёт вам 1${RuText.THIN}009,80${nb}₽", CoCoachingFormat.eachOwnPay(theirs, mineGroup = false, colleague = "Лена"))
+        assertNull(CoCoachingFormat.eachOwnPay(single(t(mine = 0, lenas = 0)), mineGroup = true, colleague = "Лена"), "Никто не пришёл")
+        assertEquals("Моих 7 · Лены 5", CoCoachingFormat.kidsSplit(7, 5, "Лена"))
+
+        val input = input(listOf(t(mine = 7, lenas = 5, day = 17), t(mine = 7, lenas = 5, day = 24)))
+        val m = input.pay()
+        val line = SalaryMonthRules.breakdown(input, m).single()
+        assertEquals(10, line.colleagueChildren)
+        assertEquals("моя группа · каждый своих: Лена · 2${nb}трен. · мои 14 × 270${nb}₽ · Лены 10", SalaryFormat.lineNote(line, "Лена"))
+        assertEquals(listOf(ConductedBy.SELF, ConductedBy.SELF_AND_COLLEAGUE, ConductedBy.COLLEAGUE, ConductedBy.EACH_OWN), CoCoachingRules.CHOICES)
+    }
+
+    @Test
+    fun colleagueNameInGenitive() {
+        assertEquals(
+            listOf("Лены", "Ольги", "Ани", "Марии", "Ивана", "Андрея", "Игоря", "Саши", "Ли", "Лены К."),
+            listOf("Лена", "Ольга", "Аня", "Мария", "Иван", "Андрей", "Игорь", "Саша", "Ли", "Лена К.").map(RuText::genitive),
+        )
     }
 }
