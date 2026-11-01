@@ -72,6 +72,7 @@ const val TYPE_NAME_TAG = "type-name"
 const val TYPE_SHORT_TAG = "type-short"
 const val TYPE_DURATION_TAG = "type-duration"
 const val TYPE_LIMIT_TAG = "type-limit"
+const val TYPE_DIRECT_TAG = "type-direct"
 internal fun kindTag(kind: TrainingKind) = "kind-${kind.name}"
 
 /**
@@ -279,6 +280,19 @@ fun TypeEditor(
 
             if (TypePresets.hasClients(draft.kind)) {
                 Spacer(Modifier.height(Dimens.space3))
+                // Шаг 5.3с: оплата напрямую — отдельный заработок, без счёта ПТ и ступеней.
+                SwitchRow(
+                    title = TypeFormat.DIRECT_TITLE,
+                    subtitle = TypeFormat.DIRECT_HINT,
+                    checked = draft.paidDirect,
+                    onToggle = { on ->
+                        draft = if (on) draft.copy(paidDirect = true, countsTowardPt = false, tierDependent = false) else draft.copy(paidDirect = false)
+                    },
+                    modifier = Modifier.testTag(TYPE_DIRECT_TAG),
+                )
+            }
+
+            if (TypePresets.hasClients(draft.kind) && !draft.paidDirect) {
                 SwitchRow(
                     title = "Считать как ПТ",
                     subtitle = "Идёт в счётчик ПТ и в ступень месяца",
@@ -292,6 +306,9 @@ fun TypeEditor(
                     onToggle = { draft = draft.copy(tierDependent = it) },
                 )
 
+            }
+
+            if (TypePresets.hasClients(draft.kind)) {
                 SectionLabel("Дневник")
                 CheckRow("План", checked = draft.diaryPlan, onToggle = { draft = draft.copy(diaryPlan = it) })
                 CheckRow("Факт", checked = draft.diaryFact, onToggle = { draft = draft.copy(diaryFact = it) })
@@ -304,7 +321,7 @@ fun TypeEditor(
             }
 
             Spacer(Modifier.height(Dimens.space4))
-            Note("Ставку задайте в «Ставках». Пока её нет, тренировки этого типа будут в «Нужно сделать».")
+            Note(if (draft.paidDirect && TypePresets.hasClients(draft.kind)) TypeFormat.PRICE_NOTE else TypeFormat.RATE_NOTE)
 
             if (archived != null && onArchive != null) {
                 Spacer(Modifier.height(Dimens.space3))
@@ -416,7 +433,7 @@ private const val FIELD = "\u001F"
 
 internal fun encodeType(t: TypeDraft): String = listOf(
     t.name, t.shortName, t.kind.name, t.shade, t.durationMin, t.maxClients ?: "", t.payUnit.name,
-    t.countsTowardPt, t.tierDependent, t.diaryPlan, t.diaryFact, t.diaryBehavior, t.dutyColor.orEmpty(),
+    t.countsTowardPt, t.tierDependent, t.diaryPlan, t.diaryFact, t.diaryBehavior, t.dutyColor.orEmpty(), t.paidDirect,
 ).joinToString(FIELD)
 
 internal fun decodeType(s: String): TypeDraft {
@@ -435,5 +452,6 @@ internal fun decodeType(s: String): TypeDraft {
         diaryFact = p[10].toBoolean(),
         diaryBehavior = p[11].toBoolean(),
         dutyColor = p.getOrNull(12)?.ifEmpty { null },
+        paidDirect = p.getOrNull(13)?.toBoolean() ?: false,
     )
 }

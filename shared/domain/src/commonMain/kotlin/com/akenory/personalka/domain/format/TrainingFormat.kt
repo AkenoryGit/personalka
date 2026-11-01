@@ -3,6 +3,7 @@ package com.akenory.personalka.domain.format
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.RuText.NBSP
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -135,6 +136,22 @@ object TrainingFormat {
     /** Новая серия: «Создано: каждый вт и чт, 17:15». */
     fun createdSeries(weekdays: Set<DayOfWeek>, time: LocalTime): String =
         "Создано: " + ZoneFormat.repeat(weekdays, null).replaceFirstChar { it.lowercaseChar() } + ", " + DateFormat.time(time)
+
+    /** Повтор «в разные дни разное время» (шаг 5.3с): «Создано каждую неделю: вт, пт 13:30; чт 17:00». */
+    fun createdSeries(slots: List<Pair<Set<DayOfWeek>, LocalTime>>): String =
+        "Создано каждую неделю: " + slots.joinToString("; ") { (days, time) -> daysAt(days, time) }
+
+    /** «вт, пт 13:30». */
+    fun daysAt(days: Set<DayOfWeek>, time: LocalTime): String =
+        days.sortedBy { it.isoDayNumber }.joinToString(", ") { DateFormat.weekdayShort(it) } + " " + DateFormat.time(time)
+
+    /** Переключатель под днями недели (шаг 5.3с). */
+    const val DIFFERENT_TIMES = "В разные дни разное время"
+    const val DIFFERENT_TIMES_HINT = "Каждый день — отдельное расписание: его можно менять, не трогая другие дни"
+
+    /** Строка дня с его временем: «Вт» слева; день первой тренировки — время из «Когда». */
+    fun dayTimeLabel(day: DayOfWeek): String = DateFormat.weekdayShort(day).replaceFirstChar { it.uppercaseChar() }
+    const val FIRST_DAY_TIME = "как в «Когда»"
 
     /** Изменение без переноса. */
     const val SAVED = "Сохранено"

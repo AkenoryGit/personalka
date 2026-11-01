@@ -355,8 +355,11 @@ class GroupsUiTest {
         onNodeWithTag(GROUP_MENU_TAG).performClick()
         awaitNode(hasText("Удалить группу"))
         onNodeWithText("Удалить группу").performClick()
-        onNodeWithText("Удалить группу?").assertIsDisplayed()
-        onNodeWithText("Удалить").performClick()
+        awaitNode(hasText("Удалить группу?"))
+        onNodeWithText("Удалятся «Сб 9:00 ББ» и её состав.").assertIsDisplayed()
+        // Меню с тем же пунктом закрывается — ждём, пока останется одна кнопка окна.
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Удалить группу")).fetchSemanticsNodes().size == 1 }
+        onNodeWithText("Удалить группу").performClick()
 
         onNodeWithText("Группа удалена").assertIsDisplayed()
         awaitNode(hasText("Групп пока нет"))

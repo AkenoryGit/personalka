@@ -94,6 +94,7 @@ import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.Segmented
+import com.akenory.personalka.ui.components.SwitchRow
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
@@ -107,6 +108,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import com.akenory.personalka.ui.components.swallowTaps
 
 const val TRAINING_FORM_TAG = "training-form"
@@ -117,6 +119,8 @@ const val FORM_UNTIL_TAG = "form-until"
 const val FORM_PLAN_TAG = "form-plan"
 const val FORM_OWN_DURATION_TAG = "form-own-duration"
 const val FORM_WEEKLY_TAG = "form-weekly"
+const val FORM_DIFFERENT_TIMES_TAG = "form-different-times"
+fun formDayTimeTag(day: DayOfWeek) = "form-day-time-$day"
 const val FORM_MODE_TAG = "form-mode"
 
 const val NEW_CLIENT_HINT_TAG = "form-new-client-hint"
@@ -520,6 +524,17 @@ private fun TrainingFields(
                         },
                         onDismiss = { panel = null },
                     )
+                    Panels.isDayTime(open) -> {
+                        val day = Panels.dayTimeDay(open)
+                        TimePickerPanel(
+                            initial = d.repeat?.timeOn(day, d.start) ?: d.start.time,
+                            onPick = { time ->
+                                panel = null
+                                update { it.copy(repeat = it.repeat?.let { r -> r.copy(times = r.times.orEmpty() + (day to time)) }) }
+                            },
+                            onDismiss = { panel = null },
+                        )
+                    }
                     open == Panels.UNTIL -> DatePickerPanel(
                         initial = d.repeat?.until ?: d.start.date,
                         onPick = { date ->
@@ -761,6 +776,8 @@ private fun TrainingFields(
                 untilError = problems[FormField.UNTIL],
                 onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
                 onUntil = { panel = Panels.UNTIL },
+                // «В разные дни разное время» (шаг 5.3с) — только у новой тренировки или разовой, ставшей постоянной.
+                onDayTime = { day -> panel = if (day == current.start.date.dayOfWeek) Panels.TIME else Panels.dayTime(day) },
             )
         }
 
@@ -881,6 +898,7 @@ internal fun RepeatChoice(
     untilError: String?,
     onRepeat: (Repeat?) -> Unit,
     onUntil: () -> Unit,
+    onDayTime: ((DayOfWeek) -> Unit)? = null,
 ) {
     val repeat = draft.repeat
     FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
@@ -894,6 +912,7 @@ internal fun RepeatChoice(
     }
     if (repeat == null) return
     WeekdayRow(repeat.weekdays, weekdaysError) { days -> onRepeat(repeat.copy(weekdays = days)) }
+    if (onDayTime != null && repeat.weekdays.size >= 2) DayTimes(draft, repeat, onRepeat, onDayTime)
     PickBox(
         text = repeat.until?.let(TrainingFormat::until) ?: TrainingFormat.FOREVER,
         icon = PIcons.CalendarMonth,
@@ -902,6 +921,40 @@ internal fun RepeatChoice(
         error = untilError,
     )
     untilError?.let { ErrorText(it) }
+}
+
+/**
+ * «В разные дни разное время» (шаг 5.3с): переключатель и, когда он включён, у каждого выбранного дня своё время.
+ * День первой тренировки — время из «Когда» (нажатие меняет его); у остальных по умолчанию то же.
+ */
+@Composable
+private fun DayTimes(draft: TrainingDraft, repeat: Repeat, onRepeat: (Repeat?) -> Unit, onDayTime: (DayOfWeek) -> Unit) {
+    val colors = PersonalkaTheme.colors
+    SwitchRow(
+        title = TrainingFormat.DIFFERENT_TIMES,
+        subtitle = TrainingFormat.DIFFERENT_TIMES_HINT,
+        checked = repeat.times != null,
+        onToggle = { on -> onRepeat(repeat.copy(times = if (on) emptyMap() else null)) },
+        modifier = Modifier.padding(top = Dimens.space2).testTag(FORM_DIFFERENT_TIMES_TAG),
+    )
+    if (repeat.times == null) return
+    val first = draft.start.date.dayOfWeek
+    repeat.weekdays.sortedBy { it.ordinal }.forEach { day ->
+        Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                TrainingFormat.dayTimeLabel(day),
+                modifier = Modifier.width(48.dp),
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.text,
+            )
+            PickBox(
+                text = DateFormat.time(repeat.timeOn(day, draft.start)) + if (day == first) " · " + TrainingFormat.FIRST_DAY_TIME else "",
+                icon = PIcons.Schedule,
+                onClick = { onDayTime(day) },
+                modifier = Modifier.weight(1f).testTag(formDayTimeTag(day)),
+            )
+        }
+    }
 }
 
 /** Дни недели пн–вс чипами во всю ширину; нажатие добавляет или снимает день. */
@@ -1009,6 +1062,12 @@ internal object Panels {
     fun conflictScope(text: String): EditScope? = text.split(SEP)[1].takeIf { it.isNotEmpty() }?.let(EditScope::valueOf)
     fun conflicts(text: String): List<String> = text.split(SEP).drop(2)
 
+    /** Время одного дня повтора «в разные дни разное время» (шаг 5.3с). */
+    private const val DAY_TIME = "daytime"
+    fun dayTime(day: DayOfWeek) = listOf(DAY_TIME, day.name).joinToString(SEP)
+    fun isDayTime(text: String) = text.startsWith(DAY_TIME + SEP)
+    fun dayTimeDay(text: String): DayOfWeek = DayOfWeek.valueOf(text.split(SEP)[1])
+
     fun similar(clientId: String, query: String) = listOf(SIMILAR, clientId, query).joinToString(SEP)
     fun isSimilar(text: String) = text.startsWith(SIMILAR + SEP)
     fun similarId(text: String): String = text.split(SEP)[1]
@@ -1032,6 +1091,7 @@ internal val DraftSaver: Saver<TrainingDraft?, Any> = Saver(
                 d.repeat?.until?.toString().orEmpty(),
                 d.plan,
                 d.coverFor,
+                d.repeat?.times?.entries?.joinToString(",") { "${it.key.name}=${it.value}" } ?: "-",
             )
         }
     },
@@ -1048,7 +1108,12 @@ internal val DraftSaver: Saver<TrainingDraft?, Any> = Saver(
                 groupId = v[3].ifEmpty { null },
                 locationId = v[4].ifEmpty { null },
                 durationMin = v[5].toInt(),
-                repeat = if (v[6] == "-") null else Repeat(v[6].split(',').filter { it.isNotEmpty() }.map(DayOfWeek::valueOf).toSet(), v[7].ifEmpty { null }?.let(LocalDate::parse)),
+                repeat = if (v[6] == "-") null else Repeat(
+                    v[6].split(',').filter { it.isNotEmpty() }.map(DayOfWeek::valueOf).toSet(),
+                    v[7].ifEmpty { null }?.let(LocalDate::parse),
+                    v.getOrElse(10) { "-" }.takeIf { it != "-" }?.split(',')?.filter { it.isNotEmpty() }
+                        ?.associate { e -> e.substringBefore('=').let(DayOfWeek::valueOf) to LocalTime.parse(e.substringAfter('=')) },
+                ),
                 plan = v[8],
                 coverFor = v.getOrElse(9) { "" },
             )

@@ -314,6 +314,22 @@ object SalaryFormat {
     fun settlement(name: String, amount: Long): String =
         if (amount >= 0) "$name отдаёт вам" else "Вы отдаёте ${RuText.dative(name)}"
 
+    // --- Оплата напрямую от клиента (шаг 5.3с) ---
+
+    const val DIRECT_TITLE = "Напрямую от клиентов"
+    const val DIRECT_NOTE = "Не касса клуба: без ступени, налога и сверки с 1С — эти деньги уже у вас"
+    const val WITH_DIRECT = "Вместе с оплатой напрямую"
+
+    /** «4 тренировки оплачены»; ни одной — `null`. */
+    fun directHeld(n: Int): String? = if (n == 0) null else RuText.count(n, "тренировка оплачена", "тренировки оплачены", "тренировок оплачено")
+
+    /** «впереди ≈ 6 000 ₽»; впереди ничего — `null`. */
+    fun directAhead(amount: Long): String? = if (amount <= 0) null else "впереди ${MoneyFormat.approxRub(amount)}"
+
+    /** «Нет цены у 1 тренировки — задайте в «Ставках»». */
+    fun directMissing(n: Int): String =
+        "Нет цены у ${RuText.count(n, "тренировки", "тренировок", "тренировок")} — задайте в «Ставках»"
+
     /** «Если всё пройдёт по расписанию — ≈ 190 270 ₽». */
     fun ifScheduled(amount: Long): String = "Если всё пройдёт по расписанию — ${MoneyFormat.approxRub(amount)}"
 

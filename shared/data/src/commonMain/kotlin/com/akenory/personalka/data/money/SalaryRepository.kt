@@ -18,9 +18,12 @@ import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.money.AdvanceState
 import com.akenory.personalka.domain.money.CancelRules
+import com.akenory.personalka.domain.money.DirectMonth
+import com.akenory.personalka.domain.money.DirectPayRules
 import com.akenory.personalka.domain.money.DutyCheck
 import com.akenory.personalka.domain.money.DutyCheckRules
 import com.akenory.personalka.domain.money.MonthInput
+import com.akenory.personalka.domain.money.MonthPay
 import com.akenory.personalka.domain.money.OwnerScheme
 import com.akenory.personalka.domain.money.OwnerSchemes
 import com.akenory.personalka.domain.money.PayAdjustment
@@ -75,7 +78,15 @@ data class SalaryMonthData(
     val colleagueSchemes: Map<String, PaySchemeKind> = emptyMap(),
     val duties: DutyCheck = DutyCheck(emptyList(), null, canCheck = false),
     val payTypes: Boolean = true,
-)
+    /** Тренировки с оплатой напрямую от клиента (шаг 5.3с): свой расчёт вне кассы клуба; нет таких — `null`. */
+    val direct: DirectMonth? = null,
+) {
+    /**
+     * Расчёты месяца для «Отчётов» (5.15): касса клуба и, отдельно, оплата напрямую — отчёт считает тренировки обоих.
+     */
+    fun reportPairs(): List<Pair<MonthInput, MonthPay>> =
+        listOfNotNull(input?.let { it to view.pay }, direct?.let { it.input to it.pay })
+}
 
 /** «Период» (5.12, 3.7в): расчёт [view] и месяцы, которые он задевает, — для имён, доплат и тренировок. */
 data class SalaryPeriodData(val view: SalaryPeriod, val months: List<SalaryMonthData>)
@@ -236,10 +247,16 @@ class SalaryRepository(
         byTraining: Map<String, List<ParticipationEntity>>,
     ): SalaryMonthData {
         val places = n.places
-        val trainings = s.trainings.map { it.pay(byTraining[it.id].orEmpty()) }
+        // Оплата напрямую от клиента (шаг 5.3с) — не касса клуба: отдельным расчётом, в зарплату клуба не входит.
+        val directIds = s.types.filter { it.paidDirect }.map { it.id }.toSet()
+        val (directEntities, clubEntities) = s.trainings.partition { it.typeId in directIds }
+        val trainings = clubEntities.map { it.pay(byTraining[it.id].orEmpty()) }
         val ptTypeId = RatesRepository.ptTypeId(s.types)
         val types = s.types.map { it.payType(ptTypeId) }
-        val trainingById = s.trainings.associateBy { it.id }
+        val direct = directEntities.filter { it.start.date.yearMonth == month }.takeIf { it.isNotEmpty() }?.let { list ->
+            DirectPayRules.month(month, list.map { it.pay(byTraining[it.id].orEmpty()) }, types, s.rates)
+        }?.takeIf { !it.isEmpty }
+        val trainingById = clubEntities.associateBy { it.id }
         val spt = m.spt.mapNotNull { case ->
             val t = trainingById[case.sptTrainingId] ?: return@mapNotNull null
             SptCase(case.id, case.clientId, case.sptTrainingId, t.typeId, t.locationId, case.sptDate, case.windowUntil, case.purchaseDate, case.status)
@@ -268,7 +285,7 @@ class SalaryRepository(
             closed = records[month]?.closed == true,
             settled = settled,
         )
-        val ofMonth = s.trainings.filter { it.start.date.yearMonth == month }
+        val ofMonth = clubEntities.filter { it.start.date.yearMonth == month }
         val shown = view.days.mapNotNull { it.trainingId }.toSet()
         val whom = ofMonth.filter { it.id in shown }.associate { t ->
             val group = t.groupId?.let { n.groups[it] }
@@ -282,6 +299,7 @@ class SalaryRepository(
             }.toMap(),
             payTypes = m.payTypes,
             duties = DutyCheckRules.build(input, view.pay, today, records[month]?.dutiesCheckedMin),
+            direct = direct,
         )
     }
 

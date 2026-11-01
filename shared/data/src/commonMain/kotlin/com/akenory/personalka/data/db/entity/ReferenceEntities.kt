@@ -1,5 +1,6 @@
 package com.akenory.personalka.data.db.entity
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Embedded
 import androidx.room3.Entity
 import androidx.room3.Index
@@ -61,6 +62,11 @@ data class TrainingTypeEntity(
     val archived: Boolean = false,
     /** Только DUTY: свой цвет дежурства в календаре — ключ палитры, как у места; пусто — цвет места (шаг 3.9е). */
     val dutyColor: String? = null,
+    /**
+     * Клиент платит тренеру напрямую, не через кассу клуба (шаг 5.3с, версия 17): выезды к клиенту и т. п. Такие
+     * тренировки — отдельный заработок: без ступени, налога, начисления клуба и сверки с 1С. Цена — в «Ставках».
+     */
+    @ColumnInfo(defaultValue = "0") val paidDirect: Boolean = false,
 )
 
 /** Ставка тренера, версия с даты. Пустое место — для любого места (дежурство). */

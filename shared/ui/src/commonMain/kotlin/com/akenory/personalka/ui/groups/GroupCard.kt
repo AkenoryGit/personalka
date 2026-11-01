@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
@@ -52,6 +53,7 @@ import com.akenory.personalka.data.clients.adultOn
 import com.akenory.personalka.data.db.entity.ClientEntity
 import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.groups.AbsentMember
+import com.akenory.personalka.data.groups.GroupDeletion
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.groups.GroupRow
 import com.akenory.personalka.data.groups.GroupTrainingRow
@@ -82,8 +84,10 @@ import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
@@ -146,8 +150,10 @@ fun GroupCard(
     val today = now.date
     val row = rows.firstOrNull { it.group.id == groupId }
     val history by remember(groups, groupId) { groups.trainings(groupId) }.collectAsState(initial = null)
-    val deletable by produceState(initialValue = false, groups, groupId, history) { value = groups.canDelete(groupId) }
+    // Что удалится (шаг 5.3с): пересчитывается, пока карточка открыта и меняется история группы.
+    val deletion by produceState<GroupDeletion?>(initialValue = null, groups, groupId, history) { value = groups.deletion(groupId) }
     var confirmDelete by rememberSaveable(groupId) { mutableStateOf(false) }
+    var confirmDeleteAll by rememberSaveable(groupId) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var leaving by rememberSaveable(groupId) { mutableStateOf<String?>(null) }
     val allAbsent by remember(groups, now.date) { groups.absent(now.date) }.collectAsState(initial = emptyList())
@@ -185,13 +191,11 @@ fun GroupCard(
                             menu = false
                             shell.open(GroupRoute.edit(groupId))
                         })
-                        // Группу с тренировками или серией не удалить: история её помнит.
-                        if (deletable) {
-                            MenuAction("Удалить группу", PIcons.Delete, {
-                                menu = false
-                                confirmDelete = true
-                            }, danger = true)
-                        }
+                        // Шаг 5.3с: удалить можно любую группу; с историей — окно спросит, что делать с прошедшими.
+                        MenuAction(GroupFormat.DELETE, PIcons.Delete, {
+                            menu = false
+                            confirmDelete = true
+                        }, danger = true)
                     }
                 }
             }
@@ -313,28 +317,60 @@ fun GroupCard(
             }
         }
 
-        if (confirmDelete) {
-            Panel("Удалить группу?", onDismiss = { confirmDelete = false }) {
-                Text(
-                    "«${row.group.name}» и её состав удалятся. Тренировок у группы ещё не было — история ничего не потеряет.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colors.text,
-                )
+        val d = deletion
+        if (confirmDelete && d != null && !confirmDeleteAll) {
+            Panel(GroupFormat.DELETE_TITLE, onDismiss = { confirmDelete = false }) {
+                if (d.held == 0) {
+                    Text(GroupFormat.deleteText(row.group.name, d.other), style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                    PanelActions(
+                        primary = GroupFormat.DELETE,
+                        onPrimary = {
+                            confirmDelete = false
+                            scope.launch { groups.delete(groupId) }
+                            shell.back()
+                            messages.show(GroupFormat.DELETED)
+                        },
+                        secondary = GroupFormat.DELETE_KEEP,
+                        onSecondary = { confirmDelete = false },
+                    )
+                } else {
+                    Text(GroupFormat.historyText(d.held), style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                    Column(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        PrimaryButton(GroupFormat.END, {
+                            confirmDelete = false
+                            scope.launch { groups.delete(groupId) }
+                            messages.show(GroupFormat.ENDED)
+                        }, Modifier.fillMaxWidth().testTag(GROUP_END_TAG))
+                        OutlineButton(GroupFormat.DELETE_ALL, { confirmDeleteAll = true }, Modifier.fillMaxWidth().testTag(GROUP_DELETE_ALL_TAG))
+                        TextButton(onClick = { confirmDelete = false }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button)) {
+                            Text(GroupFormat.DELETE_KEEP, style = MaterialTheme.typography.labelLarge, color = colors.text)
+                        }
+                    }
+                }
+            }
+        }
+        if (confirmDeleteAll && d != null) {
+            Panel(GroupFormat.DELETE_ALL_TITLE, onDismiss = { confirmDeleteAll = false; confirmDelete = false }) {
+                Text(GroupFormat.deleteAllText(d.held), style = MaterialTheme.typography.bodyLarge, color = colors.text)
                 PanelActions(
-                    primary = "Удалить",
+                    primary = GroupFormat.DELETE_ALL_CONFIRM,
                     onPrimary = {
+                        confirmDeleteAll = false
                         confirmDelete = false
-                        scope.launch { groups.delete(groupId) }
+                        scope.launch { groups.delete(groupId, withHistory = true) }
                         shell.back()
-                        messages.show("Группа удалена")
+                        messages.show(GroupFormat.DELETED)
                     },
-                    secondary = "Отмена",
-                    onSecondary = { confirmDelete = false },
+                    secondary = GroupFormat.DELETE_KEEP,
+                    onSecondary = { confirmDeleteAll = false; confirmDelete = false },
                 )
             }
         }
     }
 }
+
+internal const val GROUP_END_TAG = "group-end"
+internal const val GROUP_DELETE_ALL_TAG = "group-delete-all"
 
 @Composable
 private fun MemberList(

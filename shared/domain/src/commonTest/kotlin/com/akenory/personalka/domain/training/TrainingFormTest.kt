@@ -199,4 +199,21 @@ class TrainingFormTest {
         assertEquals("Не дольше 10 часов", TrainingFormRules.dutyProblems(draft.copy(durationMin = 660))[FormField.TIME])
         assertEquals(setOf(FormField.WEEKDAYS), TrainingFormRules.dutyProblems(draft.copy(repeat = Repeat(emptySet()))).keys)
     }
+
+    @Test
+    fun differentTimesSplitIntoSlots() {
+        // Шаг 5.3с: первая тренировка вт 13:30; чт — 17:00, пт без своего времени — как первая.
+        val start = LocalDateTime(2026, 10, 20, 13, 30)
+        val days = setOf(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)
+        assertEquals(listOf(RepeatSlot(days, LocalTime(13, 30))), Repeat(days).slots(start))
+        val repeat = Repeat(days, times = mapOf(DayOfWeek.THURSDAY to LocalTime(17, 0), DayOfWeek.TUESDAY to LocalTime(9, 0)))
+        assertEquals(
+            listOf(RepeatSlot(setOf(DayOfWeek.TUESDAY, DayOfWeek.FRIDAY), LocalTime(13, 30)), RepeatSlot(setOf(DayOfWeek.THURSDAY), LocalTime(17, 0))),
+            repeat.slots(start),
+        )
+        assertTrue(repeat.splits(start))
+        // Своё время дня тоже должно закончиться до 24:00.
+        val late = TrainingDraft(start, repeat = Repeat(days, times = mapOf(DayOfWeek.THURSDAY to LocalTime(23, 30))))
+        assertEquals("Тренировка в этот день должна закончиться до 24:00", TrainingFormRules.dutyProblems(late.copy(locationId = "x"))[FormField.WEEKDAYS])
+    }
 }

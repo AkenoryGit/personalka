@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -262,6 +262,15 @@ internal object Migration15To16 : Migration(15, 16) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `group_member` ADD COLUMN `coach` TEXT NOT NULL DEFAULT 'SELF'")
         connection.exec("ALTER TABLE `participation` ADD COLUMN `coach` TEXT NOT NULL DEFAULT 'SELF'")
+    }
+}
+
+/**
+ * Версия 17 (шаг 5.3с): у типа отметка «Клиент платит мне напрямую». Прежние типы — через кассу клуба, как и были.
+ */
+internal object Migration16To17 : Migration(16, 17) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `training_type` ADD COLUMN `paidDirect` INTEGER NOT NULL DEFAULT 0")
     }
 }
 

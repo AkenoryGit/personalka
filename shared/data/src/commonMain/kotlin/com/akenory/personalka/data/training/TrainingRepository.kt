@@ -46,6 +46,7 @@ import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.restriction.placement
 import com.akenory.personalka.domain.series.ClientScheduleRules
 import com.akenory.personalka.domain.series.ScheduleSeries
+import com.akenory.personalka.domain.series.SeriesChanges
 import com.akenory.personalka.domain.series.SeriesPattern
 import com.akenory.personalka.domain.series.SeriesRules
 import com.akenory.personalka.domain.series.TrainingEdit
@@ -296,15 +297,8 @@ class TrainingRepository internal constructor(
                 result = SaveResult.Saved(TrainingFormat.created(draft.start), recorder.alignedUndo(db, now), entity.id)
             } else {
                 val pattern = draft.pattern(repeat)
-                val created = SeriesRules.create(
-                    id = Ids.newId(now),
-                    pattern = pattern,
-                    validFrom = draft.start.date,
-                    validTo = repeat.until,
-                    now = clubNow,
-                    horizonWeeks = horizonWeeks(),
-                    members = members(draft.groupId),
-                )
+                // «В разные дни разное время» (шаг 5.3с) — по серии на каждое время; тренировки — по порядку дат.
+                val created = createSeries(draft, repeat, pattern, now, clubNow)
                 // План — у первой тренировки серии; без плана — отложенный (4.3) у первой будущей.
                 val first = draft.plan.cleanPlan()?.let { 0 } ?: created.created.indexOfFirst { it.start > clubNow }.takeIf { it >= 0 && !duty }
                 val batch = RestrictionRules.checkAll(created.created.map { it.placement(duty) }, restrictions)
@@ -321,11 +315,36 @@ class TrainingRepository internal constructor(
                 if (draft.groupId == null && !duty) db.closeWaitForSeries(draft.clientIds, now)
                 val firstId = trainings.trainingsBetween(draft.start, ClubTime.plusMinutes(draft.start, 1))
                     .firstOrNull { it.locationId == locationId && it.typeId == type.id }?.id
-                result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now), firstId)
+                result = SaveResult.Saved(createdMessage(repeat, draft), recorder.alignedUndo(db, now), firstId)
             }
         }
         return result
     }
+
+    /**
+     * Серии нового повтора (4.4): одна — или по одной на каждое время дня (шаг 5.3с). Изменения сложены вместе,
+     * новые тренировки — по порядку начала: план и отложенный план достаются первой.
+     */
+    private suspend fun createSeries(draft: TrainingDraft, repeat: Repeat, pattern: SeriesPattern, now: Long, clubNow: LocalDateTime): SeriesChanges {
+        val horizon = horizonWeeks()
+        val members = members(draft.groupId)
+        val all = repeat.slots(draft.start).map { slot ->
+            SeriesRules.create(
+                id = Ids.newId(now),
+                pattern = pattern.copy(weekdays = slot.weekdays, startTime = slot.time),
+                validFrom = draft.start.date,
+                validTo = repeat.until,
+                now = clubNow,
+                horizonWeeks = horizon,
+                members = members,
+            )
+        }.fold(SeriesChanges.NONE) { acc, c -> acc + c }
+        return all.copy(created = all.created.sortedBy { it.start })
+    }
+
+    private fun createdMessage(repeat: Repeat, draft: TrainingDraft): String =
+        if (repeat.splits(draft.start)) TrainingFormat.createdSeries(repeat.slots(draft.start).map { it.weekdays to it.time })
+        else TrainingFormat.createdSeries(repeat.weekdays, draft.start.time)
 
     /**
      * Изменение тренировки (5.5). У тренировки серии новое время, день, тип, место, длительность или клиенты
@@ -447,15 +466,7 @@ class TrainingRepository internal constructor(
                     // Разовая стала постоянной: с её даты — серия, сама она — первая тренировка серии.
                     val repeat = draft.repeat ?: return@withWriteTransaction
                     val pattern = draft.pattern(repeat).copy(typeId = type.id)
-                    val created = SeriesRules.create(
-                        id = Ids.newId(now),
-                        pattern = pattern,
-                        validFrom = draft.start.date,
-                        validTo = repeat.until,
-                        now = clubNow,
-                        horizonWeeks = horizonWeeks(),
-                        members = members(draft.groupId),
-                    )
+                    val created = createSeries(draft, repeat, pattern, now, clubNow)
                     val own = created.created.firstOrNull { it.date == draft.start.date && it.start == draft.start }
                     val changes = created.copy(created = created.created - listOfNotNull(own).toSet())
                     val placed = changes.created.map { it.placement(isDuty(it.typeId)) } + listOfNotNull(after.takeIf { RestrictionRules.moved(before, it) })
@@ -465,7 +476,7 @@ class TrainingRepository internal constructor(
                         return@withWriteTransaction
                     }
                     recorder.write(db, changes, coach.id, now, restrictions, pattern, isDuty)
-                    val seriesId = changes.series.single().id
+                    val seriesId = own?.seriesId ?: changes.series.first().id
                     val entity = t.edited(edit, plan, coverFor, RestrictionRules.flag(after, restrictions), group, now)
                         .copy(seriesId = if (own != null) seriesId else null, seriesDetached = false)
                     recorder.saveTraining(entity)
@@ -474,7 +485,7 @@ class TrainingRepository internal constructor(
                     }
                     val firstId = trainings.trainingsBetween(draft.start, ClubTime.plusMinutes(draft.start, 1))
                     .firstOrNull { it.locationId == locationId && it.typeId == type.id }?.id
-                result = SaveResult.Saved(TrainingFormat.createdSeries(repeat.weekdays, draft.start.time), recorder.alignedUndo(db, now), firstId)
+                result = SaveResult.Saved(createdMessage(repeat, draft), recorder.alignedUndo(db, now), firstId)
                 }
             }
         }

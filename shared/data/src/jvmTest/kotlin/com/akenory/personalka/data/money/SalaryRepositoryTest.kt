@@ -1,5 +1,8 @@
 package com.akenory.personalka.data.money
 
+import com.akenory.personalka.data.db.entity.RateVersionEntity
+import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.reference.TypePresets
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
@@ -27,6 +30,7 @@ import kotlinx.datetime.YearMonth
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -98,6 +102,35 @@ class SalaryRepositoryTest {
         // Полностью официально: на карту 3 680 − 13 %, аванс ожидаемый.
         assertEquals(rub(10_000), view.payout.advance)
         assertEquals(rub(3680) - 47_840, view.totals.onHand)
+    }
+
+    @Test
+    fun directPayIsSeparateFromClub(): Unit = runBlocking {
+        // Шаг 5.3с: выезд к клиенту — клиент платит напрямую; клуб и 1С его не видят, заработок отдельно.
+        setUp()
+        val coach = db.coachDao().currentCoach()!!.id
+        val visit = settings.addType(TypePresets.of(TrainingKind.PERSONAL).copy(name = "Выезд к клиенту", shortName = "Выезд", durationMin = 60, paidDirect = true))
+        val bb = placeId("ББ")
+        db.referenceDao().upsertRateVersion(RateVersionEntity("r-visit", SyncFields.new(coach, now), visit, null, LocalDate(2026, 1, 1), rub(3000)))
+        training(visit, bb, 18, TrainingStatus.DONE, ParticipationStatus.ATTENDED)
+        training(visit, bb, 19, TrainingStatus.CANCELLED, ParticipationStatus.CANCELLED_CHARGED)
+        training(visit, bb, 27, TrainingStatus.PLANNED, ParticipationStatus.EXPECTED)
+
+        val type = db.referenceDao().trainingType(visit)!!
+        assertTrue(type.paidDirect)
+        assertEquals(false, type.countsTowardPt)
+        assertEquals(false, type.tierDependent)
+
+        val data = months.month(october, today).first()
+        // Клуб — как без выездов.
+        assertEquals(rub(3680), data.view.pay.earned)
+        assertEquals(4, data.view.pay.ptCount)
+        assertEquals(1, data.view.breakdown.size)
+        val direct = assertNotNull(data.direct)
+        assertEquals(rub(6000), direct.earned)
+        assertEquals(2, direct.held)
+        assertEquals(rub(3000), direct.ahead)
+        assertEquals(2, data.reportPairs().size)
     }
 
     @Test

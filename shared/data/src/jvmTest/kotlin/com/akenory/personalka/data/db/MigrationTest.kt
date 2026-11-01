@@ -543,8 +543,39 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion16() {
-        assertEquals(16, PersonalkaDatabase.VERSION)
-        assertTrue((1..15).all { schemaFile(it).exists() }, "Схемы версий 1–15 хранятся: по ним строятся переходы")
+    fun version16TypesArePaidThroughClub(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v16", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 5.3л–5.3р: оплаты напрямую ещё нет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 16)
+                raw.exec(
+                    "INSERT INTO training_type (id, name, shortName, kind, shade, defaultDurationMin, maxClients, payUnit, countsTowardPt, " +
+                        "tierDependent, diaryPlan, diaryFact, diaryBehavior, splitFallbackTypeId, archived, dutyColor, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('t1', 'Персональная', 'ПТ', 'PERSONAL', 1, 50, 1, 'PER_SESSION', 1, 1, 1, 1, 1, NULL, 0, NULL, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val type = db.referenceDao().trainingType("t1")!!
+                assertEquals("ПТ", type.shortName, "Тип не тронут")
+                assertFalse(type.paidDirect, "Прежние типы — через кассу клуба")
+                db.referenceDao().upsertTrainingType(type.copy(paidDirect = true))
+                assertTrue(db.referenceDao().trainingType("t1")!!.paidDirect)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion17() {
+        assertEquals(17, PersonalkaDatabase.VERSION)
+        assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }

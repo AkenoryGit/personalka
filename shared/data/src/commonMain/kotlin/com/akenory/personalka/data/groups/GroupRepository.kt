@@ -55,6 +55,12 @@ data class GroupRow(
 data class AbsentMember(val group: GroupEntity, val clientId: String, val client: ClientEntity, val absence: Absence, val keeps: Int)
 
 /** Тренировка группы с участием детей: посещаемость и история в карточке группы. */
+/**
+ * Удаление группы (5.10, шаг 5.3с): [held] — прошедших тренировок с историей, [other] — остальных (будущих и
+ * отменённых), [series] — серий расписания.
+ */
+data class GroupDeletion(val held: Int, val other: Int, val series: Int)
+
 data class GroupTrainingRow(val training: TrainingEntity, val participations: List<ParticipationEntity>)
 
 /**
@@ -215,24 +221,64 @@ class GroupRepository(private val db: PersonalkaDatabase, private val clock: () 
         }
     }
 
-    /** Можно ли удалить группу: у неё нет ни тренировок, ни серий — история её не помнит. */
-    suspend fun canDelete(id: String): Boolean =
-        trainings.trainingsOfGroup(id).isEmpty() && schedule.seriesCountOfGroup(id) == 0
+    /**
+     * Что будет при удалении группы (5.10, шаг 5.3с): сколько у неё прошедших тренировок с историей — проведённых,
+     * с отметкой «пришёл», списанием или записью о занятии, — и сколько остальных (будущих и отменённых).
+     */
+    suspend fun deletion(id: String): GroupDeletion {
+        val all = trainings.trainingsOfGroup(id)
+        val held = all.count { hasHistory(it) }
+        return GroupDeletion(held = held, other = all.size - held, series = schedule.seriesOfGroup(id).size)
+    }
 
-    /** Удалить группу, заведённую по ошибке, вместе с составом. Группу с историей не удаляет — возвращает `false`. */
-    suspend fun delete(id: String): Boolean {
+    /**
+     * Удалить группу (5.10, шаг 5.3с). Расписание группы (её серии) и тренировки без истории удаляются всегда.
+     * Прошедшие тренировки с историей: при [withHistory] — тоже удаляются (уходят из истории детей и из зарплаты), и
+     * группа исчезает; без него — остаются, а группа «заканчивается»: состав закрыт вчерашним днём, расписания нет,
+     * она уходит в «Закончились» и в истории детей видна, как была. Группы с историей нет — удаляется целиком.
+     *
+     * @return `true` — группы больше нет в списке; `false` — она закончилась и осталась в «Закончились».
+     */
+    suspend fun delete(id: String, withHistory: Boolean = false): Boolean {
         val now = clock()
-        var deleted = false
+        val today = ClubTime.today(now)
+        var gone = false
         db.withWriteTransaction {
-            val group = clients.group(id)
-            if (group != null && group.sync.deletedAt == null && canDelete(id)) {
+            val group = clients.group(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            schedule.seriesOfGroup(id).forEach { s -> schedule.upsertSeries(s.copy(sync = s.sync.deleted(now))) }
+            var kept = 0
+            trainings.trainingsOfGroup(id).forEach { t ->
+                if (!withHistory && hasHistory(t)) {
+                    kept++
+                } else {
+                    trainings.participationsOf(t.id).forEach { p -> trainings.upsertParticipation(p.copy(sync = p.sync.deleted(now))) }
+                    trainings.upsertTraining(t.copy(sync = t.sync.deleted(now)))
+                }
+            }
+            if (kept == 0) {
                 clients.membersOf(id).forEach { clients.upsertGroupMember(it.copy(sync = it.sync.deleted(now))) }
                 clients.upsertGroup(group.copy(sync = group.sync.deleted(now)))
-                deleted = true
+                gone = true
+            } else {
+                // Состав закрывается вчерашним днём: прошлые тренировки его помнят, будущих нет. Добавленные с
+                // сегодня и позже — записи без истории — удаляются.
+                val yesterday = today.minus(1, DateTimeUnit.DAY)
+                clients.membersOf(id).filter { it.toDate == null || it.toDate >= today }.forEach { m ->
+                    val closed = if (m.fromDate >= today) m.copy(sync = m.sync.deleted(now)) else m.copy(toDate = yesterday, sync = m.sync.touched(now))
+                    clients.upsertGroupMember(closed)
+                }
+                clients.upsertGroup(group.copy(sync = group.sync.touched(now)))
             }
         }
-        return deleted
+        return gone
     }
+
+    /** У тренировки есть история: проведена, кто-то пришёл или со списанием, или записан факт (5.10, шаг 5.3с). */
+    private suspend fun hasHistory(t: TrainingEntity): Boolean =
+        t.status == TrainingStatus.DONE || !t.fact.isNullOrBlank() ||
+            trainings.participationsOf(t.id).any {
+                it.status == ParticipationStatus.ATTENDED || it.status == ParticipationStatus.CANCELLED_CHARGED || !it.behavior.isNullOrBlank()
+            }
 
     // --- Состав (5.10) ---
 

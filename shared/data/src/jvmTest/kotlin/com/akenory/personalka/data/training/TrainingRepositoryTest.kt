@@ -181,6 +181,32 @@ class TrainingRepositoryTest {
     }
 
     @Test
+    fun differentTimesMakeSeparateSeries(): Unit = runBlocking {
+        // Шаг 5.3с: вт 13:30 и чт 17:00 — две серии; правка четверга «Эту и следующие» вторник не трогает.
+        val morozov = client("Морозов", "Даниил")
+        val repeat = Repeat(tueThu, times = mapOf(DayOfWeek.THURSDAY to LocalTime(17, 0)))
+        val result = saved(forms.create(pt(at(tuesday, 13, 30), morozov, repeat, plan = "Старт с тумбы")))
+        assertEquals("Создано каждую неделю: вт 13:30; чт 17:00", result.message)
+        val list = all()
+        assertEquals(17, list.size)
+        assertTrue(list.filter { it.start.date.dayOfWeek == DayOfWeek.TUESDAY }.all { it.start.time == LocalTime(13, 30) })
+        assertTrue(list.filter { it.start.date.dayOfWeek == DayOfWeek.THURSDAY }.all { it.start.time == LocalTime(17, 0) })
+        assertEquals(2, list.map { it.seriesId }.toSet().size)
+        assertEquals("Старт с тумбы", list.first().plan)
+        assertEquals(listOf("Старт с тумбы"), list.mapNotNull { it.plan })
+        val tueSeries = list.first().seriesId!!
+
+        val thursday = list.first { it.start.date == day(9) }
+        val draft = forms.stored(thursday.id)!!.draft.copy(start = at(day(9), 18))
+        saved(forms.update(thursday.id, draft, EditScope.FOLLOWING))
+        val after = all()
+        assertTrue(after.filter { it.start.date.dayOfWeek == DayOfWeek.TUESDAY }.all { it.start.time == LocalTime(13, 30) && it.seriesId == tueSeries })
+        assertTrue(after.filter { it.start.date >= day(9) && it.start.date.dayOfWeek == DayOfWeek.THURSDAY }.all { it.start.time == LocalTime(18, 0) })
+        assertEquals(LocalTime(17, 0), after.single { it.start.date == day(2) }.start.time)
+        assertNull(db.scheduleDao().series(tueSeries)!!.validTo)
+    }
+
+    @Test
     fun seriesUntilDate(): Unit = runBlocking {
         val morozov = client("Морозов", "Даниил")
         saved(forms.create(pt(at(tuesday, 13, 30), morozov, Repeat(setOf(DayOfWeek.TUESDAY), LocalDate(2026, 11, 3)))))

@@ -55,6 +55,7 @@ object TypeFormat {
      */
     fun summary(type: TypeDraft): String {
         val pay = when {
+            type.paidDirect && type.kind != TrainingKind.DUTY -> DIRECT_SHORT
             type.kind == TrainingKind.SPT -> "бонус за блок"
             type.countsTowardPt -> "как ПТ"
             else -> payUnit(type.payUnit).lowercase()
@@ -112,4 +113,13 @@ object TypeFormat {
     /** Строка «Мест и типов» в настройках: «3 места · 9 типов». */
     fun placesAndTypes(places: Int, types: Int): String =
         RuText.count(places, "место", "места", "мест") + DOT + RuText.count(types, "тип", "типа", "типов")
+
+    // --- Оплата напрямую от клиента (шаг 5.3с) ---
+
+    /** В строке типа: «Персональная · 60 мин · оплата напрямую». */
+    const val DIRECT_SHORT = "оплата напрямую"
+    const val DIRECT_TITLE = "Клиент платит мне напрямую"
+    const val DIRECT_HINT = "Не через кассу клуба — например, выезд к клиенту. Заработок считается отдельно: без счёта ПТ, ступени, налога и сверки с 1С"
+    const val RATE_NOTE = "Ставку задайте в «Ставках». Пока её нет, тренировки этого типа будут в «Нужно сделать»."
+    const val PRICE_NOTE = "Цену тренировки задайте в «Ставках» — по ней считается заработок напрямую."
 }

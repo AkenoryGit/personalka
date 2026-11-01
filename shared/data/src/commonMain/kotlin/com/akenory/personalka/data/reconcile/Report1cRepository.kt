@@ -396,8 +396,11 @@ class Report1cRepository(private val db: PersonalkaDatabase, private val clock: 
     private suspend fun visits(report: Report1c): List<AppVisit> {
         val from = LocalDateTime(report.from, LocalTime(0, 0))
         val to = LocalDateTime(report.to.plus(1, DateTimeUnit.DAY), LocalTime(0, 0))
-        val byId = trainings.trainingsBetween(from, to).associateBy { it.id }
-        val kinds = reference.trainingTypes().associate { it.id to it.kind }
+        val types = reference.trainingTypes()
+        // Оплата напрямую от клиента (шаг 5.3с) идёт мимо кассы клуба — в 1С её нет и сверять нечего.
+        val direct = types.filter { it.paidDirect }.map { it.id }.toSet()
+        val byId = trainings.trainingsBetween(from, to).filter { it.typeId !in direct }.associateBy { it.id }
+        val kinds = types.associate { it.id to it.kind }
         return trainings.observeParticipationsBetween(from, to).first().mapNotNull { p ->
             val t = byId[p.trainingId] ?: return@mapNotNull null
             AppVisit(t.id, p.clientId, t.start, t.typeId, t.locationId, kinds[t.typeId] ?: TrainingKind.OTHER, t.owner, p.status)

@@ -61,7 +61,7 @@ class GroupRepositoryTest {
 
     /** Тренировка группы в сб 09:00 с ожидаемыми детьми. */
     private suspend fun training(date: LocalDate, groupId: String, vararg kids: String, status: TrainingStatus = TrainingStatus.PLANNED): String {
-        val t = Samples.training(groupTypeId, bbId, LocalDateTime(date, LocalTime(9, 0))).copy(groupId = groupId, status = status)
+        val t = Samples.training(groupTypeId, bbId, LocalDateTime(date, LocalTime(9, 0))).copy(groupId = groupId, status = status, fact = null)
         db.trainingDao().upsertTraining(t)
         kids.forEach { kid ->
             db.trainingDao().upsertParticipation(
@@ -247,7 +247,7 @@ class GroupRepositoryTest {
     private suspend fun newGroup2(): String = groups.create(GroupDraft("Вт 18:00 ББ", groupTypeId, bbId))
 
     @Test
-    fun onlyGroupWithoutHistoryIsDeleted(): Unit = runBlocking {
+    fun groupWithoutHistoryIsDeletedWithPlannedTrainings(): Unit = runBlocking {
         val empty = newGroup()
         val anya = kid("Белова", "Аня")
         groups.addMember(empty, anya, day(1, 9))
@@ -255,10 +255,36 @@ class GroupRepositoryTest {
         assertTrue(groups.rows(now.date).first().isEmpty())
         assertTrue(db.clientDao().membershipsOf(anya).isEmpty())
 
-        val used = newGroup2()
-        training(day(24), used)
-        assertFalse(groups.canDelete(used))
-        assertFalse(groups.delete(used))
-        assertEquals(listOf("Вт 18:00 ББ"), groups.rows(now.date).first().map { it.group.name })
+        // Шаг 5.3с: будущие тренировки без истории не мешают — удаляются вместе с группой.
+        val planned = newGroup2()
+        val sat24 = training(day(24), planned, anya)
+        assertEquals(GroupDeletion(held = 0, other = 1, series = 0), groups.deletion(planned))
+        assertTrue(groups.delete(planned))
+        assertNotNull(db.trainingDao().training(sat24)!!.sync.deletedAt)
+        assertTrue(db.trainingDao().participationsOf(sat24).isEmpty())
+        assertTrue(groups.rows(now.date).first().isEmpty())
+    }
+
+    @Test
+    fun groupWithHistoryEndsOrIsDeletedWithHistory(): Unit = runBlocking {
+        val id = newGroup()
+        val anya = kid("Белова", "Аня")
+        groups.addMember(id, anya, day(1, 9))
+        val sat17 = training(day(17), id, anya, status = TrainingStatus.DONE)
+        val sat24 = training(day(24), id, anya)
+        assertEquals(GroupDeletion(held = 1, other = 1, series = 0), groups.deletion(id))
+
+        // Без истории — «закончилась»: прошлое остаётся, будущее и состав — нет.
+        assertFalse(groups.delete(id))
+        assertNull(db.trainingDao().training(sat17)!!.sync.deletedAt)
+        assertNotNull(db.trainingDao().training(sat24)!!.sync.deletedAt)
+        assertEquals(day(19), db.clientDao().membershipsOf(anya).single().toDate)
+        val row = groups.rows(now.date).first().single()
+        assertTrue(row.schedule.isEmpty())
+
+        // «Удалить со всей историей» — уходит и прошлое.
+        assertTrue(groups.delete(id, withHistory = true))
+        assertNotNull(db.trainingDao().training(sat17)!!.sync.deletedAt)
+        assertTrue(groups.rows(now.date).first().isEmpty())
     }
 }

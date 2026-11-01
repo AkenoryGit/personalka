@@ -73,6 +73,7 @@ import com.akenory.personalka.domain.format.SettlementFormat
 import com.akenory.personalka.domain.format.SlotFormat
 import com.akenory.personalka.domain.money.BreakdownLine
 import com.akenory.personalka.domain.money.BreakdownSection
+import com.akenory.personalka.domain.money.DirectMonth
 import com.akenory.personalka.domain.money.MonthPeriod
 import com.akenory.personalka.domain.money.PayoutKind
 import com.akenory.personalka.domain.money.Payouts
@@ -117,6 +118,7 @@ internal const val SALARY_ADD_ADJUST_TAG = "salary-add-adjust"
 internal const val ADJUST_AMOUNT_TAG = "adjust-amount"
 internal const val ADJUST_FOR_TAG = "adjust-for"
 internal const val SALARY_ON_HAND_TAG = "salary-on-hand"
+internal const val SALARY_DIRECT_TAG = "salary-direct"
 internal const val SALARY_ADVANCE_TAG = "salary-advance"
 internal const val ADVANCE_FIELD_TAG = "advance-field"
 internal const val SALARY_TOTAL_TAG = "salary-total"
@@ -502,6 +504,7 @@ private fun MonthTab(
 ) {
     val view = data.view
     EarnedCard(view, onPlan, onSlots)
+    data.direct?.let { DirectCard(it) }
     view.tiers?.let { TierCard(it, view.period, data) }
     ChartCard(data, day, onDay, onPeriod)
     BreakdownCard(data, onAdjust)
@@ -836,6 +839,28 @@ private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () ->
         HorizontalDivider(thickness = 2.dp, color = colors.text)
         MoneyRow(SalaryFormat.ON_HAND, MoneyFormat.rub(view.totals.onHand), Modifier.testTag(SALARY_ON_HAND_TAG), bold = true)
         if (view.hasForecast && view.forecastOnHand != view.totals.onHand) Muted(SalaryFormat.ifScheduled(view.forecastOnHand))
+    }
+    data.direct?.let { DirectCard(it, onHand = view.totals.onHand) }
+}
+
+/**
+ * Оплата напрямую от клиентов (шаг 5.3с): отдельной карточкой, не в «Заработано» клуба. [onHand] — во вкладке
+ * «Выплаты»: строка «Вместе с оплатой напрямую» с суммой клуба на руки.
+ */
+@Composable
+private fun DirectCard(direct: DirectMonth, onHand: Long? = null) {
+    val colors = PersonalkaTheme.colors
+    SalaryCard(Modifier.testTag(SALARY_DIRECT_TAG)) {
+        CardHeader(SalaryFormat.DIRECT_TITLE)
+        Text(MoneyFormat.rub(direct.earned), style = MaterialTheme.typography.headlineSmall.tabular(), color = colors.text)
+        listOfNotNull(SalaryFormat.directHeld(direct.held), SalaryFormat.directAhead(direct.ahead)).takeIf { it.isNotEmpty() }
+            ?.let { Muted(it.joinToString(" · ")) }
+        if (direct.missing > 0) Text(SalaryFormat.directMissing(direct.missing), style = MaterialTheme.typography.bodySmall, color = colors.error)
+        Muted(SalaryFormat.DIRECT_NOTE)
+        if (onHand != null) {
+            HorizontalDivider(thickness = 1.dp, color = colors.divider)
+            MoneyRow(SalaryFormat.WITH_DIRECT, MoneyFormat.rub(onHand + direct.earned), bold = true)
+        }
     }
 }
 

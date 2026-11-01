@@ -14,8 +14,38 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 
-/** «Каждую неделю» в форме (5.5): дни недели и последний день; `null` в [until] — бессрочно. */
-data class Repeat(val weekdays: Set<DayOfWeek>, val until: LocalDate? = null)
+/**
+ * «Каждую неделю» в форме (5.5): дни недели и последний день; `null` в [until] — бессрочно.
+ *
+ * [times] — «В разные дни разное время» (шаг 5.3с): своё время начала у дней недели; `null` — переключатель выключен,
+ * у всех дней время первой тренировки. День первой тренировки всегда в её время (поле «Когда»), день без своего
+ * времени — тоже. Сохраняется такой повтор отдельной серией на каждое время ([slots]): вторник 13:30 и четверг 17:00 —
+ * две серии, поэтому «Эту и следующие» у четверга вторник не трогает.
+ */
+data class Repeat(
+    val weekdays: Set<DayOfWeek>,
+    val until: LocalDate? = null,
+    val times: Map<DayOfWeek, LocalTime>? = null,
+) {
+    /** Время дня [day] при первой тренировке [start]. */
+    fun timeOn(day: DayOfWeek, start: LocalDateTime): LocalTime =
+        if (day == start.date.dayOfWeek) start.time else times?.get(day) ?: start.time
+
+    /**
+     * Серии повтора с первой тренировкой [start]: дни с одинаковым временем — одна серия. Серия с днём первой
+     * тренировки — первая, остальные по первому дню недели.
+     */
+    fun slots(start: LocalDateTime): List<RepeatSlot> = weekdays
+        .groupBy { timeOn(it, start) }
+        .map { (time, days) -> RepeatSlot(days.toSet(), time) }
+        .sortedWith(compareBy<RepeatSlot>({ start.date.dayOfWeek !in it.weekdays }, { it.weekdays.minOf { d -> d.ordinal } }))
+
+    /** Разное ли время у выбранных дней — тогда серий несколько. */
+    fun splits(start: LocalDateTime): Boolean = slots(start).size > 1
+}
+
+/** Одна серия повтора «в разные дни разное время»: дни недели и время начала. */
+data class RepeatSlot(val weekdays: Set<DayOfWeek>, val time: LocalTime)
 
 /**
  * Тренировка из формы (5.5) — то, что выбрано сейчас. Клиенты — в порядке выбора: «Петров / Сидоров» в блоке
@@ -238,6 +268,14 @@ object TrainingFormRules {
         val repeat = draft.repeat ?: return
         if (repeat.weekdays.isEmpty()) put(FormField.WEEKDAYS, "Выберите дни недели")
         if (repeat.until != null && repeat.until < draft.start.date) put(FormField.UNTIL, "Не раньше даты тренировки")
+        // Своё время дня (шаг 5.3с): тренировка в этот день тоже должна закончиться до 24:00.
+        if (repeat.times != null) {
+            val late = repeat.weekdays.sortedBy { it.ordinal }.firstOrNull { day ->
+                val time = repeat.timeOn(day, draft.start)
+                time != draft.start.time && TrainingTime.problem(LocalDateTime(draft.start.date, time), draft.durationMin) == TimeProblem.CROSSES_MIDNIGHT
+            }
+            if (late != null) put(FormField.WEEKDAYS, "Тренировка в этот день должна закончиться до 24:00")
+        }
     }
 
     private fun clientsProblem(draft: TrainingDraft, type: FormType): String? {

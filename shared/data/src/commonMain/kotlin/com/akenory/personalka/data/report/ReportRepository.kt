@@ -94,7 +94,7 @@ class ReportRepository(private val db: PersonalkaDatabase, private val salary: S
     fun table(from: LocalDate, to: LocalDate, now: LocalDateTime): Flow<ReportView> {
         val months = ReportRules.monthsOf(from, to)
         return view(from, to, salary.monthsData(months, now.date)) { list, places ->
-            ReportView(table = ReportRules.table(list.mapNotNull { d -> d.input?.let { it to d.view.pay } }, from, to, now, places))
+            ReportView(table = ReportRules.table(list.flatMap { it.reportPairs() }, from, to, now, places))
         }
     }
 
@@ -122,7 +122,7 @@ class ReportRepository(private val db: PersonalkaDatabase, private val salary: S
             }.associate { it.trainingId to ClientParticipation(it.trainingId, it.status, it.notifiedAt, it.cancelReason) }
             val report = ClientReportRules.report(
                 clientId,
-                list.mapNotNull { d -> d.input?.let { it to d.view.pay } },
+                list.flatMap { it.reportPairs() },
                 mine,
                 from,
                 to,
@@ -207,7 +207,7 @@ class ReportRepository(private val db: PersonalkaDatabase, private val salary: S
         val to = LocalDate(year, 12, 31)
         return view(from, to, salary.monthsData(months, now.date)) { list, places ->
             val closed = list.filter { it.view.closed }.map { it.view.month }.toSet()
-            ReportView(year = ReportRules.year(year, list.mapNotNull { d -> d.input?.let { it to d.view.pay } }, now, closed, places))
+            ReportView(year = ReportRules.year(year, list.flatMap { it.reportPairs() }, now, closed, places))
         }
     }
 
