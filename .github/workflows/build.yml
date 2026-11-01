@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew check :androidApp:assembleDebug :tools:import:importJar :server:serverJar :shared:ui:compileKotlinIosArm64 --continue --console=plain --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew check :androidApp:assembleDebug :wearApp:assembleDebug :tools:import:importJar :server:serverJar :shared:ui:compileKotlinIosArm64 --continue --console=plain --stacktrace 2>&1 | tee build-log.txt
 
       - name: Что внутри APK
         if: success()
@@ -110,9 +110,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp androidApp/build/outputs/apk/debug/androidApp-debug.apk personalka.apk
+          cp wearApp/build/outputs/apk/debug/wearApp-debug.apk personalka-watch.apk
           gh release delete latest-build --yes --cleanup-tag || true
-          gh release create latest-build personalka.apk tools/import/build/libs/personalka-import.jar server/build/libs/personalka-server.jar \
+          gh release create latest-build personalka.apk personalka-watch.apk tools/import/build/libs/personalka-import.jar server/build/libs/personalka-server.jar \
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Последняя сборка" \
-            --notes "Сборка ${GITHUB_RUN_NUMBER} (версия 0.1.${GITHUB_RUN_NUMBER}) из коммита ${GITHUB_SHA::7}. Ставится поверх прежней, данные сохраняются. personalka-import.jar — утилита импорта таблиц для компьютера: java -jar personalka-import.jar <папка с xlsx>. personalka-server.jar — сервер, его берёт «Выкладка сервера»."
+            --notes "Сборка ${GITHUB_RUN_NUMBER} (версия 0.1.${GITHUB_RUN_NUMBER}) из коммита ${GITHUB_SHA::7}. Ставится поверх прежней, данные сохраняются. personalka-watch.apk — приложение для часов Galaxy Watch, ставится на часы по Wi-Fi через adb. personalka-import.jar — утилита импорта таблиц для компьютера: java -jar personalka-import.jar <папка с xlsx>. personalka-server.jar — сервер, его берёт «Выкладка сервера»."

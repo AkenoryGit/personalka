@@ -88,6 +88,9 @@ class PersonalkaApplication : Application() {
      * Текст последней ошибки, на которой приложение закрылось: окно при следующем запуске показывает его, чтобы тренер
      * прислал разработчику (на телефоне журнала не достать).
      */
+    /** Часы Galaxy Watch (шаг 5.3т): расписание, деньги дня и дела — на ячейки циферблата и плитку. */
+    val watch: WatchBridge by lazy { WatchBridge(this, this, prefs) }
+
     val crashFile: File get() = File(filesDir, "last-crash.txt")
 
     /** Сбой фоновой работы (обмен, будильник) записывается и не роняет приложение — иначе оно падало бы при каждом запуске. */
@@ -115,6 +118,8 @@ class PersonalkaApplication : Application() {
         // Обмен с сервером (7.2, п. 4): сразу при запуске, через 5 секунд после правки, раз в 15 минут; фоновая задача
         // стоит, пока сервер подключён.
         syncRunner.start(scope)
+        // Часы (шаг 5.3т): пока процесс жив, правки и обмен с сервером сразу доходят до часов.
+        watch.start(scope)
         scope.launch {
             sync.state.map { it.connected }.distinctUntilChanged().collect { SyncJob.schedule(this@PersonalkaApplication, it) }
         }

@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
                     link = link,
                     onLink = { link = null },
                     backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
+                    watch = app.watch,
                 )
             }
         }

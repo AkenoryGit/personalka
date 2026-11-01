@@ -69,6 +69,7 @@ import com.akenory.personalka.ui.reconcile.Report1cResultScreen
 import com.akenory.personalka.ui.reconcile.Report1cRoute
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
+import com.akenory.personalka.ui.watch.WatchTools
 import com.akenory.personalka.ui.salary.SalaryScreen
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.CABINETS_ROW_TAG
@@ -155,6 +156,7 @@ fun SectionScreen(
     followup: Followup = Followup.EMPTY,
     clientList: ClientListState = rememberClientListState(),
     reminders: Reminders? = null,
+    watch: WatchTools? = null,
     notifications: NotificationAccess? = null,
     voice: VoiceInput? = null,
     waiting: List<WaitRow> = emptyList(),
@@ -294,7 +296,7 @@ fun SectionScreen(
             }
             MoreScreen(shell, versionName, items, onTour) { route, onBack ->
             when {
-                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null)
+                SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null, watch)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
                 route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText, backup?.files) { id ->
                     shell.open(Report1cRoute.of(id))

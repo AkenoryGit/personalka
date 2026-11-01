@@ -57,4 +57,8 @@ dependencies {
     implementation(project(":shared:ui"))
     implementation(project(":shared:data"))
     implementation(libs.androidx.activity.compose)
+    // Часы (шаг 5.3т): Wearable Data Layer.
+    implementation(project(":shared:domain"))
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
 }

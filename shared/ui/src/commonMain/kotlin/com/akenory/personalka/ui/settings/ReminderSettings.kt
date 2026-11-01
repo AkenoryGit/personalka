@@ -37,6 +37,8 @@ import com.akenory.personalka.domain.reminder.ReminderRules
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.SwitchRow
+import com.akenory.personalka.ui.watch.WatchSettings
+import com.akenory.personalka.ui.watch.WatchTools
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
@@ -78,6 +80,7 @@ internal fun ReminderSettingsScreen(
     notifications: NotificationAccess?,
     scope: CoroutineScope,
     onBack: (() -> Unit)?,
+    watch: WatchTools? = null,
 ) {
     val prefs by remember(settings) { settings.prefs }.collectAsState(initial = null)
     val loaded = prefs ?: return
@@ -181,6 +184,8 @@ internal fun ReminderSettingsScreen(
                         )
                     }
                 }
+                // Часы (шаг 5.3т): раздел есть, только когда к телефону подключены часы с Персоналкой.
+                if (watch != null) WatchSettings(watch)
                 Spacer(Modifier.height(Dimens.space6))
             }
         }

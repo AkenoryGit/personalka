@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Персоналка</string>
+    <!-- Названия в списке ячеек циферблата и плиток (шаг 5.3т). -->
+    <string name="complication_next">Следующая тренировка</string>
+    <string name="complication_money">Деньги сегодня</string>
+    <string name="complication_plan">План месяца</string>
+    <string name="complication_todo">Нужно сделать</string>
+    <string name="tile_next">Ближайшая тренировка</string>
+    <string name="tile_next_description">Ближайшая тренировка, деньги дня и «Проведено»</string>
+</resources>

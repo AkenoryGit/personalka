@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Передний слой адаптивной иконки «Персоналка». Холст 108 dp, видимая часть — центр 72 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M41,71 V39 H67 V71"
+        android:fillColor="#00000000"
+        android:strokeColor="#FF15171A"
+        android:strokeWidth="8" />
+    <path
+        android:pathData="M49,65 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z"
+        android:fillColor="#FFFF5A1F" />
+</vector>

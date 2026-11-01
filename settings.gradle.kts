@@ -33,5 +33,7 @@ include(":shared:domain")
 include(":shared:data")
 include(":shared:ui")
 include(":androidApp")
+// Часы Galaxy Watch (шаг 5.3т).
+include(":wearApp")
 include(":server")
 include(":tools:import")

@@ -34,6 +34,7 @@ import com.akenory.personalka.ui.home.homeTodos
 import com.akenory.personalka.ui.reminders.AppLink
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
+import com.akenory.personalka.ui.watch.WatchTools
 import com.akenory.personalka.ui.screens.MoreItem
 import com.akenory.personalka.ui.screens.SectionScreen
 import com.akenory.personalka.ui.settings.BackupTools
@@ -101,6 +102,7 @@ import kotlinx.datetime.yearMonth
  * @param backHandler «Назад» системы. Платформа передаёт свой обработчик (на Android — `BackHandler`
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
  *   «Назад» закрывает открытый экран, иначе ведёт на «Главную»; с «Главной» приложение сворачивается.
+ * @param watch часы Galaxy Watch (шаг 5.3т, только Android): счётчик дел и переключатель «Имена клиентов на часах».
  * @param clock часы телефона, миллисекунды UTC; тесты подставляют свои.
  */
 @Composable
@@ -122,6 +124,7 @@ fun App(
     link: AppLink? = null,
     onLink: () -> Unit = {},
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
+    watch: WatchTools? = null,
     clock: () -> Long = ::systemMillis,
 ) {
     PersonalkaTheme {
@@ -210,6 +213,8 @@ fun App(
         val todos = remember(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent, confirm) {
             homeTodos(home, backupState, now, noDiary, followup, waiting, syncTodo, consentDue, sptWaiting, advance, notices, report1c, groupAbsent, confirm)
         }
+        // Счётчик дел — и на часы (шаг 5.3т): его считает только приложение.
+        LaunchedEffect(watch, todos.size) { watch?.todoCount(todos.size) }
         // Поиск и фильтр «Клиентов» — здесь: «Главная» открывает их на «Без записи».
         val clientList = rememberClientListState()
 
@@ -473,6 +478,7 @@ fun App(
                             clientList = clientList,
                             reminders = reminders,
                             notifications = notifications,
+                            watch = watch,
                             voice = voice,
                             waiting = waiting,
                             advanceAsk = advanceAsk,

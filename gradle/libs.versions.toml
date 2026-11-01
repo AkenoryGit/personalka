@@ -25,6 +25,13 @@ flyway = "13.10.0"
 logback = "1.6.5"
 # Пароли тренеров (шаг 2.8, ТЗ 7.3): Argon2id из Bouncy Castle — на чистой Java, без своих библиотек ОС.
 bouncycastle = "1.85"
+# Часы Galaxy Watch (шаг 5.3т): Data Layer, ячейки циферблата и плитка Wear OS.
+play-services-wearable = "19.0.0"
+wear-complications = "1.2.1"
+wear-tiles = "1.4.1"
+wear-protolayout = "1.2.1"
+concurrent-futures = "1.2.0"
+android-wear-minSdk = "30"
 
 android-compileSdk = "37"
 android-targetSdk = "36"
@@ -64,6 +71,13 @@ flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+play-services-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "play-services-wearable" }
+kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "kotlinx-coroutines" }
+androidx-wear-complications-data-source-ktx = { module = "androidx.wear.watchface:watchface-complications-data-source-ktx", version.ref = "wear-complications" }
+androidx-wear-tiles = { module = "androidx.wear.tiles:tiles", version.ref = "wear-tiles" }
+androidx-wear-protolayout = { module = "androidx.wear.protolayout:protolayout", version.ref = "wear-protolayout" }
+androidx-wear-protolayout-material = { module = "androidx.wear.protolayout:protolayout-material", version.ref = "wear-protolayout" }
+androidx-concurrent-futures = { module = "androidx.concurrent:concurrent-futures", version.ref = "concurrent-futures" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 
 [plugins]

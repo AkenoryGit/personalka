@@ -75,6 +75,7 @@ import com.akenory.personalka.ui.components.ShadeDot
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
+import com.akenory.personalka.ui.watch.WatchTools
 import com.akenory.personalka.ui.salary.openFeatures
 import com.akenory.personalka.ui.setup.PlaceEditor
 import com.akenory.personalka.ui.setup.TypeEditor
@@ -170,6 +171,7 @@ fun SettingsScreen(
     account: AccountRepository? = null,
     sync: SyncTools? = null,
     cabinets: Boolean = false,
+    watch: WatchTools? = null,
 ) {
     val places by remember(settings) { settings.places }.collectAsState(initial = null)
     val types by remember(settings) { settings.types }.collectAsState(initial = null)
@@ -192,7 +194,7 @@ fun SettingsScreen(
         route == SettingsRoute.CABINETS -> if (cabinets) CabinetSettingsScreen(settings, messages, scope, onBack, close)
         route == SettingsRoute.CALENDAR -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, onBack)
         route == SettingsRoute.VACATION -> CalendarSettingsScreen(calendar.settings, now, messages, scope, onForm, onBack, vacation = true)
-        route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, onBack)
+        route == SettingsRoute.REMINDERS -> ReminderSettingsScreen(calendar.reminders, reminders, notifications, scope, onBack, watch)
         route == SettingsRoute.DATA -> backup?.let { DataSettingsScreen(it, DataPart.BACKUP, messages, scope, onBack) }
         route == SettingsRoute.EXPORTS -> backup?.let { DataSettingsScreen(it, DataPart.EXPORTS, messages, scope, onBack) }
         route == SettingsRoute.SERVER -> backup?.let { DataSettingsScreen(it, DataPart.SERVER, messages, scope, onBack, account, now, sync) { shell.open(SettingsRoute.ACCOUNT) } }
