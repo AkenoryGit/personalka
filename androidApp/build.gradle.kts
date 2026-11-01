@@ -61,4 +61,5 @@ dependencies {
     implementation(project(":shared:domain"))
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.androidx.fragment)
 }

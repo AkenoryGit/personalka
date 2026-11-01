@@ -1,6 +1,6 @@
 package com.akenory.personalka.wear
 
-import androidx.concurrent.futures.ResolvableFuture
+import androidx.concurrent.futures.CallbackToFutureAdapter
 import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders.argb
 import androidx.wear.protolayout.DeviceParametersBuilders.DeviceParameters
@@ -55,7 +55,7 @@ class NextTileService : TileService() {
         done(ResourceBuilders.Resources.Builder().setVersion(RESOURCES).build())
 
     private fun layout(day: WatchDay?, now: LocalDateTime, device: DeviceParameters): LayoutElementBuilders.LayoutElement {
-        val builder = PrimaryLayout.Builder(device)
+        val builder = PrimaryLayout.Builder(device).setResponsiveContentInsetEnabled(true)
         val column = LayoutElementBuilders.Column.Builder()
         if (day == null) {
             column.addContent(line(WatchFormat.NO_DATA, Typography.TYPOGRAPHY_BODY1, maxLines = 3))
@@ -93,7 +93,10 @@ class NextTileService : TileService() {
             .setMaxLines(maxLines)
             .build()
 
-    private fun <T : Any> done(value: T): ListenableFuture<T> = ResolvableFuture.create<T>().also { it.set(value) }
+    private fun <T : Any> done(value: T): ListenableFuture<T> = CallbackToFutureAdapter.getFuture { completer ->
+        completer.set(value)
+        "personalka-tile"
+    }
 
     private companion object {
         const val MARK = "mark:"
