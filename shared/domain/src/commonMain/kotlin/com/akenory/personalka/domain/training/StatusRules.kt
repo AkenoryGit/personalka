@@ -261,7 +261,6 @@ object StatusRules {
     fun returnClient(training: TrainingState, clientId: String, now: LocalDateTime): TrainingState {
         val p = training.participant(clientId)
         require(p.isCancelled) { "Клиент не отменён" }
-        require(!charged || !noCharge(training)) { "В группе отмены со списанием нет" }
         return when (training.status) {
             TrainingStatus.DONE -> training.replace(attended(p))
             TrainingStatus.PLANNED -> training.replace(reset(p))
