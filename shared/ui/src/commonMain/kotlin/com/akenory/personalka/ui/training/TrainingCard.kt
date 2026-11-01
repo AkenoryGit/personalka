@@ -1459,17 +1459,6 @@ private fun ColumnScope.CancelBody(
             Spacer(Modifier.height(Dimens.space3))
             Note(waitLine, Modifier.testTag(WAIT_LINE_TAG))
         }
-        Spacer(Modifier.height(Dimens.space4))
-    }
-    Column(Modifier.fillMaxWidth().padding(Dimens.space4), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-        if (whole) {
-            PrimaryButton(TrainingCardFormat.CANCEL_TRAINING, { onCancel(emptyList()) }, Modifier.fillMaxWidth())
-            if (state.status == TrainingStatus.PLANNED) {
-                OutlineButton(TrainingCardFormat.MOVE_INSTEAD, onMove, Modifier.fillMaxWidth(), icon = PIcons.SyncAlt)
-            }
-        } else {
-            PrimaryButton(TrainingCardFormat.cancelFor(card.clients.filter { it.id in clientIds }.map { it.name }), { onCancel(clientIds) }, Modifier.fillMaxWidth())
-        }
         // «Не будет несколько дней» — когда отменяют одного клиента: у ПТ и СПТ он единственный, в сплите и группе — выбран один.
         val periodFor = when {
             !whole && clientIds.size == 1 -> clientIds.first()
@@ -1480,6 +1469,17 @@ private fun ColumnScope.CancelBody(
             TextButton(onClick = { onPeriod(periodFor) }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(PERIOD_LINK_TAG)) {
                 Text(PeriodCancelFormat.LINK, style = MaterialTheme.typography.labelLarge, color = colors.text)
             }
+        }
+        Spacer(Modifier.height(Dimens.space4))
+    }
+    Column(Modifier.fillMaxWidth().padding(Dimens.space4), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        if (whole) {
+            PrimaryButton(TrainingCardFormat.CANCEL_TRAINING, { onCancel(emptyList()) }, Modifier.fillMaxWidth())
+            if (state.status == TrainingStatus.PLANNED) {
+                OutlineButton(TrainingCardFormat.MOVE_INSTEAD, onMove, Modifier.fillMaxWidth(), icon = PIcons.SyncAlt)
+            }
+        } else {
+            PrimaryButton(TrainingCardFormat.cancelFor(card.clients.filter { it.id in clientIds }.map { it.name }), { onCancel(clientIds) }, Modifier.fillMaxWidth())
         }
     }
 }

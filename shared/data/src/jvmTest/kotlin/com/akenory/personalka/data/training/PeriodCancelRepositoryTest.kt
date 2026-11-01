@@ -131,7 +131,7 @@ class PeriodCancelRepositoryTest {
         val to = LocalDate(2027, 1, 19)
         assertEquals(3, cards.periodPreview(orlov, from, to).count)
         val result = assertNotNull(cards.cancelPeriod(orlov, from, to, "Отъезд"))
-        assertEquals(s("Отменено 3_тренировки: 05.01–19.01"), result.message)
+        assertEquals(s("Отменены 3_тренировки: 05.01–19.01"), result.message)
         val list = db.trainingDao().trainingsBetween(at(from, 0), at(to, 23))
         assertEquals(3, list.size)
         list.forEach { assertEquals(TrainingStatus.CANCELLED, it.status) }
