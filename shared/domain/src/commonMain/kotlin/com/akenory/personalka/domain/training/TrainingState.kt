@@ -36,6 +36,11 @@ data class TrainingState(
     val participants: List<ParticipantState> = emptyList(),
     /** Когда стала «Проведено», по часам клуба: конец тренировки, если закрылась сама. */
     val doneAt: LocalDateTime? = null,
+    /**
+     * Мини-группа ([com.akenory.personalka.domain.client.ReliabilityRules.isMiniGroup]): у ребёнка, отменённого по
+     * одному, списание можно включить вручную; у большой группы списания нет совсем (4.2, шаг 5.3у).
+     */
+    val miniGroup: Boolean = false,
 ) {
     val end: LocalDateTime get() = TrainingTime.end(start, durationMin)
 

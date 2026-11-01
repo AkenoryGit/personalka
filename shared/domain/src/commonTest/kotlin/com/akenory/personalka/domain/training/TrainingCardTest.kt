@@ -127,8 +127,19 @@ class TrainingCardTest {
         assertNull(whole.decision)
         assertFalse(whole.charged)
         assertTrue(CancelRules.asksWho(group))
-        // Один ребёнок группы за 10 минут — со списанием.
-        assertTrue(CancelRules.summary(group, whole = false, CancelReasons.CANNOT_COME, at(16, 50), StatusSettings()).charged)
+        // Один ребёнок большой группы за 10 минут — без списания, без «Когда предупредили» и переключателя (шаг 5.3у).
+        val child = CancelRules.summary(group, whole = false, CancelReasons.CANNOT_COME, at(16, 50), StatusSettings(), override = true)
+        assertFalse(child.charged)
+        assertNull(child.decision)
+        assertFalse(child.switchable)
+        // Мини-группа: по правилу без списания, переключатель есть — для исключений.
+        val mini = group.copy(miniGroup = true)
+        val miniChild = CancelRules.summary(mini, whole = false, CancelReasons.CANNOT_COME, at(16, 50), StatusSettings())
+        assertFalse(miniChild.charged)
+        assertTrue(miniChild.switchable)
+        assertEquals("в группах без списания", TrainingCardFormat.summaryNote(miniChild.decision))
+        assertTrue(CancelRules.summary(mini, whole = false, CancelReasons.CANNOT_COME, at(16, 50), StatusSettings(), override = true).charged)
+        assertFalse(CancelRules.summary(mini, whole = true, CancelReasons.CANNOT_COME, at(16, 50), StatusSettings(), override = true).switchable)
         val spt = CancelRules.summary(pt(kind = TrainingKind.SPT), true, CancelReasons.CANNOT_COME, at(16, 50), StatusSettings(), override = true)
         assertFalse(spt.switchable)
         assertFalse(spt.charged)

@@ -152,7 +152,8 @@ object StatusRules {
                 p
             } else {
                 val auto = ChargeRule.decide(training.kind, training.start, notified, why, settings.cancelNoticeMinutes).charged
-                val final = charged ?: auto
+                // Ребёнок большой группы — без списания всегда, даже если переключатель пришёл (4.2, шаг 5.3у).
+                val final = if (noCharge(training)) false else charged ?: auto
                 p.copy(
                     status = if (final) CANCELLED_CHARGED else CANCELLED,
                     cancelReason = why,
@@ -217,11 +218,15 @@ object StatusRules {
     fun setCharge(training: TrainingState, clientId: String, charged: Boolean, settings: StatusSettings): TrainingState {
         val p = training.participant(clientId)
         require(p.isCancelled) { "Клиент не отменён" }
+        require(!charged || !noCharge(training)) { "В группе отмены со списанием нет" }
         val auto = autoCharged(training, clientId, settings)
         return training.replace(
             p.copy(status = if (charged) CANCELLED_CHARGED else CANCELLED, chargeOverridden = charged != auto),
         )
     }
+
+    /** Большая группа: отмена ребёнка — всегда без списания, переключателя нет (мини-группа — можно вручную). */
+    fun noCharge(training: TrainingState): Boolean = training.kind == TrainingKind.GROUP && !training.miniGroup
 
     // --- Вернуть (4.1) ---
 
@@ -256,6 +261,7 @@ object StatusRules {
     fun returnClient(training: TrainingState, clientId: String, now: LocalDateTime): TrainingState {
         val p = training.participant(clientId)
         require(p.isCancelled) { "Клиент не отменён" }
+        require(!charged || !noCharge(training)) { "В группе отмены со списанием нет" }
         return when (training.status) {
             TrainingStatus.DONE -> training.replace(attended(p))
             TrainingStatus.PLANNED -> training.replace(reset(p))

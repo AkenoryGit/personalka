@@ -88,6 +88,16 @@ class ChargeRuleTest {
     }
 
     @Test
+    fun groupIsNeverChargedByRule() {
+        // Шаг 5.3у: на группах либо пришёл, либо отмена без списания — даже после начала.
+        listOf(at(9, 50), at(10, 5)).forEach {
+            val d = decide(it, kind = TrainingKind.GROUP)
+            assertEquals(ChargeCause.GROUP, d.cause)
+            assertFalse(d.charged)
+        }
+    }
+
+    @Test
     fun noticeFromPreviousDay() {
         assertFalse(decide(LocalDateTime(2026, 10, 19, 21, 30)).charged)
         assertEquals(750L, decide(LocalDateTime(2026, 10, 19, 21, 30)).noticeMinutes)

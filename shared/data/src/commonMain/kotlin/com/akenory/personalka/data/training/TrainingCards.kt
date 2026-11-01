@@ -16,10 +16,11 @@ import com.akenory.personalka.data.db.entity.GroupMemberEntity
 import com.akenory.personalka.data.db.entity.ParticipationEntity
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
+import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.sharing
-import com.akenory.personalka.data.groups.with
 import com.akenory.personalka.data.groups.toSeriesTraining
+import com.akenory.personalka.data.groups.with
 import com.akenory.personalka.data.money.SalaryRepository
 import com.akenory.personalka.data.money.SptRepository
 import com.akenory.personalka.data.money.reconcileSpt
@@ -38,13 +39,12 @@ import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.client.ReliabilityRules
 import com.akenory.personalka.domain.format.CalendarFormat
-import com.akenory.personalka.domain.format.CoCoachingFormat
-import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.ClientFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
+import com.akenory.personalka.domain.format.PeriodCancelFormat
+import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.ZoneFormat
-import com.akenory.personalka.domain.money.CoCoachingRules
-import com.akenory.personalka.domain.money.Sharing
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.ConductedBy
@@ -52,17 +52,22 @@ import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.money.SalaryMonthRules
+import com.akenory.personalka.domain.money.Sharing
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.series.Series
 import com.akenory.personalka.domain.series.SeriesChanges
 import com.akenory.personalka.domain.series.SeriesRules
+import com.akenory.personalka.domain.training.CancelReasons
 import com.akenory.personalka.domain.training.CancelRules
 import com.akenory.personalka.domain.training.CarryChoice
 import com.akenory.personalka.domain.training.CarryStep
 import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.ParticipantState
+import com.akenory.personalka.domain.training.PeriodCancelRules
+import com.akenory.personalka.domain.training.PeriodSlot
 import com.akenory.personalka.domain.training.PlanCarryRules
 import com.akenory.personalka.domain.training.ReturnStep
 import com.akenory.personalka.domain.training.StatusRules
@@ -71,6 +76,7 @@ import com.akenory.personalka.domain.training.TrainingCardRules
 import com.akenory.personalka.domain.training.TrainingState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -172,6 +178,13 @@ data class CardSharing(val sharing: Sharing, val names: Map<String, String>, val
  * [carry] или [uncarry] — сначала вопрос о плане (4.3), сообщение — после ответа ([TrainingCardRepository.carry],
  * [TrainingCardRepository.uncarry]).
  */
+/** Что отменит «Не будет на период»: [charged] — сколько из [count] со списанием (начинаются слишком скоро). */
+data class PeriodPreview(val count: Int, val first: LocalDate?, val last: LocalDate?, val charged: Int) {
+    companion object {
+        val EMPTY = PeriodPreview(0, null, null, 0)
+    }
+}
+
 data class CardResult(val message: String, val undo: Undo, val carry: CarryAsk? = null, val uncarry: UncarryAsk? = null)
 
 /**
@@ -259,7 +272,7 @@ class TrainingCardRepository internal constructor(
             val placeById = places.associateBy { it.id }
             val placeShort = placeById[t.locationId]?.shortName.orEmpty()
             val ordered = people.ordered()
-            val state = t.toState(kind, ordered)
+            val state = t.toState(type, ordered)
             val names = all.associateBy { it.id }
             val guests = if (t.groupId == null) emptySet() else GroupRules.guests(ordered.map { it.clientId }, members.map { it.member() }, t.start.date).toSet()
             // Дети группы — по алфавиту, как в составе (5.10): новый ребёнок встаёт на своё место, а не в конец.
@@ -420,7 +433,7 @@ class TrainingCardRepository internal constructor(
             val groupId = t.groupId ?: return@withWriteTransaction
             val people = trainings.participationsOf(id).ordered()
             val row = people.firstOrNull { it.clientId == clientId } ?: return@withWriteTransaction
-            val state = t.toState(reference.trainingType(t.typeId)?.kind ?: TrainingKind.OTHER, people)
+            val state = t.toState(reference.trainingType(t.typeId), people)
             val guest = clientId in GroupRules.guests(people.map { it.clientId }, clients.membersOf(groupId).map { it.member() }, t.start.date)
             if (!TrainingCardRules.canRemoveGuest(state, guest)) return@withWriteTransaction
             val recorder = Recorder(db, now)
@@ -438,7 +451,7 @@ class TrainingCardRepository internal constructor(
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
             val people = trainings.participationsOf(id).ordered()
-            val state = t.toState(reference.trainingType(t.typeId)?.kind ?: TrainingKind.OTHER, people)
+            val state = t.toState(reference.trainingType(t.typeId), people)
             if (t.groupId == null || !TrainingCardRules.canAddGuest(state)) return@withWriteTransaction
             val clientId = who(coach.id, now) ?: return@withWriteTransaction
             if (people.any { it.clientId == clientId }) return@withWriteTransaction
@@ -692,6 +705,95 @@ class TrainingCardRepository internal constructor(
         }
     }
 
+    // --- Не будет на период (4.2а, шаг 5.3у) ---
+
+    /** Серии для периода дальше горизонта; своё «скопированное» ему не нужно. */
+    private val forms by lazy { TrainingRepository(db, clock, MutableStateFlow(null)) }
+
+    /** Тренировки клиента [clientId], которые отменит период, по началу; уже отменённые для него — нет. */
+    private suspend fun periodPicks(clientId: String, from: LocalDate, to: LocalDate, now: LocalDateTime, types: Map<String, TrainingTypeEntity>): List<TrainingEntity> {
+        val list = trainings.trainingsOfClient(clientId).filter { it.start.date in from..to }
+        val slots = list.map { t ->
+            val mine = trainings.participationsOf(t.id).firstOrNull { it.clientId == clientId && it.sync.deletedAt == null }
+            PeriodSlot(t.id, t.start, types[t.typeId]?.kind ?: TrainingKind.OTHER, t.status, mine == null || mine.toState().isCancelled)
+        }
+        val ids = PeriodCancelRules.picks(slots, from, to, now).map { it.id }
+        val byId = list.associateBy { it.id }
+        return ids.mapNotNull { byId[it] }
+    }
+
+    /**
+     * Что отменит период — до записи: сколько тренировок, первая и последняя дата, сколько из них со списанием.
+     * Серии сначала продлеваются до [to] (4.4): летний отпуск лежит дальше 8 недель календаря.
+     */
+    suspend fun periodPreview(clientId: String, from: LocalDate, to: LocalDate): PeriodPreview {
+        forms.extendSeries(until = to)
+        val clubNow = ClubTime.now(clock())
+        val coach = coaches.currentCoach() ?: return PeriodPreview.EMPTY
+        val settings = coaches.settings(coach.id).statusSettings()
+        val types = reference.trainingTypes().associateBy { it.id }
+        val picks = periodPicks(clientId, from, to, clubNow, types)
+        if (picks.isEmpty()) return PeriodPreview.EMPTY
+        val charged = picks.count { t ->
+            val state = t.toState(types[t.typeId], trainings.participationsOf(t.id).ordered())
+            StatusRules.cancelClients(state, listOf(clientId), CancelReasons.TRIP, clubNow, settings).participant(clientId).status ==
+                ParticipationStatus.CANCELLED_CHARGED
+        }
+        return PeriodPreview(picks.size, picks.first().start.date, picks.last().start.date, charged)
+    }
+
+    /**
+     * «Не будет на период»: каждую тренировку клиента с [from] по [to] — отменить для него, с одной причиной, как из
+     * карточки (предупредили сейчас). Отменённая целиком отдаёт план следующей после периода: у той есть свой —
+     * дописывается с новой строки (вопрос на каждую здесь не задать). «Отменить» в сообщении возвращает всё.
+     */
+    suspend fun cancelPeriod(clientId: String, from: LocalDate, to: LocalDate, reason: String?): CardResult? {
+        forms.extendSeries(until = to)
+        val now = clock()
+        val clubNow = ClubTime.now(now)
+        var result: CardResult? = null
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val settings = coaches.settings(coach.id).statusSettings()
+            val types = reference.trainingTypes().associateBy { it.id }
+            val picks = periodPicks(clientId, from, to, clubNow, types)
+            if (picks.isEmpty()) return@withWriteTransaction
+            val recorder = Recorder(db, now)
+            val whole = mutableListOf<TrainingEntity>()
+            for (t in picks) {
+                val people = trainings.participationsOf(t.id).ordered()
+                val next = StatusRules.cancelClients(t.toState(types[t.typeId], people), listOf(clientId), reason, clubNow, settings)
+                save(t, people, next, now, recorder)
+                if (next.status == TrainingStatus.CANCELLED) whole += t
+            }
+            // Планы — после всех отмен: следующая для каждой — уже после периода.
+            for (t in whole) carryAfterPeriod(t, types[t.typeId]?.kind ?: TrainingKind.OTHER, recorder, now)
+            db.reconcileSpt(now)
+            val done = CardResult(PeriodCancelFormat.done(picks.size, from, to), recorder.undo())
+            db.recordFreed(done.undo, now)
+            result = done
+        }
+        return result
+    }
+
+    private suspend fun carryAfterPeriod(t: TrainingEntity, kind: TrainingKind, recorder: Recorder, now: Long) {
+        val plan = t.plan?.takeIf { it.isNotBlank() } ?: return
+        val people = trainings.participationsOf(t.id).ordered().map { it.clientId }
+        val target = db.nextTraining(t, kind, people.toSet())
+        when (PlanCarryRules.onCancel(plan, target != null, target?.plan)) {
+            CarryStep.NONE -> Unit
+            CarryStep.MOVE, CarryStep.ASK -> {
+                target!!
+                val text = PlanCarryRules.carried(CarryChoice.ADD, plan, target.plan)
+                recorder.saveTraining(target.copy(plan = text, planCarriedFromId = t.id, planCarriedText = plan, sync = target.sync.touched(now)))
+            }
+            CarryStep.PENDING -> {
+                val groupId = t.groupId
+                if (groupId != null) recorder.addGroupPendingPlan(groupId, plan) else people.forEach { recorder.addPendingPlan(it, plan) }
+            }
+        }
+    }
+
     /**
      * Закрытие в конце (4.1): ПТ, сплит и СПТ — «Проведено», если это включено в настройках; группа с отмеченными —
      * «Проведено», неотмеченные — «не пришёл»; дежурство — «Проведено». Вызывается при открытии приложения и каждую
@@ -705,10 +807,10 @@ class TrainingCardRepository internal constructor(
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val settings = coaches.settings(coach.id).statusSettings()
-            val kinds = reference.trainingTypes().associate { it.id to it.kind }
+            val types = reference.trainingTypes().associateBy { it.id }
             for (t in trainings.plannedBefore(clubNow, TrainingStatus.PLANNED)) {
                 val people = trainings.participationsOf(t.id).ordered()
-                val state = t.toState(kinds[t.typeId] ?: TrainingKind.OTHER, people)
+                val state = t.toState(types[t.typeId], people)
                 val closed = StatusRules.closeAtEnd(state, clubNow, settings)
                 if (closed == state) continue
                 save(t, people, closed, now)
@@ -735,9 +837,8 @@ class TrainingCardRepository internal constructor(
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val t = trainings.training(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
-            val kind = reference.trainingType(t.typeId)?.kind ?: TrainingKind.OTHER
             val people = trainings.participationsOf(id).ordered()
-            val (next, message) = action(t.toState(kind, people), ClubTime.now(now), coaches.settings(coach.id).statusSettings())
+            val (next, message) = action(t.toState(reference.trainingType(t.typeId), people), ClubTime.now(now), coaches.settings(coach.id).statusSettings())
                 ?: return@withWriteTransaction
             val recorder = Recorder(db, now)
             save(t, people, next, now, recorder)
@@ -866,14 +967,15 @@ private fun List<ParticipationEntity>.ordered(): List<ParticipationEntity> = sor
 
 private fun ParticipationEntity.toState(): ParticipantState = ParticipantState(clientId, status, cancelReason, notifiedAt, chargeOverridden)
 
-private fun TrainingEntity.toState(kind: TrainingKind, people: List<ParticipationEntity>): TrainingState = TrainingState(
-    kind = kind,
+private fun TrainingEntity.toState(type: TrainingTypeEntity?, people: List<ParticipationEntity>): TrainingState = TrainingState(
+    kind = type?.kind ?: TrainingKind.OTHER,
     start = start,
     durationMin = durationMin,
     status = status,
     cancelReason = cancelReason,
     participants = people.map { it.toState() },
     doneAt = doneAt?.let { ClubTime.now(it) },
+    miniGroup = type != null && type.kind == TrainingKind.GROUP && ReliabilityRules.isMiniGroup(type.name, type.shortName),
 )
 
 private fun CoachSettingsEntity?.statusSettings(): StatusSettings =

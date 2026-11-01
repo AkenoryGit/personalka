@@ -43,6 +43,9 @@ enum class ChargeCause {
 
     /** СПТ бесплатна для клиента — списывать нечего. */
     FREE_SPT,
+
+    /** Группа и мини-группа: ребёнок либо пришёл, либо отменён без списания (4.2, шаг 5.3у). */
+    GROUP,
 }
 
 /** Итог правила списания: статус участия, причина и запас в минутах («предупредили за 40 мин»). */
@@ -51,7 +54,9 @@ data class ChargeDecision(val charged: Boolean, val cause: ChargeCause, val noti
         get() = if (charged) ParticipationStatus.CANCELLED_CHARGED else ParticipationStatus.CANCELLED
 }
 
-/** Правило списания (ТЗ 4.2). Пример 19: начало 10:00, порог 60 — 09:20 и 10:05 со списанием, 09:00 и 08:59 без. */
+/**
+ * Правило списания (ТЗ 4.2). Группа и мини-группа — всегда без списания: на группах либо пришёл, либо отмена
+ * без списания (решение Дмитрия 01.11.2026). Пример 19: начало 10:00, порог 60 — 09:20 и 10:05 со списанием, 09:00 и 08:59 без. */
 object ChargeRule {
     /**
      * Запас = [start] − [notifiedAt], оба по часам клуба с точностью до минуты. Запас меньше порога
@@ -67,6 +72,7 @@ object ChargeRule {
         val notice = ClubTime.minutesBetween(notifiedAt, start)
         return when {
             kind == TrainingKind.SPT -> ChargeDecision(false, ChargeCause.FREE_SPT, notice)
+            kind == TrainingKind.GROUP -> ChargeDecision(false, ChargeCause.GROUP, notice)
             CancelReasons.isWithoutCharge(reason) -> ChargeDecision(false, ChargeCause.NOT_BY_CLIENT, notice)
             notice < 0 -> ChargeDecision(true, ChargeCause.AFTER_START, notice)
             notice < noticeThresholdMinutes -> ChargeDecision(true, ChargeCause.LATE, notice)

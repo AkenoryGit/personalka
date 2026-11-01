@@ -132,7 +132,7 @@ object TrainingCardRules {
  * не бывает (вся группа целиком): ни «Когда предупредили», ни переключателя.
  *
  * @param charged итог с учётом переключателя.
- * @param switchable переключатель «Со списанием» виден: у СПТ списывать нечего.
+ * @param switchable переключатель «Со списанием» виден: у СПТ и большой группы списывать нечего.
  */
 data class CancelSummary(val charged: Boolean, val decision: ChargeDecision?, val switchable: Boolean)
 
@@ -156,8 +156,10 @@ object CancelRules {
         settings: StatusSettings,
         override: Boolean? = null,
     ): CancelSummary {
-        if (whole && training.kind == TrainingKind.GROUP) return CancelSummary(charged = false, decision = null, switchable = false)
+        // Группа целиком и ребёнок большой группы: списания нет совсем — ни «Когда предупредили», ни переключателя.
+        if (training.kind == TrainingKind.GROUP && (whole || !training.miniGroup)) return CancelSummary(charged = false, decision = null, switchable = false)
         val decision = ChargeRule.decide(training.kind, training.start, ClubTime.toMinute(notifiedAt), CancelReasons.normalize(reason), settings.cancelNoticeMinutes)
+        // Мини-группа: по правилу без списания, переключатель — для исключительных случаев.
         val switchable = decision.cause != ChargeCause.FREE_SPT
         return CancelSummary(charged = if (switchable) override ?: decision.charged else false, decision = decision, switchable = switchable)
     }

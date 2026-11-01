@@ -72,6 +72,7 @@ import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.ReliabilityFormat
+import com.akenory.personalka.domain.format.PeriodCancelFormat
 import com.akenory.personalka.domain.format.ResultFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.SptFormat
@@ -107,6 +108,7 @@ import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import com.akenory.personalka.ui.training.DatePickerPanel
 import com.akenory.personalka.ui.training.ErrorText
+import com.akenory.personalka.ui.training.PeriodCancelPanel
 import com.akenory.personalka.ui.training.PickBox
 import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.WAIT_LINE_TAG
@@ -143,7 +145,7 @@ private enum class HistoryFilter(val title: String) { ALL("Все"), DONE("Пр�
  * (когда они есть), «Инфо» и «Расписание». Пока нет ни тренировок, ни серий, ни результатов, нет ни счётчиков,
  * ни вкладок — сразу «Инфо» (10.7: пустое не показывается).
  *
- * Меню «…»: «Изменить», «В лист ожидания…», «Объединить с…», «В архив», «Удалить полностью» — с двойным
+ * Меню «…»: «Изменить», «В лист ожидания…», «Не будет на период…», «Объединить с…», «В архив», «Удалить полностью» — с двойным
  * подтверждением и вводом фамилии. Третья кнопка «Кабинет» (2.13) — только с [cabinet]: режим «С сервером»,
  * открытые и включённые кабинеты.
  *
@@ -194,6 +196,8 @@ fun ClientCard(
     // СПТ клиента (4.9, шаг 3.7а): блок в «Инфо» и окно «Купил блок со скидкой» — id дела.
     val spt by remember(clients, clientId, today) { clients.spt.ofClient(clientId, today) }.collectAsState(initial = emptyList())
     var sptEditing by rememberSaveable(clientId) { mutableStateOf<String?>(null) }
+    // «Не будет на период» (4.2а, шаг 5.3у).
+    var period by rememberSaveable(clientId) { mutableStateOf(false) }
 
     if (row == null) {
         // Клиента только что удалили или объединили — карточка вот-вот закроется.
@@ -225,6 +229,13 @@ fun ClientCard(
                     MenuAction(if (waits == null) WaitFormat.TO_WAITLIST else WaitFormat.TITLE_EDIT, PIcons.Schedule, {
                         close()
                         nav.open(waits?.let { ClientRoute.waitEdit(it.entry.id) } ?: ClientRoute.waitNew(clientId))
+                    })
+                }
+                // «Не будет на период» (4.2а): отпуск, лето — отменить все тренировки клиента с … по ….
+                if (active && hasTrainings) {
+                    MenuAction(PeriodCancelFormat.MENU, PIcons.CalendarMonth, {
+                        close()
+                        period = true
                     })
                 }
                 // «Отчёт» (5.15, шаг 5.3к): тренировки клиента по парам за месяц — когда они есть.
@@ -361,6 +372,19 @@ fun ClientCard(
                     null
                 },
                 onDismiss = close,
+            )
+        }
+
+        if (period) {
+            PeriodCancelPanel(
+                clientId = clientId,
+                name = name,
+                from = today,
+                today = today,
+                cards = forms.cards,
+                messages = messages,
+                scope = scope,
+                onClose = { period = false },
             )
         }
 
@@ -518,7 +542,7 @@ private fun CardHeader(row: ClientRow, today: LocalDate, noBooking: Boolean, wai
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
             OutlineLabel(ClientFormat.adult(client.adultOn(today)))
             if (client.status == ClientStatus.ARCHIVED) OutlineLabel("В архиве")
-            if (noBooking) OutlineLabel(FollowupFormat.NO_BOOKING, PIcons.EventBusy)
+            if (noBooking) OutlineLabel(FollowupFormat.NO_BOOKING, PIcons.CalendarMonth)
             if (waits) OutlineLabel(WaitFormat.LABEL, PIcons.Schedule)
             if (line.isNotEmpty()) {
                 Text(line.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)

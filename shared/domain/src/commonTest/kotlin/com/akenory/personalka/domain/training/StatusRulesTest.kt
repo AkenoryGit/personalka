@@ -340,8 +340,30 @@ class StatusRulesTest {
     fun groupChildCancelKeepsGroup() {
         val t = StatusRules.cancelClients(group(), listOf("b"), CancelReasons.CANNOT_COME, at(8, 30), settings)
         assertEquals(TrainingStatus.PLANNED, t.status)
-        assertEquals(CANCELLED_CHARGED, t.statusOf("b"))
+        // Группа: отмена ребёнка — без списания, даже за 30 минут (шаг 5.3у).
+        assertEquals(CANCELLED, t.statusOf("b"))
         assertEquals(EXPECTED, t.statusOf("a"))
+    }
+
+    @Test
+    fun groupChildIsNeverChargedEvenAfterStartOrWithSwitch() {
+        // Отменили после начала и даже с переключателем — в большой группе списания нет.
+        val late = StatusRules.cancelClients(group(), listOf("b"), CancelReasons.CANNOT_COME, at(9, 30), settings)
+        assertEquals(CANCELLED, late.statusOf("b"))
+        val forced = StatusRules.cancelClients(group(), listOf("b"), CancelReasons.CANNOT_COME, at(9, 30), settings, charged = true)
+        assertEquals(CANCELLED, forced.statusOf("b"))
+        assertFailsWith<IllegalArgumentException> { StatusRules.setCharge(late, "b", true, settings) }
+    }
+
+    @Test
+    fun miniGroupChildIsNotChargedByRuleButCanBeByHand() {
+        val mini = group().copy(miniGroup = true)
+        val auto = StatusRules.cancelClients(mini, listOf("b"), CancelReasons.CANNOT_COME, at(8, 50), settings)
+        assertEquals(CANCELLED, auto.statusOf("b"))
+        val byHand = StatusRules.cancelClients(mini, listOf("b"), CancelReasons.CANNOT_COME, at(8, 50), settings, charged = true)
+        assertEquals(CANCELLED_CHARGED, byHand.statusOf("b"))
+        assertTrue(byHand.participant("b").chargeOverridden)
+        assertEquals(CANCELLED_CHARGED, StatusRules.setCharge(auto, "b", true, settings).statusOf("b"))
     }
 
     @Test
@@ -360,9 +382,10 @@ class StatusRulesTest {
 
     @Test
     fun groupWithEveryChildCancelledIsCancelledAndKeepsCharges() {
-        var t = group()
+        // Списание вручную бывает только в мини-группе — оно сохраняется, когда отменили всех.
+        var t = group().copy(miniGroup = true)
         t = StatusRules.cancelClients(t, listOf("a", "b"), CancelReasons.CANNOT_COME, at(7, 0), settings)
-        t = StatusRules.cancelClients(t, listOf("c", "d"), CancelReasons.CANNOT_COME, at(8, 30), settings)
+        t = StatusRules.cancelClients(t, listOf("c", "d"), CancelReasons.CANNOT_COME, at(8, 30), settings, charged = true)
         assertEquals(TrainingStatus.CANCELLED, t.status)
         assertEquals(listOf(CANCELLED, CANCELLED, CANCELLED_CHARGED, CANCELLED_CHARGED), t.participants.map { it.status })
     }

@@ -317,5 +317,6 @@ object TrainingCardFormat {
         ChargeCause.LATE, ChargeCause.IN_TIME -> "предупредили за" + NBSP + DurationFormat.short(decision.noticeMinutes)
         ChargeCause.NOT_BY_CLIENT -> "отмена не по вине клиента"
         ChargeCause.FREE_SPT -> "СПТ бесплатна для клиента"
+        ChargeCause.GROUP -> "в группах без списания"
     }
 }

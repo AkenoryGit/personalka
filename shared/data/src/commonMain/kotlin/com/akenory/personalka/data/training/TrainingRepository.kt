@@ -64,6 +64,7 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.plus
 
 /** Клиент в форме: «Орлова К.» на чипе; полное имя — для поиска и проверки похожих (5.8). */
@@ -158,6 +159,9 @@ class TrainingRepository internal constructor(
     private val reference = db.referenceDao()
     private val coaches = db.coachDao()
     private val schedule = db.scheduleDao()
+
+    /** «Не будет на период» из карточки клиента (4.2а, шаг 5.3у): отмена теми же правилами, что в карточке тренировки. */
+    val cards: TrainingCardRepository by lazy { TrainingCardRepository(db, clock = clock) }
 
     /** Данные формы; обновляются сами — новый клиент из формы сразу виден. */
     fun form(): Flow<TrainingFormData> {
@@ -623,8 +627,9 @@ class TrainingRepository internal constructor(
     /**
      * Продление серий до горизонта (4.4) — при открытии приложения: тренировки на даты, где у серии ещё нет своей.
      * Повторный запуск ничего не дублирует. Окон запретов нет — флаг ставится молча (4.5). Возвращает, сколько создано.
+     * [until] — продлить не короче, чем до этого дня («Не будет на период» дальше горизонта, шаг 5.3у).
      */
-    suspend fun extendSeries(): Int {
+    suspend fun extendSeries(until: LocalDate? = null): Int {
         val now = clock()
         val clubNow = ClubTime.now(now)
         var count = 0
@@ -636,7 +641,8 @@ class TrainingRepository internal constructor(
             val series = list.map { s -> s.toSeries(people[s.id].orEmpty().sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }) }
             val existing = trainings.seriesTrainingsFrom(LocalDateTime(clubNow.date, LocalTime(0, 0))).map { it.toSeriesTraining(emptyList()) }
             val members = series.mapNotNull { it.pattern.groupId }.distinct().associateWith { members(it) }
-            val changes = SeriesRules.extendAll(series, existing, clubNow, horizonWeeks(), members)
+            val weeks = until?.let { maxOf(horizonWeeks(), (clubNow.date.daysUntil(it) + 6) / 7) } ?: horizonWeeks()
+            val changes = SeriesRules.extendAll(series, existing, clubNow, weeks, members)
             if (changes.isEmpty) return@withWriteTransaction
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             Recorder(db, now).write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, owner = null) { it in duties }

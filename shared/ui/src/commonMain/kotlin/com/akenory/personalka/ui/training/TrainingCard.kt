@@ -1,9 +1,5 @@
 package com.akenory.personalka.ui.training
 
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
-import com.akenory.personalka.domain.format.GroupShareFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,18 +42,21 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,9 +73,11 @@ import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.format.CalendarFormat
-import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.ClientFormat
+import com.akenory.personalka.domain.format.CoCoachingFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.GroupShareFormat
+import com.akenory.personalka.domain.format.PeriodCancelFormat
 import com.akenory.personalka.domain.format.ReliabilityFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TrainingCardFormat
@@ -90,6 +91,7 @@ import com.akenory.personalka.domain.training.CancelRules
 import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.CardMenu
 import com.akenory.personalka.domain.training.CarryChoice
+import com.akenory.personalka.domain.training.ChargeCause
 import com.akenory.personalka.domain.training.ClientOutcome
 import com.akenory.personalka.domain.training.TrainingCardRules
 import com.akenory.personalka.domain.training.TrainingPhase
@@ -111,21 +113,21 @@ import com.akenory.personalka.ui.components.ReliabilityChip
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.SwitchRow
+import com.akenory.personalka.ui.components.swallowTaps
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.results.ResultFormPanel
 import com.akenory.personalka.ui.results.ResultWho
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
+import com.akenory.personalka.ui.tour.TourTarget
+import com.akenory.personalka.ui.tour.tourTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.yearMonth
-import com.akenory.personalka.ui.tour.TourTarget
-import com.akenory.personalka.ui.tour.tourTarget
-import com.akenory.personalka.ui.components.swallowTaps
 
 const val TRAINING_CARD_TAG = "training-card"
 const val CANCEL_PANEL_TAG = "cancel-panel"
@@ -219,6 +221,8 @@ fun TrainingCardHost(
     var pickDate by rememberSaveable(key) { mutableStateOf<String?>(null) }
     var pickingDate by rememberSaveable(key) { mutableStateOf(false) }
     var askDelete by rememberSaveable(key) { mutableStateOf(false) }
+    // «Не будет на период» из панели отмены (4.2а, шаг 5.3у): id клиента.
+    var periodClient by rememberSaveable(key) { mutableStateOf<String?>(null) }
     // «Удалить → Эту и все следующие» у тренировки серии (шаг 3.9к): второе подтверждение с числом тренировок.
     var askFollowing by rememberSaveable(key) { mutableStateOf(false) }
     // «Добавить результат» (5.11): форма с днём тренировки и её клиентами.
@@ -420,6 +424,10 @@ fun TrainingCardHost(
                         cancelWho = null
                         guarded { onEdit(shown.id) }
                     },
+                    onPeriod = { clientId ->
+                        cancelWho = null
+                        guarded { periodClient = clientId }
+                    },
                 )
             }
             Spacer(Modifier.height(messageGap))
@@ -490,6 +498,19 @@ fun TrainingCardHost(
                     guarded { scope.launch { done(cards.addNewGuest(shown.id, last, first, whose)) } }
                 },
                 onDismiss = { guestSimilar = null },
+            )
+        }
+        val periodId = periodClient
+        if (shown != null && periodId != null) {
+            PeriodCancelPanel(
+                clientId = periodId,
+                name = shown.clients.firstOrNull { it.id == periodId }?.name.orEmpty(),
+                from = shown.state.start.date,
+                today = now.date,
+                cards = cards,
+                messages = messages,
+                scope = scope,
+                onClose = { periodClient = null },
             )
         }
         if (shown != null && askDelete) {
@@ -1309,6 +1330,7 @@ private const val GUEST_SHORT_LIST = 8
 
 /** Строка «Это время ждут: Петров К. (разово)» (4.16) в подтверждениях. */
 const val WAIT_LINE_TAG = "wait-line"
+const val PERIOD_LINK_TAG = "period-link"
 
 @Composable
 private fun ColumnScope.CancelBody(
@@ -1325,6 +1347,7 @@ private fun ColumnScope.CancelBody(
     onCharged: (Boolean) -> Unit,
     onCancel: (List<String>) -> Unit,
     onMove: () -> Unit,
+    onPeriod: (String) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
     val state = card.state
@@ -1394,7 +1417,8 @@ private fun ColumnScope.CancelBody(
             )
         }
 
-        if (summary.decision != null) {
+        // В мини-группе по правилу списания нет — время предупреждения ничего не решает, остаётся переключатель.
+        if (summary.decision != null && summary.decision?.cause != ChargeCause.GROUP) {
             SectionLabel(TrainingCardFormat.WHEN_NOTIFIED)
             Chips {
                 ChoiceChip(TrainingCardFormat.nowChip(now), selected = draft.notifiedAt == null, onClick = onNow)
@@ -1445,6 +1469,17 @@ private fun ColumnScope.CancelBody(
             }
         } else {
             PrimaryButton(TrainingCardFormat.cancelFor(card.clients.filter { it.id in clientIds }.map { it.name }), { onCancel(clientIds) }, Modifier.fillMaxWidth())
+        }
+        // «Не будет несколько дней» — когда отменяют одного клиента: у ПТ и СПТ он единственный, в сплите и группе — выбран один.
+        val periodFor = when {
+            !whole && clientIds.size == 1 -> clientIds.first()
+            !asksWho && state.participants.size == 1 -> state.participants.first().clientId
+            else -> null
+        }
+        if (periodFor != null && state.status == TrainingStatus.PLANNED) {
+            TextButton(onClick = { onPeriod(periodFor) }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(PERIOD_LINK_TAG)) {
+                Text(PeriodCancelFormat.LINK, style = MaterialTheme.typography.labelLarge, color = colors.text)
+            }
         }
     }
 }
