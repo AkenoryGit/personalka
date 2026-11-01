@@ -175,14 +175,7 @@ object ReferenceRules {
     )
 
     private fun preset(kind: TrainingKind, name: String, shortName: String, shade: Int) =
-        TypePresets.of(kind).let { preset ->
-            // Оплата напрямую (шаг 5.3с) — свойство самого типа, не вида; у дежурства её нет.
-            val direct = paidDirect && kind != TrainingKind.DUTY
-            preset.copy(
-                name = name, shortName = shortName, shade = shade, paidDirect = direct,
-                countsTowardPt = preset.countsTowardPt && !direct, tierDependent = preset.tierDependent && !direct,
-            )
-        }
+        TypePresets.of(kind).copy(name = name, shortName = shortName, shade = shade)
 
     /** Новый тип в конструкторе: персональная, первый оттенок, которого ещё нет у типов; заняты все — светлый. */
     fun newType(usedShades: Collection<Int>): TypeDraft =
