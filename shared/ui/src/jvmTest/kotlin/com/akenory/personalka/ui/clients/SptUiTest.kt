@@ -18,6 +18,7 @@ import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientName
+import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.SptFormat
 import com.akenory.personalka.domain.format.TodoListFormat
 import com.akenory.personalka.domain.home.TodoKind
@@ -27,7 +28,9 @@ import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.home.sptBoughtTag
+import com.akenory.personalka.ui.home.sptDeclineTag
 import com.akenory.personalka.ui.home.todoPanelTag
 import com.akenory.personalka.ui.home.todoTag
 import kotlin.test.Test
@@ -93,5 +96,30 @@ class SptUiTest {
         // Последний — окно закрылось, пункт ушёл; в «Инфо» клиента блок куплен.
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.SPT_PURCHASE))).fetchSemanticsNodes().isEmpty() }
         assertEquals(0, onAllNodes(hasTestTag(todoPanelTag(TodoKind.SPT_PURCHASE))).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun homeTodoDeclineRemovesItemAndUndoReturnsIt() = runComposeUiTest {
+        sptDone("Шубин", "Роман", LocalDateTime(2026, 10, 12, 10, 0))
+        setContent { Box(Modifier.size(412.dp, 960.dp)) { App("0.1.0", settings, clients, TestData.groupsOf(settings), calendar, clock = TestData.clock) } }
+
+        // Шаг 5.3ф: клиент сказал, что не купит, — «Не купит» убирает пункт сразу, без доплаты.
+        awaitNode(hasTestTag(todoTag(TodoKind.SPT_PURCHASE)))
+        onNodeWithTag(todoTag(TodoKind.SPT_PURCHASE)).performClick()
+        awaitNode(hasTestTag(todoPanelTag(TodoKind.SPT_PURCHASE)))
+        onNodeWithTag(sptDeclineTag(case().clientId)).performClick()
+        waitUntil(timeoutMillis = 5_000) { case().status == SptCaseStatus.NOT_CLOSED }
+        assertEquals(null, case().purchaseDate)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.SPT_PURCHASE))).fetchSemanticsNodes().isEmpty() }
+
+        // Сверка (каждую минуту) его не открывает снова.
+        runBlocking { clients.spt.reconcile() }
+        assertEquals(SptCaseStatus.NOT_CLOSED, case().status)
+
+        // «Отменить» в сообщении — дело снова ждёт покупки, пункт вернулся.
+        awaitNode(hasText(SptFormat.declinedMessage(CalendarFormat.client(ClientName("Шубин", "Роман")))))
+        onNodeWithText(MessageState.UNDO_LABEL).performClick()
+        waitUntil(timeoutMillis = 5_000) { case().status == SptCaseStatus.OPEN }
+        awaitNode(hasTestTag(todoTag(TodoKind.SPT_PURCHASE)))
     }
 }

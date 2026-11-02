@@ -19,6 +19,8 @@ class SptFormatTest {
         assertEquals("Ждём покупку блока до 12.11", SptFormat.status(SptCaseStatus.OPEN, until, null))
         assertEquals("Блок куплен 20.10", SptFormat.status(SptCaseStatus.CLOSED, until, LocalDate(2026, 10, 20)))
         assertEquals("Блок со скидкой не куплен до 12.11", SptFormat.status(SptCaseStatus.NOT_CLOSED, until, null))
+        assertEquals("Не купит блок со скидкой", SptFormat.status(SptCaseStatus.NOT_CLOSED, until, null, declined = true))
+        assertEquals("Орлов М. — не купит блок", SptFormat.declinedMessage("Орлов М."))
     }
 
     @Test

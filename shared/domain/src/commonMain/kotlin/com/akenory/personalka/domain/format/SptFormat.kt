@@ -21,11 +21,15 @@ object SptFormat {
         listOf(DateFormat.short(date), typeShort, placeShort).filter { it.isNotBlank() }.joinToString(DOT)
 
     /** Статус дела: «Ждём покупку блока до 12.11», «Блок куплен 20.10», «Блок со скидкой не куплен до 12.11». */
-    fun status(status: SptCaseStatus, windowUntil: LocalDate, purchaseDate: LocalDate?): String = when (status) {
-        SptCaseStatus.OPEN -> "Ждём покупку блока до ${DateFormat.dayMonth(windowUntil)}"
-        SptCaseStatus.CLOSED -> "Блок куплен ${DateFormat.dayMonth(purchaseDate ?: windowUntil)}"
-        SptCaseStatus.NOT_CLOSED -> "Блок со скидкой не куплен до ${DateFormat.dayMonth(windowUntil)}"
+    fun status(status: SptCaseStatus, windowUntil: LocalDate, purchaseDate: LocalDate?, declined: Boolean = false): String = when {
+        status == SptCaseStatus.OPEN -> "Ждём покупку блока до ${DateFormat.dayMonth(windowUntil)}"
+        status == SptCaseStatus.CLOSED -> "Блок куплен ${DateFormat.dayMonth(purchaseDate ?: windowUntil)}"
+        declined -> "Не купит блок со скидкой"
+        else -> "Блок со скидкой не куплен до ${DateFormat.dayMonth(windowUntil)}"
     }
+
+    /** «Не купит» (шаг 5.3ф): клиент отказался от блока со скидкой — дело уходит из «СПТ ждут покупки» без доплаты. */
+    const val DECLINE = "Не купит"
 
     /** Кнопка блока и заголовок окна (4.9, п. 3). */
     const val BOUGHT = "Купил блок со скидкой"
@@ -55,6 +59,7 @@ object SptFormat {
     /** Сообщения с «Отменить». */
     fun closedMessage(name: String): String = "$name — покупка блока отмечена"
     fun reopenedMessage(name: String): String = "$name — отметка покупки снята"
+    fun declinedMessage(name: String): String = "$name — не купит блок"
 
     // --- Вопрос на первой оплаченной ПТ (4.9, п. 4–5) ---
 

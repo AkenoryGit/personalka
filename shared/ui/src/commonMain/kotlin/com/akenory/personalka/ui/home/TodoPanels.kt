@@ -68,6 +68,7 @@ internal fun todoPanelTag(kind: TodoKind) = "todo-panel-${kind.name.lowercase()}
 internal fun confirmComingTag(clientId: String) = "confirm-coming-$clientId"
 internal fun confirmNotComingTag(clientId: String) = "confirm-not-coming-$clientId"
 internal fun sptBoughtTag(clientId: String) = "todo-spt-bought-$clientId"
+internal fun sptDeclineTag(clientId: String) = "todo-spt-decline-$clientId"
 
 /** Пункты «Нужно сделать», которые открывают своё окно со списком (шаг 3.16), а не экран. */
 internal val PANEL_KINDS = setOf(
@@ -166,7 +167,12 @@ internal fun TodoListPanel(
                     waiting.firstOrNull { it.case.id == buying }?.let { w -> SptBuy(w, clients, messages, scope, now, onClose = { buying = null }) }
                 },
             ) { waiting ->
-                SptList(waiting, messages, now, onClient, onBuy = { buying = it })
+                SptList(waiting, messages, now, onClient, onBuy = { buying = it }, onDecline = { caseId ->
+                    scope.launch {
+                        val saved = clients.spt.decline(caseId) ?: return@launch
+                        messages.showUndo(SptFormat.declinedMessage(saved.name)) { scope.launch { clients.spt.undo(saved) } }
+                    }
+                })
             }
         }
         else -> LaunchedEffect(kind) { onClose() }
@@ -341,7 +347,7 @@ private fun FollowupRows(
 
 /**
  * «СПТ ждут покупки»: сколько осталось до конца окна, день СПТ, место и доплата; «Купил блок» — окно даты покупки
- * ([SptBuy], как в «Инфо» клиента), звонок — набор номера.
+ * ([SptBuy], как в «Инфо» клиента), «Не купит» — дело сразу не закрыто, с «Отменить» (шаг 5.3ф), звонок — набор номера.
  */
 @Composable
 private fun SptList(
@@ -350,6 +356,7 @@ private fun SptList(
     now: LocalDateTime,
     onClient: (String) -> Unit,
     onBuy: (String) -> Unit,
+    onDecline: (String) -> Unit,
 ) {
     BorderedList {
         list.forEachIndexed { index, w ->
@@ -363,6 +370,7 @@ private fun SptList(
                 }
                 Row(Modifier.padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                     SecondaryButton(TodoListFormat.SPT_BOUGHT, { onBuy(w.case.id) }, Modifier.testTag(sptBoughtTag(clientId)))
+                    SecondaryButton(TodoListFormat.SPT_DECLINE, { onDecline(w.case.id) }, Modifier.testTag(sptDeclineTag(clientId)))
                     Spacer(Modifier.weight(1f))
                     w.phone?.let { CallButton(it) { messages.show(FollowupFormat.PHONE_COPIED) } }
                 }

@@ -65,7 +65,7 @@ data class SptAsk(val prompt: SptPrompt, val name: String, val bonus: Long) {
         }
 }
 
-/** Что вышло из «Купил блок со скидкой» или «Снять отметку»: [before] — дело до правки, для «Отменить». */
+/** Что вышло из «Купил блок со скидкой», «Снять отметку» или «Не купит»: [before] — дело до правки, для «Отменить». */
 data class SptSaved(val before: SptCaseEntity, val name: String)
 
 /**
@@ -199,6 +199,20 @@ class SptRepository internal constructor(private val db: PersonalkaDatabase, pri
             val t = trainings.training(entity.sptTrainingId) ?: return@withWriteTransaction
             val open = SptRules.reopen(entity.domain(t), ClubTime.today(now))
             trainings.upsertSptCase(entity.copy(purchaseDate = null, status = open.status, sync = entity.sync.touched(now)))
+            result = SptSaved(entity, nameOf(entity.clientId))
+        }
+        return result
+    }
+
+    /** «Не купит» (шаг 5.3ф): открытое дело сразу `NOT_CLOSED`, без доплаты; «Отменить» — [undo]. */
+    suspend fun decline(caseId: String): SptSaved? {
+        val now = clock()
+        var result: SptSaved? = null
+        db.withWriteTransaction {
+            val entity = trainings.sptCase(caseId)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            val t = trainings.training(entity.sptTrainingId) ?: return@withWriteTransaction
+            val declined = SptRules.decline(entity.domain(t)) ?: return@withWriteTransaction
+            trainings.upsertSptCase(entity.copy(status = declined.status, sync = entity.sync.touched(now)))
             result = SptSaved(entity, nameOf(entity.clientId))
         }
         return result

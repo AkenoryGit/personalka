@@ -51,9 +51,10 @@ object TodoListFormat {
     /** «СПТ ждут покупки»: окно покупки со скидкой. */
     const val SPT_WHY =
         "У этих клиентов прошла стартовая тренировка. Если они купят блок со скидкой до конца окна, вам начислится доплата. " +
-            "Напомните о скидке, а когда купят — отметьте."
+            "Напомните о скидке, а когда купят или откажутся — отметьте."
 
     const val SPT_BOUGHT = "Купил блок"
+    const val SPT_DECLINE = SptFormat.DECLINE
 
     /** «СПТ ср 21.10 · ББ · окно до 05.11». */
     fun sptLine(case: SptCase, typeShort: String, placeShort: String): String =

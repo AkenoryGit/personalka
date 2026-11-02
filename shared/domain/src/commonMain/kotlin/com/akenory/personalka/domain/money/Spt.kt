@@ -92,12 +92,15 @@ object SptRules {
             val keep = list.sortedWith(compareBy({ it.purchaseDate == null }, { it.id })).first()
             removed += list.filter { it !== keep }
             var case = keep
-            if (case.sptDate != spt.date || case.clientId != spt.clientId) {
+            val moved = case.sptDate != spt.date || case.clientId != spt.clientId
+            if (moved) {
                 case = case.copy(clientId = spt.clientId, sptDate = spt.date, windowUntil = windowUntil(spt.date))
                 val bought = case.purchaseDate
                 if (bought != null && purchaseProblem(case, bought) != null) case = reopen(case, today)
             }
-            if (case.purchaseDate == null) {
+            // «Не купит» (шаг 5.3ф) — `NOT_CLOSED` в открытом окне: сверка его не открывает, пока СПТ на своём дне.
+            val declined = !moved && case.status == SptCaseStatus.NOT_CLOSED
+            if (case.purchaseDate == null && !declined) {
                 val status = if (today > case.windowUntil) SptCaseStatus.NOT_CLOSED else SptCaseStatus.OPEN
                 if (case.status != status) case = case.copy(status = status)
             }
@@ -135,6 +138,19 @@ object SptRules {
     fun close(case: SptCase, date: LocalDate): SptCase? =
         if (purchaseProblem(case, date) != null) null
         else case.copy(purchaseDate = date, status = SptCaseStatus.CLOSED)
+
+    /**
+     * «Не купит» (шаг 5.3ф): клиент сказал, что блок со скидкой покупать не будет, — дело сразу `NOT_CLOSED`, без
+     * доплаты, и уходит из «СПТ ждут покупки». Только открытое дело; иначе `null`. Передумал в окне — «Купил блок со
+     * скидкой» закрывает его как обычно, вопрос на первой оплаченной ПТ тоже остаётся.
+     */
+    fun decline(case: SptCase): SptCase? =
+        if (case.status != SptCaseStatus.OPEN || case.purchaseDate != null) null
+        else case.copy(status = SptCaseStatus.NOT_CLOSED)
+
+    /** «Не купит» отмечено, а окно ещё идёт: `NOT_CLOSED` без покупки до конца окна. */
+    fun isDeclined(case: SptCase, today: LocalDate): Boolean =
+        case.status == SptCaseStatus.NOT_CLOSED && case.purchaseDate == null && today <= case.windowUntil
 
     /** Снять отметку покупки: дело снова открыто, если окно не прошло к [today], иначе — не закрыто. */
     fun reopen(case: SptCase, today: LocalDate): SptCase =

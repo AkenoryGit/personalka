@@ -47,13 +47,14 @@ const val SPT_BUTTON_TAG = "spt-button"
 const val SPT_DATE_TAG = "spt-date"
 const val SPT_SAVE_TAG = "spt-save"
 const val SPT_UNMARK_TAG = "spt-unmark"
+const val SPT_DECLINE_TAG = "spt-decline"
 
 /**
  * Блок «Стартовая тренировка» в «Инфо» клиента (5.9, макет ClCardInfo): «пн 12.10 · СПТ · ББ», статус с рамкой и
- * одна кнопка — «Купил блок со скидкой», у закрытой — «Изменить покупку».
+ * кнопка — «Купил блок со скидкой», у закрытой — «Изменить покупку». У открытой под ней — «Не купит» (шаг 5.3ф).
  */
 @Composable
-internal fun SptBlock(view: SptCaseView, onClick: () -> Unit) {
+internal fun SptBlock(view: SptCaseView, today: LocalDate, onClick: () -> Unit, onDecline: () -> Unit) {
     val colors = PersonalkaTheme.colors
     ListCard(Modifier.testTag(SPT_BLOCK_TAG)) {
         Column(Modifier.fillMaxWidth().padding(Dimens.space4), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
@@ -77,7 +78,7 @@ internal fun SptBlock(view: SptCaseView, onClick: () -> Unit) {
                 Icon(icon, contentDescription = null, tint = colors.text, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    SptFormat.status(view.status, view.case.windowUntil, view.case.purchaseDate),
+                    SptFormat.status(view.status, view.case.windowUntil, view.case.purchaseDate, SptRules.isDeclined(view.case, today)),
                     style = MaterialTheme.typography.labelMedium.tabular(),
                     color = colors.text,
                 )
@@ -87,6 +88,11 @@ internal fun SptBlock(view: SptCaseView, onClick: () -> Unit) {
                 onClick,
                 modifier = Modifier.fillMaxWidth().padding(top = Dimens.space1).testTag(SPT_BUTTON_TAG),
             )
+            if (view.status == SptCaseStatus.OPEN) {
+                TextButton(onClick = onDecline, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(SPT_DECLINE_TAG)) {
+                    Text(SptFormat.DECLINE, style = MaterialTheme.typography.labelLarge, color = colors.text)
+                }
+            }
         }
     }
 }

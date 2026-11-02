@@ -972,7 +972,14 @@ private fun InfoTab(
             }
         }
         // Стартовая тренировка (4.9): статус и «Купил блок со скидкой» — последним блоком, как в макете ClCardInfo.
-        spt.forEach { view -> SptBlock(view) { onSpt(view) } }
+        spt.forEach { view ->
+            SptBlock(view, today, onClick = { onSpt(view) }, onDecline = {
+                scope.launch {
+                    val saved = clients.spt.decline(view.case.id) ?: return@launch
+                    messages.showUndo(SptFormat.declinedMessage(saved.name)) { scope.launch { clients.spt.undo(saved) } }
+                }
+            })
+        }
     }
 }
 

@@ -221,6 +221,37 @@ class SptTest {
         assertEquals(listOf(b), SptRules.reconcile(listOf(done(12)), listOf(bought, b), d(13)).removed)
     }
 
+    // --- Шаг 5.3ф: «Не купит» ---
+
+    @Test
+    fun decline_closesWithoutBonusAndStaysAfterReconcile() {
+        val declined = SptRules.decline(case(8))!!
+        assertEquals(SptCaseStatus.NOT_CLOSED, declined.status)
+        assertNull(declined.purchaseDate)
+        assertTrue(SptRules.isDeclined(declined, d(2, 11)))
+        assertTrue(!SptRules.isDeclined(declined, d(9, 11)))
+        assertEquals(SptCaseStatus.NOT_CLOSED, SptRules.statusOn(declined, d(2, 11)))
+        assertTrue(!SptRules.remind(declined, d(6, 11)))
+        assertEquals(0, SptRules.bonus(declined, rates))
+        // Сверка в окне не открывает его снова; перенос СПТ на другой день — открывает.
+        assertTrue(SptRules.reconcile(listOf(done(8)), listOf(declined), d(2, 11)).isEmpty)
+        assertEquals(SptCaseStatus.OPEN, SptRules.reconcile(listOf(done(9)), listOf(declined), d(2, 11)).changed.single().status)
+        // Конверсия считает его незакрытым.
+        assertEquals(SptConversion(0, 1), SptRules.conversion(listOf(declined), d(1), d(31), d(2, 11)))
+        // Передумал в окне — закрывается как обычно; закрытое и уже отказавшееся «Не купит» не меняет.
+        assertEquals(SptCaseStatus.CLOSED, SptRules.close(declined, d(5, 11))!!.status)
+        assertNull(SptRules.decline(declined))
+        assertNull(SptRules.decline(SptRules.close(case(8), d(20))!!))
+        // «Отменить» в сообщении возвращает прежнее дело целиком — это делает слой данных; снятие отметки открывает в окне.
+        assertEquals(SptCaseStatus.OPEN, SptRules.reopen(declined, d(2, 11)).status)
+    }
+
+    @Test
+    fun decline_keepsPromptOnFirstPaidPt() {
+        val declined = SptRules.decline(case(8))!!
+        assertTrue(SptRules.prompt(declined, d(15), listOf(d(15))) is SptPrompt.CloseNow)
+    }
+
     @Test
     fun paidPtAndDefaultPurchase() {
         assertTrue(SptRules.isPaidPt(TrainingKind.PERSONAL, ATTENDED))
