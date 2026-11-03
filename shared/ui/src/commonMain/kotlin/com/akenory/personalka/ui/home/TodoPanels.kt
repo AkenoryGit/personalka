@@ -84,6 +84,7 @@ internal val PANEL_KINDS = setOf(
 internal fun todoFillTag(id: String) = "todo-fill-$id"
 internal fun todoMarkTag(id: String) = "todo-mark-$id"
 internal fun todoOpenCardTag(clientId: String) = "todo-open-card-$clientId"
+internal fun todoConsentDoneTag(clientId: String) = "todo-consent-done-$clientId"
 
 /**
  * Окно пункта «Нужно сделать» (ТЗ 5.2, шаг 3.16): заголовок — как у пункта, сверху — почему эти люди здесь и что
@@ -109,6 +110,7 @@ internal fun TodoListPanel(
     trainings: List<CalendarTraining>,
     consents: List<ConsentDue>,
     onDiary: (String) -> Unit,
+    onConsentDone: ((ConsentDue, Boolean) -> Unit)? = null,
 ) {
     when (kind) {
         TodoKind.UNMARKED_GROUPS -> {
@@ -125,7 +127,15 @@ internal fun TodoListPanel(
             }
         }
         TodoKind.CONSENT_REVOKED -> ListPanel(kind, title, TodoListFormat.CONSENT_WHY, consents, onClose) { list ->
-            ConsentRows(list, now) { id -> onClose(); onClient(id) }
+            ConsentRows(
+                list, now,
+                onDone = onConsentDone?.let { mark ->
+                    { c: ConsentDue ->
+                        mark(c, true)
+                        messages.showUndo(TodoListFormat.consentDone(c.name.short)) { mark(c, false) }
+                    }
+                },
+            ) { id -> onClose(); onClient(id) }
         }
         TodoKind.CONFIRM_VISIT -> {
             val list by remember(clients, now) { clients.reliability.confirm(now) }.collectAsState(initial = null)
@@ -303,14 +313,17 @@ private fun TrainingRows(
 
 /** «Удалить данные клиента»: имя, до какого дня удалить и сколько осталось; удаление — в карточке, с подтверждением. */
 @Composable
-private fun ConsentRows(list: List<ConsentDue>, now: LocalDateTime, onOpen: (String) -> Unit) {
+private fun ConsentRows(list: List<ConsentDue>, now: LocalDateTime, onDone: ((ConsentDue) -> Unit)?, onOpen: (String) -> Unit) {
     BorderedList {
         list.forEachIndexed { index, c ->
             if (index > 0) RowDivider(start = 0.dp)
             Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.space3, vertical = Dimens.space3)) {
                 NameLine(c.name.short, CabinetLinkFormat.left(c.deleteBy, now.date)) { onOpen(c.clientId) }
                 Muted(TodoListFormat.deleteBy(c.deleteBy))
-                SecondaryButton(TodoListFormat.OPEN_CARD, { onOpen(c.clientId) }, Modifier.padding(top = Dimens.space2).testTag(todoOpenCardTag(c.clientId)))
+                Row(Modifier.padding(top = Dimens.space2), horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    SecondaryButton(TodoListFormat.OPEN_CARD, { onOpen(c.clientId) }, Modifier.testTag(todoOpenCardTag(c.clientId)))
+                    if (onDone != null) SecondaryButton(TodoListFormat.CONSENT_DONE, { onDone(c) }, Modifier.testTag(todoConsentDoneTag(c.clientId)))
+                }
             }
         }
     }

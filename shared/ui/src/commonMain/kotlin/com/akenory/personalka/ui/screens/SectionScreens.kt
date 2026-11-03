@@ -148,6 +148,7 @@ fun SectionScreen(
     todos: List<HomeTodo> = emptyList(),
     notices: List<NoticeRow> = emptyList(),
     consents: List<ConsentDue> = emptyList(),
+    onConsentDone: ((ConsentDue, Boolean) -> Unit)? = null,
     homeCard: String? = null,
     onHomeCard: (String?) -> Unit = {},
     calendarDay: LocalDate? = null,
@@ -242,6 +243,7 @@ fun SectionScreen(
             groups = groups,
             onForm = onForm,
             consents = consents,
+            onConsentDone = onConsentDone,
         )
         }
         Section.CALENDAR -> CalendarScreen(

@@ -463,6 +463,7 @@ fun App(
                             todos = todos,
                             notices = notices,
                             consents = consentDue,
+                            onConsentDone = cabinets?.repository?.let { repo -> { item, done -> repo.markDone(item, done) } },
                             homeCard = homeCard,
                             onHomeCard = { homeCard = it },
                             calendarDay = calendarDay?.let(LocalDate::parse),

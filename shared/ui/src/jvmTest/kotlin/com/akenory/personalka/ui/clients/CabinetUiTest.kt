@@ -35,6 +35,7 @@ import com.akenory.personalka.domain.home.TodoKind
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.TestData
 import com.akenory.personalka.ui.awaitNode
+import com.akenory.personalka.ui.home.todoConsentDoneTag
 import com.akenory.personalka.ui.home.todoOpenCardTag
 import com.akenory.personalka.ui.home.todoPanelTag
 import com.akenory.personalka.ui.home.todoTag
@@ -181,6 +182,15 @@ class CabinetUiTest {
         onNodeWithTag(todoOpenCardTag(revoked)).performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoPanelTag(TodoKind.CONSENT_REVOKED))).fetchSemanticsNodes().isEmpty() }
         awaitNode(hasText("Соколов Пётр"))
+
+        // «Сделано» (шаг 5.3ц): пункт уходит с «Главной», внизу сообщение с «Отменить».
+        onNodeWithTag(navTag(Section.HOME)).performClick()
+        awaitNode(hasTestTag(todoTag(TodoKind.CONSENT_REVOKED)))
+        onNodeWithTag(todoTag(TodoKind.CONSENT_REVOKED)).performClick()
+        awaitNode(hasTestTag(todoConsentDoneTag(revoked)))
+        onNodeWithTag(todoConsentDoneTag(revoked)).performClick()
+        awaitNode(hasText(TodoListFormat.consentDone("Соколов Пётр")))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.CONSENT_REVOKED))).fetchSemanticsNodes().isEmpty() }
 
         // «Инфо»: у ссылки на фото — «Нет согласия на фото»; у клиента с согласием на фото пометки бы не было.
         openCard("Орлова Ксения")

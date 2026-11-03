@@ -107,9 +107,25 @@ class CabinetRepository(
 
     /** «Удалить данные клиента» (5.2, 6.1): отозванные согласия клиентов, которые ещё есть в телефоне. */
     val due: Flow<List<ConsentDue>>
-        get() = combine(consentState, clients.observeAllClients()) { consents, all ->
-            CabinetLinkRules.due(consents, all.associate { it.id to ClientName(it.lastName, it.firstName) })
+        get() = combine(consentState, doneState, clients.observeAllClients()) { consents, done, all ->
+            CabinetLinkRules.due(consents, all.associate { it.id to ClientName(it.lastName, it.firstName) }, done)
         }
+
+    private val doneState by lazy {
+        MutableStateFlow(secrets.read(DONE_KEY)?.split('\n')?.filter { it.isNotBlank() }?.toSet() ?: emptySet())
+    }
+
+    /**
+     * «Сделано» у отзыва согласия (шаг 5.3ц): тренер удалил данные сам или знает, что делать, — пункт уходит.
+     * [done] = `false` — «Отменить». Отметка привязана к времени отзыва: новый отзыв того же клиента появится снова.
+     */
+    fun markDone(item: ConsentDue, done: Boolean = true) {
+        val key = CabinetLinkRules.doneKey(item.clientId, item.revokedAt)
+        val next = if (done) doneState.value + key else doneState.value - key
+        if (next == doneState.value) return
+        doneState.value = next
+        secrets.write(DONE_KEY, if (next.isEmpty()) null else next.joinToString("\n"))
+    }
 
     /** Обновить согласия с сервера — после синхронизации; без связи остаётся прежнее. */
     suspend fun refresh() {
@@ -264,6 +280,9 @@ class CabinetRepository(
 
         /** Согласия из последнего ответа сервера — JSON-массив `consents` как он пришёл. */
         const val CONSENTS_KEY = "cabinet-consents"
+
+        /** Отзывы, отмеченные «Сделано» (шаг 5.3ц): строки «id@revokedAt». */
+        const val DONE_KEY = "cabinet-consents-done"
 
         /** SHA-256 токена в base64url без «=» — как его ждёт сервер (7.1). */
         fun hash(token: String): String =

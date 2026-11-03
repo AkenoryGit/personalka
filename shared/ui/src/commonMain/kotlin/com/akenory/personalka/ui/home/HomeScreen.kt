@@ -352,6 +352,7 @@ fun HomeScreen(
     groups: GroupRepository? = null,
     onForm: (String) -> Unit = {},
     consents: List<ConsentDue> = emptyList(),
+    onConsentDone: ((ConsentDue, Boolean) -> Unit)? = null,
 ) {
     val wide = LocalWide.current
     var noticesOpen by rememberSaveable { mutableStateOf(false) }
@@ -494,6 +495,7 @@ fun HomeScreen(
                 trainings = trainings,
                 consents = consents,
                 onDiary = onDiary,
+                onConsentDone = onConsentDone,
             )
         }
       }

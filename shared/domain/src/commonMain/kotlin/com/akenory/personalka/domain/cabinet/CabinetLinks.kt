@@ -17,7 +17,7 @@ data class ConsentLine(val text: String, val state: ConsentState)
 enum class ConsentState { GIVEN, NONE, REVOKED }
 
 /** Клиент, чьи данные надо удалить после отзыва согласия (6.1, шаг 2.13а): [deleteBy] — последний день срока. */
-data class ConsentDue(val clientId: String, val name: ClientName, val deleteBy: LocalDate)
+data class ConsentDue(val clientId: String, val name: ClientName, val deleteBy: LocalDate, val revokedAt: Long = 0)
 
 /**
  * Ссылки кабинетов в приложении (ТЗ 5.9, 6.1, 3.7; шаг 2.13): адрес, код доступа, текст «Отправить», состояние
@@ -85,10 +85,17 @@ object CabinetLinkRules {
     /**
      * Пункт «Удалить данные клиента» в «Нужно сделать» (5.2, 6.1): отозванные согласия клиентов, которые ещё есть
      * в телефоне ([names] — по id; «Удалить полностью» убирает клиента — уходит и пункт), ближайший срок первым.
+     * С шага 5.3ц тренер может отметить отзыв «Сделано» ([done] — ключи [doneKey]): пункт уходит, а новый отзыв
+     * того же клиента (другое время) появится снова.
      */
-    fun due(consents: Map<String, ConsentInfo>, names: Map<String, ClientName>): List<ConsentDue> =
+    /** Отметка «Сделано» у отзыва согласия: клиент и время отзыва. */
+    fun doneKey(clientId: String, revokedAt: Long): String = "$clientId@$revokedAt"
+
+    fun due(consents: Map<String, ConsentInfo>, names: Map<String, ClientName>, done: Set<String> = emptySet()): List<ConsentDue> =
         consents.mapNotNull { (id, info) ->
             val name = names[id] ?: return@mapNotNull null
-            deleteBy(info)?.let { ConsentDue(id, name, it) }
+            val revoked = info.revokedAt ?: return@mapNotNull null
+            if (doneKey(id, revoked) in done) return@mapNotNull null
+            deleteBy(info)?.let { ConsentDue(id, name, it, revoked) }
         }.sortedWith(compareBy({ it.deleteBy }, { it.name.lastName }, { it.name.firstName }))
 }

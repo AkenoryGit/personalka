@@ -119,6 +119,12 @@ class CabinetLinksTest {
         assertEquals(LocalDate(2026, 11, 19), CabinetLinkRules.deleteBy(consents["a"]))
         assertNull(CabinetLinkRules.deleteBy(consents["c"]))
 
+        // «Сделано» (шаг 5.3ц): отмеченный отзыв уходит; новый отзыв того же клиента — снова в списке.
+        val done = setOf(CabinetLinkRules.doneKey("b", now - 5 * day))
+        assertEquals(listOf("a"), CabinetLinkRules.due(consents, names, done).map { it.clientId })
+        val again = consents + ("b" to consents.getValue("b").copy(revokedAt = now))
+        assertEquals(listOf("a", "b"), CabinetLinkRules.due(again, names, done).map { it.clientId })
+
         assertEquals("Удалить данные клиента", CabinetLinkFormat.deleteData(1))
         assertEquals("Удалить данные клиентов", CabinetLinkFormat.deleteData(2))
         assertEquals("Соколов\u00A0П., Орлова\u00A0К. · осталось 25\u00A0дней", CabinetLinkFormat.deleteNote(due.map { it.name }, due[0].deleteBy, today))

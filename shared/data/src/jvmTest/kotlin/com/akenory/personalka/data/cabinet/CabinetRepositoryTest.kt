@@ -229,6 +229,14 @@ class CabinetRepositoryTest {
         assertEquals(client.id, again.due.first().single().clientId)
         server.offline = false
 
+        // «Сделано» (шаг 5.3ц) — пункт уходит и после перезапуска; «Отменить» возвращает.
+        a.cabinets.markDone(due)
+        assertTrue(a.cabinets.due.first().isEmpty())
+        val restarted = CabinetRepository(a.db, CabinetApi(server.client) { "https://trener.example.ru/" }, a.tokens, a.secrets, { Samples.NOW })
+        assertTrue(restarted.due.first().isEmpty())
+        a.cabinets.markDone(due, done = false)
+        assertEquals(client.id, a.cabinets.due.first().single().clientId)
+
         // «Удалить полностью» — пункт уходит.
         a.db.clientDao().eraseClient(client.id)
         assertTrue(a.cabinets.due.first().isEmpty())
