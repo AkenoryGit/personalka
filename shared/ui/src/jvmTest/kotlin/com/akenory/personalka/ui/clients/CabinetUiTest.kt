@@ -163,6 +163,28 @@ class CabinetUiTest {
     }
 
     @Test
+    fun groupDiaryInCabinetIsOffByDefaultAndShownOnlyWithCabinets() = runComposeUiTest {
+        show()
+        openSettings()
+        awaitNode(hasTestTag("settings-cabinets"))
+        onNodeWithTag("settings-cabinets").performScrollTo().performClick()
+        awaitNode(hasTestTag("cabinets-switch"))
+        // Кабинеты выключены — переключателя дневника групп нет (пустое не показывается, 10.7).
+        onNodeWithTag("cabinets-group-diary").assertDoesNotExist()
+        onNodeWithTag("cabinets-switch").performClick()
+        onNodeWithTag("cabinets-group-diary").assertExists()
+        onNodeWithText(CabinetLinkFormat.GROUP_DIARY_OFF).assertExists()
+        assertFalse(runBlocking { settings.cabinetGroupDiary.first() }, "по умолчанию выключен")
+
+        onNodeWithTag("cabinets-group-diary").performClick()
+        onNodeWithText(CabinetLinkFormat.GROUP_DIARY_ON).assertExists()
+        onNodeWithTag("cabinets-contact").performTextInput("+7 912 000-00-00")
+        onNodeWithText("Сохранить").performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { settings.cabinetGroupDiary.first() } }
+        assertTrue(runBlocking { settings.cabinetsEnabled.first() })
+    }
+
+    @Test
     fun revokedConsentIsATodoAndNoPhotoIsMarkedInInfo() = runComposeUiTest {
         val noPhoto = runBlocking { clients.create(ClientDraft("Орлова", "Ксения", mediaUrl = "https://disk.yandex.ru/d/abc")) }
         val revoked = runBlocking { clients.create(ClientDraft("Соколов", "Пётр")) }

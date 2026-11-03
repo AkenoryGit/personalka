@@ -117,11 +117,15 @@ class SettingsRepository(
     /** Общий выключатель кабинетов (3.2, только «С сервером»). */
     val cabinetsEnabled: Flow<Boolean> = coaches.observeSettings().map { it?.cabinetsEnabled == true }
 
+    /** «Дневник групп в кабинете» (шаг 5.3ч): по умолчанию выключен. */
+    val cabinetGroupDiary: Flow<Boolean> = coaches.observeSettings().map { it?.cabinetGroupDiary == true }
+
     /**
      * Раздел «Кабинеты» (5.16, шаг 2.13): контакт для родителей и общий выключатель. Без контакта кабинеты
-     * не включаются (3.2): пустой контакт выключает их. На сервер настройки уходят синхронизацией.
+     * не включаются (3.2): пустой контакт выключает их. [groupDiary] — «Дневник групп в кабинете» (шаг 5.3ч);
+     * не передан — не меняется. На сервер настройки уходят синхронизацией.
      */
-    suspend fun saveCabinets(enabled: Boolean, contact: String) {
+    suspend fun saveCabinets(enabled: Boolean, contact: String, groupDiary: Boolean? = null) {
         val coach = coaches.currentCoach() ?: return
         val settings = coaches.settings(coach.id) ?: return
         val clean = CabinetLinkRules.contact(contact)
@@ -131,8 +135,9 @@ class SettingsRepository(
                 coaches.upsertCoach(coach.copy(sync = coach.sync.touched(now), contactForParents = clean))
             }
             val on = enabled && clean != null
-            if (on != settings.cabinetsEnabled) {
-                coaches.upsertSettings(settings.copy(sync = settings.sync.touched(now), cabinetsEnabled = on))
+            val diary = groupDiary ?: settings.cabinetGroupDiary
+            if (on != settings.cabinetsEnabled || diary != settings.cabinetGroupDiary) {
+                coaches.upsertSettings(settings.copy(sync = settings.sync.touched(now), cabinetsEnabled = on, cabinetGroupDiary = diary))
             }
         }
     }

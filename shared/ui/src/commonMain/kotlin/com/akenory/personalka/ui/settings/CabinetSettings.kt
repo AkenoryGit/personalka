@@ -36,19 +36,24 @@ import kotlinx.coroutines.launch
 internal const val CABINETS_ROW_TAG = "settings-cabinets"
 internal const val CABINETS_SWITCH_TAG = "cabinets-switch"
 internal const val CABINETS_CONTACT_TAG = "cabinets-contact"
+internal const val CABINETS_GROUP_DIARY_TAG = "cabinets-group-diary"
 
 /**
  * «Настройки → Кабинеты» (5.16, шаг 2.13): общий выключатель и контакт для родителей — без контакта кабинеты
  * не включаются (3.2). Код доступа по умолчанию и приветствие — потом, если понадобятся: новая ссылка выходит с кодом,
  * кабинет приветствия не показывает. Сколько ближайших тренировок видно — то же число, что в карточке.
+ * «Дневник групп в кабинете» (шаг 5.3ч) виден, только когда кабинеты включены; по умолчанию выключен.
  */
 @Composable
 internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: MessageState, scope: CoroutineScope, onBack: (() -> Unit)?, onClose: () -> Unit) {
     val coach by remember(settings) { settings.coach }.collectAsState(initial = null)
     val on by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = null)
+    val diaryOn by remember(settings) { settings.cabinetGroupDiary }.collectAsState(initial = null)
     val loadedCoach = coach ?: return
     val loadedOn = on ?: return
+    val loadedDiary = diaryOn ?: return
     var enabled by rememberSaveable(loadedCoach.id) { mutableStateOf(loadedOn) }
+    var groupDiary by rememberSaveable(loadedCoach.id) { mutableStateOf(loadedDiary) }
     var contact by rememberSaveable(loadedCoach.id) { mutableStateOf(loadedCoach.contactForParents.orEmpty()) }
     val noContact = CabinetLinkRules.contact(contact) == null
     val colors = PersonalkaTheme.colors
@@ -66,6 +71,15 @@ internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: Messa
                 subtitle = if (enabled) CabinetLinkFormat.SETTINGS_SWITCH_NOTE else CabinetLinkFormat.OFF_NOTE,
                 modifier = Modifier.testTag(CABINETS_SWITCH_TAG),
             )
+            if (enabled) {
+                SwitchRow(
+                    title = CabinetLinkFormat.GROUP_DIARY,
+                    checked = groupDiary,
+                    onToggle = { groupDiary = it },
+                    subtitle = if (groupDiary) CabinetLinkFormat.GROUP_DIARY_ON else CabinetLinkFormat.GROUP_DIARY_OFF,
+                    modifier = Modifier.testTag(CABINETS_GROUP_DIARY_TAG),
+                )
+            }
             Field(
                 CabinetLinkFormat.CONTACT,
                 contact,
@@ -81,7 +95,7 @@ internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: Messa
             enabled = !(enabled && noContact),
             hint = if (enabled && noContact) CabinetLinkFormat.CONTACT_NEEDED else null,
             onClick = {
-                scope.launch { settings.saveCabinets(enabled, contact) }
+                scope.launch { settings.saveCabinets(enabled, contact, groupDiary) }
                 onClose()
                 messages.show("Сохранено")
             },

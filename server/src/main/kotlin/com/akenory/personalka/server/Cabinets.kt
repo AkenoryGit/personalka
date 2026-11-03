@@ -16,6 +16,7 @@ import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.ResultKind
 import com.akenory.personalka.domain.model.SwimStyle
+import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.result.ResultItem
 import com.akenory.personalka.domain.result.SwimEvent
@@ -422,6 +423,7 @@ class Cabinets(
                 showBehavior = type.flag("diaryBehavior"),
                 cancelReason = p.textOrNull("cancelReason") ?: training.textOrNull("cancelReason"),
                 notifiedAt = p.textOrNull("notifiedAt")?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
+                group = type.text("kind") == TrainingKind.GROUP.name,
             )
         }
         val results = rows(c, listOf(owner), "result", "clientId", listOf(access.clientId)).mapNotNull { r ->
@@ -450,6 +452,7 @@ class Cabinets(
             mediaUrl = client.textOrNull("mediaUrl"),
             consentDate = consent?.let { ClubTime.today(it.acceptedAt, zone) },
             photoConsent = consent?.photo ?: false,
+            groupDiary = settings?.flag("cabinetGroupDiary") == true,
         )
     }
 

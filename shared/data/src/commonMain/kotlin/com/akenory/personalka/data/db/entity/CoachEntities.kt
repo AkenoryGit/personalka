@@ -52,6 +52,8 @@ data class CoachSettingsEntity(
     val followupEnabled: Boolean = true,
     val followupDays: Int = 14,
     val cabinetsEnabled: Boolean = false,
+    /** План и факт групп и мини-групп в кабинете родителя (шаг 5.3ч, версия 18): по умолчанию не показываются. */
+    val cabinetGroupDiary: Boolean = false,
     val coCoachingEnabled: Boolean = false,
     /** Надёжность клиентов (4.18): включена — видна в карточках, календаре и на «Главной». С версии 14 базы. */
     val reliabilityEnabled: Boolean = true,

@@ -14,7 +14,8 @@ import kotlinx.datetime.LocalDateTime
  * Тренировка клиента для кабинета родителя (ТЗ 6.3): только то, что можно показать. Имён других участников, названия
  * группы, коллег и служебных отметок здесь нет совсем (6.2) — сервер их сюда не кладёт, и страница не может их вывести.
  * [typeName] и [placeName] — полные названия; [showPlan], [showFact], [showBehavior] — включены ли эти поля у типа (3.3).
- * [cancelReason] — причина отмены клиента, а если её нет — всей тренировки.
+ * [cancelReason] — причина отмены клиента, а если её нет — всей тренировки. [group] — группа или мини-группа
+ * (`TrainingKind.GROUP`): их план и факт видны, только если тренер включил «Дневник групп» (шаг 5.3ч).
  */
 data class CabinetTraining(
     val start: LocalDateTime,
@@ -30,6 +31,7 @@ data class CabinetTraining(
     val showBehavior: Boolean = false,
     val cancelReason: String? = null,
     val notifiedAt: LocalDateTime? = null,
+    val group: Boolean = false,
 ) {
     val outcome: ClientOutcome get() = ClientOutcome.of(trainingStatus, participationStatus)
 }
@@ -52,6 +54,11 @@ data class CabinetInput(
     /** Согласие (6.1): когда дано (день по часам клуба) и отмечена ли галочка про фото. */
     val consentDate: LocalDate? = null,
     val photoConsent: Boolean = false,
+    /**
+     * «Дневник групп в кабинете» (3.2, шаг 5.3ч): выключен — у групп и мини-групп в кабинете дата, время, статус
+     * и причина отмены, без плана и факта. Тренер дневник группы ведёт для себя как раньше.
+     */
+    val groupDiary: Boolean = false,
 )
 
 /** Строка тренировки: «вт 20.10 · 13:30», «Персональная · Большой бассейн», метка статуса, поля дневника или причина. */
@@ -136,16 +143,16 @@ object CabinetRules {
         val earlierMonths = past.groupBy { LocalDate(it.start.year, it.start.month, 1) }
             .toList()
             .sortedByDescending { it.first }
-            .map { (first, list) -> month(first, list) }
+            .map { (first, list) -> month(first, list, input.groupDiary) }
         return CabinetPage(
             clientName = input.clientName,
             coachLine = CabinetFormat.coach(input.coachName),
             dataLine = input.syncedAt?.let(CabinetFormat::dataAt),
-            upcoming = upcoming(input.trainings, input.now, input.upcomingCount).mapIndexed { i, t -> item(t, upcomingIndex = i) },
+            upcoming = upcoming(input.trainings, input.now, input.upcomingCount).mapIndexed { i, t -> item(t, upcomingIndex = i, groupDiary = input.groupDiary) },
             monthColumn = CabinetFormat.monthColumn(today),
             counters = counters(history, today),
             rule = CabinetFormat.rule(input.cancelNoticeMinutes),
-            currentMonth = current.takeIf { it.isNotEmpty() }?.let { month(LocalDate(today.year, today.month, 1), it) },
+            currentMonth = current.takeIf { it.isNotEmpty() }?.let { month(LocalDate(today.year, today.month, 1), it, input.groupDiary) },
             earlier = past.takeIf { it.isNotEmpty() }?.let { CabinetEarlier(CabinetFormat.trainings(it.size), earlierMonths) },
             results = CabinetResultRules.results(input.results, today, chartKey),
             media = CabinetMediaRules.media(input.mediaUrl, input.photoConsent),
@@ -153,18 +160,20 @@ object CabinetRules {
         )
     }
 
-    private fun month(first: LocalDate, list: List<CabinetTraining>) =
-        CabinetMonth(CabinetFormat.monthTitle(first), CabinetFormat.trainings(list.size), list.map { item(it) })
+    private fun month(first: LocalDate, list: List<CabinetTraining>, groupDiary: Boolean) =
+        CabinetMonth(CabinetFormat.monthTitle(first), CabinetFormat.trainings(list.size), list.map { item(it, groupDiary = groupDiary) })
 
     /**
      * Строка тренировки. В «Ближайших» ([upcomingIndex] не `null`) у запланированной — только план и только у первой,
      * без метки; у отменённой — серая метка и причина. В истории — метка, дальше поля дневника или причина отмены.
+     * У группы без [groupDiary] полей дневника нет совсем (шаг 5.3ч).
      */
-    fun item(training: CabinetTraining, upcomingIndex: Int? = null): CabinetItem {
+    fun item(training: CabinetTraining, upcomingIndex: Int? = null, groupDiary: Boolean = false): CabinetItem {
         val outcome = training.outcome
         val cancelled = outcome == ClientOutcome.CANCELLED || outcome == ClientOutcome.CANCELLED_CHARGED
         val fields = when {
             cancelled -> emptyList()
+            training.group && !groupDiary -> emptyList()
             upcomingIndex != null -> listOfNotNull(
                 filled(training.plan)?.takeIf { training.showPlan && upcomingIndex == 0 }?.let { CabinetFormat.PLAN to it },
             )

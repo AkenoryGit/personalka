@@ -574,8 +574,39 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion17() {
-        assertEquals(17, PersonalkaDatabase.VERSION)
+    fun version17HidesGroupDiaryInCabinets(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v17", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 5.3с–5.3ц: выключателя «Дневник групп в кабинете» нет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 17)
+                raw.exec(
+                    "INSERT INTO coach_settings (id, cancelNoticeMinutes, diaryEnabled, digestEnabled, digestTime, instantDiary, instantGroup, " +
+                        "followupEnabled, followupDays, cabinetsEnabled, coCoachingEnabled, reliabilityEnabled, workDayStart, workDayEnd, dragStepMinutes, " +
+                        "seriesHorizonWeeks, upcomingInCard, autoDonePersonal, weekViewDays, backupFolderUri, backupFrequency, " +
+                        "coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('s1', 90, 1, 1, '21:00', 0, 0, 1, 14, 1, 0, 1, '07:00', '23:00', 15, 8, 4, 1, 3, NULL, 'DAILY', 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val settings = db.coachDao().observeSettings().first()!!
+                assertTrue(settings.cabinetsEnabled, "Настройки не тронуты")
+                assertFalse(settings.cabinetGroupDiary, "План и факт групп в кабинете выключены")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion18() {
+        assertEquals(18, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }

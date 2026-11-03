@@ -101,6 +101,28 @@ class CabinetRulesTest {
     }
 
     @Test
+    fun groupDiaryHiddenUnlessTurnedOn() {
+        val group = listOf(
+            done("2026-10-17T09:00", plan = "Ныряние", fact = "Выдох в воду").copy(group = true, showBehavior = false),
+            pt("2026-10-24T09:00", plan = "Скольжение").copy(group = true),
+            pt("2026-10-31T09:00", TrainingStatus.CANCELLED, reason = "По инициативе клуба").copy(group = true),
+            done("2026-10-15T13:30", plan = "Кроль", fact = "Проплыла 25 м"),
+        )
+        val off = CabinetRules.page(input(group))
+        // Группа без дневника: дата, тип, отметка и причина отмены остаются, плана и факта нет.
+        assertEquals(emptyList(), off.upcoming[0].fields)
+        assertEquals("По инициативе клуба", off.upcoming[1].note)
+        val history = off.currentMonth!!.items
+        assertEquals(ClientOutcome.DONE, history[0].status)
+        assertEquals(emptyList(), history[0].fields)
+        assertEquals(listOf(CabinetFormat.PLAN to "Кроль", CabinetFormat.FACT to "Проплыла 25 м"), history[1].fields, "ПТ не трогается")
+
+        val on = CabinetRules.page(input(group).copy(groupDiary = true))
+        assertEquals(listOf(CabinetFormat.PLAN to "Скольжение"), on.upcoming[0].fields)
+        assertEquals(listOf(CabinetFormat.PLAN to "Ныряние", CabinetFormat.FACT to "Выдох в воду"), on.currentMonth!!.items[0].fields)
+    }
+
+    @Test
     fun countersAndHistoryByMonth() {
         val list = listOf(
             done("2026-10-20T13:30"),

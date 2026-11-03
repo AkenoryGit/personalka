@@ -98,9 +98,9 @@ class CabinetTest {
      * Данные тренера как с телефона: профиль и настройки, тип и место, группа из 12 детей и её тренировки,
      * внутренняя заметка и телефон у Евы, своя ПТ у другого ребёнка.
      */
-    private fun data(coachId: String, cabinetsOn: Boolean = true): List<JsonObject> = buildList {
+    private fun data(coachId: String, cabinetsOn: Boolean = true, groupDiary: Boolean = false): List<JsonObject> = buildList {
         add(row("coach", coachId) { put("coachId", coachId); put("lastName", "Дудник"); put("firstName", "Дмитрий"); put("middleName", "Викторович"); put("timezone", "Asia/Yekaterinburg") })
-        add(row("coach_settings", "settings-1") { put("coachId", coachId); put("cancelNoticeMinutes", 60); put("upcomingInCard", 4); put("cabinetsEnabled", if (cabinetsOn) 1 else 0) })
+        add(row("coach_settings", "settings-1") { put("coachId", coachId); put("cancelNoticeMinutes", 60); put("upcomingInCard", 4); put("cabinetsEnabled", if (cabinetsOn) 1 else 0); put("cabinetGroupDiary", if (groupDiary) 1 else 0) })
         add(row("training_type", "type-group") { put("name", "Групповая"); put("shortName", "Группа"); put("kind", "GROUP"); put("diaryPlan", 1); put("diaryFact", 1); put("diaryBehavior", 0); put("scope", "COACH") })
         add(row("training_type", "type-pt") { put("name", "Персональная"); put("shortName", "ПТ"); put("kind", "PERSONAL"); put("diaryPlan", 1); put("diaryFact", 1); put("diaryBehavior", 1); put("scope", "COACH") })
         add(row("location", "place-bb") { put("name", "Большой бассейн"); put("shortName", "ББ"); put("scope", "CLUB") })
@@ -196,9 +196,14 @@ class CabinetTest {
     }
 
     /** Тренер с данными и ссылкой для Евы; без кода — согласие уже дано ([consented]). */
-    private suspend fun ApplicationTestBuilder.setUp(db: Database, pin: String? = null, consented: Boolean = pin == null): Pair<String, String> {
+    private suspend fun ApplicationTestBuilder.setUp(
+        db: Database,
+        pin: String? = null,
+        consented: Boolean = pin == null,
+        groupDiary: Boolean = false,
+    ): Pair<String, String> {
         val (token, coachId) = signUp(db)
-        client.push(token, data(coachId))
+        client.push(token, data(coachId, groupDiary = groupDiary))
         val link = client.issue(token, childId(0), pin)
         if (consented) assertEquals(HttpStatusCode.SeeOther, consent(link).status)
         return token to link
@@ -219,8 +224,10 @@ class CabinetTest {
         assertTrue("Тренер: Дмитрий Дудник" in page)
         assertTrue("Данные на 20.10.2026, 15:41" in page)
         assertTrue("Групповая · Большой бассейн" in page)
-        assertTrue("Ныряние за предметами" in page, "план ближайшей")
-        assertTrue("Выдох в воду на 5 счётов" in page, "общий факт группы")
+        // Дневник групп в кабинете по умолчанию выключен (шаг 5.3ч): план и факт не видны, расписание и отметки — да.
+        assertFalse("Ныряние за предметами" in page, "план группы скрыт")
+        assertFalse("Выдох в воду на 5 счётов" in page, "факт группы скрыт")
+        assertTrue("17.10" in page, "проведённая группа в истории")
         assertTrue("По инициативе клуба: санитарный день" in page, "отменённая клубом будущая — в «Ближайших»")
         // Чужих имён, группы и служебного нет (6.2).
         children.drop(1).forEach { (last, first) ->
@@ -232,6 +239,16 @@ class CabinetTest {
         }
         assertTrue(page.length < 100 * 1024, "страница до 100 КБ")
         assertFalse("Результаты" in page, "нет результатов — нет раздела")
+    }
+
+    @Test
+    fun groupDiaryShownWhenCoachTurnsItOn() = withServer { db ->
+        val (_, link) = setUp(db, groupDiary = true)
+        val page = client.get("/c/$link").html()
+
+        assertTrue("Ныряние за предметами" in page, "план ближайшей")
+        assertTrue("Выдох в воду на 5 счётов" in page, "общий факт группы")
+        assertFalse("Поведение" in page, "поведения у группы нет")
     }
 
     private fun result(id: String, clientId: String, date: String, distance: Int, style: String, cs: Int, kind: String = "TRAINING", pool: Int = 25) =
@@ -532,7 +549,7 @@ class CabinetTest {
         val noAgree = consent(link, agree = false).html()
         assertTrue("Чтобы открыть кабинет, отметьте согласие." in noAgree)
         assertTrue("value=\"Данилова Светлана\"" in noAgree)
-        assertFalse("Ныряние за предметами" in noAgree)
+        assertFalse("Ближайшие тренировки" in noAgree)
         // Без имени у ребёнка — подсказка про имя.
         assertTrue("Впишите ваши фамилию и имя." in consent(link, name = "  ").html())
         assertEquals(0, db.tx { c -> c.queryOne("SELECT count(*) FROM consent_record") { it.getInt(1) } })
@@ -542,7 +559,7 @@ class CabinetTest {
         assertEquals(HttpStatusCode.SeeOther, accepted.status)
         assertEquals("/c/$link", accepted.headers[HttpHeaders.Location])
         val page = client.get("/c/$link").html()
-        assertTrue("Ныряние за предметами" in page)
+        assertTrue("Ближайшие тренировки" in page)
         val footer = page.substringAfter("<footer")
         listOf("По всем вопросам", "Согласие на обработку данных дано 20.10.2026", "Политика обработки персональных данных", "href=\"/c/$link/revoke\"")
             .forEach { assertTrue(it in footer, "в подвале — «$it»") }
@@ -567,7 +584,7 @@ class CabinetTest {
 
         // Новая ссылка без отзыва согласие заново не спрашивает: оно у клиента, а не у ссылки.
         val fresh = client.issue(token, childId(0))
-        assertTrue("Ныряние за предметами" in client.get("/c/$fresh").html())
+        assertTrue("Ближайшие тренировки" in client.get("/c/$fresh").html())
         // Повторная отправка формы второй записи не делает.
         consent(fresh)
         assertEquals(1, db.tx { c -> c.queryOne("SELECT count(*) FROM consent_record") { it.getInt(1) } })
@@ -621,7 +638,7 @@ class CabinetTest {
         val ask = client.get("/c/$link/revoke").html()
         listOf("Отозвать согласие?", "Данилова Ева", "Кабинет закроется по этой ссылке", nb("в течение 30 дней"), "Вернуться в кабинет", "href=\"/c/$link\"")
             .forEach { assertTrue(it in ask, "на подтверждении — «$it»") }
-        assertTrue("Ныряние за предметами" in client.get("/c/$link").html(), "подтверждение само ничего не отзывает")
+        assertTrue("Ближайшие тренировки" in client.get("/c/$link").html(), "подтверждение само ничего не отзывает")
 
         val done = client.post("/c/$link/revoke").html()
         assertTrue("Согласие отозвано" in done && "Кабинет закрыт. Тренер удалит данные ребёнка до 19.11.2026." in done, done)
@@ -638,7 +655,7 @@ class CabinetTest {
         val fresh = client.issue(token, childId(0))
         val again = client.get("/c/$fresh").html()
         assertTrue("Ваши фамилия и имя" in again)
-        assertFalse("Ныряние за предметами" in again)
+        assertFalse("Ближайшие тренировки" in again)
     }
 
     @Test
