@@ -168,29 +168,26 @@ class CabinetUiTest {
         val revoked = runBlocking { clients.create(ClientDraft("Соколов", "Пётр")) }
         server.consents[noPhoto] = consent(noPhoto, photo = false, revokedAt = null)
         server.consents[revoked] = consent(revoked, photo = true, revokedAt = TestData.clock())
+        val handled = runBlocking { clients.create(ClientDraft("Ершов", "Ян")) }
+        server.consents[handled] = consent(handled, photo = true, revokedAt = TestData.clock())
         runBlocking { settings.saveCabinets(true, "+7 912 000-00-00") }
         show()
 
         // «Нужно сделать»: «Удалить данные клиента» со сроком 30 дней, нажатие — карточка клиента.
         awaitNode(hasTestTag(todoTag(TodoKind.CONSENT_REVOKED)))
-        onNodeWithText("Удалить данные клиента").assertExists()
-        onNodeWithText("Соколов\u00A0П. · осталось 30\u00A0дней").assertExists()
+        onNodeWithText("Удалить данные клиентов").assertExists()
+        onNodeWithText("Ершов\u00A0Я., Соколов\u00A0П. · осталось 30\u00A0дней").assertExists()
         // Нажатие — окно со сроком (шаг 3.16а), «Открыть карточку» — карточка клиента, там «Удалить полностью».
         onNodeWithTag(todoTag(TodoKind.CONSENT_REVOKED)).performClick()
         awaitNode(hasTestTag(todoPanelTag(TodoKind.CONSENT_REVOKED)))
         onNodeWithText(TodoListFormat.deleteBy(LocalDate(2026, 11, 19))).assertExists()
+        // «Сделано» (шаг 5.3ц): Ершов уходит из окна, Соколов остаётся.
+        onNodeWithTag(todoConsentDoneTag(handled)).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoConsentDoneTag(handled))).fetchSemanticsNodes().isEmpty() }
+        onNodeWithTag(todoConsentDoneTag(revoked)).assertExists()
         onNodeWithTag(todoOpenCardTag(revoked)).performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoPanelTag(TodoKind.CONSENT_REVOKED))).fetchSemanticsNodes().isEmpty() }
         awaitNode(hasText("Соколов Пётр"))
-
-        // «Сделано» (шаг 5.3ц): пункт уходит с «Главной», внизу сообщение с «Отменить».
-        onNodeWithTag(navTag(Section.HOME)).performClick()
-        awaitNode(hasTestTag(todoTag(TodoKind.CONSENT_REVOKED)))
-        onNodeWithTag(todoTag(TodoKind.CONSENT_REVOKED)).performClick()
-        awaitNode(hasTestTag(todoConsentDoneTag(revoked)))
-        onNodeWithTag(todoConsentDoneTag(revoked)).performClick()
-        awaitNode(hasText(TodoListFormat.consentDone("Соколов Пётр")))
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.CONSENT_REVOKED))).fetchSemanticsNodes().isEmpty() }
 
         // «Инфо»: у ссылки на фото — «Нет согласия на фото»; у клиента с согласием на фото пометки бы не было.
         openCard("Орлова Ксения")
