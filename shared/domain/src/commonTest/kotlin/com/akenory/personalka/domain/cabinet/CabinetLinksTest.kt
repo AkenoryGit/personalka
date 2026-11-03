@@ -33,7 +33,8 @@ class CabinetLinksTest {
         val url = CabinetLinkRules.url("https://trener.planovo-app.ru/", "Sk8v1PLEy5xT7Bl9w44C")
         assertEquals("https://trener.planovo-app.ru/c/Sk8v1PLEy5xT7Bl9w44C", url)
         assertEquals(
-            "Здравствуйте! Здесь расписание и итоги тренировок: $url\nКод для входа: 4719",
+            "Здравствуйте! Здесь расписание и итоги тренировок: $url\nКод для входа: 4719\n" +
+                "Код постоянный, сохраните это сообщение: кабинет иногда спрашивает код снова, подходит этот же.",
             CabinetLinkRules.shareText(url, "4719", adult = false),
         )
         assertEquals("Здравствуйте! Здесь расписание и итоги ваших тренировок: $url", CabinetLinkRules.shareText(url, null, adult = true))

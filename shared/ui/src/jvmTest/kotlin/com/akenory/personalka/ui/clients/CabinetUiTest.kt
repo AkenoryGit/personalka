@@ -141,7 +141,7 @@ class CabinetUiTest {
         onNodeWithTag(CABINET_SEND_TAG).performClick()
         val text = shared.single()
         assertTrue(text.startsWith("Здравствуйте! Здесь расписание и итоги тренировок: $url/c/"), text)
-        assertTrue(text.endsWith("Код для входа: $pin"), text)
+        assertTrue(text.endsWith("Код для входа: $pin\n${CabinetLinkFormat.SHARE_PIN_NOTE}"), text)
         onNodeWithTag(CABINET_COPY_TAG).performClick()
         assertEquals(text, copied.single())
 

@@ -46,12 +46,12 @@ object CabinetLinkRules {
         return (n % 10_000).toString().padStart(4, '0')
     }
 
-    /** Текст «Отправить» (5.9): ссылка, код — отдельной строкой, если он есть. У взрослого — «ваших тренировок». */
+    /** Текст «Отправить» (5.9): ссылка, код — отдельной строкой, если он есть, и под ним «Код постоянный…» (шаг 5.3х). У взрослого — «ваших тренировок». */
     fun shareText(url: String, pin: String?, adult: Boolean): String = buildString {
         append(if (adult) CabinetLinkFormat.SHARE_ADULT else CabinetLinkFormat.SHARE_CHILD)
         append(": ")
         append(url)
-        if (pin != null) append("\n").append(CabinetLinkFormat.sharePin(pin))
+        if (pin != null) append("\n").append(CabinetLinkFormat.sharePin(pin)).append("\n").append(CabinetLinkFormat.SHARE_PIN_NOTE)
     }
 
     /** Контакт для родителей без лишних пробелов; пусто — `null`: без него кабинеты не включаются (3.2). */
