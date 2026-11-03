@@ -180,7 +180,7 @@ class CabinetUiTest {
         // Нажатие — окно со сроком (шаг 3.16а), «Открыть карточку» — карточка клиента, там «Удалить полностью».
         onNodeWithTag(todoTag(TodoKind.CONSENT_REVOKED)).performClick()
         awaitNode(hasTestTag(todoPanelTag(TodoKind.CONSENT_REVOKED)))
-        onNodeWithText(TodoListFormat.deleteBy(LocalDate(2026, 11, 19))).assertExists()
+        assertEquals(2, onAllNodes(hasText(TodoListFormat.deleteBy(LocalDate(2026, 11, 19)))).fetchSemanticsNodes().size)
         // «Сделано» (шаг 5.3ц): Ершов уходит из окна, Соколов остаётся.
         onNodeWithTag(todoConsentDoneTag(handled)).performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoConsentDoneTag(handled))).fetchSemanticsNodes().isEmpty() }
