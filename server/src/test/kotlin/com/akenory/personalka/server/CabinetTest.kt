@@ -671,7 +671,7 @@ class CabinetTest {
         val pass = noRedirect.submitForm("/c/$link/pin", parameters { append("code", "4721") }).headers[HttpHeaders.SetCookie]!!.substringBefore(';')
         assertTrue("Ваши фамилия и имя" in client.get("/c/$link") { header(HttpHeaders.Cookie, pass) }.html(), "после кода — согласие")
         assertEquals(HttpStatusCode.SeeOther, consent(link, cookie = pass).status)
-        assertTrue("Ныряние за предметами" in client.get("/c/$link") { header(HttpHeaders.Cookie, pass) }.html())
+        assertTrue("Ближайшие тренировки" in client.get("/c/$link") { header(HttpHeaders.Cookie, pass) }.html())
     }
 
     @Test
