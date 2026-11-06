@@ -221,7 +221,7 @@ object PayRules {
      * Ожидаемое число детей запланированной группы (ТЗ 4.12): среднее оплаченных по последним 4 проведённым
      * тренировкам этой группы до неё, до целого, половина вверх. Истории нет — `null`, и прогноз берёт состав.
      * У группы «Каждый своих» (4.8) — по последним 4 проведённым «Каждый своих», свои и дети коллеги отдельно.
-     * Шаг 5.3ш (просьба Дмитрия 06.11.2026): среднее не больше тех, кто ещё может прийти (отменённые заранее — нет);
+     * Шаг 5.3ш (просьба Дмитрия 06.11.2026): среднее не больше тех из состава тренировки, кто ещё может прийти (отменённые заранее — нет; состава нет — без ограничения);
      * группа уже началась ([now] не раньше начала: идёт или закончилась, но ещё не закрыта) — только отмеченные:
      * пришли и отмена со списанием, неотмеченные не считаются.
      */
@@ -238,14 +238,20 @@ object PayRules {
             .take(EXPECTED_FROM_LAST)
         if (last.isEmpty()) return null
         val size = last.size.toLong()
+        // Состав у тренировки не записан — ограничивать нечем: только среднее.
+        val roster = training.clients.isNotEmpty()
         val possible = training.clients.withIndex().filter { (_, status) -> status != ParticipationStatus.CANCELLED }
         if (!eachOwn) {
             val average = roundDiv(last.sumOf { paidClients(it).toLong() }, size).toInt()
-            return ExpectedKids(minOf(average, possible.size))
+            return ExpectedKids(if (roster) minOf(average, possible.size) else average)
         }
         val possibleColleague = possible.count { (i, _) -> training.coachOf(i) == Owner.COLLEAGUE }
-        val colleague = minOf(roundDiv(last.sumOf { paidColleague(it).toLong() }, size).toInt(), possibleColleague)
-        val own = minOf(roundDiv(last.sumOf { (paidClients(it) - paidColleague(it)).toLong() }, size).toInt(), possible.size - possibleColleague)
+        var colleague = roundDiv(last.sumOf { paidColleague(it).toLong() }, size).toInt()
+        var own = roundDiv(last.sumOf { (paidClients(it) - paidColleague(it)).toLong() }, size).toInt()
+        if (roster) {
+            colleague = minOf(colleague, possibleColleague)
+            own = minOf(own, possible.size - possibleColleague)
+        }
         return ExpectedKids(own + colleague, colleague)
     }
 
