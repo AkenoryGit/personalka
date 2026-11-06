@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.YearMonth
 import kotlinx.datetime.atTime
@@ -137,9 +138,12 @@ class SalaryRepository(
     /**
      * Месяц [month] на день [today]; пересчитывается сам при каждой правке тренировок, ставок и денег. Тренировки
      * берутся и за два месяца до него: прогноз ждёт в группе столько детей, сколько было на 4 последних (4.12),
-     * а доплата СПТ месяца покупки берёт тип и место самой СПТ (4.9) — окно СПТ месяц.
+     * а доплата СПТ месяца покупки берёт тип и место самой СПТ (4.9) — окно СПТ месяц. [now] — «сейчас» по клубу
+     * (на «Главной» — каждую минуту): началась ли группа, и в прогнозе — только её отмеченные дети (шаг 5.3ш);
+     * нет — «сейчас» берётся из часов при каждом пересчёте.
      */
-    fun month(month: YearMonth, today: LocalDate): Flow<SalaryMonthData> = months(listOf(month), today).map { it.single() }
+    fun month(month: YearMonth, today: LocalDate, now: Flow<LocalDateTime>? = null): Flow<SalaryMonthData> =
+        months(listOf(month), today, now).map { it.single() }
 
     /**
      * Вкладка «Год» (5.12, 3.8б): месяцы года [year] до текущего, каждый — тем же расчётом, что вкладка «Месяц»
@@ -159,7 +163,7 @@ class SalaryRepository(
         if (list.isEmpty()) flowOf(emptyList()) else months(list, today)
 
     /** Месяцы [list] (по возрастанию) одним чтением базы: тренировки — с двух месяцев до первого по конец последнего. */
-    private fun months(list: List<YearMonth>, today: LocalDate): Flow<List<SalaryMonthData>> {
+    private fun months(list: List<YearMonth>, today: LocalDate, now: Flow<LocalDateTime>? = null): Flow<List<SalaryMonthData>> {
         val first = list.first()
         val last = list.last()
         val from = first.firstDay.minus(HISTORY_MONTHS, DateTimeUnit.MONTH).atTime(LocalTime(0, 0))
@@ -212,14 +216,16 @@ class SalaryRepository(
                 groups.associate { it.id to it.name },
             )
         }
-        return combine(sources, moneySources, names, settled) { s, m, n, marks ->
+        val clockNow: Flow<LocalDateTime?> = now ?: flowOf(null)
+        return combine(sources, moneySources, names, settled, clockNow) { s, m, n, marks, at ->
             val byTraining = s.participations.groupBy { it.trainingId }
+            val moment = at ?: ClubTime.now(clock())
             list.map { month ->
                 // У каждого месяца — своё окно, как при чтении одного месяца: прогноз групп берёт 4 последние (4.12).
                 val start = month.firstDay.minus(HISTORY_MONTHS, DateTimeUnit.MONTH)
                 val own = if (first == last) s else s.copy(trainings = s.trainings.filter { it.start.date >= start && it.start.date <= month.lastDay })
                 val ownMoney = if (first == last) m else m.copy(adjustments = m.adjustments.filter { it.month == month })
-                build(month, today, own, ownMoney, n, marks[month].orEmpty(), byTraining)
+                build(month, today, own, ownMoney, n, marks[month].orEmpty(), byTraining, moment)
             }
         }.flowOn(Dispatchers.Default)
     }
@@ -245,6 +251,7 @@ class SalaryRepository(
         n: Names,
         settled: Map<String, Long>,
         byTraining: Map<String, List<ParticipationEntity>>,
+        now: LocalDateTime,
     ): SalaryMonthData {
         val places = n.places
         // Оплата напрямую от клиента (шаг 5.3с) — не касса клуба: отдельным расчётом, в зарплату клуба не входит.
@@ -274,6 +281,7 @@ class SalaryRepository(
             spt = spt,
             adjustments = m.adjustments.map { PayAdjustment(it.amount, it.inClubAccrual, ClubTime.today(it.sync.createdAt)) },
             cancels = CancelRules.share(trainings, types, today),
+            now = now,
         )
         // Две записи одного месяца с двух телефонов — берётся последняя изменённая, как в MoneyDao.monthRecord.
         val records = m.records.groupBy { it.month }.mapValues { (_, list) -> list.maxWith(compareBy({ it.sync.updatedAt }, { it.id })) }

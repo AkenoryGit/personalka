@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,6 +43,7 @@ import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
+import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.MoreFormat
 import com.akenory.personalka.domain.format.ReportFormat
@@ -59,17 +61,15 @@ import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.home.HomeMoney
 import com.akenory.personalka.ui.home.HomeScreen
-import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.ui.home.HomeTodo
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.reconcile.ReconcileScreen
-import com.akenory.personalka.ui.reports.ReportsRoute
-import com.akenory.personalka.ui.reports.ReportsScreen
 import com.akenory.personalka.ui.reconcile.Report1cResultScreen
 import com.akenory.personalka.ui.reconcile.Report1cRoute
 import com.akenory.personalka.ui.reminders.NotificationAccess
 import com.akenory.personalka.ui.reminders.Reminders
-import com.akenory.personalka.ui.watch.WatchTools
+import com.akenory.personalka.ui.reports.ReportsRoute
+import com.akenory.personalka.ui.reports.ReportsScreen
 import com.akenory.personalka.ui.salary.SalaryScreen
 import com.akenory.personalka.ui.settings.BackupTools
 import com.akenory.personalka.ui.settings.CABINETS_ROW_TAG
@@ -85,17 +85,19 @@ import com.akenory.personalka.ui.settings.SERVER_ROW_TAG
 import com.akenory.personalka.ui.settings.SettingsRoute
 import com.akenory.personalka.ui.settings.SettingsScreen
 import com.akenory.personalka.ui.settings.SyncTools
-import com.akenory.personalka.ui.slots.SlotsRoute
-import com.akenory.personalka.ui.slots.SlotsScreen
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.ShellState
 import com.akenory.personalka.ui.shell.TopBar
+import com.akenory.personalka.ui.slots.SlotsRoute
+import com.akenory.personalka.ui.slots.SlotsScreen
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
 import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.VoiceInput
+import com.akenory.personalka.ui.watch.WatchTools
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.yearMonth
@@ -185,7 +187,10 @@ fun SectionScreen(
         Section.HOME -> {
             // «Деньги» (5.2, шаг 3.9): текущий месяц тем же расчётом, что «Зарплата»; читается, только пока «Главная» открыта.
             val schemes by remember(settings) { settings.salary.schemes }.collectAsState(initial = null)
-            val month by remember(settings, now.date) { settings.months.month(now.date.yearMonth, now.date) }.collectAsState(initial = null)
+            // «Сейчас» — потоком (шаг 5.3ш): прогноз дня узнаёт, что группа началась, без нового чтения базы.
+            val nowFlow = remember { MutableStateFlow(now) }
+            LaunchedEffect(now) { nowFlow.value = now }
+            val month by remember(settings, now.date) { settings.months.month(now.date.yearMonth, now.date, nowFlow) }.collectAsState(initial = null)
             // Именинники (шаг 3.9р) — тоже только пока «Главная» открыта.
             val birthdays by remember(clients, now.date) { clients.birthdays(now.date) }.collectAsState(initial = emptyList())
             val loadedSchemes = schemes

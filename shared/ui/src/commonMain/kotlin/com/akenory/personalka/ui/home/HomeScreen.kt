@@ -826,7 +826,7 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                             title = HomeFormat.MONTH,
                             earned = view.pay.earned,
                             forecast = view.pay.forecast,
-                            pt = HomeFormat.ptLine(view.pay.ptCount, view.pay.forecastPtCount),
+                            pt = HomeFormat.ptLine(view.pay.ptCount, view.pay.likelyPtCount),
                             cancelled = HomeFormat.cancelledLine(view.monthCancelled),
                             modifier = Modifier.weight(1f).testTag(MONEY_MONTH_TAG),
                         )

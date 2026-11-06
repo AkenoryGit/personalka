@@ -149,7 +149,9 @@ data class ExpectedKids(val total: Int, val colleague: Int = 0)
  * из них «Если всё пройдёт по расписанию — ≈ …» на руки (5.12).
  * [forecast] — прогноз с обычной долей отмен [cancels] (шаг 3.9щ): запланированные ПТ и сплиты — со скидкой на неё,
  * и по ступени [likelyTier] от ожидаемого счётчика; [scheduled] — будто всё по расписанию состоялось. Доли нет —
- * они равны.
+ * они равны. [likelyPtCount] — ожидаемый счётчик ПТ с той же скидкой (по нему [likelyTier]; шаг 5.3ш).
+ * [plannedNow] — запланированные тренировки месяца по текущей ступени [tier] с ожидаемыми детьми групп:
+ * из них «будет ≈ …» за сегодня на «Главной» (шаг 5.3ш).
  */
 data class MonthPay(
     val month: YearMonth,
@@ -172,6 +174,8 @@ data class MonthPay(
     val scheduled: Long = forecast,
     val likelyTier: Int = forecastTier,
     val cancels: CancelShare? = null,
+    val likelyPtCount: Int = forecastPtCount,
+    val plannedNow: List<TrainingPay> = emptyList(),
 ) {
     /** Взаиморасчёт S (4.10): мне должны минус я должен, по всем коллегам. */
     val settlement: Long get() = settlements.values.sum()
@@ -217,10 +221,16 @@ object PayRules {
      * Ожидаемое число детей запланированной группы (ТЗ 4.12): среднее оплаченных по последним 4 проведённым
      * тренировкам этой группы до неё, до целого, половина вверх. Истории нет — `null`, и прогноз берёт состав.
      * У группы «Каждый своих» (4.8) — по последним 4 проведённым «Каждый своих», свои и дети коллеги отдельно.
+     * Шаг 5.3ш (просьба Дмитрия 06.11.2026): среднее не больше тех, кто ещё может прийти (отменённые заранее — нет);
+     * группа уже началась ([now] не раньше начала: идёт или закончилась, но ещё не закрыта) — только отмеченные:
+     * пришли и отмена со списанием, неотмеченные не считаются.
      */
-    fun expectedChildren(training: PayTraining, history: List<PayTraining>): ExpectedKids? {
+    fun expectedChildren(training: PayTraining, history: List<PayTraining>, now: LocalDateTime? = null): ExpectedKids? {
         val groupId = training.groupId ?: return null
         val eachOwn = training.conductedBy == ConductedBy.EACH_OWN
+        if (now != null && training.start <= now) {
+            return ExpectedKids(paidClients(training), paidColleague(training))
+        }
         val last = history
             .filter { it.groupId == groupId && it.status == TrainingStatus.DONE && it.start < training.start }
             .filter { !eachOwn || it.conductedBy == ConductedBy.EACH_OWN }
@@ -228,9 +238,14 @@ object PayRules {
             .take(EXPECTED_FROM_LAST)
         if (last.isEmpty()) return null
         val size = last.size.toLong()
-        if (!eachOwn) return ExpectedKids(roundDiv(last.sumOf { paidClients(it).toLong() }, size).toInt())
-        val colleague = roundDiv(last.sumOf { paidColleague(it).toLong() }, size).toInt()
-        val own = roundDiv(last.sumOf { (paidClients(it) - paidColleague(it)).toLong() }, size).toInt()
+        val possible = training.clients.withIndex().filter { (_, status) -> status != ParticipationStatus.CANCELLED }
+        if (!eachOwn) {
+            val average = roundDiv(last.sumOf { paidClients(it).toLong() }, size).toInt()
+            return ExpectedKids(minOf(average, possible.size))
+        }
+        val possibleColleague = possible.count { (i, _) -> training.coachOf(i) == Owner.COLLEAGUE }
+        val colleague = minOf(roundDiv(last.sumOf { paidColleague(it).toLong() }, size).toInt(), possibleColleague)
+        val own = minOf(roundDiv(last.sumOf { (paidClients(it) - paidColleague(it)).toLong() }, size).toInt(), possible.size - possibleColleague)
         return ExpectedKids(own + colleague, colleague)
     }
 
@@ -405,6 +420,7 @@ object PayRules {
         spt: List<SptCase> = emptyList(),
         adjustments: List<PayAdjustment> = emptyList(),
         cancels: CancelShare? = null,
+        now: LocalDateTime? = null,
     ): MonthPay {
         val ofMonth = inMonth(trainings, month)
         val scheme = Versions.activeIn(schemes, month) { it.validFrom }
@@ -419,19 +435,22 @@ object PayRules {
         val adjusted = adjustments.sumOf { it.amount }
         val adjustedInClub = adjustments.filter { it.inClubAccrual }.sumOf { it.amount }
         val kindOf = { t: PayTraining -> byId[t.typeId]?.kind }
-        val forecastPays = ofMonth.map {
-            val expected = if (it.status == TrainingStatus.PLANNED && kindOf(it) == TrainingKind.GROUP) expectedChildren(it, trainings) else null
-            pay(it, byId, rates, forecastTier, forecast = true, owners = owners, expected = expected)
+        val expectedOf = { t: PayTraining ->
+            if (t.status == TrainingStatus.PLANNED && kindOf(t) == TrainingKind.GROUP) expectedChildren(t, trainings, now) else null
         }
+        val forecastPays = ofMonth.map { pay(it, byId, rates, forecastTier, forecast = true, owners = owners, expected = expectedOf(it)) }
         val forecast = sptBonus + adjusted + forecastPays.sumOf { it.earned }
         // Прогноз с отменами: запланированные ПТ и сплиты, которые принесут деньги, — со скидкой на обычную долю отмен.
         val discounted = { t: PayTraining -> cancels != null && t.status == TrainingStatus.PLANNED && kindOf(t) in CancelRules.KINDS }
         val plannedPt = ofMonth.count { discounted(it) && it.typeId in ptIds && paidClients(it, forecast = true) > 0 }
-        val likelyTier = tier(scheme, nForecast - plannedPt + (cancels?.keep(plannedPt) ?: plannedPt))
+        val likelyPtCount = nForecast - plannedPt + (cancels?.keep(plannedPt) ?: plannedPt)
+        val likelyTier = tier(scheme, likelyPtCount)
         val likelyPays = if (likelyTier == forecastTier) forecastPays else ofMonth.map {
-            val expected = if (it.status == TrainingStatus.PLANNED && kindOf(it) == TrainingKind.GROUP) expectedChildren(it, trainings) else null
-            pay(it, byId, rates, likelyTier, forecast = true, owners = owners, expected = expected)
+            pay(it, byId, rates, likelyTier, forecast = true, owners = owners, expected = expectedOf(it))
         }
+        // Остаток дня (5.2, шаг 5.3ш): запланированные — по ступени, по которой посчитано «Заработано», как и сумма рядом.
+        val plannedNow = ofMonth.filter { it.status == TrainingStatus.PLANNED }
+            .map { pay(it, byId, rates, tier, forecast = true, owners = owners, expected = expectedOf(it)) }
         val (cut, kept) = ofMonth.zip(likelyPays).partition { (t, _) -> discounted(t) }
         val likely = sptBonus + adjusted + kept.sumOf { it.second.earned } +
             cut.sumOf { it.second.earned }.let { cancels?.keep(it) ?: it }
@@ -455,6 +474,8 @@ object PayRules {
             scheduled = forecast,
             likelyTier = likelyTier,
             cancels = cancels,
+            likelyPtCount = likelyPtCount,
+            plannedNow = plannedNow,
         )
     }
 

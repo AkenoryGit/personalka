@@ -5,6 +5,7 @@ import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.YearMonth
 import kotlinx.datetime.atTime
@@ -164,8 +165,9 @@ data class MonthInput(
     val spt: List<SptCase> = emptyList(),
     val adjustments: List<PayAdjustment> = emptyList(),
     val cancels: CancelShare? = null,
+    val now: LocalDateTime? = null,
 ) {
-    fun pay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments, cancels)
+    fun pay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments, cancels, now)
 }
 
 /**
