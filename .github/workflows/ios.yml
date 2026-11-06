@@ -1,21 +1,14 @@
-# «Персоналка» для iPhone в TestFlight (шаг 5.1в): после push в main GitHub собирает приложение на Mac и выгружает
+# «Персоналка» для iPhone в TestFlight (шаг 5.1в): по кнопке GitHub собирает приложение на Mac и выгружает
 # сборку в App Store Connect — через 20–40 минут она в TestFlight на телефоне. Свой Mac для этого не нужен.
-# Машины Mac для открытого репозитория бесплатные. Подпись — автоматическая по ключу App Store Connect API
+# Только кнопкой (шаг 5.8, 06.11.2026): репозиторий приватный, минута Mac списывается за 10 из 2000 бесплатных
+# в месяц — одна сборка ≈ 250 минут. Запуск: Actions → «iPhone» → Run workflow → main.
+# Подпись — автоматическая по ключу App Store Connect API
 # (секреты ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 — их задаёт Дмитрий); без них выгрузка пропускается.
 # Номер сборки — число коммитов (фаза «Build Number» в Xcode), версия — MARKETING_VERSION в iosApp/Configuration/Config.xcconfig.
 # Итоги — отметками: «iPhone: TestFlight» или «iPhone: ошибка» с последними строками ошибок.
 name: iPhone
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "shared/**"
-      - "iosApp/**"
-      - "gradle/**"
-      - "*.gradle.kts"
-      - "gradle.properties"
-      - ".github/workflows/ios.yml"
   workflow_dispatch:
 
 concurrency:

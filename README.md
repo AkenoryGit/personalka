@@ -11,6 +11,6 @@
 
 ## Сборка
 
-Каждый push собирает проект в GitHub Actions: тесты, проверки Android и APK. Свежий APK из ветки `main` — в релизе [«Последняя сборка»](https://github.com/AkenoryGit/personalka/releases/tag/latest-build); он ставится поверх прежней версии, данные сохраняются.
+Каждый push собирает проект в GitHub Actions: тесты, проверки Android и APK. Свежий APK из ветки `main` — в релизе [«Последняя сборка»](https://github.com/AkenoryGit/personalka/releases/tag/latest-build); он ставится поверх прежней версии, данные сохраняются. Репозиторий приватный: ссылка открывается после входа в GitHub. iPhone (TestFlight) собирается кнопкой: Actions → «iPhone» → Run workflow.
 
 Локально: `./gradlew check :androidApp:assembleDebug` (нужна Java 21 и Android SDK).

@@ -22,17 +22,17 @@
 | `androidApp`, `iosApp`, `server`, `tools/import` | Приложения Android и iPhone (с шага 5.1), сервер, утилита импорта |
 | [`deploy/`](deploy/README.md) | Сервер на VPS: служба, Caddy, база, переключение версии с откатом, установка по шагам |
 | [`gradle/libs.versions.toml`](gradle/libs.versions.toml) | Все версии: Kotlin, AGP, Compose, библиотеки |
-| [`.github/workflows/build.yml`](.github/workflows/build.yml) | Сборка при каждом push: тесты, lint, APK; `ios.yml` — iPhone в TestFlight из `main` |
+| [`.github/workflows/build.yml`](.github/workflows/build.yml) | Сборка при каждом push: тесты, lint, APK; `ios.yml` — iPhone в TestFlight из `main`, только кнопкой |
 
 ## Сборка
 
 - **Команда:** `./gradlew check :androidApp:assembleDebug` — тесты всех модулей, lint и APK.
 - **В облачной сессии Claude** Maven Central и Google Maven бывали закрыты — тогда Gradle здесь не собирает, а полный лог Actions не скачивается. С шага 1.15 они открыты: сначала проверить `curl -s -o /dev/null -w "%{http_code}" https://dl.google.com/android/maven2/androidx/room3/room3-runtime/maven-metadata.xml` (200 — открыт); тогда Android SDK ставится в `/opt/android-sdk` (commandlinetools с dl.google.com, `sdkmanager "platforms;android-37.0" platform-tools`), в `local.properties` — `sdk.dir=/opt/android-sdk`, и та же команда собирает здесь за 2 минуты. Сборка в Actions перед `main` нужна всё равно. Код проверяется в GitHub Actions: push в ветку шага, ожидание `gh run view <id> --json status,conclusion`, итоги — отметками сборки: `gh api repos/AkenoryGit/personalka/check-runs/<job>/annotations` (номер job — `gh run view <id> --json jobs`). Отметки пишет `.github/scripts/annotate.py`: тесты по модулям, lint, состав и подпись APK, ошибки Kotlin и Gradle. В `main` — только зелёная сборка: работа шага идёт в ветке `step-N.N`, в `main` она переносится перемоткой (fast-forward). Удалить ветку на GitHub из облачной сессии нельзя — она остаётся, это не мешает. Коммиты только с документами — с `[skip ci]`, чтобы не запускать сборку и не выпускать новый APK. GitHub смотрит на последний коммит push: если шаг кончается коммитом с `[skip ci]`, `main` не пересобирается и APK в релизе остаётся прежним. Поэтому в шаге, где менялось само приложение, последний коммит перед переносом в `main` — без `[skip ci]`; запустить сборку вручную из облачной сессии нельзя (403).
-- **APK:** только в релизе «Последняя сборка» из `main`, ссылка постоянная: `releases/download/latest-build/personalka.apk`. Артефакты Actions не используются: хранилище на аккаунте общее (500 МБ) и заполнено.
+- **APK:** только в релизе «Последняя сборка» из `main`, ссылка постоянная: `releases/download/latest-build/personalka.apk`. С 06.11.2026 репозиторий приватный: ссылка открывается только после входа в GitHub (без входа — 404); Дмитрий скачивает APK сам и пересылает коллегам файлом. Артефакты Actions не используются: хранилище на аккаунте общее (500 МБ) и заполнено.
 - **Подпись:** отладочный ключ лежит в `androidApp/debug.keystore`, поэтому каждая новая сборка ставится поверх прежней с сохранением данных. Номер версии — номер сборки в Actions.
 - **Схема базы** (`shared/data/schemas`) пишется Room при сборке. В ветку шага её коммитит сама сборка («N.N: схема базы из сборки K») — после зелёной сборки сделать `git pull`. В `main` схема обязана совпадать со сборкой.
 - **Общий код** в `commonMain` — только общий Kotlin, без `java.*` и Android (и без функций только JVM вроде `toSortedMap`): с шага 5.1 у модулей есть цели iOS, «Сборка» компилирует klib для iOS (`:shared:ui:compileKotlinIosArm64`). Платформенное для iPhone — `iosMain` (`shared/data/.../iosMain`, `shared/ui/.../ios`).
-- **iPhone в TestFlight** (шаг 5.1в): workflow «iPhone» (`.github/workflows/ios.yml`) после push в `main` (правки `shared/`, `iosApp/`, Gradle) собирает приложение на машине Mac GitHub и выгружает в TestFlight по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` задаёт Дмитрий; без них — пропуск). Итог — отметка «iPhone: TestFlight» или «iPhone: ошибка». Номер сборки — число коммитов, версия — `MARKETING_VERSION` в `iosApp/Configuration/Config.xcconfig`.
+- **iPhone в TestFlight** (шаг 5.1в): workflow «iPhone» (`.github/workflows/ios.yml`) собирает приложение на машине Mac GitHub и выгружает в TestFlight по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` задаёт Дмитрий; без них — пропуск). **Запускается только кнопкой** (шаг 5.8, 06.11.2026): репозиторий приватный, бесплатных минут Actions 2000 в месяц на весь аккаунт вместе с Planovo, минута Mac идёт за 10 — одна сборка iPhone ≈ 250 минут, «Сборка» ≈ 7. Итог — отметка «iPhone: TestFlight» или «iPhone: ошибка». Номер сборки — число коммитов, версия — `MARKETING_VERSION` в `iosApp/Configuration/Config.xcconfig`.
 - **iPhone локально** — на Mac Дмитрия (Remote Control): репозиторий — `~/Downloads/iOS Personalka/personalka`, Xcode — `iosApp/iosApp.xcodeproj`, первая сборка Kotlin — `./gradlew :shared:ui:linkDebugFrameworkIosSimulatorArm64`, тесты общего кода на iOS — `:shared:data:iosSimulatorArm64Test`; подробно — [`iosApp/README.md`](iosApp/README.md).
 - **Тесты сервера** — на настоящем PostgreSQL 16: в Actions — служба `postgres:16` сборки, в облачной сессии — свой PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, `initdb` и `pg_ctl` от пользователя `postgres`) и `TRENER_TEST_DB_URL`, `TRENER_TEST_DB_USER`, `TRENER_TEST_DB_PASSWORD`. Если Maven Central отвечает 429 — зеркало `maven-central.storage-download.googleapis.com` через init-скрипт (`-I`) в папке сессии (шаг 2.7).
 - **Тесты экранов** — в `shared/ui/src/jvmTest` через `runComposeUiTest`: у `shared/ui` есть JVM-цель только для них, Compose рисуется на компьютере без телефона. Логика, которой нужно состояние Compose, тоже тестируется там.
@@ -57,6 +57,18 @@
 - **Реальных имён клиентов** нет ни в коде, ни в тестах, ни в макетах — только придуманные.
 - **Язык интерфейса — русский:** даты «вт 22.10» и «22.10.2026», время 24 часа, «124 800 ₽» с тонким пробелом, склонение числительных (ТЗ 10.6). Все такие строки собираются функциями `shared/domain/.../format`, а не по месту.
 - **Сложение Fold:** экран читает ширину из `LocalWide`; прокрутка и выбранное объявляются над веткой `if (wide)`, иначе сложение их сбросит (шаг 1.5).
+
+## После переноса в `main` — напомнить про iPhone
+
+Когда шаг, менявший приложение (`shared/`, `iosApp/`, Gradle), перенесён в `main` и «Сборка» там зелёная (новый APK в релизе), в итоговом сообщении Дмитрию **обязательно** написать, что iPhone сам не собирается, и дать инструкцию. Запустить сборку из облачной сессии нельзя — только Дмитрий. Текст:
+
+> Android собран, APK в «Последней сборке». iPhone теперь собирается только вручную:
+> 1. Открой github.com/AkenoryGit/personalka (в браузере, где ты вошёл в GitHub) → вкладка **Actions**.
+> 2. Слева выбери **iPhone**.
+> 3. Справа **Run workflow** → ветка **main** → зелёная **Run workflow**.
+> 4. Через 20–40 минут сборка придёт в TestFlight. Одна сборка ≈ 250 из 2000 бесплатных минут в месяц — если на iPhone сейчас не нужно, можно не запускать или собрать один раз после нескольких правок.
+
+Если в `main` ушли только документы или сервер — напоминать не нужно.
 
 ## Общение с Дмитрием
 
