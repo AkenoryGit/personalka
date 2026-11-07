@@ -683,7 +683,8 @@ class CalendarUiTest {
         val scrolled = grid()[SemanticsProperties.VerticalScrollAxisRange].value() / d
         fun pixel(x: Float, y: Float): Color = image[((48f + x) * d).toInt(), ((y - scrolled) * d).toInt()]
         fun close(a: Color, b: Color) = abs(a.red - b.red) + abs(a.green - b.green) + abs(a.blue - b.blue) < 0.04f
-        assertTrue(close(LightColors.outline, pixel(3.5f, zone.y + 20f)), "Полоска запрета: ${pixel(3.5f, zone.y + 20f)}")
+        // Шаг 5.3ю: полоска запрета — полосой цвета места (ДБ — розовый), а не серым цветом рамок.
+        assertTrue(close(PlaceColor.PINK.light.stripe, pixel(3.5f, zone.y + 20f)), "Полоска запрета: ${pixel(3.5f, zone.y + 20f)}")
         // Справа от блока, между линиями сетки, — хоть одна точка штриховки на фоне.
         val margin = (357..363).flatMap { x -> (zone.y.toInt() + 4..zone.y.toInt() + 28).map { y -> pixel(x.toFloat(), y.toFloat()) } }
         assertTrue(margin.any { !close(LightColors.surface, it) }, "Штриховки справа от блока нет")
