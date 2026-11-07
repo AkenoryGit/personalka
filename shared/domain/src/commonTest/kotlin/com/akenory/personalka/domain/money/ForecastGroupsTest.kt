@@ -1,5 +1,7 @@
 package com.akenory.personalka.domain.money
 
+import com.akenory.personalka.domain.format.HomeFormat
+import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.ParticipationStatus.ATTENDED
 import com.akenory.personalka.domain.model.ParticipationStatus.CANCELLED
@@ -97,6 +99,36 @@ class ForecastGroupsTest {
         val view = SalaryMonthRules.build(input, emptyList(), emptyMap(), null, LocalDate(2026, 11, 6), "pt", "bb")
         assertEquals(2, view.pay.forecastTier)
         assertEquals(rub(920), view.todayAhead)
+    }
+
+    @Test
+    fun todayAheadAtTheTierTodayReaches() {
+        // Шаг 5.3щ: проведено 99 ПТ, сегодня ещё 3 — к вечеру 102, ступень 2: остаток дня по 960 ₽, а не по 920 ₽.
+        val done = List(99) { pt(2) }
+        val today = List(3) { pt(6, TrainingStatus.PLANNED, hour = 21) }
+        val input = MonthInput(november, done + today, types, rates, tiers, owners, now = at(6, 20))
+        val view = SalaryMonthRules.build(input, emptyList(), emptyMap(), null, LocalDate(2026, 11, 6), "pt", "bb")
+        assertEquals(1, view.pay.tier)
+        assertEquals(rub(3 * 960), view.todayAhead)
+        // Сегодня 1 ПТ — к вечеру 100, порог не перейдён: по ступени 1.
+        val one = MonthInput(november, done + today.take(1), types, rates, tiers, owners, now = at(6, 20))
+        assertEquals(rub(920), SalaryMonthRules.build(one, emptyList(), emptyMap(), null, LocalDate(2026, 11, 6), "pt", "bb").todayAhead)
+    }
+
+    @Test
+    fun forecastNoteText() {
+        val nb = RuText.NBSP
+        assertEquals(
+            "Прогноз — с обычными отменами: из запланированных ПТ и сплитов отменяется около 20${nb}% (по последним 8 неделям)." +
+                " Дети в группах — в среднем по 4 последним занятиям, а не весь состав." +
+                " По расписанию, без отмен: 170${nb}ПТ, ≈${nb}190${RuText.THIN}000${nb}₽.",
+            HomeFormat.forecastNote(CancelShare(8, 40), 137, 170, rub(182_080), rub(190_004)),
+        )
+        assertEquals(
+            "Прогноз ПТ и сплитов — по расписанию: прошедших пока мало, чтобы посчитать обычную долю отмен." +
+                " Дети в группах — в среднем по 4 последним занятиям, а не весь состав.",
+            HomeFormat.forecastNote(null, 49, 49, rub(50_000), rub(50_000)),
+        )
     }
 
     @Test

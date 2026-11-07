@@ -1,13 +1,7 @@
 package com.akenory.personalka.ui.home
 
-import androidx.compose.foundation.background
-import com.akenory.personalka.data.groups.AbsentMember
-import com.akenory.personalka.domain.format.GroupFormat
-import com.akenory.personalka.domain.money.SalaryPlan
-import com.akenory.personalka.domain.money.PlanPace
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -58,13 +54,14 @@ import com.akenory.personalka.data.backup.BackupState
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.NoticeRow
-import com.akenory.personalka.data.clients.ClientRepository
-import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.clients.Birthday
+import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.clients.ConfirmVisit
 import com.akenory.personalka.data.clients.Followup
 import com.akenory.personalka.data.clients.WaitRow
 import com.akenory.personalka.data.db.entity.ReconciliationItemEntity
+import com.akenory.personalka.data.groups.AbsentMember
+import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.money.SptWaiting
 import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.data.training.TrainingCard
@@ -77,6 +74,7 @@ import com.akenory.personalka.domain.format.CalendarSettingsFormat
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
+import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.ReconcileFormat
@@ -92,7 +90,10 @@ import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.ReconcileResolution
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.money.AdvanceState
+import com.akenory.personalka.domain.money.MonthPeriod
+import com.akenory.personalka.domain.money.PlanPace
 import com.akenory.personalka.domain.money.SalaryMonth
+import com.akenory.personalka.domain.money.SalaryPlan
 import com.akenory.personalka.domain.report1c.Reconcile1cRules
 import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.DiaryRules
@@ -101,6 +102,7 @@ import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.calendar.COPIED
 import com.akenory.personalka.ui.calendar.EntryRow
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
@@ -110,6 +112,8 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.theme.tabular
+import com.akenory.personalka.ui.tour.TourTarget
+import com.akenory.personalka.ui.tour.tourTarget
 import com.akenory.personalka.ui.training.TrainingCardHost
 import com.akenory.personalka.ui.training.TrainingCardKey
 import kotlinx.coroutines.CoroutineScope
@@ -119,8 +123,6 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.plus
-import com.akenory.personalka.ui.tour.TourTarget
-import com.akenory.personalka.ui.tour.tourTarget
 
 internal const val NEAREST_TAG = "home-nearest"
 internal const val NEAREST_OPEN_TAG = "home-nearest-open"
@@ -137,6 +139,8 @@ internal fun birthdayTag(id: String) = "home-birthday-$id"
 internal const val MONEY_SETUP_TAG = "home-money-setup"
 internal const val MONEY_TODAY_TAG = "home-money-today"
 internal const val MONEY_MONTH_TAG = "home-money-month"
+internal const val MONEY_INFO_TAG = "home-money-info"
+internal const val MONEY_NOTE_TAG = "home-money-note"
 internal const val MONEY_TIER_TAG = "home-money-tier"
 internal fun todoTag(kind: TodoKind) = "home-todo-${kind.name.lowercase()}"
 internal fun dayRowTag(id: String) = "home-day-$id"
@@ -805,6 +809,8 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
         is HomeMoney.Month -> {
             val view = money.view
             val tier = view.tiers?.tier ?: 1
+            // Пояснение к прогнозу месяца (шаг 5.3щ): ⓘ у «За месяц» раскрывает его под колонками, повторно — прячет.
+            var note by rememberSaveable { mutableStateOf(false) }
             Block(Modifier.tourTarget(TourTarget.MONEY).clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
                 Padded {
                     Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -829,6 +835,15 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                             pt = HomeFormat.ptLine(view.pay.ptCount, view.pay.likelyPtCount),
                             cancelled = HomeFormat.cancelledLine(view.monthCancelled),
                             modifier = Modifier.weight(1f).testTag(MONEY_MONTH_TAG),
+                            onInfo = if (view.period == MonthPeriod.CURRENT) ({ note = !note }) else null,
+                        )
+                    }
+                    if (note && view.period == MonthPeriod.CURRENT) {
+                        Note(
+                            HomeFormat.forecastNote(
+                                view.pay.cancels, view.pay.likelyPtCount, view.pay.forecastPtCount, view.pay.forecast, view.pay.scheduled,
+                            ),
+                            Modifier.padding(top = Dimens.space1).testTag(MONEY_NOTE_TAG),
                         )
                     }
                     val plan = view.plan
@@ -906,10 +921,36 @@ private fun Sparks() {
 
 /** Колонка «Денег»: заголовок, заработано, «будет ≈ …», строка ПТ и отмены, если они есть. */
 @Composable
-private fun MoneyColumn(title: String, earned: Long, forecast: Long, pt: String, cancelled: String?, modifier: Modifier = Modifier) {
+private fun MoneyColumn(
+    title: String,
+    earned: Long,
+    forecast: Long,
+    pt: String,
+    cancelled: String?,
+    modifier: Modifier = Modifier,
+    onInfo: (() -> Unit)? = null,
+) {
     val colors = PersonalkaTheme.colors
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Dimens.space1)) {
-        Text(title, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        // Заголовок высотой 24 dp в обеих колонках, чтобы суммы стояли на одной линии; с ⓘ — нажимается целиком.
+        Row(
+            Modifier
+                .heightIn(min = 24.dp)
+                .then(
+                    if (onInfo != null) {
+                        Modifier.clickable(role = Role.Button, onClickLabel = HomeFormat.FORECAST_INFO, onClick = onInfo).testTag(MONEY_INFO_TAG)
+                    } else {
+                        Modifier
+                    },
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.space1),
+        ) {
+            Text(title, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+            if (onInfo != null) {
+                Icon(PIcons.Info, contentDescription = HomeFormat.FORECAST_INFO, tint = colors.textMuted, modifier = Modifier.size(16.dp))
+            }
+        }
         Text(MoneyFormat.rub(earned), style = MaterialTheme.typography.titleLarge.tabular(), color = colors.text, maxLines = 1)
         Text(HomeFormat.willBe(earned, forecast), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1)
         Text(pt, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text, maxLines = 1)

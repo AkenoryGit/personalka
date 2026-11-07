@@ -150,8 +150,8 @@ data class ExpectedKids(val total: Int, val colleague: Int = 0)
  * [forecast] — прогноз с обычной долей отмен [cancels] (шаг 3.9щ): запланированные ПТ и сплиты — со скидкой на неё,
  * и по ступени [likelyTier] от ожидаемого счётчика; [scheduled] — будто всё по расписанию состоялось. Доли нет —
  * они равны. [likelyPtCount] — ожидаемый счётчик ПТ с той же скидкой (по нему [likelyTier]; шаг 5.3ш).
- * [plannedNow] — запланированные тренировки месяца по текущей ступени [tier] с ожидаемыми детьми групп:
- * из них «будет ≈ …» за сегодня на «Главной» (шаг 5.3ш).
+ * [plannedNow] — запланированные тренировки месяца с ожидаемыми детьми групп по ступени, до которой доведут
+ * сегодняшние ПТ (проведено + запланировано на сегодня): из них «будет ≈ …» за сегодня на «Главной» (шаги 5.3ш, 5.3щ).
  */
 data class MonthPay(
     val month: YearMonth,
@@ -427,6 +427,7 @@ object PayRules {
         adjustments: List<PayAdjustment> = emptyList(),
         cancels: CancelShare? = null,
         now: LocalDateTime? = null,
+        today: LocalDate? = now?.date,
     ): MonthPay {
         val ofMonth = inMonth(trainings, month)
         val scheme = Versions.activeIn(schemes, month) { it.validFrom }
@@ -454,9 +455,14 @@ object PayRules {
         val likelyPays = if (likelyTier == forecastTier) forecastPays else ofMonth.map {
             pay(it, byId, rates, likelyTier, forecast = true, owners = owners, expected = expectedOf(it))
         }
-        // Остаток дня (5.2, шаг 5.3ш): запланированные — по ступени, по которой посчитано «Заработано», как и сумма рядом.
+        // Остаток дня (5.2, шаги 5.3ш и 5.3щ): запланированные — по ступени, до которой доведут сегодняшние ПТ:
+        // проведено за месяц плюс запланированные на сегодня. Не переваливаем за порог — по ступени «Заработано».
+        val todayPlannedPt = today?.let { day ->
+            ptCount(ofMonth.filter { it.status == TrainingStatus.PLANNED && it.start.date == day }, ptIds, forecast = true)
+        } ?: 0
+        val todayTier = tier(scheme, n + todayPlannedPt)
         val plannedNow = ofMonth.filter { it.status == TrainingStatus.PLANNED }
-            .map { pay(it, byId, rates, tier, forecast = true, owners = owners, expected = expectedOf(it)) }
+            .map { pay(it, byId, rates, todayTier, forecast = true, owners = owners, expected = expectedOf(it)) }
         val (cut, kept) = ofMonth.zip(likelyPays).partition { (t, _) -> discounted(t) }
         val likely = sptBonus + adjusted + kept.sumOf { it.second.earned } +
             cut.sumOf { it.second.earned }.let { cancels?.keep(it) ?: it }

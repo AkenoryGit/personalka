@@ -156,6 +156,25 @@ class HomeMoneyUiTest {
         awaitIn(MONEY_MONTH_TAG, s("2_отмены"))
     }
 
+    @Test
+    fun forecastNoteByInfo() = runComposeUiTest {
+        prepare()
+        openHome()
+        // ⓘ у «За месяц» (шаг 5.3щ): нажатие раскрывает пояснение под колонками, повторное — прячет; на «Зарплату» не уходит.
+        val note = hasAnyAncestor(hasTestTag(MONEY_NOTE_TAG)) and hasText("Дети в группах", substring = true)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(MONEY_INFO_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(0, onAllNodes(note, useUnmergedTree = true).fetchSemanticsNodes().size)
+        onNodeWithTag(MONEY_INFO_TAG, useUnmergedTree = true).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(note, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        // Прошедших ПТ мало — доли отмен нет: прогноз по расписанию, и строки «По расписанию, без отмен» нет.
+        val noShare = hasAnyAncestor(hasTestTag(MONEY_NOTE_TAG)) and hasText("прошедших пока мало", substring = true)
+        assertEquals(1, onAllNodes(noShare, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodes(hasText("без отмен:", substring = true), useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodes(hasTestTag(com.akenory.personalka.ui.salary.SALARY_TITLE_TAG)).fetchSemanticsNodes().size)
+        onNodeWithTag(MONEY_INFO_TAG, useUnmergedTree = true).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(note, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
+    }
+
     /** Строка внутри колонки «Денег»: карточка — одна кнопка, поэтому ищем в несклеенном дереве. */
     private fun ComposeUiTest.awaitIn(column: String, text: String) {
         val matcher = hasAnyAncestor(hasTestTag(column)) and hasText(text)

@@ -166,8 +166,9 @@ data class MonthInput(
     val adjustments: List<PayAdjustment> = emptyList(),
     val cancels: CancelShare? = null,
     val now: LocalDateTime? = null,
+    val today: LocalDate? = now?.date,
 ) {
-    fun pay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments, cancels, now)
+    fun pay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments, cancels, now, today)
 }
 
 /**

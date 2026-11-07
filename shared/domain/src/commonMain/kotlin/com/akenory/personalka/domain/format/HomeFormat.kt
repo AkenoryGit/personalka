@@ -4,6 +4,7 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.format.RuText.NBSP
 import com.akenory.personalka.domain.home.BackupTodo
 import com.akenory.personalka.domain.money.AdvanceState
+import com.akenory.personalka.domain.money.CancelShare
 import com.akenory.personalka.domain.money.PlanPace
 import com.akenory.personalka.domain.money.TierProgress
 import kotlinx.datetime.DateTimeUnit
@@ -177,6 +178,30 @@ object HomeFormat {
         total <= 0 && done == 0 -> "без ПТ"
         total <= done -> RuText.digits(done.toLong()) + NBSP + "ПТ"
         else -> RuText.digits(done.toLong()) + NBSP + "ПТ" + DOT + "будет " + RuText.digits(total.toLong())
+    }
+
+    /** Значок ⓘ у «За месяц» (шаг 5.3щ, просьба Дмитрия 07.11.2026): чтение для экранного диктора. */
+    const val FORECAST_INFO = "Как считается прогноз"
+
+    /**
+     * Пояснение к прогнозу месяца по нажатию на ⓘ (шаг 5.3щ): ПТ и сплиты — с обычной долей отмен [cancels]
+     * за 8 недель (доли нет — по расписанию), дети в группах — в среднем по 4 последним занятиям; если ожидаемое
+     * расходится с расписанием — «По расписанию, без отмен: 170 ПТ, ≈ 190 000 ₽».
+     */
+    fun forecastNote(cancels: CancelShare?, likelyPt: Int, scheduledPt: Int, likely: Long, scheduled: Long): String {
+        val first = if (cancels != null) {
+            "Прогноз — с обычными отменами: из запланированных ПТ и сплитов отменяется около " +
+                WatchFormat.percent(cancels.percent) + " (по последним 8 неделям)."
+        } else {
+            "Прогноз ПТ и сплитов — по расписанию: прошедших пока мало, чтобы посчитать обычную долю отмен."
+        }
+        val groups = " Дети в группах — в среднем по 4 последним занятиям, а не весь состав."
+        val schedule = if (likelyPt != scheduledPt || likely != scheduled) {
+            " По расписанию, без отмен: " + RuText.digits(scheduledPt.toLong()) + NBSP + "ПТ, " + MoneyFormat.approxRub(scheduled) + "."
+        } else {
+            ""
+        }
+        return first + groups + schedule
     }
 
     /** Отменённые тренировки колонки «Денег»: «1 отмена», «3 отмены»; отмен нет — строки нет (10.7). */

@@ -168,7 +168,7 @@ object SalaryMonthRules {
     ): SalaryMonth {
         val month = input.month
         val period = period(month, today)
-        val pay = input.pay()
+        val pay = (if (input.today == null) input.copy(today = today) else input).pay()
         val plan = SalaryPlan.planFor(month, plans)
         val on = calcDay(month, today)
         val shortfall = when {
