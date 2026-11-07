@@ -43,6 +43,7 @@ import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.ReferenceRules
+import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionHit
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.training.DiaryRules
@@ -165,12 +166,23 @@ data class CalendarZone(
     val done: Boolean = false,
     /** Запрет повторяется — удаление спрашивает «Только этот день / Этот и все следующие» (шаг 5.3р). */
     val repeating: Boolean = false,
+    /** Причина запрета — для общей подписи запретов одного времени (шаг 5.3ю); у дежурства пусто. */
+    val reason: String = "",
 ) {
+    /** Запрет на все места (шаг 5.3ю): виден при любом фильтре места. */
+    val allPlaces: Boolean get() = kind == ZoneKind.RESTRICTION && placeId == Restriction.ALL_PLACES
+
+    /** Видна ли зона при фильтре места [placeId] (пусто — все места). */
+    fun shownIn(placeId: String?): Boolean = placeId == null || allPlaces || this.placeId == placeId
+
     val span: ZoneSpan get() = ZoneSpan(id, kind, start, end)
 
     companion object {
-        /** Запрет в его день. */
-        fun restriction(hit: RestrictionHit, placeShort: String, editable: Boolean = true): CalendarZone {
+        /**
+         * Запрет в его день. [placeShort] — «ББ» или «Все места»; [color] — ключ цвета места, у «Все места» пусто:
+         * штриховка запрета — цвета места, у «Все места» — цвета текста (шаг 5.3ю).
+         */
+        fun restriction(hit: RestrictionHit, placeShort: String, color: String = "", editable: Boolean = true): CalendarZone {
             val r = hit.restriction
             return CalendarZone(
                 id = r.id,
@@ -180,13 +192,14 @@ data class CalendarZone(
                 end = r.endMinute,
                 placeId = hit.locationId,
                 placeShort = placeShort,
-                color = "",
+                color = color,
                 title = ZoneFormat.RESTRICTION,
                 text = ZoneFormat.restriction(placeShort, r.startMinute, r.endMinute, r.reason),
                 label = ZoneFormat.restrictionLabel(placeShort, r.reason),
                 repeat = ZoneFormat.repeat(r.weekdays, r.validTo),
                 editable = editable,
                 repeating = !r.isOneOff,
+                reason = r.reason,
             )
         }
 
@@ -419,7 +432,14 @@ class CalendarRepository(
             val hatched = generateSequence(from) { it.plus(1, DateTimeUnit.DAY) }
                 .takeWhile { it < to }
                 .flatMap { date -> RestrictionRules.on(restrictions, date) }
-                .map { hit -> CalendarZone.restriction(hit, placeById[hit.locationId]?.shortName.orEmpty(), editable = hit.restriction.id in own) }
+                .map { hit ->
+                    CalendarZone.restriction(
+                        hit,
+                        ZoneFormat.restrictionPlace(hit.locationId) { placeById[it]?.shortName },
+                        color = placeById[hit.locationId]?.color.orEmpty(),
+                        editable = hit.restriction.id in own,
+                    )
+                }
                 .toList()
             duties + hatched
         }
@@ -538,3 +558,20 @@ private fun TrainingEntity.toCalendar(
 
 /** На блоке календаря надёжность — у ПТ и сплита; у мини-группы она в строке каждого ребёнка карточки. */
 private val BLOCK_RELIABILITY = setOf(TrainingKind.PERSONAL, TrainingKind.SPLIT)
+
+/**
+ * Подписи запретов одного дня, которые идут в одно время с одной причиной в разных местах (шаг 5.3ю): одна подпись
+ * «ББ, ДБ · причина» на первом, у остальных подписи нет — иначе подписи лежат друг на друге и видна только верхняя.
+ * Вызывается на уже отфильтрованных по месту зонах дня, чтобы подпись не осталась на скрытом месте.
+ */
+fun List<CalendarZone>.joinRestrictionLabels(): List<CalendarZone> {
+    val groups = filter { it.kind == ZoneKind.RESTRICTION && !it.allPlaces }.groupBy { Triple(it.start, it.end, it.reason.trim()) }
+    if (groups.values.none { it.size > 1 }) return this
+    val label = HashMap<Pair<ZoneKind, String>, String>()
+    groups.values.filter { it.size > 1 }.forEach { same ->
+        same.forEachIndexed { index, zone ->
+            label[zone.kind to zone.id] = if (index == 0) ZoneFormat.restrictionLabel(same.map { it.placeShort }.distinct(), zone.reason) else ""
+        }
+    }
+    return map { zone -> label[zone.kind to zone.id]?.let { zone.copy(label = it) } ?: zone }
+}

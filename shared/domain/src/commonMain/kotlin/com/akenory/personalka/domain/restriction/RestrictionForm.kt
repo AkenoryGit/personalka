@@ -24,12 +24,18 @@ data class RestrictionDraft(
     val validTo: LocalDate? = null,
     /**
      * Новый запрет сразу на несколько мест (шаг 1.13д): места кроме [locationId]. Сохраняется по запрету на каждое
-     * место — дальше каждый меняется и удаляется сам. У изменения запрета всегда пусто.
+     * место — дальше каждый меняется и удаляется сам. У изменения запрета и у «Все места» всегда пусто.
      */
     val otherPlaces: Set<String> = emptySet(),
 ) {
-    /** Все выбранные места: [locationId] первым. */
+    /** «Все места» (шаг 5.3ю): [locationId] — [Restriction.ALL_PLACES], запрет — одна запись. */
+    val allPlaces: Boolean get() = locationId == Restriction.ALL_PLACES
+
+    /** Что записать: по месту на запрет; у «Все места» — одна запись [Restriction.ALL_PLACES]. */
     val placeIds: List<String> get() = listOfNotNull(locationId) + otherPlaces.filter { it != locationId }
+
+    /** Выбранные места для чипов: у «Все места» — все [order]. */
+    fun selected(order: List<String>): Set<String> = if (allPlaces) order.toSet() else placeIds.toSet()
 }
 
 /** Поля формы запрета, под которыми показывается ошибка. */
@@ -61,19 +67,24 @@ object RestrictionFormRules {
 
     /**
      * Нажатие на чип места нового запрета: место добавляется или убирается; первым ([RestrictionDraft.locationId])
-     * становится первое выбранное в порядке мест [order].
+     * становится первое выбранное в порядке мест [order]. Выбраны все места (их не меньше двух) — это «Все места»:
+     * одна запись, которая действует и в местах, добавленных потом (шаг 5.3ю).
      */
     fun togglePlace(draft: RestrictionDraft, id: String, order: List<String>): RestrictionDraft {
-        val now = draft.placeIds.toSet()
+        val now = draft.selected(order)
         return withPlaces(draft, if (id in now) now - id else now + id, order)
     }
 
-    /** «Все места»: выбрать все; если уже выбраны все — снять выбор. */
+    /** «Все места»: выбрать; если уже выбраны — снять выбор. */
     fun toggleAll(draft: RestrictionDraft, order: List<String>): RestrictionDraft =
-        withPlaces(draft, if (draft.placeIds.toSet().containsAll(order)) emptySet() else order.toSet(), order)
+        withPlaces(draft, if (draft.selected(order).containsAll(order)) emptySet() else order.toSet(), order)
+
+    /** Изменение запрета: одно место или «Все места» ([Restriction.ALL_PLACES]). */
+    fun pickPlace(draft: RestrictionDraft, id: String): RestrictionDraft = draft.copy(locationId = id, otherPlaces = emptySet())
 
     private fun withPlaces(draft: RestrictionDraft, ids: Set<String>, order: List<String>): RestrictionDraft {
         val sorted = order.filter { it in ids }
+        if (order.size > 1 && sorted.size == order.size) return draft.copy(locationId = Restriction.ALL_PLACES, otherPlaces = emptySet())
         return draft.copy(locationId = sorted.firstOrNull(), otherPlaces = sorted.drop(1).toSet())
     }
 

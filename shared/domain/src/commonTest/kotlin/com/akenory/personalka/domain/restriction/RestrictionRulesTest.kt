@@ -315,4 +315,42 @@ class RestrictionRulesTest {
         val cut = RestrictionRules.endBefore(dbGroup.copy(validTo = day(15)), day(22))!!
         assertEquals(day(15), cut.validTo)
     }
+
+    // --- «Все места» одной записью (шаг 5.3ю) ---
+
+    /** Запрет «Все места» действует в каждом месте, в том числе в месте, которого при записи не было. */
+    @Test
+    fun allPlacesCoversEveryPlace() {
+        val pool = dbGroup.copy(id = "all", locationId = Restriction.ALL_PLACES)
+        assertTrue(pool.allPlaces)
+        assertTrue(RestrictionRules.flag(pt(day(20), 17, place = "db"), listOf(pool)))
+        assertTrue(RestrictionRules.flag(pt(day(20), 17, place = "bb"), listOf(pool)))
+        assertTrue(RestrictionRules.flag(pt(day(20), 17, place = "new-gym"), listOf(pool)))
+        // В фильтре места — свои запреты и «Все места», чужое место не попадает.
+        val bb = oneOff("bb-only", "bb", day(20), time(9), time(10))
+        assertEquals(listOf("all"), RestrictionRules.on(listOf(pool, bb), day(20), "db").map { it.restriction.id })
+        assertEquals(listOf("bb-only", "all"), RestrictionRules.on(listOf(pool, bb), day(20), "bb").map { it.restriction.id })
+        // Дежурство с запретами не сверяется — и с «Все места» тоже.
+        assertFalse(RestrictionRules.flag(duty(day(20), 17, duration = 60), listOf(pool)))
+    }
+
+    /** Старые запреты «на все места» — по одному на место — склеиваются, только если совпадают полностью. */
+    @Test
+    fun oldPerPlaceRestrictionsMergeIntoAllPlaces() {
+        val places = setOf("bb", "db", "gym")
+        val triple = listOf("r3" to "gym", "r1" to "bb", "r2" to "db").map { (id, place) -> dbGroup.copy(id = id, locationId = place) }
+        assertEquals(listOf(RestrictionRules.AllPlacesMerge(keep = "r1", drop = listOf("r2", "r3"))), RestrictionRules.allPlacesMerges(triple, places))
+        // Не все места — не «Все места».
+        assertEquals(emptyList(), RestrictionRules.allPlacesMerges(triple.dropLast(1), places))
+        // Разная причина, время или пропущенный день — не склеиваются.
+        val reason = triple.mapIndexed { i, r -> if (i == 0) r.copy(reason = "Соревнования") else r }
+        assertEquals(emptyList(), RestrictionRules.allPlacesMerges(reason, places))
+        val skipped = triple.mapIndexed { i, r -> if (i == 0) r.copy(skipDates = setOf(day(22))) else r }
+        assertEquals(emptyList(), RestrictionRules.allPlacesMerges(skipped, places))
+        // Одно место — нечего склеивать; «Все места» уже склеен.
+        assertEquals(emptyList(), RestrictionRules.allPlacesMerges(triple.take(1), setOf("gym")))
+        assertEquals(emptyList(), RestrictionRules.allPlacesMerges(listOf(dbGroup.copy(locationId = Restriction.ALL_PLACES)), places))
+        // Место в архиве не мешает: склеиваются запреты всех действующих мест.
+        assertEquals("r1", RestrictionRules.allPlacesMerges(triple, setOf("bb", "db")).single().keep)
+    }
 }

@@ -28,6 +28,7 @@ import com.akenory.personalka.data.training.TrainingFormData
 import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
 import com.akenory.personalka.domain.restriction.RestrictionFormRules
@@ -371,17 +372,20 @@ internal fun RestrictionFields(
         val form = data
         if (current == null || form == null) return@FormFrame
         if (restrictionId == null) {
-            // Новый запрет — сразу на несколько мест (шаг 1.13д): по запрету на каждое.
+            // Новый запрет — сразу на несколько мест (шаг 1.13д): по запрету на каждое; все места — один «Все места» (5.3ю).
             val order = form.places.map { it.id }
             ManyPlaceChips(
                 places = form.places,
-                selected = current.placeIds.toSet(),
+                selected = current.selected(order),
                 error = problems[RestrictionField.PLACE],
                 onToggle = { id -> update { RestrictionFormRules.togglePlace(it, id, order) } },
                 onAll = { update { RestrictionFormRules.toggleAll(it, order) } },
             )
         } else {
-            PlaceChips(form.places, current.locationId, problems[RestrictionField.PLACE]) { id -> update { it.copy(locationId = id) } }
+            // Изменение — одно место или «Все места» (шаг 5.3ю).
+            PlaceChips(form.places, current.locationId, problems[RestrictionField.PLACE], allPlaces = true) { id ->
+                update { RestrictionFormRules.pickPlace(it, id) }
+            }
         }
 
         SectionLabel("Время")
@@ -452,11 +456,19 @@ internal fun RestrictionFields(
     }
 }
 
-/** Место чипами, как в форме тренировки. */
+/** Место чипами, как в форме тренировки; [allPlaces] — первым чип «Все места», когда мест больше одного (запрет). */
 @Composable
-private fun PlaceChips(places: List<FormPlace>, selected: String?, error: String?, onPick: (String) -> Unit) {
+private fun PlaceChips(places: List<FormPlace>, selected: String?, error: String?, allPlaces: Boolean = false, onPick: (String) -> Unit) {
     SectionLabel("Место")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        if (allPlaces && places.size > 1) {
+            ChoiceChip(
+                text = TrainingFormat.ALL_PLACES,
+                selected = selected == Restriction.ALL_PLACES,
+                onClick = { onPick(Restriction.ALL_PLACES) },
+                modifier = Modifier.testTag(FORM_ALL_PLACES_TAG),
+            )
+        }
         places.forEach { place ->
             ChoiceChip(
                 text = place.shortName,

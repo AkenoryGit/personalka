@@ -280,7 +280,7 @@ class CalendarSettingsRepository internal constructor(
             val rows = restrictions.filter { scopes[it.id] == Scope.COACH }.map { r ->
                 ZoneRow(
                     key = r.id,
-                    title = ZoneFormat.restriction(place[r.locationId].orEmpty(), r.startMinute, r.endMinute, r.reason),
+                    title = ZoneFormat.restriction(ZoneFormat.restrictionPlace(r.locationId) { place[it] }, r.startMinute, r.endMinute, r.reason),
                     subtitle = CalendarSettingsFormat.period(r.weekdays, r.date, r.validFrom, r.validTo, today),
                     id = r.id,
                 )

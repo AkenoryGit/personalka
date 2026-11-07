@@ -309,6 +309,10 @@ fun App(
         LaunchedEffect(calendar, hasCoach, now.date) {
             if (hasCoach == true) calendar.forms.extendSeries()
         }
+        // Запреты «на все места» старых версий — по одному на место — склеиваются в один (шаг 5.3ю).
+        LaunchedEffect(calendar, hasCoach) {
+            if (hasCoach == true) calendar.restrictions.mergeAllPlaces()
+        }
         // Прошедшие закрываются в конце (4.1): при открытии приложения и каждую минуту.
         LaunchedEffect(calendar, hasCoach, now) {
             if (hasCoach == true) calendar.cards.closeEnded()

@@ -16,6 +16,7 @@ import kotlinx.datetime.LocalTime
  */
 data class Restriction(
     val id: String,
+    /** Место; [ALL_PLACES] — запрет на все места сразу, одной записью (шаг 5.3ю). */
     val locationId: String,
     /** Текст предупреждения: «Групповая тренировка». */
     val reason: String,
@@ -35,12 +36,26 @@ data class Restriction(
 ) {
     val isOneOff: Boolean get() = weekdays.isEmpty()
 
+    /** Запрет на все места, в том числе на места, добавленные потом. */
+    val allPlaces: Boolean get() = locationId == ALL_PLACES
+
+    /** Действует ли запрет в месте [placeId]. */
+    fun covers(placeId: String): Boolean = allPlaces || locationId == placeId
+
     /** Начало в минутах от начала суток; секунды не считаются. */
     val startMinute: Int get() = startTime.hour * 60 + startTime.minute
 
     /** Конец в минутах от начала суток; 00:00 — это 24:00, то есть 1440. */
     val endMinute: Int
         get() = (endTime.hour * 60 + endTime.minute).let { if (it == 0) ClubTime.MINUTES_PER_DAY else it }
+
+    companion object {
+        /**
+         * Место запрета «Все места» (шаг 5.3ю). Не `null`: колонка `locationId` остаётся обязательной, и сборка без
+         * этого шага (iPhone собирается вручную) просто видит запрет без места, а не падает на пустом поле.
+         */
+        const val ALL_PLACES = "*"
+    }
 }
 
 /** Что не так с запретом: форма показывает это под полем и не сохраняет. */

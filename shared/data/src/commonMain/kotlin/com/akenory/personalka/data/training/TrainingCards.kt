@@ -304,7 +304,7 @@ class TrainingCardRepository internal constructor(
             } else {
                 val placement = t.placement(isDuty = false)
                 val restricted = RestrictionRules.hits(placement, blocks.map { it.toRestriction() }).map { hit ->
-                    TrainingCardFormat.overRestriction(ZoneFormat.restriction(placeShort, hit.restriction.startMinute, hit.restriction.endMinute, hit.restriction.reason))
+                    TrainingCardFormat.overRestriction(ZoneFormat.restriction(if (hit.restriction.allPlaces) ZoneFormat.ALL_PLACES else placeShort, hit.restriction.startMinute, hit.restriction.endMinute, hit.restriction.reason))
                 }
                 val duties = sameDay.filter { typeById[it.typeId]?.kind == TrainingKind.DUTY && it.sync.deletedAt == null }
                 val overDuty = RestrictionRules.dutyOverlaps(placement, duties.map { it.placed(isDuty = true) }).map { d ->

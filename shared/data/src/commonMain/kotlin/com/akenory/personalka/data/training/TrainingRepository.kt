@@ -716,14 +716,14 @@ class TrainingRepository internal constructor(
     /** Строки окна «Поставить всё равно?» — полным названием места (4.5). */
     private suspend fun conflictLines(hits: List<RestrictionHit>): List<String> {
         val places = reference.locations().associateBy { it.id }
-        return hits.map { conflict(it.restriction, places[it.restriction.locationId]?.name.orEmpty()) }
+        return hits.map { conflict(it.restriction, ZoneFormat.restrictionPlace(it.restriction.locationId) { id -> places[id]?.name }) }
     }
 
     /** Окно на серию: «… — 9 из 17 тренировок, первая вт 20.10» по строке на запрет. */
     private suspend fun batchLines(batch: BatchConflicts): List<String> {
         val places = reference.locations().associateBy { it.id }
         return batch.groups.map { g ->
-            TrainingFormat.batchConflict(conflict(g.restriction, places[g.restriction.locationId]?.name.orEmpty()), g.dates.size, batch.checked, g.dates.first())
+            TrainingFormat.batchConflict(conflict(g.restriction, ZoneFormat.restrictionPlace(g.restriction.locationId) { id -> places[id]?.name }), g.dates.size, batch.checked, g.dates.first())
         }
     }
 

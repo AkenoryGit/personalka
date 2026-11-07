@@ -1,6 +1,7 @@
 package com.akenory.personalka.data.restrictions
 
 import com.akenory.personalka.data.calendar.CalendarRepository
+import com.akenory.personalka.data.calendar.joinRestrictionLabels
 import com.akenory.personalka.data.clients.ClientRepository
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.Samples
@@ -14,6 +15,7 @@ import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.reference.CoachName
 import com.akenory.personalka.domain.reference.ReferenceRules
+import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
 import com.akenory.personalka.domain.training.TrainingDraft
@@ -199,5 +201,58 @@ class RestrictionRepositoryTest {
         restrictions.undo(saved.undo)
         assertEquals(emptyList(), db.scheduleDao().blocks())
         assertFalse(flag(later))
+    }
+
+    /** Шаг 5.3ю: «Все места» — одна запись, действует в каждом месте, видна при любом фильтре места. */
+    @Test
+    fun allPlacesIsOneRecord(): Unit = runBlocking {
+        val later = training(LocalDate(2026, 10, 22), 17, 15)
+        val saved = assertIs<RestrictionSaveResult.Saved>(restrictions.save(null, group().copy(locationId = Restriction.ALL_PLACES)))
+        assertEquals(TrainingFormat.RESTRICTION_CREATED, saved.message)
+        assertEquals(Restriction.ALL_PLACES, db.scheduleDao().blocks().single().locationId)
+        assertTrue(flag(later))
+        val zone = calendar.zones(LocalDate(2026, 10, 22), LocalDate(2026, 10, 23)).first().single()
+        assertTrue(zone.allPlaces)
+        assertEquals("Все места · групповая тренировка", zone.label)
+        assertEquals("", zone.color)
+        assertTrue(zone.shownIn(placeId("ББ")) && zone.shownIn(placeId("Зал")))
+        // В форме изменения — «Все места», можно сменить на одно место.
+        val id = db.scheduleDao().blocks().single().id
+        assertTrue(assertNotNull(restrictions.stored(id)).allPlaces)
+        assertIs<RestrictionSaveResult.Saved>(restrictions.save(id, group().copy(locationId = placeId("ББ"))))
+        assertFalse(flag(later))
+    }
+
+    /** Шаг 5.3ю: запреты «на все места» старых версий — по одному на место — склеиваются при открытии в один. */
+    @Test
+    fun oldPerPlaceRestrictionsMerge(): Unit = runBlocking {
+        val later = training(LocalDate(2026, 10, 22), 17, 15)
+        val places = listOf(placeId("ББ"), placeId("ДБ"), placeId("Зал"))
+        restrictions.save(null, group().copy(locationId = places[0], otherPlaces = setOf(places[1], places[2])))
+        // Отдельный запрет одного места остаётся сам по себе.
+        restrictions.save(null, group().copy(locationId = places[0], start = LocalTime(8, 0), end = LocalTime(9, 0)))
+        assertEquals(4, db.scheduleDao().blocks().size)
+
+        assertEquals(1, restrictions.mergeAllPlaces())
+        val left = db.scheduleDao().blocks()
+        assertEquals(setOf(Restriction.ALL_PLACES, places[0]), left.map { it.locationId }.toSet())
+        assertEquals(2, left.size)
+        assertTrue(flag(later))
+        // Повторный вызов ничего не меняет.
+        assertEquals(0, restrictions.mergeAllPlaces())
+    }
+
+    /** Шаг 5.3ю: запреты одного времени и причины в разных местах — одна подпись «ББ, ДБ · …», а не друг на друге. */
+    @Test
+    fun sameTimeLabelsJoined(): Unit = runBlocking {
+        restrictions.save(null, group().copy(locationId = placeId("ББ"), otherPlaces = setOf(placeId("ДБ"))))
+        val zones = calendar.zones(tuesday, LocalDate(2026, 10, 21)).first()
+        assertTrue(zones.all { it.color.isNotEmpty() }, "Запрет места — цвета своего места")
+        val labels = zones.joinRestrictionLabels().map { it.label }
+        assertEquals(listOf(""), labels.filter { it.isEmpty() })
+        val joined = labels.single { it.isNotEmpty() }
+        assertTrue(joined.endsWith(" · групповая тренировка") && "ББ" in joined && "ДБ" in joined && ", " in joined, joined)
+        // Фильтр места — у оставшегося своя подпись.
+        assertEquals(listOf("ДБ · групповая тренировка"), zones.filter { it.shownIn(placeId("ДБ")) }.joinRestrictionLabels().map { it.label })
     }
 }

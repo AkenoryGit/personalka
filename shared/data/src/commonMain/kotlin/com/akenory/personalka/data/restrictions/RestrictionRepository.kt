@@ -8,6 +8,7 @@ import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
+import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
 import com.akenory.personalka.domain.restriction.RestrictionFormRules
@@ -39,13 +40,15 @@ sealed interface RestrictionSaveResult {
 class RestrictionRepository internal constructor(private val db: PersonalkaDatabase, private val clock: () -> Long) {
     private val schedule = db.scheduleDao()
     private val coaches = db.coachDao()
+    private val reference = db.referenceDao()
 
     /** Свой запрет для формы изменения; `null` — его нет или он клуба. */
     suspend fun stored(id: String): RestrictionDraft? = own(id)?.let { RestrictionFormRules.draftOf(it.toRestriction()) }
 
     /**
      * Новый запрет ([id] пусто) или изменение своего; пропущенные дни прежнего остаются. Новый на несколько мест
-     * ([RestrictionDraft.placeIds]) — по запрету на каждое место, одной записью и одним «Отменить».
+     * ([RestrictionDraft.placeIds]) — по запрету на каждое место, одной записью и одним «Отменить»; «Все места» —
+     * одна запись с местом `Restriction.ALL_PLACES` (шаг 5.3ю).
      */
     suspend fun save(id: String?, draft: RestrictionDraft): RestrictionSaveResult {
         val problems = RestrictionFormRules.problems(draft)
@@ -138,6 +141,34 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
             }
             db.recalcRestrictionFlags(now)
         }
+    }
+
+    /**
+     * Склейка запретов «на все места», записанных до шага 5.3ю по одному на место (`RestrictionRules.allPlacesMerges`):
+     * один становится «Все места», остальные мягко удаляются — изменения уходят на сервер, как обычная правка.
+     * Вызывается при открытии приложения; повторный вызов ничего не меняет. Возвращает, сколько запретов вышло.
+     */
+    suspend fun mergeAllPlaces(): Int {
+        val now = clock()
+        var merged = 0
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val places = reference.locations().filter { !it.archived }.map { it.id }.toSet()
+            val own = schedule.blocks().filter { it.scope == Scope.COACH && it.sync.coachId == coach.id }
+            val byId = own.associateBy { it.id }
+            val merges = RestrictionRules.allPlacesMerges(own.map { it.toRestriction() }, places)
+            merges.forEach { merge ->
+                val keep = byId.getValue(merge.keep)
+                schedule.upsertBlock(keep.copy(locationId = Restriction.ALL_PLACES, sync = keep.sync.touched(now)))
+                merge.drop.forEach { id ->
+                    val drop = byId.getValue(id)
+                    schedule.upsertBlock(drop.copy(sync = drop.sync.deleted(now)))
+                }
+            }
+            if (merges.isNotEmpty()) db.recalcRestrictionFlags(now)
+            merged = merges.size
+        }
+        return merged
     }
 
     private suspend fun own(id: String): ScheduleBlockEntity? =

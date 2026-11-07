@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.prefs.MemoryPrefs
+import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.calendar.CalendarBadge
@@ -442,14 +443,16 @@ class TrainingFormUiTest {
         // Место не выбрано — сохранить нельзя.
         save()
         onNodeWithText("Выберите место").assertIsDisplayed()
-        // Шаг 1.13д: «Все места» — по запрету на каждое место, одно «Отменить».
+        // Шаг 5.3ю: «Все места» — одна запись на все места, одно «Отменить».
         tap(FORM_ALL_PLACES_TAG)
         onNodeWithTag(FORM_REASON_TAG).performScrollTo().performTextInput("Свои дела")
         save()
-        awaitNode(hasText(s("Запреты созданы в 3_местах")))
+        awaitNode(hasText(TrainingFormat.RESTRICTION_CREATED))
         val blocks = runBlocking { db.scheduleDao().blocks() }
-        assertEquals(3, blocks.map { it.locationId }.toSet().size)
+        assertEquals(listOf(Restriction.ALL_PLACES), blocks.map { it.locationId })
         assertTrue(blocks.all { it.reason == "Свои дела" && it.startTime == LocalTime(18, 0) })
+        awaitZones(1)
+        assertEquals("Все места · свои дела", day().zones.single().label)
         onNodeWithText("Отменить").performClick()
         waitUntil(timeoutMillis = 5_000) { runBlocking { db.scheduleDao().blocks().isEmpty() } }
     }

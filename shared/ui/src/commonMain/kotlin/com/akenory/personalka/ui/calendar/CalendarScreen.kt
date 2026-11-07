@@ -53,6 +53,7 @@ import com.akenory.personalka.data.calendar.CalendarPlace
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.CalendarZone
+import com.akenory.personalka.data.calendar.joinRestrictionLabels
 import com.akenory.personalka.data.calendar.MoveResult
 import com.akenory.personalka.data.calendar.WorkHours
 import com.akenory.personalka.data.training.EditScope
@@ -328,7 +329,7 @@ fun CalendarScreen(
         }
     }
     val zonesOf: (LocalDate) -> List<CalendarZone> = { date ->
-        loadedZones[date].orEmpty().filter { inPlace(place, it.placeId) }
+        loadedZones[date].orEmpty().filter { it.shownIn(place?.id) }.joinRestrictionLabels()
     }
 
     // Часы сетки — по дням, на которых листание остановилось: во время свайпа подписи часов не прыгают.

@@ -77,11 +77,31 @@ class RestrictionFormTest {
         assertEquals("db", two.locationId)
         assertEquals(listOf("db", "gym"), two.placeIds)
         assertEquals(listOf("gym"), RestrictionFormRules.togglePlace(two, "db", order).placeIds)
+        // Шаг 5.3ю: «Все места» — одна запись на все места, чипы показывают выбранными все.
         val all = RestrictionFormRules.toggleAll(two, order)
-        assertEquals(order, all.placeIds)
+        assertTrue(all.allPlaces)
+        assertEquals(listOf(Restriction.ALL_PLACES), all.placeIds)
+        assertEquals(order.toSet(), all.selected(order))
+        assertEquals(Restriction.ALL_PLACES, RestrictionFormRules.toRestriction("r", all).locationId)
+        // Все три чипа по одному — тоже «Все места»; снятое место возвращает остальные два.
+        assertTrue(RestrictionFormRules.togglePlace(two, "bb", order).allPlaces)
+        assertEquals(listOf("db", "gym"), RestrictionFormRules.togglePlace(all, "bb", order).placeIds)
         // Все уже выбраны — «Все места» снимает выбор, и форма просит место.
         val none = RestrictionFormRules.toggleAll(all, order)
         assertNull(none.locationId)
         assertEquals(setOf(RestrictionField.PLACE), RestrictionFormRules.problems(none).keys)
+        // Одно место — его выбор не превращается в «Все места».
+        assertEquals(listOf("bb"), RestrictionFormRules.togglePlace(empty, "bb", listOf("bb")).placeIds)
+    }
+
+    /** Изменение запрета: одно место или «Все места» (шаг 5.3ю). */
+    @Test
+    fun editSwitchesBetweenPlaceAndAllPlaces() {
+        val stored = RestrictionFormRules.draftOf(
+            Restriction("r", Restriction.ALL_PLACES, "Свои дела", LocalTime(12, 0), LocalTime(13, 0), date = tuesday, validFrom = tuesday),
+        )
+        assertTrue(stored.allPlaces)
+        assertEquals("db", RestrictionFormRules.pickPlace(stored, "db").locationId)
+        assertTrue(RestrictionFormRules.pickPlace(stored.copy(locationId = "db"), Restriction.ALL_PLACES).allPlaces)
     }
 }

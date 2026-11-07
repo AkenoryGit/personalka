@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.restriction.Restriction
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
@@ -10,6 +11,23 @@ object ZoneFormat {
 
     /** Заголовок окна запрета. */
     const val RESTRICTION = "Запрет"
+
+    /** Место запрета «Все места» в подписях и окнах (шаг 5.3ю). */
+    const val ALL_PLACES = "Все места"
+
+    /**
+     * Название места запрета: «Все места» у запрета на все места ([Restriction.ALL_PLACES]), иначе — [name] места
+     * («ДБ» или «Детский бассейн»), найденное по [locationId].
+     */
+    fun restrictionPlace(locationId: String, name: (String) -> String?): String =
+        if (locationId == Restriction.ALL_PLACES) ALL_PLACES else name(locationId).orEmpty()
+
+    /**
+     * Подпись на штриховке нескольких запретов одного времени и одной причины (шаг 5.3ю): «ББ, ДБ · групповая
+     * тренировка» — одна подпись вместо нескольких друг на друге.
+     */
+    fun restrictionLabel(places: List<String>, reason: String): String =
+        restrictionLabel(places.filter { it.isNotEmpty() }.joinToString(", "), reason)
 
     /** Запрет в окне: «ДБ 17:00–18:00 — групповая тренировка»; без причины — «ДБ 17:00–18:00». */
     fun restriction(place: String, startMinute: Int, endMinute: Int, reason: String): String =

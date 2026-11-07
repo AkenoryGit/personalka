@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -206,7 +207,7 @@ data class MoreInfo(val label: String, val ids: List<String>, val x: Float, val 
  * в пределах сетки. Во всю ширину колонки, под тренировками.
  */
 @Immutable
-data class ZoneInfo(val place: ZonePlace, val label: String, val y: Float, val height: Float) {
+data class ZoneInfo(val place: ZonePlace, val label: String, val y: Float, val height: Float, val labelRow: Int = 0) {
     val id: String get() = place.zone.id
     val kind: ZoneKind get() = place.zone.kind
     val lane: Int get() = place.lane
@@ -1073,10 +1074,21 @@ private val LABEL_END = 10.dp
 private val LABEL_PAD = 4.dp
 private val LABEL_RADIUS = 4.dp
 
-/** Полоска запрета: штриховка цветом рамок 2 dp через 4 dp и край 1 dp — читается не хуже 3 : 1 (макет). */
+/** Строка подписи запрета: подпись 13 sp и зазор — подписи запретов одного времени идут одна под другой (5.3ю). */
+private val LABEL_ROW = 22.dp
+
+/**
+ * Полоска запрета: штриховка цветом места 2 dp через 4 dp и край 1 dp — полоса места не ниже 3 : 1 к сетке.
+ * У «Все места» — цветом текста и штрих толще: видно, что закрыто всё (шаг 5.3ю).
+ */
 private val STRIP_HATCH_STROKE = 2.dp
+private val STRIP_HATCH_STROKE_ALL = 3.dp
 private val STRIP_HATCH_STEP = 4.dp
 private val STRIP_EDGE = 1.dp
+
+/** Штриховка самой зоны запрета: цвет места на 50 % поверх сетки, «Все места» — цвет текста на 35 %, как прежний серый. */
+private const val HATCH_PLACE = 0.5f
+private const val HATCH_ALL = 0.35f
 
 /**
  * Блоки и зоны дня в dp от левого и верхнего края колонки: раскладка наложений, строки по высоте, значки и полоски
@@ -1142,8 +1154,25 @@ internal fun dayBlocks(
         if (to <= from) return@mapNotNull null
         ZoneInfo(place, labelOf[place.zone.kind to place.zone.id].orEmpty(), y(from), CalendarGrid.heightDp(to - from, hourDp))
     }
-    return DayBlocks(blocks, more, placed)
+    return DayBlocks(blocks, more, stackRestrictionLabels(placed))
 }
+
+/**
+ * Подписи запретов, которые начинаются рядом, — одна под другой, а не друг на друге (шаг 5.3ю): каждой подписи —
+ * первая строка, не занятая подписью раньше идущего запрета. Строка — [LABEL_ROW]; что не влезло в зону, не рисуется.
+ */
+private fun stackRestrictionLabels(zones: List<ZoneInfo>): List<ZoneInfo> {
+    val row = LABEL_ROW.value
+    val done = ArrayList<ZoneInfo>()
+    return zones.map { zone ->
+        if (zone.kind != ZoneKind.RESTRICTION || zone.label.isEmpty()) return@map zone
+        var index = 0
+        while (done.any { other -> overlaps(other.y + other.labelRow * row, zone.y + index * row, row) }) index++
+        zone.copy(labelRow = index).also { done += it }
+    }
+}
+
+private fun overlaps(a: Float, b: Float, size: Float): Boolean = a < b + size && b < a + size
 
 /** Минуты тренировки в её дне; через полночь — до конца дня. */
 internal fun CalendarTraining.span(): DaySpan {
@@ -1313,8 +1342,9 @@ private fun DrawScope.drawBackground(date: LocalDate, hours: GridHours, hourDp: 
 
 /**
  * Зоны во всю ширину дня (ТЗ 5.3): дежурство — сплошной фон цвета своего типа на 20 %, запрет — штриховка 45°
- * линиями 1,5 dp через 8 dp. Затем полоски 4 dp у левого края, каждой зоне своя: дежурство — сплошная полоса типа,
- * запрет — частая штриховка цветом рамок. Зоны идут в порядке рисования: дежурства под запретами.
+ * линиями 1,5 dp через 8 dp цветом своего места, «Все места» — цветом текста (шаг 5.3ю). Затем полоски 4 dp у левого
+ * края, каждой зоне своя: дежурство — сплошная полоса типа, запрет — частая штриховка цветом места. Зоны идут
+ * в порядке рисования: дежурства под запретами.
  */
 private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, String>, CalendarZone>, colors: PersonalkaColors) {
     fun rect(zone: ZoneInfo, left: Float, right: Float) = Rect(left, zone.y.dp.toPx(), right, (zone.y + zone.height).dp.toPx())
@@ -1323,7 +1353,11 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
         val area = rect(zone, 0f, size.width)
         when (zone.kind) {
             ZoneKind.DUTY -> drawRect(dutyFill(place(zone), colors), area.topLeft, area.size)
-            ZoneKind.RESTRICTION -> hatch(area, colors.hatch, Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
+            ZoneKind.RESTRICTION -> {
+                val info = byId[zone.kind to zone.id]
+                val fill = lerp(colors.surface, restrictionInk(info, colors), if (isAllPlaces(info)) HATCH_ALL else HATCH_PLACE)
+                hatch(area, fill, Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
+            }
         }
     }
     val strip = Dimens.zoneStrip.toPx()
@@ -1332,13 +1366,27 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
         when (zone.kind) {
             ZoneKind.DUTY -> drawRect(place(zone).tone(colors.isDark).stripe, area.topLeft, area.size)
             ZoneKind.RESTRICTION -> {
-                hatch(area, colors.outline, STRIP_HATCH_STROKE.toPx(), STRIP_HATCH_STEP.toPx())
+                val info = byId[zone.kind to zone.id]
+                val ink = restrictionInk(info, colors)
+                val stroke = if (isAllPlaces(info)) STRIP_HATCH_STROKE_ALL else STRIP_HATCH_STROKE
+                hatch(area, ink, stroke.toPx(), STRIP_HATCH_STEP.toPx())
                 val edge = STRIP_EDGE.toPx()
-                drawRect(colors.outline, Offset(area.right - edge, area.top), Size(edge, area.height))
+                drawRect(ink, Offset(area.right - edge, area.top), Size(edge, area.height))
             }
         }
     }
 }
+
+/** Запрет на все места — или место не найдено: рисуется без цвета места (шаг 5.3ю). */
+private fun isAllPlaces(info: CalendarZone?): Boolean = info == null || info.allPlaces || info.color.isEmpty()
+
+/** Цвет полоски запрета: полоса места; у «Все места» — цвет текста (графит в светлой теме, кремовый в тёмной). */
+private fun restrictionInk(info: CalendarZone?, colors: PersonalkaColors): Color =
+    if (isAllPlaces(info)) colors.text else PlaceColor.of(info?.color).tone(colors.isDark).stripe
+
+/** Цвет подписи запрета на плашке: текст места (не ниже 4,5 : 1 к сетке), у «Все места» — цвет текста. */
+private fun restrictionText(info: CalendarZone?, colors: PersonalkaColors): Color =
+    if (isAllPlaces(info)) colors.text else PlaceColor.of(info?.color).tone(colors.isDark).text
 
 /**
  * Штриховка «/» под 45°: линии [stroke] через [step] по перпендикуляру. Линии — x + y = const от края колонки,
@@ -1360,7 +1408,7 @@ private fun DrawScope.hatch(area: Rect, color: Color, stroke: Float, step: Float
 
 /** Подпись зоны вверху, под тренировками: «Дежурство · ББ» справа, «ДБ · групповая тренировка» слева на плашке. */
 private fun DrawScope.drawZoneLabel(zone: ZoneInfo, info: CalendarZone, label: TextLayoutResult, colors: PersonalkaColors) {
-    val top = zone.y.dp.toPx() + LABEL_TOP.toPx()
+    val top = zone.y.dp.toPx() + LABEL_TOP.toPx() + zone.labelRow * LABEL_ROW.toPx()
     if (zone.label.isEmpty() || top + label.size.height > (zone.y + zone.height).dp.toPx()) return
     when (zone.kind) {
         ZoneKind.DUTY -> {
@@ -1376,7 +1424,7 @@ private fun DrawScope.drawZoneLabel(zone: ZoneInfo, info: CalendarZone, label: T
                 size = Size(label.size.width + pad * 2, label.size.height.toFloat()),
                 cornerRadius = CornerRadius(LABEL_RADIUS.toPx()),
             )
-            drawText(label, color = colors.textMuted, topLeft = Offset(left + pad, top))
+            drawText(label, color = restrictionText(info, colors), topLeft = Offset(left + pad, top))
         }
     }
 }

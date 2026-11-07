@@ -13,7 +13,8 @@ import kotlinx.datetime.minus
  * (`ClubTime.now`).
  *
  * Главные правила:
- * - **Только то же место.** Тренировка в ДБ сверяется только с запретами ДБ; в ББ в то же время — ничего.
+ * - **Только то же место.** Тренировка в ДБ сверяется только с запретами ДБ и «Все места»; в ББ в то же время —
+ *   только с запретами ББ и «Все места».
  * - **Пересечение — по интервалам \[начало, конец).** Тренировка, которая кончается в 17:00, и запрет
  *   с 17:00 не пересекаются.
  * - **Окно — только когда тренировку ставят на это время:** создание, перенос, смена места или длительности.
@@ -66,11 +67,12 @@ object RestrictionRules {
 
     /**
      * Запреты дня — для штриховки и полосок календаря (5.3) и поиска свободного времени (4.13).
-     * [locationId] — только одно место; пусто — все места. По началу, затем по концу, месту и id.
+     * [locationId] — только запреты, которые действуют в этом месте (свои и «Все места»); пусто — все запреты.
+     * По началу, затем по концу, месту и id.
      */
     fun on(restrictions: List<Restriction>, date: LocalDate, locationId: String? = null): List<RestrictionHit> =
         restrictions
-            .filter { (locationId == null || it.locationId == locationId) && occursOn(it, date) }
+            .filter { (locationId == null || it.covers(locationId)) && occursOn(it, date) }
             .sortedWith(
                 compareBy<Restriction>({ it.startMinute }, { it.endMinute }, { it.locationId }, { it.id }),
             )
@@ -186,5 +188,30 @@ object RestrictionRules {
             start = ClubTime.plusMinutes(midnight, restriction.startMinute),
             end = ClubTime.plusMinutes(midnight, restriction.endMinute),
         )
+    }
+
+    // --- «Все места» одной записью (шаг 5.3ю) ---
+
+    /** Склейка старых запретов: [keep] становится «Все места», [drop] удаляются. */
+    data class AllPlacesMerge(val keep: String, val drop: List<String>)
+
+    /**
+     * Запреты «на все места», записанные до шага 5.3ю по одному на место: одинаковые время, дни, дата, период,
+     * причина и пропущенные дни, а места вместе покрывают все действующие [places] (их не меньше двух). Остаётся запрет
+     * с наименьшим id — на двух телефонах склейка выходит одинаковой. Если в группе на одно место два одинаковых
+     * запрета, лишний тоже удаляется. Всё, что совпадает не полностью, не трогается.
+     */
+    fun allPlacesMerges(restrictions: List<Restriction>, places: Set<String>): List<AllPlacesMerge> {
+        if (places.size < 2) return emptyList()
+        return restrictions
+            .filter { !it.allPlaces }
+            .groupBy { it.copy(id = "", locationId = "") }
+            .values
+            .filter { same -> same.map { it.locationId }.toSet().containsAll(places) }
+            .map { same ->
+                val ids = same.map { it.id }.sorted()
+                AllPlacesMerge(keep = ids.first(), drop = ids.drop(1))
+            }
+            .sortedBy { it.keep }
     }
 }
