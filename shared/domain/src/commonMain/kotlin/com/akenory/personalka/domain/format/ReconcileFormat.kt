@@ -172,6 +172,23 @@ object ReconcileFormat {
     const val TODO_TITLE = "Расхождения с 1С"
     const val REPEAT_NOTE = "Исправили в 1С — загрузите отчёт ещё раз: исправленное закроется само"
 
+    // «Разобрано» и удаление сверки (шаг 5.3э).
+    const val REVIEWED = "Разобрано"
+    const val REVIEWED_DONE = "Убрано с «Главной»"
+    const val UNREVIEW = "Вернуть на «Главную»"
+    const val UNREVIEWED_DONE = "Расхождения снова на «Главной»"
+    const val DELETE = "Удалить сверку"
+    const val DELETED = "Сверка удалена"
+    const val REVIEWED_HINT = "Посмотрели всё нужное — «Разобрано» уберёт расхождения с «Главной». Сверка останется здесь."
+
+    /** Под сводкой разобранной сверки: «Разобрано 07.11 — на «Главной» не показывается. Новая загрузка отчёта покажет снова». */
+    fun reviewedNote(on: LocalDate): String =
+        "Разобрано ${DateFormat.dayMonth(on)} — на «Главной» не показывается. Новая загрузка отчёта покажет расхождения снова"
+
+    /** Строка сверки в карточке «Отчёт 1С»: «Совпало 189 · Расхождений 4 · разобрано». */
+    fun historyNote(matched: Int, open: Int, reviewed: Boolean): String =
+        summary(matched, open) + if (reviewed && open > 0) "${DOT}разобрано" else ""
+
     /** Строка пункта: «чт 08.10 · 09:00 · Пестов Егор». */
     fun itemTitle(at: LocalDateTime, name: String): String = listOf(DateFormat.short(at.date), DateFormat.time(at.time), name).joinToString(DOT)
 

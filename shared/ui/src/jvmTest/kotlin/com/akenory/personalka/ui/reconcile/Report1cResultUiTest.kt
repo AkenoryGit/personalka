@@ -110,6 +110,37 @@ class Report1cResultUiTest {
     }
 
     @Test
+    fun reviewedLeavesHomeAndDeleteHasUndo() = runComposeUiTest {
+        val id = prepare()
+        val messages = MessageState()
+        var back = 0
+        setContent {
+            Box(Modifier.size(412.dp, 900.dp)) {
+                Report1cResultScreen(repo, id, messages, rememberCoroutineScope(), onBack = { back++ })
+            }
+        }
+        awaitNode(hasTestTag(REPORT1C_REVIEWED_TAG))
+        onNodeWithTag(REPORT1C_UNREVIEW_TAG).assertDoesNotExist()
+
+        // «Разобрано» — с «Главной» ушло, пункты в сверке остались, можно вернуть.
+        onNodeWithTag(REPORT1C_REVIEWED_TAG).performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { repo.todo().first() }.isEmpty() }
+        assertEquals(2, runBlocking { repo.unresolved().first() }.size)
+        awaitNode(hasTestTag(REPORT1C_UNREVIEW_TAG))
+        onNodeWithTag(REPORT1C_REVIEWED_TAG).assertDoesNotExist()
+        onNodeWithTag(REPORT1C_UNREVIEW_TAG).performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { repo.todo().first() }.size == 2 }
+
+        // «Удалить сверку» — назад и «Отменить» в сообщении.
+        onNodeWithTag(REPORT1C_DELETE_TAG).performClick()
+        waitUntil(timeoutMillis = 5_000) { back == 1 }
+        assertTrue(runBlocking { repo.history().first() }.isEmpty())
+        assertEquals(ReconcileFormat.DELETED, messages.current?.text)
+        messages.current!!.onAction!!.invoke()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { repo.history().first() }.size == 1 }
+    }
+
+    @Test
     fun homeTodoShowsOpenAndLateAsked() {
         val id = prepare()
         val now = TestData.now

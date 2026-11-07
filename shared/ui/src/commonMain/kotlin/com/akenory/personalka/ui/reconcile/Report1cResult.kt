@@ -63,12 +63,16 @@ internal const val REPORT1C_ADD_TAG = "reconcile-1c-add"
 internal const val REPORT1C_FIX_TAG = "reconcile-1c-fix"
 internal const val REPORT1C_ASKED_TAG = "reconcile-1c-asked"
 internal const val REPORT1C_IGNORE_TAG = "reconcile-1c-ignore"
+internal const val REPORT1C_REVIEWED_TAG = "reconcile-1c-reviewed"
+internal const val REPORT1C_UNREVIEW_TAG = "reconcile-1c-unreview"
+internal const val REPORT1C_DELETE_TAG = "reconcile-1c-delete"
 internal fun report1cItemTag(id: String) = "reconcile-1c-item-$id"
 
 /**
  * Сверка с отчётом 1С (ТЗ 8.4, шаг 4.2в): период и сводка, три списка нерешённых пунктов, нажатие на пункт — его
  * действия (не больше трёх, 10.7). «Отправить администратору» собирает строки всех пунктов, которые исправляет
- * администратор, и отмечает их «Написал администратору». Прокрутка и открытый пункт — над разметкой (сложение Fold).
+ * администратор, и отмечает их «Написал администратору». «Разобрано» (шаг 5.3э) убирает расхождения сверки с «Главной»,
+ * «Удалить сверку» — для не того файла, с «Отменить» в сообщении. Прокрутка и открытый пункт — над разметкой (сложение Fold).
  */
 @Composable
 internal fun Report1cResultScreen(
@@ -101,12 +105,17 @@ internal fun Report1cResultScreen(
                     .padding(bottom = 56.dp),
                 verticalArrangement = Arrangement.spacedBy(Dimens.space3),
             ) {
-                val r = rec ?: return@Column
+                val r = rec?.takeIf { it.sync.deletedAt == null } ?: return@Column
                 if (views == null) return@Column
                 SalaryCard(Modifier.testTag(REPORT1C_SUMMARY_TAG)) {
                     CardHeader(ReconcileFormat.period(r.periodFrom, r.periodTo, r.generatedAt))
                     Text(ReconcileFormat.summary(r.matched, open.size), style = MaterialTheme.typography.titleMedium, color = colors.text)
-                    if (open.isEmpty()) Muted(ReconcileFormat.NOTHING) else Muted(ReconcileFormat.REPEAT_NOTE)
+                    val reviewedAt = r.reviewedAt
+                    when {
+                        open.isEmpty() -> Muted(ReconcileFormat.NOTHING)
+                        reviewedAt != null -> Muted(ReconcileFormat.reviewedNote(ClubTime.today(reviewedAt)))
+                        else -> Muted(ReconcileFormat.REPEAT_NOTE)
+                    }
                     if (forAdmin.isNotEmpty()) {
                         OutlineButton(
                             ReconcileFormat.SEND_ADMIN,
@@ -121,6 +130,34 @@ internal fun Report1cResultScreen(
                             Modifier.fillMaxWidth().testTag(REPORT1C_SEND_TAG),
                             icon = PIcons.Share,
                         )
+                    }
+                    if (open.isNotEmpty() && reviewedAt == null) {
+                        Muted(ReconcileFormat.REVIEWED_HINT)
+                        PrimaryButton(
+                            ReconcileFormat.REVIEWED,
+                            { scope.launch { repo.markReviewed(r.id, true); messages.show(ReconcileFormat.REVIEWED_DONE) } },
+                            Modifier.fillMaxWidth().testTag(REPORT1C_REVIEWED_TAG),
+                        )
+                    }
+                    if (open.isNotEmpty() && reviewedAt != null) {
+                        TextButton(
+                            onClick = { scope.launch { repo.markReviewed(r.id, false); messages.show(ReconcileFormat.UNREVIEWED_DONE) } },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(REPORT1C_UNREVIEW_TAG),
+                        ) {
+                            Text(ReconcileFormat.UNREVIEW, style = MaterialTheme.typography.labelLarge, color = colors.text)
+                        }
+                    }
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                val at = repo.delete(r.id) ?: return@launch
+                                onBack?.invoke()
+                                messages.showUndo(ReconcileFormat.DELETED) { scope.launch { repo.restore(r.id, at) } }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.button).testTag(REPORT1C_DELETE_TAG),
+                    ) {
+                        Text(ReconcileFormat.DELETE, style = MaterialTheme.typography.labelLarge, color = colors.error)
                     }
                 }
                 Section(ReconcileFormat.ONLY_1C, open.filter { it.item.kind in ONLY_1C_KINDS }) { openId = it }

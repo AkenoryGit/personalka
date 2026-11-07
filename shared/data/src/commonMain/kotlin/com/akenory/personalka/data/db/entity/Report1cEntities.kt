@@ -37,6 +37,7 @@ data class ClientAlias1cEntity(
 /**
  * Сверка с отчётом 1С (Reconciliation, ТЗ 3.7) — одна на период отчёта: повторная загрузка того же периода обновляет
  * её и её пункты (8.4). [checkedUntil] — до какого времени сверялись тренировки приложения, [matched] — сколько сошлось.
+ * [reviewedAt] — «Разобрано» (шаг 5.3э): тренер посмотрел расхождения, на «Главной» их нет; новая загрузка периода сбрасывает.
  */
 @Entity(tableName = "reconciliation", indices = [Index("periodFrom", "periodTo")])
 data class ReconciliationEntity(
@@ -51,6 +52,7 @@ data class ReconciliationEntity(
     val rowsTotal: Int,
     val matched: Int,
     val checkedUntil: LocalDateTime,
+    val reviewedAt: Long? = null,
 )
 
 /**

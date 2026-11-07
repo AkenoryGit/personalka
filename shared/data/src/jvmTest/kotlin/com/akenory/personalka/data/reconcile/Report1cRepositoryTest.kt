@@ -25,6 +25,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Сверка с 1С из базы (шаг 4.2а, ТЗ 8): услуги и имена один раз, сохранение пунктов, повторная сверка. Имена придуманы. */
@@ -148,6 +149,61 @@ class Report1cRepositoryTest {
         // Выгрузка позже — тренировка 18.10 11:00 уже сверяется: в 1С её нет.
         val (_, third) = repo.check(r, "Отчет по тренировкам report-20261019T090000.pdf")
         assertEquals(LocalDateTime(2026, 10, 18, 11, 0), third.onlyInApp.last().visit!!.start)
+    }
+
+    @Test
+    fun reviewedHidesFromHomeUntilNextLoadAndDeleteCanBeUndone() = runBlocking {
+        val egor = client("Пестов", "Егор")
+        val vera = client("Чернова", "Вера")
+        repo.saveService(groupName, group, db1)
+        repo.saveService(ptName, pt, bb)
+        visit(egor, LocalDateTime(2026, 10, 8, 9, 0), ParticipationStatus.ATTENDED, group, db1)
+        val r = report(
+            row(LocalDateTime(2026, 10, 8, 9, 0), "Пестов Егор", Status1c.CANCELLED, groupName),
+            row(LocalDateTime(2026, 10, 12, 9, 0), "Чернова Вера"),
+        )
+        val (id, _) = repo.check(r, file)
+        val ignored = repo.items(id).first().first { it.clientId == vera }
+        repo.resolve(ignored.id, ReconcileResolution.IGNORED)
+        assertEquals(1, repo.todo().first().size)
+
+        // «Разобрано»: с «Главной» ушло, в сверке и карточке пункты остались как были.
+        millis += 60_000
+        repo.markReviewed(id, true)
+        assertTrue(repo.todo().first().isEmpty())
+        assertEquals(1, repo.unresolved().first().size)
+        assertEquals(millis, repo.reconciliation(id).first()!!.reviewedAt)
+        repo.markReviewed(id, false)
+        assertEquals(1, repo.todo().first().size, "«Вернуть на «Главную»»")
+        repo.markReviewed(id, true)
+
+        // Новая загрузка того же периода — расхождение снова на «Главной», «Игнорировать» по одному осталось.
+        millis += 60_000
+        val (again, _) = repo.check(r, file)
+        assertEquals(id, again)
+        assertNull(repo.reconciliation(id).first()!!.reviewedAt)
+        assertEquals(1, repo.todo().first().size)
+        assertEquals(ReconcileResolution.IGNORED, repo.items(id).first().single { it.id == ignored.id }.resolution)
+
+        // «Удалить сверку» и «Отменить».
+        millis += 60_000
+        val at = repo.delete(id)!!
+        assertTrue(repo.history().first().isEmpty())
+        assertTrue(repo.todo().first().isEmpty())
+        assertTrue(repo.unresolved().first().isEmpty())
+        assertTrue(repo.items(id).first().isEmpty())
+        millis += 60_000
+        repo.restore(id, at)
+        assertEquals(listOf(id), repo.history().first().map { it.id })
+        assertEquals(2, repo.items(id).first().size)
+        assertEquals(1, repo.todo().first().size)
+
+        // Удалили и загрузили снова — новая сверка.
+        repo.delete(id)
+        millis += 60_000
+        val (fresh, _) = repo.check(r, file)
+        assertTrue(fresh != id)
+        assertEquals(2, repo.todo().first().size, "Новая сверка не знает прошлого «Игнорировать»")
     }
 
     @Test

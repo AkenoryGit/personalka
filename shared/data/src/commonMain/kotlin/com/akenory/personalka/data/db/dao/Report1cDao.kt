@@ -63,10 +63,20 @@ interface Report1cDao {
     @Query("SELECT * FROM reconciliation_item WHERE reconciliationId = :id AND deletedAt IS NULL")
     suspend fun items(id: String): List<ReconciliationItemEntity>
 
+    @Query("SELECT * FROM reconciliation_item WHERE reconciliationId = :id AND deletedAt = :deletedAt")
+    suspend fun deletedItems(id: String, deletedAt: Long): List<ReconciliationItemEntity>
+
     @Query("SELECT * FROM reconciliation_item WHERE reconciliationId = :id AND deletedAt IS NULL ORDER BY at, itemKey")
     fun observeItems(id: String): Flow<List<ReconciliationItemEntity>>
 
     /** Пункты с решением [open] и [asked] всех сверок — «Нужно сделать» (5.2) и напоминание через 3 дня (8.4). */
     @Query("SELECT * FROM reconciliation_item WHERE resolution IN (:open, :asked) AND deletedAt IS NULL")
     fun observeUnresolved(open: ReconcileResolution, asked: ReconcileResolution): Flow<List<ReconciliationItemEntity>>
+
+    /** То же, но без пунктов разобранных и удалённых сверок — «Нужно сделать» на «Главной» (шаг 5.3э). */
+    @Query(
+        "SELECT i.* FROM reconciliation_item i JOIN reconciliation r ON r.id = i.reconciliationId " +
+            "WHERE i.resolution IN (:open, :asked) AND i.deletedAt IS NULL AND r.deletedAt IS NULL AND r.reviewedAt IS NULL",
+    )
+    fun observeTodo(open: ReconcileResolution, asked: ReconcileResolution): Flow<List<ReconciliationItemEntity>>
 }

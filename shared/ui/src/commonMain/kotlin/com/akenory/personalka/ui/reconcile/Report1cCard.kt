@@ -185,7 +185,7 @@ internal fun Report1cCard(repo: Report1cRepository, month: YearMonth, files: Pla
                 title = ReconcileFormat.period(rec.periodFrom, rec.periodTo, rec.generatedAt),
                 amount = "",
                 modifier = Modifier.clickable { onOpen(rec.id) }.heightIn(min = Dimens.touch).testTag(report1cRowTag(rec.id)),
-                note = ReconcileFormat.summary(rec.matched, open.count { it.reconciliationId == rec.id }),
+                note = ReconcileFormat.historyNote(rec.matched, open.count { it.reconciliationId == rec.id }, rec.reviewedAt != null),
             )
         }
         val mappings by remember(repo) { repo.mappings() }.collectAsState(initial = null)

@@ -286,6 +286,47 @@ class Report1cRepository(private val db: PersonalkaDatabase, private val clock: 
     fun unresolved(): Flow<List<ReconciliationItemEntity>> =
         dao.observeUnresolved(ReconcileResolution.OPEN, ReconcileResolution.ASKED_ADMIN)
 
+    /** Пункты для «Нужно сделать» (5.2): как [unresolved], но без разобранных и удалённых сверок (шаг 5.3э). */
+    fun todo(): Flow<List<ReconciliationItemEntity>> =
+        dao.observeTodo(ReconcileResolution.OPEN, ReconcileResolution.ASKED_ADMIN)
+
+    /**
+     * «Разобрано» (шаг 5.3э, ТЗ 8.4): [reviewed] — расхождения сверки [id] больше не висят на «Главной», пункты не меняются;
+     * `false` — снова висят. Новая загрузка того же периода сбрасывает отметку сама ([check]).
+     */
+    suspend fun markReviewed(id: String, reviewed: Boolean) {
+        val now = clock()
+        val rec = dao.reconciliation(id) ?: return
+        if ((rec.reviewedAt != null) == reviewed) return
+        dao.upsertReconciliation(rec.copy(sync = rec.sync.touched(now), reviewedAt = if (reviewed) now else null))
+    }
+
+    /**
+     * «Удалить сверку» (шаг 5.3э): сверка и её пункты удаляются мягко — для не того файла или периода. Тренировки не
+     * трогаются. Возвращает момент удаления для [restore], `null` — сверки нет.
+     */
+    suspend fun delete(id: String): Long? {
+        val now = clock()
+        var done: Long? = null
+        db.withWriteTransaction {
+            val rec = dao.reconciliation(id)?.takeIf { it.sync.deletedAt == null } ?: return@withWriteTransaction
+            dao.upsertReconciliation(rec.copy(sync = rec.sync.deleted(now)))
+            dao.upsertItems(dao.items(id).map { it.copy(sync = it.sync.deleted(now)) })
+            done = now
+        }
+        return done
+    }
+
+    /** «Отменить» после [delete]: сверка и пункты, удалённые в [deletedAt], возвращаются. */
+    suspend fun restore(id: String, deletedAt: Long) {
+        val now = clock()
+        db.withWriteTransaction {
+            val rec = dao.reconciliation(id)?.takeIf { it.sync.deletedAt == deletedAt } ?: return@withWriteTransaction
+            dao.upsertReconciliation(rec.copy(sync = rec.sync.restored(now)))
+            dao.upsertItems(dao.deletedItems(id, deletedAt).map { it.copy(sync = it.sync.restored(now)) })
+        }
+    }
+
     /** Решение по пункту: «Написал администратору», «Игнорировать», «Исправлено» или снова открыт. */
     suspend fun resolve(itemId: String, resolution: ReconcileResolution) {
         val now = clock()

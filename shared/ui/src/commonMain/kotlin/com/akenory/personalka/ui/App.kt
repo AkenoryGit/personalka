@@ -200,7 +200,7 @@ fun App(
         }
         // Расхождения с 1С (8.4, шаг 4.2в): пункт «Нужно сделать».
         val report1c by remember(settings, hasCoach) {
-            if (hasCoach == true) settings.report1c.unresolved() else flowOf(emptyList())
+            if (hasCoach == true) settings.report1c.todo() else flowOf(emptyList())
         }.collectAsState(initial = emptyList())
         // Не ходят в группу 30 дней (5.10, шаг 3.9у): пункт «Нужно сделать».
         val groupAbsent by remember(groups, hasCoach, now.date) {

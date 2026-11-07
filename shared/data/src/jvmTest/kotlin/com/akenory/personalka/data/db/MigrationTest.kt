@@ -574,6 +574,35 @@ class MigrationTest {
     }
 
     @Test
+    fun version18KeepsReconciliationsNotReviewed(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v18", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 5.3ч–5.3ы: «Разобрано» у сверки с 1С нет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 18)
+                raw.exec(
+                    "INSERT INTO reconciliation (id, fileName, periodFrom, periodTo, generatedAt, coachName1c, rowsTotal, matched, checkedUntil, " +
+                        "coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('r1', 'report.pdf', '2026-10-01', '2026-10-25', NULL, NULL, 10, 8, '2026-10-25T10:00', 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val rec = db.report1cDao().reconciliation("r1")!!
+                assertEquals(8, rec.matched, "Сверка на месте")
+                assertNull(rec.reviewedAt, "Не разобрана — расхождения на «Главной», как были")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
     fun version17HidesGroupDiaryInCabinets(): Unit = runBlocking {
         val file = File.createTempFile("personalka-v17", ".db")
         file.delete()
