@@ -116,6 +116,20 @@ class ForecastGroupsTest {
     }
 
     @Test
+    fun startedGroupNotCountedTwiceToday() {
+        // Шаг 5.3ы, сб 07.11 в 09:01: проведена 1 ПТ, группа идёт — отмечены 9 из 31, впереди ещё 4 ПТ.
+        // Заработано 920 + 9 × 270 = 3 350 ₽; будет 3 350 + 4 × 920 = 7 030 ₽, а не 9 460 ₽ (группа дважды).
+        val done = pt(7, hour = 8)
+        val group = groupOn(7, TrainingStatus.PLANNED, List(31) { if (it < 9) ATTENDED else EXPECTED }, hour = 9)
+        val later = List(4) { pt(7, TrainingStatus.PLANNED, hour = 10 + it) }
+        val input = MonthInput(november, history + done + group + later, types, rates, tiers, owners, now = at(7, 9, 1))
+        val view = SalaryMonthRules.build(input, emptyList(), emptyMap(), null, LocalDate(2026, 11, 7), "pt", "bb")
+        assertEquals(rub(3350), view.today)
+        assertEquals(rub(4 * 920), view.todayAhead)
+        assertEquals(rub(7030), view.today!! + view.todayAhead!!)
+    }
+
+    @Test
     fun forecastNoteText() {
         val nb = RuText.NBSP
         assertEquals(

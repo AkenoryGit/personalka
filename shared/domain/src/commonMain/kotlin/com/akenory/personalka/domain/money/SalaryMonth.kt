@@ -199,7 +199,11 @@ object SalaryMonthRules {
             planOwn = plans.containsKey(month),
             shortfall = shortfall,
             today = todayIds?.let { ids -> pay.trainings.filter { it.trainingId in ids }.sumOf { it.earned } },
-            todayAhead = plannedToday?.let { ids -> pay.plannedNow.filter { it.trainingId in ids }.sumOf { it.earned } },
+            // Шаг 5.3ы: у идущей группы отмеченные дети уже в «today» — в остаток дня идёт только то, что сверх них.
+            todayAhead = plannedToday?.let { ids ->
+                val already = pay.trainings.filter { it.trainingId in ids }.sumOf { it.earned }
+                (pay.plannedNow.filter { it.trainingId in ids }.sumOf { it.earned } - already).coerceAtLeast(0)
+            },
             tiers = tierProgress(input, pay, period, ptTypeId, ptPlaceId, on),
             breakdown = breakdown(input, pay),
             advanceActual = advanceActual,
