@@ -634,8 +634,8 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion18() {
-        assertEquals(18, PersonalkaDatabase.VERSION)
+    fun newDatabaseIsVersion19() {
+        assertEquals(19, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }
