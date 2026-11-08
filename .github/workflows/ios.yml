@@ -65,11 +65,23 @@ jobs:
           xcode-version: latest-stable
 
       - name: Java 21
+        id: java
         if: steps.key.outputs.ready == 'true'
+        continue-on-error: true
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
+
+      # Скачивание Java иногда отвечает 504 (08.11.2026) — тогда берём Java 21, которая уже стоит на машине Mac GitHub.
+      - name: Java 21 с машины
+        if: steps.key.outputs.ready == 'true' && steps.java.outcome == 'failure'
+        shell: bash
+        run: |
+          JH="${JAVA_HOME_21_arm64:-$JAVA_HOME_21_X64}"
+          if [ -z "$JH" ]; then echo "::error title=iPhone: ошибка::Нет Java 21 на машине"; exit 1; fi
+          echo "JAVA_HOME=$JH" >> "$GITHUB_ENV"
+          echo "$JH/bin" >> "$GITHUB_PATH"
 
       - name: Gradle
         if: steps.key.outputs.ready == 'true'

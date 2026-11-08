@@ -135,7 +135,8 @@ class Report1cResultUiTest {
         onNodeWithTag(REPORT1C_DELETE_TAG).performClick()
         waitUntil(timeoutMillis = 5_000) { back == 1 }
         assertTrue(runBlocking { repo.history().first() }.isEmpty())
-        assertEquals(ReconcileFormat.DELETED, messages.current?.text)
+        // Сообщение «Сверка удалена» может прийти чуть позже «назад» — ждём его, а не берём прежнее.
+        waitUntil(timeoutMillis = 5_000) { messages.current?.text == ReconcileFormat.DELETED }
         messages.current!!.onAction!!.invoke()
         waitUntil(timeoutMillis = 5_000) { runBlocking { repo.history().first() }.size == 1 }
     }
