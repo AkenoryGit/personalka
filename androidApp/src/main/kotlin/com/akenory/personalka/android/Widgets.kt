@@ -176,7 +176,8 @@ object Widgets {
     }
 
     private fun smallNow(context: Context, v: RemoteViews, view: WidgetView?) {
-        if (view == null || view.id == null) {
+        val id = view?.id
+        if (view == null || id == null) {
             v.setTextViewText(R.id.small_label, view?.label ?: WidgetRules.NO_DATA)
             v.setTextViewText(R.id.now_name, "")
             v.setTextViewText(R.id.now_sub, "")
@@ -198,7 +199,7 @@ object Widgets {
         } else {
             v.setViewVisibility(R.id.small_progress, View.GONE)
         }
-        v.setOnClickPendingIntent(R.id.widget_root, open(context, AppLink.Card(view.id)))
+        v.setOnClickPendingIntent(R.id.widget_root, open(context, AppLink.Card(id)))
     }
 
     private fun smallMonth(v: RemoteViews, m: WidgetMoney?) {
