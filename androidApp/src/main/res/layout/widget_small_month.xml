@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Маленький виджет «Месяц» (шаг 5.9): заработано, прогноз и план. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/month_name"
+        style="@style/WidgetCaptionStrong"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_text_muted" />
+
+    <TextView
+        android:id="@+id/month_amount"
+        style="@style/WidgetAmount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:id="@+id/month_will"
+        style="@style/WidgetCaption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_text_muted" />
+
+    <include layout="@layout/widget_plan_bar" />
+
+    <LinearLayout
+        android:id="@+id/pace_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/pace_dot_ok"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginEnd="6dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_dot_done" />
+
+        <ImageView
+            android:id="@+id/pace_dot_behind"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginEnd="6dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_dot_charged"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/pace_text"
+            style="@style/WidgetCaptionStrong"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/month_pt"
+        style="@style/WidgetCaption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_text_muted" />
+</LinearLayout>

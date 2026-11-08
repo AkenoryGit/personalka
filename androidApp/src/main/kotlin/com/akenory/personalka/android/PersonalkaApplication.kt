@@ -91,6 +91,9 @@ class PersonalkaApplication : Application() {
     /** Часы Galaxy Watch (шаг 5.3т): расписание, деньги дня и дела — на ячейки циферблата и плитку. */
     val watch: WatchBridge by lazy { WatchBridge(this, this, prefs) }
 
+    /** Виджеты на экране телефона (шаг 5.9). */
+    val widgets: WidgetBridge by lazy { WidgetBridge(this, this, prefs) }
+
     val crashFile: File get() = File(filesDir, "last-crash.txt")
 
     /** Сбой фоновой работы (обмен, будильник) записывается и не роняет приложение — иначе оно падало бы при каждом запуске. */
@@ -120,6 +123,8 @@ class PersonalkaApplication : Application() {
         syncRunner.start(scope)
         // Часы (шаг 5.3т): пока процесс жив, правки и обмен с сервером сразу доходят до часов.
         watch.start(scope)
+        // Виджеты (шаг 5.9): правки сразу видны на экране телефона.
+        widgets.start(scope)
         scope.launch {
             sync.state.map { it.connected }.distinctUntilChanged().collect { SyncJob.schedule(this@PersonalkaApplication, it) }
         }
@@ -127,6 +132,17 @@ class PersonalkaApplication : Application() {
 
     private companion object {
         const val CRASH_MAX = 20_000
+    }
+
+    /** Будильник или система просят обновить виджеты: пересчитать из базы и сообщить [done] (`goAsync`). */
+    fun refreshWidgets(done: () -> Unit) {
+        scope.launch {
+            try {
+                widgets.refresh()
+            } finally {
+                done()
+            }
+        }
     }
 
     /** «План на день» и разрешение не видны в базе — будильник переставляется по просьбе экрана. */

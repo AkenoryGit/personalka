@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Текст виджетов (шаг 5.9): системный шрифт, начертания 400 и 500, цифры моноширинные (ТЗ 10.5). -->
+<resources>
+    <style name="WidgetCaption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/widget_text</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="WidgetCaptionStrong" parent="WidgetCaption">
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="WidgetName" parent="WidgetCaption">
+        <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="WidgetRowName" parent="WidgetCaption">
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="WidgetAmount" parent="WidgetCaption">
+        <item name="android:textSize">22sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+</resources>

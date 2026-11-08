@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Полоса плана в виджете (шаг 5.9): ход идущей тренировки — линия «сейчас» -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape><corners android:radius="3dp" /><solid android:color="@color/widget_surface_alt" /></shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip><shape><corners android:radius="3dp" /><solid android:color="@color/widget_accent" /></shape></clip>
+    </item>
+</layer-list>

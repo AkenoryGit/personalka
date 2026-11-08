@@ -47,7 +47,8 @@ class WatchBridge(
     private val _names = MutableStateFlow(prefs.boolean(NAMES) ?: true)
     override val names: StateFlow<Boolean> = _names
 
-    private val todo = MutableStateFlow(prefs.string(TODO)?.toIntOrNull() ?: 0)
+    /** Счётчик дел «Главной» — его же берут виджеты (шаг 5.9). */
+    val todo = MutableStateFlow(prefs.string(TODO)?.toIntOrNull() ?: 0)
     private var last: String? = null
     private var started = false
 

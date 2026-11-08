@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Виджеты (шаг 5.9): роли дизайн-системы тёмной темы. -->
+<resources>
+    <color name="widget_surface">#1E2124</color>
+    <color name="widget_surface_alt">#2A2D31</color>
+    <color name="widget_divider">#34373B</color>
+    <color name="widget_outline">#72767C</color>
+    <color name="widget_text">#F3EFE6</color>
+    <color name="widget_text_muted">#98958D</color>
+    <color name="widget_primary">#F3EFE6</color>
+    <color name="widget_done">#64B376</color>
+    <color name="widget_charged">#CF9037</color>
+    <color name="widget_done_container">#1C3E24</color>
+    <color name="widget_on_done_container">#C2E1C7</color>
+    <color name="widget_accent">#FF5A1F</color>
+</resources>

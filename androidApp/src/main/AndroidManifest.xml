@@ -95,6 +95,55 @@
             </intent-filter>
         </service>
 
+        <!-- Виджеты на экране телефона (шаг 5.9) и их будильник. -->
+        <receiver
+            android:name="com.akenory.personalka.android.WidgetLarge"
+            android:exported="false"
+            android:label="@string/widget_large_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_large_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.WidgetMedium"
+            android:exported="false"
+            android:label="@string/widget_medium_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_medium_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.WidgetSmallNow"
+            android:exported="false"
+            android:label="@string/widget_small_now_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_small_now_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.WidgetSmallMonth"
+            android:exported="false"
+            android:label="@string/widget_small_month_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_small_month_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.WidgetTick"
+            android:exported="false" />
+
         <!-- «Поделиться копией» и календарём .ics: файл из временной папки по ссылке с правом только на чтение. -->
         <provider
             android:name="androidx.core.content.FileProvider"

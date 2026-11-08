@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Персоналка</string>
+
+    <!-- Виджеты (шаг 5.9) -->
+    <string name="widget_large_label">Деньги и расписание</string>
+    <string name="widget_large_description">Заработок за сегодня и за месяц, идущая и следующие тренировки</string>
+    <string name="widget_medium_label">Деньги</string>
+    <string name="widget_medium_description">Заработок за сегодня и за месяц, план</string>
+    <string name="widget_small_now_label">Сейчас и следующая</string>
+    <string name="widget_small_now_description">Идущая или следующая тренировка</string>
+    <string name="widget_small_month_label">Месяц</string>
+    <string name="widget_small_month_description">Заработок за месяц и план</string>
+    <string name="widget_today">Сегодня</string>
+    <string name="widget_month">За месяц</string>
+    <string name="widget_todo">Нужно сделать</string>
 </resources>
