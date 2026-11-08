@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «День». Картинка-образец для списка виджетов; на экране её заменяет рисунок из кода. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="262dp"
+    android:height="22dp"
+    android:viewportWidth="262"
+    android:viewportHeight="22">
+    <path android:pathData="M4.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FFFFD54A" />
+    <path android:pathData="M26.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FFFFD54A" />
+    <path android:pathData="M48.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FFFFD54A" />
+    <path android:pathData="M70.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M92.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M114.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M136.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M158.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M180.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M202.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M224.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+    <path android:pathData="M246.5,6.5 h9 a4.5,4.5 0 0,1 0,9 h-9 a4.5,4.5 0 0,1 0,-9 Z"
+        android:fillColor="#FF3E9A65" />
+</vector>

@@ -11,6 +11,7 @@
 
     <TextView
         android:id="@+id/bright_label"
+        android:text="до получки"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
@@ -26,6 +27,7 @@
 
         <TextView
             android:id="@+id/bright_big"
+        android:text="2"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="6dp"
@@ -37,6 +39,7 @@
 
         <TextView
             android:id="@+id/bright_right"
+        android:text="дня"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#FFFFFF"
@@ -46,6 +49,7 @@
 
     <TextView
         android:id="@+id/bright_sub"
+        android:text="10.11 · ≈ 103 980 ₽"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
@@ -56,6 +60,7 @@
         android:fontFamily="sans-serif-medium" />
     <ImageView
         android:id="@+id/bright_image"
+        android:src="@drawable/preview_bars"
         android:layout_width="match_parent"
         android:layout_height="14dp"
         android:layout_marginTop="8dp"

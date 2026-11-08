@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
@@ -54,6 +55,8 @@ object Widgets {
                 val view = views.getOrPut(rows) { day?.let { WidgetRules.view(it, now, rows) } }
                 val remote = RemoteViews(context.packageName, kind.layout)
                 render(context, kind, remote, view, rows)
+                // Средний и маленькие — текст крупнее под размер виджета (шаг 5.9в); большой заполняется строками.
+                if (kind != Kind.LARGE) WidgetScale.texts(remote, texts(kind), WidgetScale.of(manager.getAppWidgetOptions(id), kind != Kind.MEDIUM))
                 manager.updateAppWidget(id, remote)
             }
         }
@@ -70,6 +73,17 @@ object Widgets {
         val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
         if (height <= 0) return WidgetRules.NEXT_ROWS
         return ((height - BASE_DP) / ROW_DP).coerceIn(1, WidgetRules.MAX_ROWS)
+    }
+
+    private fun texts(kind: Kind): Map<Int, Float> = when (kind) {
+        Kind.MEDIUM -> mapOf(
+            R.id.money_title to 13f, R.id.money_right to 13f, R.id.money_today_label to 13f, R.id.money_month_label to 13f,
+            R.id.today_amount to 26f, R.id.today_will to 13f, R.id.today_pt to 13f,
+            R.id.month_amount to 26f, R.id.month_will to 13f, R.id.month_pt to 13f,
+        )
+        Kind.SMALL_NOW -> mapOf(R.id.small_label to 13f, R.id.now_name to 17f, R.id.now_sub to 13f, R.id.small_when to 15f, R.id.small_count to 13f)
+        Kind.SMALL_MONTH -> mapOf(R.id.month_name to 13f, R.id.month_amount to 26f, R.id.month_will to 13f, R.id.pace_text to 13f, R.id.month_pt to 13f)
+        Kind.LARGE -> emptyMap()
     }
 
     private val ROWS = listOf(
@@ -323,3 +337,32 @@ class WidgetMedium : PersonalkaWidget()
 class WidgetSmallNow : PersonalkaWidget()
 
 class WidgetSmallMonth : PersonalkaWidget()
+
+/**
+ * Масштаб виджета (шаг 5.9в): слои нарисованы под клетки 4 × 2 ≈ 320 × 146 dp и 2 × 2 ≈ 146 × 146 dp, а на Fold
+ * клетки крупнее — текст и картинки растут вместе с виджетом, от 1 до 2 раз, чтобы не оставалось пустого места.
+ */
+object WidgetScale {
+    private const val MEDIUM_W = 320f
+    private const val SMALL_W = 146f
+    private const val H = 146f
+
+    fun of(options: Bundle, small: Boolean): Float {
+        val w = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+        val h = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
+        if (w <= 0 || h <= 0) return 1f
+        return minOf(w / (if (small) SMALL_W else MEDIUM_W), h / H).coerceIn(1f, 2f)
+    }
+
+    fun texts(v: RemoteViews, sizes: Map<Int, Float>, k: Float) {
+        sizes.forEach { (id, sp) -> v.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, sp * k) }
+    }
+
+    fun width(v: RemoteViews, id: Int, dp: Float) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) v.setViewLayoutWidth(id, dp, TypedValue.COMPLEX_UNIT_DIP)
+    }
+
+    fun height(v: RemoteViews, id: Int, dp: Float) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) v.setViewLayoutHeight(id, dp, TypedValue.COMPLEX_UNIT_DIP)
+    }
+}

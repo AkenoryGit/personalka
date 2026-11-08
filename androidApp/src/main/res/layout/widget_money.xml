@@ -14,6 +14,7 @@
 
         <TextView
             android:id="@+id/money_title"
+        android:text="Деньги · ноябрь"
             style="@style/WidgetCaptionStrong"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -38,6 +39,7 @@
 
         <TextView
             android:id="@+id/money_chip"
+        android:text="Ступень 1 · до бонуса 63 ПТ"
             style="@style/WidgetCaptionStrong"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -62,6 +64,7 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/money_today_label"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -70,12 +73,14 @@
 
             <TextView
                 android:id="@+id/today_amount"
+        android:text="2 760 ₽"
                 style="@style/WidgetAmount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
 
             <TextView
                 android:id="@+id/today_will"
+        android:text="будет ≈ 13 880 ₽"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -83,6 +88,7 @@
 
             <TextView
                 android:id="@+id/today_pt"
+        android:text="3 ПТ · будет 12"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
@@ -104,6 +110,7 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/money_month_label"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -112,12 +119,14 @@
 
             <TextView
                 android:id="@+id/month_amount"
+        android:text="49 840 ₽"
                 style="@style/WidgetAmount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
 
             <TextView
                 android:id="@+id/month_will"
+        android:text="будет ≈ 184 980 ₽"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -125,6 +134,7 @@
 
             <TextView
                 android:id="@+id/month_pt"
+        android:text="38 ПТ · будет 139"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
@@ -168,6 +178,7 @@
 
         <TextView
             android:id="@+id/pace_text"
+        android:text="Хорошо идёте: прогноз 115 % плана"
             style="@style/WidgetCaptionStrong"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />

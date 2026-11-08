@@ -40,6 +40,7 @@
 
             <TextView
                 android:id="@+id/now_header"
+        android:text="Сейчас · 12:00–12:50"
                 style="@style/WidgetCaptionStrong"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -48,6 +49,7 @@
 
             <TextView
                 android:id="@+id/now_right"
+        android:text="до 12:50"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -77,12 +79,14 @@
 
                 <TextView
                     android:id="@+id/now_name"
+        android:text="Никитин А."
                     style="@style/WidgetName"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content" />
 
                 <TextView
                     android:id="@+id/now_sub"
+        android:text="ПТ · ББ"
                     style="@style/WidgetCaption"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -96,11 +100,11 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/next1_time"
+        android:text="13:00"
                 style="@style/WidgetCaption"
                 android:layout_width="44dp"
                 android:layout_height="wrap_content"
@@ -115,6 +119,7 @@
 
             <TextView
                 android:id="@+id/next1_name"
+        android:text="Морозов Д."
                 style="@style/WidgetRowName"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -123,6 +128,7 @@
 
             <TextView
                 android:id="@+id/next1_sub"
+        android:text="ПТ · ББ"
                 style="@style/WidgetCaption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -412,13 +418,13 @@
 
         <TextView
             android:id="@+id/more"
+        android:text="ещё 7 · последняя в 19:00"
             style="@style/WidgetCaption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:paddingStart="56dp"
-            android:textColor="@color/widget_text_muted"
-            android:visibility="gone" />
+            android:textColor="@color/widget_text_muted" />
 
         <LinearLayout
             android:id="@+id/todo_row"

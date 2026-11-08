@@ -11,12 +11,15 @@
 
     <ImageView
         android:id="@+id/bright_image"
-        android:layout_width="86dp"
-        android:layout_height="86dp"
+        android:src="@drawable/preview_ring"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:scaleType="fitCenter"
         android:contentDescription="@string/bright_bonus_image" />
 
     <TextView
         android:id="@+id/bright_big"
+        android:text="63 ПТ"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
@@ -29,6 +32,7 @@
         android:layout_marginTop="6dp" />
     <TextView
         android:id="@+id/bright_sub"
+        android:text="до бонуса"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"

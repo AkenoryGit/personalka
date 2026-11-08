@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Заряд бонуса». Картинка-образец для списка виджетов; на экране её заменяет рисунок из кода. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="86dp"
+    android:height="86dp"
+    android:viewportWidth="86"
+    android:viewportHeight="86">
+    <path android:pathData="M9,43 a34,34 0 1,0 68,0 a34,34 0 1,0 -68,0 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#33FFFFFF"
+        android:strokeWidth="10" />
+    <path android:pathData="M43,9 a34,34 0 0,1 26.4,55.4"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFD54A"
+        android:strokeWidth="10"
+        android:strokeLineCap="round" />
+    <path android:pathData="M47,22 L32,47 H42 L38,64 L54,38 H44 Z"
+        android:fillColor="#FFFFD54A" />
+</vector>

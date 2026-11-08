@@ -26,14 +26,25 @@ import kotlinx.datetime.LocalDate
  * размер виджета, а текст остаётся текстом (крупный шрифт телефона, экранный диктор).
  */
 object BrightWidgets {
-    private enum class Kind(val provider: Class<*>, val layout: Int) {
-        POOL(BrightPool::class.java, R.layout.bright_pool),
-        LANE(BrightLane::class.java, R.layout.bright_lane),
-        TYULYA(BrightTyulya::class.java, R.layout.bright_tyulya),
-        BONUS(BrightBonus::class.java, R.layout.bright_bonus),
-        DAY(BrightDay::class.java, R.layout.bright_day),
-        PAYDAY(BrightPayday::class.java, R.layout.bright_payday),
+    /** Виджет: слой, маленький ли он (2 × 2), размеры текста в sp и картинки в dp при масштабе 1 — как в слое. */
+    private enum class Kind(
+        val provider: Class<*>,
+        val layout: Int,
+        val small: Boolean,
+        val texts: Map<Int, Float>,
+        val imageWidth: Float? = null,
+        val imageHeight: Float? = null,
+    ) {
+        POOL(BrightPool::class.java, R.layout.bright_pool, false, mapOf(R.id.bright_label to 13f, R.id.bright_big to 30f, R.id.bright_sub to 15f, R.id.bright_chip to 12f), imageWidth = 104f),
+        LANE(BrightLane::class.java, R.layout.bright_lane, false, mapOf(R.id.bright_label to 12f, R.id.bright_right to 13f, R.id.bright_big to 24f, R.id.bright_sub to 13f), imageHeight = 40f),
+        TYULYA(BrightTyulya::class.java, R.layout.bright_tyulya, false, mapOf(R.id.bright_big to 26f, R.id.bright_sub to 14f, R.id.bright_chip to 12f), imageWidth = 116f),
+        BONUS(BrightBonus::class.java, R.layout.bright_bonus, true, mapOf(R.id.bright_big to 22f, R.id.bright_sub to 12f), imageWidth = 72f, imageHeight = 72f),
+        DAY(BrightDay::class.java, R.layout.bright_day, true, mapOf(R.id.bright_label to 12f, R.id.bright_big to 28f, R.id.bright_sub to 12f, R.id.bright_chip to 12f), imageHeight = 22f),
+        PAYDAY(BrightPayday::class.java, R.layout.bright_payday, true, mapOf(R.id.bright_label to 13f, R.id.bright_big to 52f, R.id.bright_right to 20f, R.id.bright_sub to 13f), imageHeight = 14f),
     }
+
+    /** Масштаб виджета, который рисуется сейчас: картинки рисуются в нём же. */
+    private var factor = 1f
 
     /** Перерисовать все яркие виджеты; вернуть, есть ли хоть один на экране. */
     fun updateAll(context: Context, manager: AppWidgetManager, view: WidgetView?, today: LocalDate): Boolean {
@@ -41,7 +52,11 @@ object BrightWidgets {
         Kind.entries.forEach { kind ->
             manager.getAppWidgetIds(ComponentName(context, kind.provider)).forEach { id ->
                 any = true
-                val width = manager.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH).takeIf { it > 0 } ?: DEFAULT_WIDTH
+                val options = manager.getAppWidgetOptions(id)
+                val width = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH).takeIf { it > 0 } ?: DEFAULT_WIDTH
+                // Всё крупнее под размер виджета (шаг 5.9в): на Fold клетки больше, чем в макете.
+                val k = WidgetScale.of(options, kind.small)
+                factor = k
                 val v = RemoteViews(context.packageName, kind.layout)
                 v.setOnClickPendingIntent(R.id.bright_root, Widgets.open(context, AppLink.Home))
                 when (kind) {
@@ -52,6 +67,9 @@ object BrightWidgets {
                     Kind.DAY -> day(context, v, view, width - 28f)
                     Kind.PAYDAY -> payday(context, v, view, today, width - 32f)
                 }
+                WidgetScale.texts(v, kind.texts, k)
+                kind.imageWidth?.let { WidgetScale.width(v, R.id.bright_image, it * k) }
+                kind.imageHeight?.let { WidgetScale.height(v, R.id.bright_image, it * k) }
                 manager.updateAppWidget(id, v)
             }
         }
@@ -184,8 +202,9 @@ object BrightWidgets {
 
     // --- Картинки: рисуются в dp, на холсте с масштабом плотности экрана. ---
 
+    /** Картинка [wDp] × [hDp] в единицах масштаба 1; на деле она больше в [factor] раз. */
     private fun image(context: Context, wDp: Float, hDp: Float, draw: Canvas.() -> Unit): Bitmap {
-        val d = context.resources.displayMetrics.density
+        val d = context.resources.displayMetrics.density * factor
         val bitmap = Bitmap.createBitmap((wDp * d).toInt().coerceAtLeast(1), (hDp * d).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
         Canvas(bitmap).apply {
             scale(d, d)
@@ -246,7 +265,7 @@ object BrightWidgets {
 
     /** «Дорожка»: Тюля на доле [progress] (тысячные) пути от старта до финиша. */
     private fun laneImage(context: Context, progress: Int, width: Float): Bitmap {
-        val w = width.coerceAtLeast(160f)
+        val w = (width / factor).coerceAtLeast(160f)
         return image(context, w, 40f) {
             drawRoundRect(RectF(0f, 4f, w, 36f), 10f, 10f, paint(0xFF26A69A.toInt()))
             val x = 30f + (w - 70f) * progress.coerceIn(0, 1000) / 1000f
@@ -286,7 +305,7 @@ object BrightWidgets {
 
     /** «День»: капля на каждую тренировку дня, проведённые — жёлтые; больше 12 — в два ряда. */
     private fun dropsImage(context: Context, done: Int, total: Int, width: Float): Bitmap {
-        val w = width.coerceAtLeast(80f)
+        val w = (width / factor).coerceAtLeast(80f)
         return image(context, w, 22f) {
             if (total <= 0) return@image
             val rows = if (total > 12) 2 else 1
@@ -306,7 +325,7 @@ object BrightWidgets {
 
     /** «До получки»: день между выплатами — клетка; прошедшие бледные, оставшиеся жёлтые. */
     private fun barsImage(context: Context, total: Int, passed: Int, width: Float): Bitmap {
-        val w = width.coerceAtLeast(80f)
+        val w = (width / factor).coerceAtLeast(80f)
         return image(context, w, 14f) {
             val n = total.coerceIn(1, 31)
             val gap = 2f

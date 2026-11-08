@@ -27,6 +27,7 @@
 
         <TextView
             android:id="@+id/bright_big"
+        android:text="Поехали!"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
@@ -37,6 +38,7 @@
             android:textStyle="bold" />
         <TextView
             android:id="@+id/bright_sub"
+        android:text="Сегодня 12 тренировок, первая в 07:00"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
@@ -48,6 +50,7 @@
 
         <TextView
             android:id="@+id/bright_chip"
+        android:text="Смирнова И. · ПТ · ББ"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"

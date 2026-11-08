@@ -16,6 +16,7 @@
 
         <TextView
             android:id="@+id/bright_label"
+        android:text="СЕЙЧАС"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -27,6 +28,7 @@
 
         <TextView
             android:id="@+id/bright_right"
+        android:text="до 12:50"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
@@ -44,6 +46,7 @@
 
         <TextView
             android:id="@+id/bright_big"
+        android:text="Никитин А."
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
@@ -54,6 +57,7 @@
             android:textStyle="bold" />
         <TextView
             android:id="@+id/bright_sub"
+        android:text="ПТ · ББ · ещё 9 сегодня"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
@@ -65,6 +69,7 @@
 
     <ImageView
         android:id="@+id/bright_image"
+        android:src="@drawable/preview_lane"
         android:layout_width="match_parent"
         android:layout_height="40dp"
         android:contentDescription="@string/bright_lane_image"

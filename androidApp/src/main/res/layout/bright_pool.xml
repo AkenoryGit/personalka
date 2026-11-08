@@ -11,6 +11,7 @@
 
     <ImageView
         android:id="@+id/bright_image"
+        android:src="@drawable/preview_pool"
         android:layout_width="104dp"
         android:layout_height="match_parent"
         android:contentDescription="@string/bright_pool_image"
@@ -25,6 +26,7 @@
 
         <TextView
             android:id="@+id/bright_label"
+        android:text="Ноябрь"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
@@ -34,6 +36,7 @@
             android:textSize="13sp" />
         <TextView
             android:id="@+id/bright_big"
+        android:text="49 840 ₽"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
@@ -44,6 +47,7 @@
             android:textStyle="bold" />
         <TextView
             android:id="@+id/bright_sub"
+        android:text="31 % плана"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
@@ -54,6 +58,7 @@
             android:fontFamily="sans-serif-medium" />
         <TextView
             android:id="@+id/bright_chip"
+        android:text="Прогноз 115 % — план переплывёте"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"

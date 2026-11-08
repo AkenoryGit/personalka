@@ -11,6 +11,7 @@
 
     <TextView
         android:id="@+id/bright_label"
+        android:text="Сегодня"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
@@ -20,6 +21,7 @@
         android:textSize="12sp" />
     <TextView
         android:id="@+id/bright_big"
+        android:text="+2 760 ₽"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
@@ -30,6 +32,7 @@
         android:textStyle="bold" />
     <TextView
         android:id="@+id/bright_sub"
+        android:text="будет ≈ 13 880 ₽"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
@@ -39,6 +42,7 @@
         android:textSize="12sp" />
     <ImageView
         android:id="@+id/bright_image"
+        android:src="@drawable/preview_drops"
         android:layout_width="match_parent"
         android:layout_height="22dp"
         android:layout_marginTop="8dp"
@@ -47,6 +51,7 @@
 
     <TextView
         android:id="@+id/bright_chip"
+        android:text="3 из 12 · так держать"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
