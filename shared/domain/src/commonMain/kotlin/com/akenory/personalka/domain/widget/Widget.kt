@@ -68,7 +68,7 @@ enum class WidgetPhase { NOW, NEXT, DONE, EMPTY }
 
 /**
  * Что показывает виджет в минуту [WidgetRules.view]: шапка «Сейчас · 11:00–11:50» и справа «до 11:50»; имя и
- * «ПТ · ББ»; [progress] — сколько прошло у идущей, в тысячных; [next] — две следующие сегодня и [more] — «ещё 7 ·
+ * «ПТ · ББ»; [progress] — сколько прошло у идущей, в тысячных; [next] — следующие сегодня, сколько влезает, и [more] — «ещё 7 ·
  * последняя в 20:00». Сегодня всё — шапка «Сегодня всё · завтра первая», ниже первая следующая.
  */
 data class WidgetView(
@@ -93,8 +93,11 @@ data class WidgetView(
 object WidgetRules {
     private const val DOT = " · "
 
-    /** Сколько следующих тренировок помещается в большой виджет под «Сейчас». */
+    /** Сколько следующих тренировок под «Сейчас» у большого виджета наименьшей высоты; выше — больше (шаг 5.9а). */
     const val NEXT_ROWS: Int = 2
+
+    /** Больше строк большой виджет не показывает: остальное — в «ещё N · последняя в …». */
+    const val MAX_ROWS: Int = 8
 
     /** Пока тренировка идёт, полоска хода обновляется так часто — минутами. */
     const val RUNNING_REFRESH_MIN: Int = 10
@@ -142,8 +145,11 @@ object WidgetRules {
 
     private fun permille(part: Long, whole: Long): Int = ((part * 1000) / whole).coerceIn(0, 1000).toInt()
 
-    /** Что показать в минуту [now]. Деньги и дела — только за свой день: вчерашние не показываются. */
-    fun view(day: WidgetDay, now: LocalDateTime): WidgetView {
+    /**
+     * Что показать в минуту [now]; под «Сейчас» — до [rows] следующих сегодня. Деньги и дела — только за свой день:
+     * вчерашние не показываются.
+     */
+    fun view(day: WidgetDay, now: LocalDateTime, rows: Int = NEXT_ROWS): WidgetView {
         val today = now.date
         val active = day.slots
         val nearest = nearest(active, now)
@@ -174,8 +180,9 @@ object WidgetRules {
         }
         val running = now >= s.start
         val later = laterToday(active, nearest, now)
-        val shown = later.take(NEXT_ROWS)
-        val rest = later.drop(NEXT_ROWS)
+        val fit = rows.coerceIn(0, MAX_ROWS)
+        val shown = later.take(fit)
+        val rest = later.drop(fit)
         val todayCount = day.slots.count { it.slot.start.date == today }
         return WidgetView(
             phase = if (running) WidgetPhase.NOW else WidgetPhase.NEXT,

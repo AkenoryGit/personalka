@@ -44,6 +44,10 @@ class WidgetTest {
         assertEquals("ещё 2 · последняя в 20:00", v.more)
         assertEquals("сегодня 6", v.count)
         assertEquals(money, v.money)
+        // Виджет выше — строк больше, «ещё» не нужно (шаг 5.9а).
+        val tall = WidgetRules.view(d, LocalDateTime(2026, 11, 8, 11, 24), rows = 5)
+        assertEquals(listOf("b", "c", "d", "e"), tall.next.map { it.id })
+        assertNull(tall.more)
     }
 
     @Test

@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
+import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
@@ -43,25 +44,49 @@ object Widgets {
         val text = (context.applicationContext as PersonalkaApplication).prefs.string(WidgetBridge.KEY)
         val day = text?.let(WidgetCodec::decode)
         val now = ClubTime.now(System.currentTimeMillis())
-        val view = day?.let { WidgetRules.view(it, now) }
+        val views = mutableMapOf<Int, WidgetView?>()
         var any = false
         Kind.entries.forEach { kind ->
-            val ids = manager.getAppWidgetIds(ComponentName(context, kind.provider))
-            if (ids.isEmpty()) return@forEach
-            any = true
-            val views = RemoteViews(context.packageName, kind.layout)
-            render(context, kind, views, view)
-            manager.updateAppWidget(ids, views)
+            manager.getAppWidgetIds(ComponentName(context, kind.provider)).forEach { id ->
+                any = true
+                // Большой виджет показывает столько следующих тренировок, сколько влезает по его высоте (шаг 5.9а).
+                val rows = if (kind == Kind.LARGE) rowsFor(manager.getAppWidgetOptions(id)) else WidgetRules.NEXT_ROWS
+                val view = views.getOrPut(rows) { day?.let { WidgetRules.view(it, now, rows) } }
+                val remote = RemoteViews(context.packageName, kind.layout)
+                render(context, kind, remote, view, rows)
+                manager.updateAppWidget(id, remote)
+            }
         }
         if (any && day != null) schedule(context, ClubTime.toMillis(WidgetRules.nextUpdate(day, now)))
     }
 
-    private fun render(context: Context, kind: Kind, v: RemoteViews, view: WidgetView?) {
+    /**
+     * Строк под «Сейчас» по высоте виджета: «Деньги», черта, «Сейчас» и «ещё …» занимают около [BASE_DP], каждая
+     * строка — [ROW_DP]. Высота неизвестна — как у наименьшего.
+     */
+    private fun rowsFor(options: Bundle): Int {
+        val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
+        if (height <= 0) return WidgetRules.NEXT_ROWS
+        return ((height - BASE_DP) / ROW_DP).coerceIn(1, WidgetRules.MAX_ROWS)
+    }
+
+    private val ROWS = listOf(
+        intArrayOf(R.id.next1, R.id.next1_time, R.id.next1_stripe, R.id.next1_name, R.id.next1_sub),
+        intArrayOf(R.id.next2, R.id.next2_time, R.id.next2_stripe, R.id.next2_name, R.id.next2_sub),
+        intArrayOf(R.id.next3, R.id.next3_time, R.id.next3_stripe, R.id.next3_name, R.id.next3_sub),
+        intArrayOf(R.id.next4, R.id.next4_time, R.id.next4_stripe, R.id.next4_name, R.id.next4_sub),
+        intArrayOf(R.id.next5, R.id.next5_time, R.id.next5_stripe, R.id.next5_name, R.id.next5_sub),
+        intArrayOf(R.id.next6, R.id.next6_time, R.id.next6_stripe, R.id.next6_name, R.id.next6_sub),
+        intArrayOf(R.id.next7, R.id.next7_time, R.id.next7_stripe, R.id.next7_name, R.id.next7_sub),
+        intArrayOf(R.id.next8, R.id.next8_time, R.id.next8_stripe, R.id.next8_name, R.id.next8_sub),
+    )
+
+    private fun render(context: Context, kind: Kind, v: RemoteViews, view: WidgetView?, rows: Int) {
         v.setOnClickPendingIntent(R.id.widget_root, open(context, AppLink.Home))
         when (kind) {
             Kind.LARGE -> {
                 money(v, view?.money, withChip = true)
-                block(context, v, view)
+                block(context, v, view, rows)
             }
             Kind.MEDIUM -> money(v, view?.money, withChip = false)
             Kind.SMALL_NOW -> smallNow(context, v, view)
@@ -128,12 +153,12 @@ object Widgets {
         v.setViewVisibility(R.id.pace_dot_behind, if (behind) View.VISIBLE else View.GONE)
     }
 
-    private fun block(context: Context, v: RemoteViews, view: WidgetView?) {
+    private fun block(context: Context, v: RemoteViews, view: WidgetView?, rows: Int) {
         if (view == null) {
             v.setTextViewText(R.id.now_header, WidgetRules.NO_DATA)
             v.setTextViewText(R.id.now_right, "")
             v.setViewVisibility(R.id.now_row, View.GONE)
-            listOf(R.id.next1, R.id.next2, R.id.more, R.id.todo_row).forEach { v.setViewVisibility(it, View.GONE) }
+            (ROWS.map { it[0] } + listOf(R.id.more, R.id.todo_row)).forEach { v.setViewVisibility(it, View.GONE) }
             return
         }
         v.setTextViewText(R.id.now_header, view.header)
@@ -148,12 +173,11 @@ object Widgets {
             stripe(context, v, R.id.now_stripe, view.color)
             v.setOnClickPendingIntent(R.id.now_row, open(context, AppLink.Card(id)))
         }
-        row(context, v, view.next.getOrNull(0), R.id.next1, R.id.next1_time, R.id.next1_stripe, R.id.next1_name, R.id.next1_sub)
-        row(context, v, view.next.getOrNull(1), R.id.next2, R.id.next2_time, R.id.next2_stripe, R.id.next2_name, R.id.next2_sub)
+        ROWS.forEachIndexed { i, ids -> row(context, v, view.next.getOrNull(i), ids[0], ids[1], ids[2], ids[3], ids[4]) }
         text(v, R.id.more, view.more)
         // «Нужно сделать» — когда под «Ближайшей» есть место: вечером и днём без следующих.
         val todo = view.todo
-        if (todo != null && view.next.size < WidgetRules.NEXT_ROWS) {
+        if (todo != null && view.next.size < rows) {
             v.setViewVisibility(R.id.todo_row, View.VISIBLE)
             v.setTextViewText(R.id.todo_count, todo.toString())
             v.setOnClickPendingIntent(R.id.todo_row, open(context, AppLink.Home))
@@ -261,6 +285,8 @@ object Widgets {
         alarms.setAndAllowWhileIdle(AlarmManager.RTC, at, intent)
     }
 
+    private const val BASE_DP = 310
+    private const val ROW_DP = 27
     private const val TICK_REQUEST = 5_900
     private const val REQUEST_BASE = 59_000
 }
@@ -280,6 +306,11 @@ abstract class PersonalkaWidget : AppWidgetProvider() {
         Widgets.updateAll(context)
         val pending = goAsync()
         (context.applicationContext as PersonalkaApplication).refreshWidgets { pending.finish() }
+    }
+
+    /** Размер виджета поменяли — у большого меняется число строк. */
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) {
+        Widgets.updateAll(context)
     }
 }
 

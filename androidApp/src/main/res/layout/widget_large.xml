@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Большой виджет (шаг 5.9): «Деньги», «Сейчас» или «Следующая» и две следующие тренировки дня. -->
+<!-- Большой виджет (шаг 5.9): «Деньги», «Сейчас» или «Следующая» и следующие тренировки дня — сколько влезает по высоте (5.9а). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -102,7 +102,7 @@
             <TextView
                 android:id="@+id/next1_time"
                 style="@style/WidgetCaption"
-                android:layout_width="40dp"
+                android:layout_width="44dp"
                 android:layout_height="wrap_content"
                 android:textColor="@color/widget_text_muted" />
 
@@ -142,7 +142,7 @@
             <TextView
                 android:id="@+id/next2_time"
                 style="@style/WidgetCaption"
-                android:layout_width="40dp"
+                android:layout_width="44dp"
                 android:layout_height="wrap_content"
                 android:textColor="@color/widget_text_muted" />
 
@@ -170,13 +170,253 @@
                 android:textColor="@color/widget_text_muted" />
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/next3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/next3_time"
+                style="@style/WidgetCaption"
+                android:layout_width="44dp"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text_muted" />
+
+            <ImageView
+                android:id="@+id/next3_stripe"
+                android:layout_width="3dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:background="@color/widget_outline" />
+
+            <TextView
+                android:id="@+id/next3_name"
+                style="@style/WidgetRowName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/next3_sub"
+                style="@style/WidgetCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/widget_text_muted" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/next4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/next4_time"
+                style="@style/WidgetCaption"
+                android:layout_width="44dp"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text_muted" />
+
+            <ImageView
+                android:id="@+id/next4_stripe"
+                android:layout_width="3dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:background="@color/widget_outline" />
+
+            <TextView
+                android:id="@+id/next4_name"
+                style="@style/WidgetRowName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/next4_sub"
+                style="@style/WidgetCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/widget_text_muted" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/next5"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/next5_time"
+                style="@style/WidgetCaption"
+                android:layout_width="44dp"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text_muted" />
+
+            <ImageView
+                android:id="@+id/next5_stripe"
+                android:layout_width="3dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:background="@color/widget_outline" />
+
+            <TextView
+                android:id="@+id/next5_name"
+                style="@style/WidgetRowName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/next5_sub"
+                style="@style/WidgetCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/widget_text_muted" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/next6"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/next6_time"
+                style="@style/WidgetCaption"
+                android:layout_width="44dp"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text_muted" />
+
+            <ImageView
+                android:id="@+id/next6_stripe"
+                android:layout_width="3dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:background="@color/widget_outline" />
+
+            <TextView
+                android:id="@+id/next6_name"
+                style="@style/WidgetRowName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/next6_sub"
+                style="@style/WidgetCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/widget_text_muted" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/next7"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/next7_time"
+                style="@style/WidgetCaption"
+                android:layout_width="44dp"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text_muted" />
+
+            <ImageView
+                android:id="@+id/next7_stripe"
+                android:layout_width="3dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:background="@color/widget_outline" />
+
+            <TextView
+                android:id="@+id/next7_name"
+                style="@style/WidgetRowName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/next7_sub"
+                style="@style/WidgetCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/widget_text_muted" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/next8"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/next8_time"
+                style="@style/WidgetCaption"
+                android:layout_width="44dp"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text_muted" />
+
+            <ImageView
+                android:id="@+id/next8_stripe"
+                android:layout_width="3dp"
+                android:layout_height="14dp"
+                android:importantForAccessibility="no"
+                android:background="@color/widget_outline" />
+
+            <TextView
+                android:id="@+id/next8_name"
+                style="@style/WidgetRowName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/next8_sub"
+                style="@style/WidgetCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/widget_text_muted" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/more"
             style="@style/WidgetCaption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:paddingStart="51dp"
+            android:paddingStart="56dp"
             android:textColor="@color/widget_text_muted"
             android:visibility="gone" />
 
