@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.yearMonth
 
@@ -73,10 +74,13 @@ class WidgetBridge(
     private fun day(today: LocalDate): Flow<WidgetDay> = combine(
         app.calendar.homeTrainings(today),
         app.settings.salary.schemes,
-        app.settings.months.month(today.yearMonth, today),
+        app.settings.months.months(listOf(previous(today), today.yearMonth), today),
         app.watch.todo,
-    ) { trainings, schemes, month, todo ->
-        val view = month.view.takeIf { !SalarySetupRules.needed(schemes) && it.month == today.yearMonth }
+    ) { trainings, schemes, months, todo ->
+        val set = !SalarySetupRules.needed(schemes)
+        val view = months.last().view.takeIf { set && it.month == today.yearMonth }
+        // «До получки» (шаг 5.9б): прошлый месяц — выплаты по проведённым, текущий — по расписанию.
+        val payouts = if (set) months.first().view.payout.payouts + months.last().view.forecastPayout.payouts else emptyList()
         val until = today.plus(DAYS, DateTimeUnit.DAY)
         WidgetDay(
             date = today,
@@ -85,10 +89,12 @@ class WidgetBridge(
                 .sortedWith(compareBy({ it.start }, { it.id }))
                 .take(MAX_SLOTS)
                 .map { it.widget() },
-            money = view?.let { WidgetRules.money(it, today) },
+            money = view?.let { WidgetRules.money(it, today, payouts) },
             todo = todo,
         )
     }
+
+    private fun previous(today: LocalDate) = LocalDate(today.year, today.month, 1).minus(1, DateTimeUnit.MONTH).yearMonth
 
     /** Имена в виджете есть всегда (решение Дмитрия 08.11.2026): выключатель «Без имён» — только для часов. */
     private fun CalendarTraining.widget() = WidgetSlot(

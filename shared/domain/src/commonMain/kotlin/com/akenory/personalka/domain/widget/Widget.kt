@@ -9,6 +9,7 @@ import com.akenory.personalka.domain.format.RuText.NBSP
 import com.akenory.personalka.domain.home.HomeRules
 import com.akenory.personalka.domain.home.HomeSlot
 import com.akenory.personalka.domain.money.PlanPace
+import com.akenory.personalka.domain.money.Payout
 import com.akenory.personalka.domain.money.SalaryMonth
 import com.akenory.personalka.domain.money.SalaryPlan
 import com.akenory.personalka.domain.watch.WatchSlot
@@ -16,6 +17,7 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.plus
 
 /**
@@ -42,7 +44,27 @@ data class WidgetMoney(
     val paceShort: String?,
     val behind: Boolean,
     val ptTier: String,
+    val todaySigned: String = today,
+    val planPercent: String? = null,
+    val poolNote: String? = null,
+    val planDone: Boolean = false,
+    val ptCount: Int = 0,
+    val tierNext: Int? = null,
+    val tierToNext: Int? = null,
+    val hasTiers: Boolean = false,
+    val paydayDate: LocalDate? = null,
+    val paydayAmount: String? = null,
+    val paydayFrom: LocalDate? = null,
 )
+
+/** Настроение талисмана «Тюля» в ярком виджете (шаг 5.9б): машет ластой или спит. */
+enum class WidgetMood { WAVE, SLEEP }
+
+/** Талисман: крупная фраза [title], строка [line] и плашка [pill] — имя следующей или заработок дня. */
+data class WidgetMascot(val mood: WidgetMood, val title: String, val line: String, val pill: String?)
+
+/** Ближайшая выплата: [date], сумма [amount] в копейках, прошлая выплата [from]. */
+data class WidgetPayday(val date: LocalDate, val amount: Long, val from: LocalDate?)
 
 /**
  * Тренировка в виджете: то же, что на часах, плюс ключ цвета [color] — полоска слева, как в расписании «Главной».
@@ -87,6 +109,11 @@ data class WidgetView(
     val count: String?,
     val money: WidgetMoney?,
     val todo: Int?,
+    val todayTotal: Int = 0,
+    val todayDone: Int = 0,
+    val laneSub: String? = null,
+    val dayLine: String? = null,
+    val mascot: WidgetMascot? = null,
 )
 
 /** Правила виджетов (шаг 5.9). Выбор «Ближайшей» — тем же правилом, что на «Главной» (ТЗ 5.2). */
@@ -103,7 +130,7 @@ object WidgetRules {
     const val RUNNING_REFRESH_MIN: Int = 10
 
     /** Деньги для виджета из месяца «Главной» (зарплата настроена, месяц текущий — проверяет приложение). */
-    fun money(view: SalaryMonth, today: LocalDate): WidgetMoney {
+    fun money(view: SalaryMonth, today: LocalDate, payouts: List<Payout> = emptyList()): WidgetMoney {
         val earnedToday = view.today ?: 0
         val donePt = view.todayPt ?: 0
         val plan = view.plan
@@ -134,7 +161,71 @@ object WidgetRules {
             paceShort = pace?.let { paceShort(it, view.percent ?: 0, view.forecastPercent ?: 0) },
             behind = pace == PlanPace.BEHIND,
             ptTier = RuText.digits(view.pay.ptCount.toLong()) + NBSP + "ПТ" + (view.tiers?.let { DOT + "ступень " + it.tier } ?: ""),
-        )
+            todaySigned = MoneyFormat.signedRub(earnedToday),
+            planPercent = view.percent?.let { "$it$NBSP% плана" },
+            poolNote = pace?.let { poolNote(it, view.forecastPercent ?: 0) },
+            planDone = pace == PlanPace.DONE,
+            ptCount = view.pay.ptCount,
+            tierNext = view.tiers?.nextFrom,
+            tierToNext = view.tiers?.toNext,
+            hasTiers = view.tiers != null,
+        ).withPayday(payday(payouts, today))
+    }
+
+    /**
+     * Ближайшая выплата для «До получки» (шаг 5.9б): из выплат прошлого и текущего месяца — первая с сегодняшнего дня,
+     * сумма всех выплат этого дня (остаток на карту и наличные 10-го — вместе); [WidgetPayday.from] — прошлая выплата,
+     * от неё полоска дней.
+     */
+    fun payday(payouts: List<Payout>, today: LocalDate): WidgetPayday? {
+        val paid = payouts.filter { it.amount > 0 }
+        val next = paid.filter { it.date >= today }.minByOrNull { it.date } ?: return null
+        val amount = paid.filter { it.date == next.date }.sumOf { it.amount }
+        return WidgetPayday(next.date, amount, paid.filter { it.date < today }.maxOfOrNull { it.date })
+    }
+
+    private fun WidgetMoney.withPayday(p: WidgetPayday?): WidgetMoney =
+        if (p == null) this else copy(paydayDate = p.date, paydayAmount = MoneyFormat.approxRub(p.amount), paydayFrom = p.from)
+
+    /** «Бассейн плана»: «Прогноз 115 % — план переплывёте», выполнен — «План выполнен — вода через край». */
+    fun poolNote(pace: PlanPace, forecastPercent: Int): String = when (pace) {
+        PlanPace.DONE -> "План выполнен — вода через край"
+        PlanPace.ON_TRACK -> "Прогноз $forecastPercent$NBSP% — план переплывёте"
+        PlanPace.BEHIND -> "Прогноз $forecastPercent$NBSP% — поднажмём"
+    }
+
+    /** «До получки»: крупное число дней и подпись — «2» «дня»; в день выплаты — пусто и «сегодня!». */
+    fun paydayDays(date: LocalDate, today: LocalDate): Pair<String, String> {
+        val days = today.daysUntil(date)
+        return if (days <= 0) "" to "сегодня!" else RuText.digits(days.toLong()) to RuText.plural(days.toLong(), "день", "дня", "дней")
+    }
+
+    /** Под числом дней: «10.11 · ≈ 103 980 ₽». */
+    fun paydayLine(m: WidgetMoney): String? {
+        val date = m.paydayDate ?: return null
+        return DateFormat.dayMonth(date) + DOT + m.paydayAmount.orEmpty()
+    }
+
+    /** Полоска «До получки»: всего дней между выплатами и сколько прошло; прошлой выплаты нет — `null`. */
+    fun paydayBar(m: WidgetMoney, today: LocalDate): Pair<Int, Int>? {
+        val from = m.paydayFrom ?: return null
+        val to = m.paydayDate ?: return null
+        val total = from.daysUntil(to)
+        if (total <= 0) return null
+        return total to from.daysUntil(today).coerceIn(0, total)
+    }
+
+    /**
+     * «Заряд бонуса»: доля кольца в тысячных, крупно «63 ПТ» и подпись «до бонуса»; на ступени 2 — «до ступени 3»,
+     * на последней — полное кольцо и «максимум». Ступеней нет — `null`.
+     */
+    fun bonus(m: WidgetMoney): Triple<Int, String, String>? {
+        if (!m.hasTiers) return null
+        val next = m.tierNext
+        val left = m.tierToNext
+        if (next == null || left == null) return Triple(1000, "Ступень " + m.tier, "максимум")
+        val part = (m.ptCount.coerceAtLeast(0) * 1000 / next.coerceAtLeast(1)).coerceIn(0, 1000)
+        return Triple(part, RuText.digits(left.toLong()) + NBSP + "ПТ", if (m.tier <= 1) "до бонуса" else "до ступени " + (m.tier + 1))
     }
 
     /** Короткая оценка для маленького виджета: «прогноз 115 % плана», «выполнено 104 %». */
@@ -155,11 +246,25 @@ object WidgetRules {
         val nearest = nearest(active, now)
         val money = day.money.takeIf { day.date == today }
         val todo = day.todo.takeIf { day.date == today && it > 0 }
+        val todaySlots = active.filter { it.slot.start.date == today }
+        val todayTotal = todaySlots.size
+        val todayDone = todaySlots.count { it.slot.marked || it.slot.end <= now }
+        val dayLine = if (todayTotal == 0) null else RuText.digits(todayDone.toLong()) + " из " + RuText.digits(todayTotal.toLong()) + DOT + when (todayDone) {
+            0 -> "день впереди"
+            todayTotal -> "день закрыт!"
+            else -> "так держать"
+        }
         if (nearest == null) {
             return WidgetView(
                 phase = WidgetPhase.EMPTY, header = HomeFormat.todayDone(null, today), right = null, label = TODAY_DONE,
                 id = null, name = null, typePlace = null, color = null, whenText = null, progress = null,
                 next = emptyList(), more = null, count = null, money = money, todo = todo,
+                todayTotal = todayTotal, todayDone = todayDone, dayLine = dayLine,
+                mascot = if (todayTotal > 0) {
+                    WidgetMascot(WidgetMood.SLEEP, TODAY_DONE, "Отдыхайте! Впереди тренировок нет", money?.let { it.todaySigned + " за день" })
+                } else {
+                    WidgetMascot(WidgetMood.SLEEP, "Выходной", "Тренировок впереди нет", null)
+                },
             )
         }
         val s = nearest.slot
@@ -176,6 +281,14 @@ object WidgetRules {
                 more = dayLabel(s.start.date, today) + " " + RuText.count(dayCount, "тренировка", "тренировки", "тренировок"),
                 count = dayLabel(s.start.date, today) + " " + RuText.digits(dayCount.toLong()),
                 money = money, todo = todo,
+                todayTotal = todayTotal, todayDone = todayDone, dayLine = dayLine,
+                laneSub = typePlace(s) + DOT + firstLabel(s.start.date, today) + " в" + NBSP + DateFormat.time(s.start.time),
+                mascot = WidgetMascot(
+                    WidgetMood.SLEEP,
+                    TODAY_DONE,
+                    "Отдыхайте! " + HomeFormat.todayDone(s.start, today).removePrefix("Сегодня всё. "),
+                    money?.takeIf { todayTotal > 0 }?.let { it.todaySigned + " за день" },
+                ),
             )
         }
         val running = now >= s.start
@@ -200,6 +313,9 @@ object WidgetRules {
             },
             count = "сегодня " + RuText.digits(todayCount.toLong()),
             money = money, todo = todo,
+            todayTotal = todayTotal, todayDone = todayDone, dayLine = dayLine,
+            laneSub = typePlace(s) + if (later.isEmpty()) DOT + "последняя" else DOT + "ещё " + RuText.digits(later.size.toLong()) + " сегодня",
+            mascot = mascot(running, todayDone, todayTotal, later.size, s, money),
         )
     }
 
@@ -214,6 +330,45 @@ object WidgetRules {
         val tick = if (running) ClubTime.plusMinutes(now, RUNNING_REFRESH_MIN) else null
         return (edges + listOfNotNull(tick, midnight)).min()
     }
+
+    /** Талисман днём: утром до первой — «Поехали!», во время — «Плывём!», между — «Отлично!» или «Поднажмём!». */
+    private fun mascot(running: Boolean, done: Int, total: Int, later: Int, s: WatchSlot, money: WidgetMoney?): WidgetMascot {
+        val pill = name(s) + DOT + typePlace(s)
+        val left = if (later == 0) "последняя" else "ещё " + RuText.digits(later.toLong())
+        return when {
+            running -> WidgetMascot(WidgetMood.WAVE, "Плывём!", "до" + NBSP + DateFormat.time(s.end.time) + DOT + left, pill)
+            done == 0 -> WidgetMascot(
+                WidgetMood.WAVE,
+                "Поехали!",
+                "Сегодня " + RuText.count(total, "тренировка", "тренировки", "тренировок") + ", первая в" + NBSP + DateFormat.time(s.start.time),
+                pill,
+            )
+            money?.behind == true -> WidgetMascot(WidgetMood.WAVE, "Поднажмём!", "Дальше в" + NBSP + DateFormat.time(s.start.time) + DOT + left, pill)
+            else -> WidgetMascot(WidgetMood.WAVE, "Отлично!", "Дальше в" + NBSP + DateFormat.time(s.start.time) + DOT + left, pill)
+        }
+    }
+
+    /** «Дорожка»: подпись над именем — «СЕЙЧАС», «СЛЕДУЮЩАЯ», «СЕГОДНЯ ВСЁ», «ТРЕНИРОВОК НЕТ». */
+    fun laneLabel(phase: WidgetPhase): String = when (phase) {
+        WidgetPhase.NOW -> "СЕЙЧАС"
+        WidgetPhase.NEXT -> "СЛЕДУЮЩАЯ"
+        WidgetPhase.DONE -> "СЕГОДНЯ ВСЁ"
+        WidgetPhase.EMPTY -> "ТРЕНИРОВОК НЕТ"
+    }
+
+    /** «Дорожка»: где Тюля на дорожке, в тысячных — идущая по ходу, следующая на старте, остальное на финише. */
+    fun laneProgress(view: WidgetView): Int = when (view.phase) {
+        WidgetPhase.NOW -> view.progress ?: 0
+        WidgetPhase.NEXT -> 0
+        else -> 1000
+    }
+
+    const val PAYDAY = "до получки"
+    const val NO_PAYDAY = "Выплат впереди нет"
+    const val NO_TIERS = "Ступеней нет"
+    const val TODAY = "Сегодня"
+    const val NO_PLAN = "План не задан"
+    const val NO_TRAININGS_TODAY = "Сегодня тренировок нет"
 
     const val NEXT = "Следующая"
     const val TODAY_DONE = "Сегодня всё"
@@ -257,7 +412,7 @@ object WidgetRules {
  * дела; вторая — деньги (пустая — зарплата не настроена); дальше — тренировка на строку. Чужая версия — `null`.
  */
 object WidgetCodec {
-    private const val VERSION = "g1"
+    private const val VERSION = "g2"
     private const val TAB = '\t'
 
     fun encode(day: WidgetDay): String = buildString {
@@ -269,6 +424,8 @@ object WidgetCodec {
                     m.title, m.monthName, m.tierChip, m.tier, m.today, m.todayWill, m.todayPt, m.todayCancelled,
                     m.month, m.monthWill, m.monthPt, m.monthCancelled, m.done, m.forecast, m.pace, m.paceShort,
                     if (m.behind) "1" else "0", m.ptTier,
+                    m.todaySigned, m.planPercent, m.poolNote, if (m.planDone) "1" else "0", m.ptCount, m.tierNext, m.tierToNext,
+                    if (m.hasTiers) "1" else "0", m.paydayDate, m.paydayAmount, m.paydayFrom,
                 ).joinToString(TAB.toString()) { it?.toString()?.let(::clean).orEmpty() },
             )
         }
@@ -300,6 +457,11 @@ object WidgetCodec {
                     done = it[12].toIntOrNull(), forecast = it[13].toIntOrNull(),
                     pace = it[14].ifEmpty { null }, paceShort = it[15].ifEmpty { null }, behind = it[16] == "1",
                     ptTier = it[17],
+                    todaySigned = it[18], planPercent = it[19].ifEmpty { null }, poolNote = it[20].ifEmpty { null },
+                    planDone = it[21] == "1", ptCount = it[22].toInt(), tierNext = it[23].toIntOrNull(),
+                    tierToNext = it[24].toIntOrNull(), hasTiers = it[25] == "1",
+                    paydayDate = it[26].ifEmpty { null }?.let(LocalDate::parse), paydayAmount = it[27].ifEmpty { null },
+                    paydayFrom = it[28].ifEmpty { null }?.let(LocalDate::parse),
                 )
             },
             slots = lines.drop(2).filter { it.isNotEmpty() }.map { line ->

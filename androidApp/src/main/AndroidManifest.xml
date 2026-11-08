@@ -140,6 +140,73 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_small_month_info" />
         </receiver>
+        <!-- Яркие виджеты (шаг 5.9б). -->
+        <receiver
+            android:name="com.akenory.personalka.android.BrightPool"
+            android:exported="false"
+            android:label="@string/bright_pool_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bright_pool_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.BrightLane"
+            android:exported="false"
+            android:label="@string/bright_lane_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bright_lane_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.BrightTyulya"
+            android:exported="false"
+            android:label="@string/bright_tyulya_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bright_tyulya_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.BrightBonus"
+            android:exported="false"
+            android:label="@string/bright_bonus_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bright_bonus_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.BrightDay"
+            android:exported="false"
+            android:label="@string/bright_day_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bright_day_info" />
+        </receiver>
+        <receiver
+            android:name="com.akenory.personalka.android.BrightPayday"
+            android:exported="false"
+            android:label="@string/bright_payday_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bright_payday_info" />
+        </receiver>
         <receiver
             android:name="com.akenory.personalka.android.WidgetTick"
             android:exported="false" />

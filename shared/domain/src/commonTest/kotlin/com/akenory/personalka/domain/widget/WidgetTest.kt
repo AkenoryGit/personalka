@@ -1,5 +1,7 @@
 package com.akenory.personalka.domain.widget
 
+import com.akenory.personalka.domain.money.Payout
+import com.akenory.personalka.domain.money.PayoutKind
 import com.akenory.personalka.domain.watch.WatchSlot
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -94,5 +96,59 @@ class WidgetTest {
         assertEquals(LocalDateTime(2026, 11, 8, 11, 34), WidgetRules.nextUpdate(d, LocalDateTime(2026, 11, 8, 11, 24)))
         assertEquals(LocalDateTime(2026, 11, 8, 11, 50), WidgetRules.nextUpdate(d, LocalDateTime(2026, 11, 8, 11, 45)))
         assertEquals(LocalDateTime(2026, 11, 9, 0, 0), WidgetRules.nextUpdate(d, LocalDateTime(2026, 11, 8, 14, 0)))
+    }
+
+    @Test
+    fun brightFieldsSurviveCodec() {
+        val m = money.copy(
+            planPercent = "31\u00A0% плана", poolNote = "Прогноз 115\u00A0% — план переплывёте", ptCount = 38, tierNext = 101,
+            tierToNext = 63, hasTiers = true, paydayDate = LocalDate(2026, 11, 10), paydayAmount = "≈\u00A0103\u00A0980\u00A0₽",
+            paydayFrom = LocalDate(2026, 10, 25),
+        )
+        val d = WidgetDay(sunday, listOf(slot("a", sunday, 11)), m)
+        assertEquals(d, WidgetCodec.decode(WidgetCodec.encode(d)))
+    }
+
+    @Test
+    fun paydayIsNextPayoutDaySummed() {
+        val payouts = listOf(
+            Payout(PayoutKind.ADVANCE, LocalDate(2026, 10, 25), 1_354_650),
+            Payout(PayoutKind.CARD_REST, LocalDate(2026, 11, 10), 4_113_300),
+            Payout(PayoutKind.CASH, LocalDate(2026, 11, 10), 6_285_000),
+            Payout(PayoutKind.ADVANCE, LocalDate(2026, 11, 25), 1_354_650),
+        )
+        val p = WidgetRules.payday(payouts, sunday)!!
+        assertEquals(LocalDate(2026, 11, 10), p.date)
+        assertEquals(10_398_300, p.amount)
+        assertEquals(LocalDate(2026, 10, 25), p.from)
+        assertEquals("2" to "дня", WidgetRules.paydayDays(p.date, sunday))
+        assertEquals("" to "сегодня!", WidgetRules.paydayDays(p.date, p.date))
+        val m = money.copy(paydayDate = p.date, paydayFrom = p.from, paydayAmount = "x")
+        assertEquals(16 to 14, WidgetRules.paydayBar(m, sunday))
+    }
+
+    @Test
+    fun bonusRingToNextTier() {
+        val (part, big, small) = WidgetRules.bonus(money.copy(hasTiers = true, ptCount = 38, tierNext = 101, tierToNext = 63))!!
+        assertEquals(376, part)
+        assertEquals("63\u00A0ПТ", big)
+        assertEquals("до бонуса", small)
+        assertEquals("максимум", WidgetRules.bonus(money.copy(hasTiers = true, tier = 3))!!.third)
+        assertNull(WidgetRules.bonus(money))
+    }
+
+    @Test
+    fun mascotMoods() {
+        val d = day(slot("a", sunday, 7), slot("b", sunday, 8), slot("c", sunday, 9))
+        val morning = WidgetRules.view(d, LocalDateTime(2026, 11, 8, 6, 40)).mascot!!
+        assertEquals("Поехали!", morning.title)
+        assertEquals("Сегодня 3\u00A0тренировки, первая в\u00A007:00", morning.line)
+        assertEquals("Плывём!", WidgetRules.view(d, LocalDateTime(2026, 11, 8, 7, 10)).mascot!!.title)
+        val between = WidgetRules.view(d, LocalDateTime(2026, 11, 8, 7, 55))
+        assertEquals("Отлично!", between.mascot!!.title)
+        assertEquals("1 из 3 · так держать", between.dayLine)
+        val evening = WidgetRules.view(d, LocalDateTime(2026, 11, 8, 21, 0))
+        assertEquals(WidgetMood.SLEEP, evening.mascot!!.mood)
+        assertEquals("3 из 3 · день закрыт!", evening.dayLine)
     }
 }

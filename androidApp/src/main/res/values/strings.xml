@@ -14,4 +14,24 @@
     <string name="widget_today">Сегодня</string>
     <string name="widget_month">За месяц</string>
     <string name="widget_todo">Нужно сделать</string>
+
+    <!-- Яркие виджеты (шаг 5.9б) -->
+    <string name="bright_pool_label">Бассейн плана</string>
+    <string name="bright_pool_description">Заработок месяца — вода в бассейне, план — бортик</string>
+    <string name="bright_pool_image">Бассейн, заполненный по плану месяца</string>
+    <string name="bright_lane_label">Дорожка</string>
+    <string name="bright_lane_description">Идущая тренировка — Тюля плывёт к финишу</string>
+    <string name="bright_lane_image">Дорожка бассейна, сколько тренировки прошло</string>
+    <string name="bright_tyulya_label">Тюля</string>
+    <string name="bright_tyulya_description">Талисман: подсказывает, что сегодня</string>
+    <string name="bright_tyulya_image">Тюлень Тюля</string>
+    <string name="bright_bonus_label">Заряд бонуса</string>
+    <string name="bright_bonus_description">Сколько ПТ до следующей ступени</string>
+    <string name="bright_bonus_image">Кольцо до следующей ступени</string>
+    <string name="bright_day_label">День</string>
+    <string name="bright_day_description">Заработок за сегодня и проведённые тренировки</string>
+    <string name="bright_day_image">Проведённые тренировки дня</string>
+    <string name="bright_payday_label">До получки</string>
+    <string name="bright_payday_description">Сколько дней до выплаты и сколько придёт</string>
+    <string name="bright_payday_image">Дни от прошлой выплаты до следующей</string>
 </resources>

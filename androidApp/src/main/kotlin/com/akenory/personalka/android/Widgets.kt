@@ -57,6 +57,8 @@ object Widgets {
                 manager.updateAppWidget(id, remote)
             }
         }
+        // Яркие виджеты (шаг 5.9б) — из того же расписания и денег.
+        if (BrightWidgets.updateAll(context, manager, day?.let { WidgetRules.view(it, now) }, now.date)) any = true
         if (any && day != null) schedule(context, ClubTime.toMillis(WidgetRules.nextUpdate(day, now)))
     }
 
@@ -264,7 +266,7 @@ object Widgets {
         }
     }
 
-    private fun open(context: Context, link: AppLink): PendingIntent = PendingIntent.getActivity(
+    fun open(context: Context, link: AppLink): PendingIntent = PendingIntent.getActivity(
         context,
         REQUEST_BASE + link.code.hashCode(),
         Intent(context, MainActivity::class.java)
