@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import WidgetKit
 import PersonalkaUI
 
 /// «Персоналка» на iPhone (шаг 5.1): всё приложение — общие экраны Kotlin (модуль shared/ui, фреймворк PersonalkaUI).
@@ -10,6 +11,8 @@ struct iOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        // Виджеты (шаг 5.10): после записи кадров приложение просит систему перерисовать их.
+        MainViewControllerKt.setWidgetReloader { WidgetCenter.shared.reloadAllTimelines() }
         // База, обмен и уведомления наперёд — до первого экрана.
         MainViewControllerKt.startPersonalka()
     }

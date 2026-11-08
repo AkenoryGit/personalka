@@ -29,6 +29,12 @@ fun startPersonalka() = IosApp.start()
 fun onAppActive() {
     IosApp.syncRunner.now()
     IosNotifications.onActive()
+    IosWidgets.refresh()
+}
+
+/** Swift передаёт, как перерисовать виджеты (`WidgetCenter.shared.reloadAllTimelines()`), — до [startPersonalka]. */
+fun setWidgetReloader(block: () -> Unit) {
+    IosWidgets.reload = block
 }
 
 /** Ссылка из уведомления (`userInfo["link"]`, у кнопки «Дневник» — `userInfo["diary"]`). */
@@ -38,6 +44,12 @@ fun openLink(code: String?) {
 
 /** Файл, открытый в «Персоналке» из почты или «Файлов»: PDF — отчёт 1С в «Сверках». */
 fun openUrl(url: NSURL) {
+    // Нажатие на виджет (шаг 5.10): «personalka://card/<id>» — карточка тренировки, «personalka://home» — «Главная».
+    if (url.scheme == "personalka") {
+        val code = listOfNotNull(url.host, url.path?.trim('/')?.ifEmpty { null }).joinToString("/")
+        AppLink.parse(code)?.let { link = it }
+        return
+    }
     if (IosFiles.receive(url)) link = AppLink.Report1c
 }
 

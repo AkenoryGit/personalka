@@ -11,7 +11,38 @@
 		1B3AEF7B3DD6F1752645A938 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC4331BF513AAF49E5792BB /* ContentView.swift */; };
 		A7F96582E63FB0C4CDC2785B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B501E2E3EFE8766F122180D7 /* Assets.xcassets */; };
 		022C5F34614DC952949422EC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0E2492C12C1861576E2E9322 /* PrivacyInfo.xcprivacy */; };
+		6E5ED3339C9A7AECA66D7FEE /* Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79CF8248F1B076874A4E45D0 /* Model.swift */; };
+		582A070F625CB96D3E09B310 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F98759DEB4BFD8E04C90C1F /* Theme.swift */; };
+		F3B31D873F289E3AA067302D /* StandardWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D8990352B9344A3BF1EA733 /* StandardWidgets.swift */; };
+		3709721F09ECCE7CBD1B11E7 /* BrightWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10B3143DEF6E0DE132D322D /* BrightWidgets.swift */; };
+		9639DB731205426C42DE48A3 /* PersonalkaWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F85AC18DF552AA9689C7EC /* PersonalkaWidgets.swift */; };
+		9EC88D8D3D25AB34E219A069 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 314C08B3D88A3FF58A14857D /* Assets.xcassets */; };
+		B6258FF7BAF88D90A00E48C3 /* PersonalkaWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E460D1177C7AC391760AF8CA /* PersonalkaWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		141E943B6FAA3FB63F4B96CC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BAA5EAAF9DC4E172AD9CBE91;
+			remoteInfo = PersonalkaWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BB3C9B4A737C8DD7F89E4FBE /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B6258FF7BAF88D90A00E48C3 /* PersonalkaWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		091B9C89C84CC2621A27D143 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
@@ -21,10 +52,27 @@
 		0E2492C12C1861576E2E9322 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		807DEEEF12A5D4EA7C916A16 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		977D50DC09121275C3F6ABBB /* Personalka.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Personalka.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		79CF8248F1B076874A4E45D0 /* Model.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model.swift; sourceTree = "<group>"; };
+		2F98759DEB4BFD8E04C90C1F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		6D8990352B9344A3BF1EA733 /* StandardWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardWidgets.swift; sourceTree = "<group>"; };
+		F10B3143DEF6E0DE132D322D /* BrightWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightWidgets.swift; sourceTree = "<group>"; };
+		12F85AC18DF552AA9689C7EC /* PersonalkaWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalkaWidgets.swift; sourceTree = "<group>"; };
+		314C08B3D88A3FF58A14857D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4501992096D1E97158A1CEDA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		846FBF653F85C1C5625AB5E2 /* PersonalkaWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PersonalkaWidgets.entitlements; sourceTree = "<group>"; };
+		289CE0ADB434321E22897241 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
+		E460D1177C7AC391760AF8CA /* PersonalkaWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PersonalkaWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		DEA932E34B2312740697C7EE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2634C440AA2E5C01548C52A3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -39,6 +87,7 @@
 			children = (
 				A21913DCCA33361D30F0218C /* Configuration */,
 				C24AD9BAD5A5FA4A08EDE5C2 /* iosApp */,
+				9308C6D1EE5A957DF9B89BE1 /* PersonalkaWidgets */,
 				49108901BA9D37D35762520D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +108,7 @@
 				B501E2E3EFE8766F122180D7 /* Assets.xcassets */,
 				CC7A925406ACA4570256873E /* Info.plist */,
 				0E2492C12C1861576E2E9322 /* PrivacyInfo.xcprivacy */,
+				289CE0ADB434321E22897241 /* iosApp.entitlements */,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -67,8 +117,24 @@
 			isa = PBXGroup;
 			children = (
 				977D50DC09121275C3F6ABBB /* Personalka.app */,
+				E460D1177C7AC391760AF8CA /* PersonalkaWidgets.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9308C6D1EE5A957DF9B89BE1 /* PersonalkaWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				79CF8248F1B076874A4E45D0 /* Model.swift */,
+				2F98759DEB4BFD8E04C90C1F /* Theme.swift */,
+				6D8990352B9344A3BF1EA733 /* StandardWidgets.swift */,
+				F10B3143DEF6E0DE132D322D /* BrightWidgets.swift */,
+				12F85AC18DF552AA9689C7EC /* PersonalkaWidgets.swift */,
+				314C08B3D88A3FF58A14857D /* Assets.xcassets */,
+				4501992096D1E97158A1CEDA /* Info.plist */,
+				846FBF653F85C1C5625AB5E2 /* PersonalkaWidgets.entitlements */,
+			);
+			path = PersonalkaWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -82,16 +148,36 @@
 				9B912CD4F049B80A36B52EB6 /* Sources */,
 				DEA932E34B2312740697C7EE /* Frameworks */,
 				D8F38BB97F85D1BE32428452 /* Resources */,
+				BB3C9B4A737C8DD7F89E4FBE /* Embed Foundation Extensions */,
 				11D584BB7341DAB329261D5A /* Build Number */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E2947C459749A5659821CCEF /* PBXTargetDependency */,
 			);
 			name = iosApp;
 			productName = iosApp;
 			productReference = 977D50DC09121275C3F6ABBB /* Personalka.app */;
 			productType = "com.apple.product-type.application";
+		};
+		BAA5EAAF9DC4E172AD9CBE91 /* PersonalkaWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 57CC4C522ABE2BC8460B8AF4 /* Build configuration list for PBXNativeTarget "PersonalkaWidgets" */;
+			buildPhases = (
+				E5D28B17A19A94DAEBC09CDE /* Sources */,
+				2634C440AA2E5C01548C52A3 /* Frameworks */,
+				2175B7CA1A2FC334E6CDA014 /* Resources */,
+				DA56C1E056D6B6FB95E172F6 /* Build Number */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PersonalkaWidgets;
+			productName = PersonalkaWidgets;
+			productReference = E460D1177C7AC391760AF8CA /* PersonalkaWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -117,6 +203,7 @@
 			projectRoot = "";
 			targets = (
 				EE6DB360538A4D3C4697A6F9 /* iosApp */,
+				BAA5EAAF9DC4E172AD9CBE91 /* PersonalkaWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -128,6 +215,14 @@
 			files = (
 				A7F96582E63FB0C4CDC2785B /* Assets.xcassets in Resources */,
 				022C5F34614DC952949422EC /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2175B7CA1A2FC334E6CDA014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9EC88D8D3D25AB34E219A069 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -171,6 +266,25 @@
 			shellPath = /bin/sh;
 			shellScript = "cd \"$SRCROOT/..\"\nBUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\necho \"Build number: $BUILD\"\n";
 		};
+		DA56C1E056D6B6FB95E172F6 /* Build Number */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Number";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cd \"$SRCROOT/..\"\nBUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\necho \"Build number: $BUILD\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -183,7 +297,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E5D28B17A19A94DAEBC09CDE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6E5ED3339C9A7AECA66D7FEE /* Model.swift in Sources */,
+				582A070F625CB96D3E09B310 /* Theme.swift in Sources */,
+				F3B31D873F289E3AA067302D /* StandardWidgets.swift in Sources */,
+				3709721F09ECCE7CBD1B11E7 /* BrightWidgets.swift in Sources */,
+				9639DB731205426C42DE48A3 /* PersonalkaWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E2947C459749A5659821CCEF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BAA5EAAF9DC4E172AD9CBE91 /* PersonalkaWidgets */;
+			targetProxy = 141E943B6FAA3FB63F4B96CC /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		C8814BAF7583D88577D7C5BF /* Debug */ = {
@@ -234,6 +368,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(CURRENT_PROJECT_VERSION)";
@@ -270,6 +405,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(CURRENT_PROJECT_VERSION)";
@@ -301,6 +437,62 @@
 			};
 			name = Release;
 		};
+		F83514A0F7F6287E2A27983E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 807DEEEF12A5D4EA7C916A16 /* Config.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = PersonalkaWidgets/PersonalkaWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(CURRENT_PROJECT_VERSION)";
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
+				INFOPLIST_FILE = PersonalkaWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(MARKETING_VERSION)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).widgets";
+				PRODUCT_NAME = PersonalkaWidgets;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		4D2B14A0423041DFD39D2523 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 807DEEEF12A5D4EA7C916A16 /* Config.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = PersonalkaWidgets/PersonalkaWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(CURRENT_PROJECT_VERSION)";
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
+				INFOPLIST_FILE = PersonalkaWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(MARKETING_VERSION)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID).widgets";
+				PRODUCT_NAME = PersonalkaWidgets;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -318,6 +510,15 @@
 			buildConfigurations = (
 				D3E7F1024E0D44BDB40E69B1 /* Debug */,
 				627AD046054D75C3F2C1304C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		57CC4C522ABE2BC8460B8AF4 /* Build configuration list for PBXNativeTarget "PersonalkaWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F83514A0F7F6287E2A27983E /* Debug */,
+				4D2B14A0423041DFD39D2523 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

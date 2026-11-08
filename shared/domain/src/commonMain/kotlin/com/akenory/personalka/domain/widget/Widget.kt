@@ -348,6 +348,40 @@ object WidgetRules {
         }
     }
 
+    /** iPhone: шаг кадров, пока идёт тренировка, — для Тюли на «Дорожке» и строки дня. */
+    const val TIMELINE_TICK_MIN: Int = 5
+
+    /** iPhone: больше кадров не готовим — система всё равно перечитывает виджет раз в несколько часов. */
+    const val TIMELINE_MAX: Int = 240
+
+    /**
+     * Минуты, в которые iPhone сменит кадр виджета (шаг 5.10): сейчас, начало и конец каждой тренировки, полночь
+     * каждого дня расписания и, пока тренировка идёт, каждые [TIMELINE_TICK_MIN] минут. На Android вместо этого —
+     * будильник ([nextUpdate]): iPhone не будит приложение, кадры готовятся заранее.
+     */
+    fun timeline(day: WidgetDay, now: LocalDateTime): List<LocalDateTime> {
+        val out = mutableSetOf<LocalDateTime>()
+        out += ClubTime.toMinute(now)
+        day.slots.forEach { w ->
+            val s = w.slot
+            if (s.start > now) out += s.start
+            if (s.end > now) out += s.end
+            var t = ClubTime.plusMinutes(s.start, TIMELINE_TICK_MIN)
+            while (t < s.end) {
+                if (t > now) out += t
+                t = ClubTime.plusMinutes(t, TIMELINE_TICK_MIN)
+            }
+        }
+        var d = now.date.plus(1, DateTimeUnit.DAY)
+        repeat(WIDGET_DAYS) {
+            out += LocalDateTime(d, LocalTime(0, 0))
+            d = d.plus(1, DateTimeUnit.DAY)
+        }
+        return out.sorted().take(TIMELINE_MAX)
+    }
+
+    private const val WIDGET_DAYS = 3
+
     /** «Дорожка»: подпись над именем — «СЕЙЧАС», «СЛЕДУЮЩАЯ», «СЕГОДНЯ ВСЁ», «ТРЕНИРОВОК НЕТ». */
     fun laneLabel(phase: WidgetPhase): String = when (phase) {
         WidgetPhase.NOW -> "СЕЙЧАС"

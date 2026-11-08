@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Общая папка приложения и виджетов (шаг 5.10): приложение кладёт кадры, виджеты читают. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.akenory.personalka</string>
+	</array>
+</dict>
+</plist>

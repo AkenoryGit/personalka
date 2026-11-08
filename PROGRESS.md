@@ -2,6 +2,16 @@
 
 ## Где остановились
 
+Шаг **5.10 «Виджеты на iPhone»** (вместе с яркими) — 08.11.2026, просьба Дмитрия: всё, что сделано для Android в 5.9–5.9в, — на iPhone. Репозиторий снова открытый: сборка iPhone идёт сама при push (ветка — только архив, `main` — TestFlight).
+
+- **Общий код:** `WidgetSource` (shared/ui) — данные виджетов для Android и iPhone (Android `WidgetBridge` теперь берёт его); `WidgetRules.timeline` (domain) — минуты смены кадров iPhone; `IosWidgets` (iosMain) — кадры на 3 дня JSON-ом в общую папку `group.com.akenory.personalka` (ключ `widget.timeline`), `WidgetCenter.reloadAllTimelines()` через `setWidgetReloader` из Swift; `openUrl` понимает `personalka://card/<id>` и `personalka://home`.
+- **Расширение** `iosApp/PersonalkaWidgets` (`com.akenory.personalka.widgets`): `Model.swift` (кадры, провайдер, образец для списка), `Theme.swift` (роли дизайн-системы, фон iOS 17/16), `StandardWidgets.swift` (4 обычных + экран блокировки), `BrightWidgets.swift` (6 ярких), Тюля — SVG из векторов Android в `Assets.xcassets`. Цель в `project.pbxproj` добавлена вручную: сборка, ресурсы, «Номер сборки», встраивание в приложение, общая папка в обоих `entitlements`.
+- **Не как на Android:** счётчика дел нет; деньги в кадрах — на момент записи (обновляются при открытии приложения); отсчёт «до конца» — живой.
+
+Тесты: `WidgetTest.iphoneTimelineFramesAtEdgesTicksAndMidnights`. **Изменено в ТЗ:** 5.2 («iPhone»). **Проверить на телефоне:** в TestFlight новая сборка, в списке виджетов «Персоналка» — десять; на экране блокировки — «Сейчас и следующая» и «Месяц»; отметить тренировку в приложении — виджет меняется. **Следующий шаг — 5.6 «Публикация в RuStore».**
+
+### Предыдущий: 5.9в
+
 Шаг **5.9в «Виджеты крупнее и образцы в списке»** — 08.11.2026, замечание Дмитрия после 5.9б на Fold: содержимое мелкое, не заполняет виджет; в списке виджетов — пустые цветные плашки.
 
 - **Масштаб** (`WidgetScale` в `Widgets.kt`): по `OPTION_APPWIDGET_MIN_WIDTH` / `MAX_HEIGHT` — во сколько раз клетка больше слоя (4 × 2 ≈ 320 × 146 dp, 2 × 2 ≈ 146 × 146 dp), от 1 до 2. Текст — `setTextViewTextSize`, картинки ярких — `setViewLayoutWidth/Height` (Android 12+) и рисуются в том же масштабе (`BrightWidgets.factor`). Размеры по умолчанию — в `Kind` ярких и `Widgets.texts` обычных. Большой не масштабируется — заполняется строками (5.9а).

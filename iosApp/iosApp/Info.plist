@@ -41,6 +41,18 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Нажатие на виджет (шаг 5.10): personalka://card/<id> — карточка тренировки, personalka://home — «Главная». -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.akenory.personalka</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>personalka</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
 	<key>ITSAppUsesNonExemptEncryption</key>

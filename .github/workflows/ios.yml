@@ -1,7 +1,8 @@
 # «Персоналка» для iPhone в TestFlight (шаг 5.1в): по кнопке GitHub собирает приложение на Mac и выгружает
 # сборку в App Store Connect — через 20–40 минут она в TestFlight на телефоне. Свой Mac для этого не нужен.
-# Только кнопкой (шаг 5.8, 06.11.2026): репозиторий приватный, минута Mac списывается за 10 из 2000 бесплатных
-# в месяц — одна сборка ≈ 250 минут. Запуск: Actions → «iPhone» → Run workflow → main.
+# С 08.11.2026 репозиторий снова открытый — минуты Actions бесплатны (решение Дмитрия): сборка идёт сама при push,
+# если менялось приложение iPhone, общий код или Gradle. В ветках шагов — только архив (проверка, что собирается и
+# подписывается), в TestFlight выгружается сборка из main или по кнопке (Actions → «iPhone» → Run workflow).
 # Подпись — автоматическая по ключу App Store Connect API
 # (секреты ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 — их задаёт Дмитрий); без них выгрузка пропускается.
 # Номер сборки — число коммитов (фаза «Build Number» в Xcode), версия — MARKETING_VERSION в iosApp/Configuration/Config.xcconfig.
@@ -10,6 +11,14 @@ name: iPhone
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main, 'step-*']
+    paths:
+      - 'iosApp/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - '.github/workflows/ios.yml'
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -89,7 +98,7 @@ jobs:
           grep -q "ARCHIVE SUCCEEDED" ios-log.txt
 
       - name: Выгрузка в TestFlight
-        if: steps.key.outputs.ready == 'true'
+        if: steps.key.outputs.ready == 'true' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
         shell: bash
         run: |
           set -o pipefail
@@ -116,7 +125,9 @@ jobs:
         shell: bash
         run: |
           INFO="$RUNNER_TEMP/Personalka.xcarchive/Info.plist"
-          if grep -q "Upload succeeded" ios-log.txt 2>/dev/null; then
+          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ] && grep -q "ARCHIVE SUCCEEDED" ios-log.txt 2>/dev/null; then
+            echo "::notice title=iPhone: собирается::Архив собран и подписан; в TestFlight — из main"
+          elif grep -q "Upload succeeded" ios-log.txt 2>/dev/null; then
             VERSION=$(/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleShortVersionString" "$INFO")
             BUILD=$(/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleVersion" "$INFO")
             echo "::notice title=iPhone: TestFlight::Сборка $VERSION ($BUILD) выгружена; после обработки Apple (10–30 мин) — в TestFlight"

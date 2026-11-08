@@ -151,4 +151,18 @@ class WidgetTest {
         assertEquals(WidgetMood.SLEEP, evening.mascot!!.mood)
         assertEquals("3 из 3 · день закрыт!", evening.dayLine)
     }
+
+    @Test
+    fun iphoneTimelineFramesAtEdgesTicksAndMidnights() {
+        val d = day(slot("a", sunday, 11), slot("b", sunday, 13))
+        val t = WidgetRules.timeline(d, LocalDateTime(2026, 11, 8, 11, 32))
+        assertEquals(LocalDateTime(2026, 11, 8, 11, 32), t.first())
+        assertEquals(
+            listOf(35, 40, 45, 50).map { LocalDateTime(2026, 11, 8, 11, it) },
+            t.filter { it.hour == 11 && it.minute > 32 },
+        )
+        assertEquals(true, LocalDateTime(2026, 11, 8, 13, 0) in t)
+        assertEquals(true, LocalDateTime(2026, 11, 9, 0, 0) in t)
+        assertEquals(t.sorted(), t)
+    }
 }

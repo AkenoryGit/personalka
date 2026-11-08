@@ -32,7 +32,7 @@
 - **Подпись:** отладочный ключ лежит в `androidApp/debug.keystore`, поэтому каждая новая сборка ставится поверх прежней с сохранением данных. Номер версии — номер сборки в Actions.
 - **Схема базы** (`shared/data/schemas`) пишется Room при сборке. В ветку шага её коммитит сама сборка («N.N: схема базы из сборки K») — после зелёной сборки сделать `git pull`. В `main` схема обязана совпадать со сборкой.
 - **Общий код** в `commonMain` — только общий Kotlin, без `java.*` и Android (и без функций только JVM вроде `toSortedMap`): с шага 5.1 у модулей есть цели iOS, «Сборка» компилирует klib для iOS (`:shared:ui:compileKotlinIosArm64`). Платформенное для iPhone — `iosMain` (`shared/data/.../iosMain`, `shared/ui/.../ios`).
-- **iPhone в TestFlight** (шаг 5.1в): workflow «iPhone» (`.github/workflows/ios.yml`) собирает приложение на машине Mac GitHub и выгружает в TestFlight по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` задаёт Дмитрий; без них — пропуск). **Запускается только кнопкой** (шаг 5.8, 06.11.2026): репозиторий приватный, бесплатных минут Actions 2000 в месяц на весь аккаунт вместе с Planovo, минута Mac идёт за 10 — одна сборка iPhone ≈ 250 минут, «Сборка» ≈ 7. Итог — отметка «iPhone: TestFlight» или «iPhone: ошибка». Номер сборки — число коммитов, версия — `MARKETING_VERSION` в `iosApp/Configuration/Config.xcconfig`.
+- **iPhone в TestFlight** (шаг 5.1в): workflow «iPhone» (`.github/workflows/ios.yml`) собирает приложение на машине Mac GitHub по ключу App Store Connect API (секреты `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` задаёт Дмитрий; без них — пропуск). С 08.11.2026 репозиторий снова открытый, минуты Actions бесплатны: сборка идёт сама при push, если менялись `iosApp/`, `shared/` или Gradle; в ветке шага — только архив (проверка сборки и подписи, отметка «iPhone: собирается»), в TestFlight выгружает сборка из `main` или кнопка. Итог — отметка «iPhone: TestFlight» или «iPhone: ошибка». Номер сборки — число коммитов, версия — `MARKETING_VERSION` в `iosApp/Configuration/Config.xcconfig`. Виджеты iPhone (шаг 5.10) — расширение `iosApp/PersonalkaWidgets` (`com.akenory.personalka.widgets`), общая папка `group.com.akenory.personalka`.
 - **iPhone локально** — на Mac Дмитрия (Remote Control): репозиторий — `~/Downloads/iOS Personalka/personalka`, Xcode — `iosApp/iosApp.xcodeproj`, первая сборка Kotlin — `./gradlew :shared:ui:linkDebugFrameworkIosSimulatorArm64`, тесты общего кода на iOS — `:shared:data:iosSimulatorArm64Test`; подробно — [`iosApp/README.md`](iosApp/README.md).
 - **Тесты сервера** — на настоящем PostgreSQL 16: в Actions — служба `postgres:16` сборки, в облачной сессии — свой PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, `initdb` и `pg_ctl` от пользователя `postgres`) и `TRENER_TEST_DB_URL`, `TRENER_TEST_DB_USER`, `TRENER_TEST_DB_PASSWORD`. Если Maven Central отвечает 429 — зеркало `maven-central.storage-download.googleapis.com` через init-скрипт (`-I`) в папке сессии (шаг 2.7).
 - **Тесты экранов** — в `shared/ui/src/jvmTest` через `runComposeUiTest`: у `shared/ui` есть JVM-цель только для них, Compose рисуется на компьютере без телефона. Логика, которой нужно состояние Compose, тоже тестируется там.
@@ -58,17 +58,9 @@
 - **Язык интерфейса — русский:** даты «вт 22.10» и «22.10.2026», время 24 часа, «124 800 ₽» с тонким пробелом, склонение числительных (ТЗ 10.6). Все такие строки собираются функциями `shared/domain/.../format`, а не по месту.
 - **Сложение Fold:** экран читает ширину из `LocalWide`; прокрутка и выбранное объявляются над веткой `if (wide)`, иначе сложение их сбросит (шаг 1.5).
 
-## После переноса в `main` — напомнить про iPhone
+## После переноса в `main` — про iPhone
 
-Когда шаг, менявший приложение (`shared/`, `iosApp/`, Gradle), перенесён в `main` и «Сборка» там зелёная (новый APK в релизе), в итоговом сообщении Дмитрию **обязательно** написать, что iPhone сам не собирается, и дать инструкцию. Запустить сборку из облачной сессии нельзя — только Дмитрий. Текст:
-
-> Android собран, APK в «Последней сборке». iPhone теперь собирается только вручную:
-> 1. Открой github.com/AkenoryGit/personalka (в браузере, где ты вошёл в GitHub) → вкладка **Actions**.
-> 2. Слева выбери **iPhone**.
-> 3. Справа **Run workflow** → ветка **main** → зелёная **Run workflow**.
-> 4. Через 20–40 минут сборка придёт в TestFlight. Одна сборка ≈ 250 из 2000 бесплатных минут в месяц — если на iPhone сейчас не нужно, можно не запускать или собрать один раз после нескольких правок.
-
-Если в `main` ушли только документы или сервер — напоминать не нужно.
+С 08.11.2026 iPhone собирается и выгружается в TestFlight сам после переноса в `main` (если менялись `iosApp/`, `shared/` или Gradle). В итоговом сообщении написать Дмитрию, что сборка для iPhone ушла и через 20–40 минут после неё придёт в TestFlight; проверить итог — отметкой «iPhone: TestFlight» у запуска workflow «iPhone».
 
 ## Общение с Дмитрием
 

@@ -83,6 +83,8 @@ object IosApp {
         started = true
         syncRunner.start(scope)
         IosNotifications.start(scope)
+        // Виджеты (шаг 5.10): кадры на три дня — после каждой правки.
+        IosWidgets.start(scope)
     }
 
     @OptIn(ExperimentalForeignApi::class)
