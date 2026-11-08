@@ -74,11 +74,13 @@ class WidgetBridge(
     private fun day(today: LocalDate): Flow<WidgetDay> = combine(
         app.calendar.homeTrainings(today),
         app.settings.salary.schemes,
-        app.settings.months.months(listOf(previous(today), today.yearMonth), today),
+        app.settings.months.month(previous(today), today),
+        app.settings.months.month(today.yearMonth, today),
         app.watch.todo,
-    ) { trainings, schemes, months, todo ->
+    ) { trainings, schemes, last, current, todo ->
         val set = !SalarySetupRules.needed(schemes)
-        val view = months.last().view.takeIf { set && it.month == today.yearMonth }
+        val months = listOf(last, current)
+        val view = current.view.takeIf { set && it.month == today.yearMonth }
         // «До получки» (шаг 5.9б): прошлый месяц — выплаты по проведённым, текущий — по расписанию.
         val payouts = if (set) months.first().view.payout.payouts + months.last().view.forecastPayout.payouts else emptyList()
         val until = today.plus(DAYS, DateTimeUnit.DAY)
