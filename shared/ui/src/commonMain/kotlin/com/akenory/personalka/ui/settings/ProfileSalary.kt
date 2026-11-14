@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.format.RateFormat
@@ -59,6 +60,8 @@ internal const val SCHEME_ROW_TAG = "profile-scheme"
 internal const val CO_COACHING_TAG = "profile-co-coaching"
 internal const val SALARY_FROM_TAG = "profile-salary-from"
 internal const val PROFILE_ADVANCE_TAG = "profile-advance"
+internal const val FORECAST_ROW_TAG = "profile-forecast"
+internal fun forecastTypeTag(id: String) = "forecast-type-$id"
 internal fun profileSchemeTag(k: PaySchemeKind) = "profile-scheme-${k.name}"
 
 /**
@@ -70,6 +73,8 @@ internal fun profileSchemeTag(k: PaySchemeKind) = "profile-scheme-${k.name}"
 internal fun ProfileSalaryRows(settings: SettingsRepository, open: Set<Feature>, today: LocalDate, shell: ShellState, scope: CoroutineScope) {
     val schemes by remember(settings) { settings.salary.schemes }.collectAsState(initial = emptyList())
     val coCoaching by remember(settings) { settings.salary.coCoaching }.collectAsState(initial = false)
+    val types by remember(settings) { settings.types }.collectAsState(initial = emptyList())
+    val forecastTypes = forecastTypes(types)
     val scheme = Versions.activeIn(schemes, today.yearMonth) { it.scheme.validFrom }?.scheme
     SectionLabel(SalarySetupFormat.SALARY)
     ListCard {
@@ -88,6 +93,15 @@ internal fun ProfileSalaryRows(settings: SettingsRepository, open: Set<Feature>,
                 subtitle = scheme?.let { SalarySetupFormat.schemeRow(it.kind, it.advanceDefault, it.validFrom) } ?: SalarySetupFormat.NOT_SET,
                 onClick = { shell.open(SettingsRoute.SCHEME) },
                 modifier = Modifier.testTag(SCHEME_ROW_TAG),
+            )
+        }
+        if (forecastTypes.isNotEmpty()) {
+            RowDivider()
+            NavRow(
+                title = SalarySetupFormat.FORECAST,
+                subtitle = SalarySetupFormat.forecastRow(forecastTypes.filter { !it.inForecast }.map { it.name }),
+                onClick = { shell.open(SettingsRoute.FORECAST) },
+                modifier = Modifier.testTag(FORECAST_ROW_TAG),
             )
         }
         RowDivider()
@@ -242,5 +256,41 @@ internal fun SchemeEditor(settings: SettingsRepository, open: Set<Feature>, toda
             )
         }
         if (picking) DatePickerPanel(month.firstDay, { picking = false; monthText = it.yearMonth.toString() }, { picking = false })
+    }
+}
+
+/** Типы для «Что считать в „будет“»: действующие и через кассу клуба — оплата напрямую считается отдельно (шаг 5.3с). */
+internal fun forecastTypes(types: List<TrainingTypeEntity>): List<TrainingTypeEntity> = types.filter { !it.archived && !it.paidDirect }
+
+/**
+ * «Что считать в „будет“» (шаг 5.10в): выключатель у каждого типа, пишется сразу. Выключен — запланированные тренировки
+ * типа не входят в «будет» дня и месяца; «Заработано», план и ступени не меняются. По умолчанию включены все.
+ */
+@Composable
+internal fun ForecastTypesScreen(settings: SettingsRepository, scope: CoroutineScope, onBack: () -> Unit) {
+    val types by remember(settings) { settings.types }.collectAsState(initial = null)
+    val list = forecastTypes(types ?: return)
+    Column(Modifier.fillMaxSize()) {
+        TopBar(SalarySetupFormat.FORECAST, onBack = onBack)
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
+            // Пояснение — над выключателями (просьба Дмитрия 14.11.2026): снятый тип не пропадает из «Заработано».
+            Hint(SalarySetupFormat.FORECAST_INTRO)
+            Hint(SalarySetupFormat.FORECAST_ON)
+            Hint(SalarySetupFormat.FORECAST_OFF)
+            Spacer(Modifier.height(Dimens.space4))
+            ListCard {
+                list.forEachIndexed { i, type ->
+                    if (i > 0) RowDivider()
+                    SwitchRow(
+                        type.name,
+                        type.inForecast,
+                        { on -> scope.launch { settings.setInForecast(type.id, on) } },
+                        Modifier.padding(horizontal = Dimens.space4).testTag(forecastTypeTag(type.id)),
+                    )
+                }
+            }
+            Hint(SalarySetupFormat.FORECAST_PLAN)
+            Spacer(Modifier.height(Dimens.space6))
+        }
     }
 }

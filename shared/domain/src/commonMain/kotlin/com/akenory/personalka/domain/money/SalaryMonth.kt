@@ -85,7 +85,8 @@ data class TierProgress(
  * [colleagues] — взаиморасчёт по каждому коллеге для вкладки «Коллеги» (3.8). [todayPt] и [todayPtAhead] — ПТ
  * сегодня: проведено и ещё запланировано (счёт как у ступени, 4.6), для «Денег» на «Главной». [todayCancelled] и
  * [monthCancelled] — отменённые тренировки сегодня и за месяц без дежурств (просьба Дмитрия 26.10.2026), там же.
- * [work] — часы работы в неделю и заработок за час (шаг 3.9щ).
+ * [work] — часы работы в неделю и заработок за час (шаг 3.9щ). [shown] — прогноз для показа «будет» (шаг 5.10в): без
+ * запланированных типов, снятых в «Что считать в „будет“»; [pay] — полный, по нему план, «не хватает» и ступени.
  */
 data class SalaryMonth(
     val month: YearMonth,
@@ -111,6 +112,7 @@ data class SalaryMonth(
     val todayCancelled: Int? = null,
     val monthCancelled: Int = 0,
     val work: WorkHours? = null,
+    val shown: MonthPay = pay,
 ) {
     /** «Месяц сверен» — у прошедшего и текущего: сверять будущий не с чем. */
     val canClose: Boolean get() = period != MonthPeriod.FUTURE
@@ -120,8 +122,11 @@ data class SalaryMonth(
     /** Выполнение плана, проценты вниз до целого. */
     val percent: Int? get() = SalaryPlan.percent(pay.earned, plan)
 
-    /** Прогноз в процентах плана. */
+    /** Прогноз в процентах плана — полный: по нему подсказки плана (шаг 5.10в). */
     val forecastPercent: Int? get() = SalaryPlan.percent(pay.forecast, plan)
+
+    /** Показываемый прогноз «будет» в процентах плана — рядом с ним в «Месяце». */
+    val shownPercent: Int? get() = SalaryPlan.percent(shown.forecast, plan)
 
     /** Прогноз есть у текущего и будущих месяцев. */
     val hasForecast: Boolean get() = period != MonthPeriod.PAST
@@ -168,7 +173,10 @@ object SalaryMonthRules {
     ): SalaryMonth {
         val month = input.month
         val period = period(month, today)
-        val pay = (if (input.today == null) input.copy(today = today) else input).pay()
+        val dated = if (input.today == null) input.copy(today = today) else input
+        val pay = dated.pay()
+        // Шаг 5.10в: «будет» — без снятых типов; у прошедшего месяца прогноза нет.
+        val shown = if (dated.hidesForecast && period(input.month, today) != MonthPeriod.PAST) dated.shownPay() else pay
         val plan = SalaryPlan.planFor(month, plans)
         val on = calcDay(month, today)
         val shortfall = when {
@@ -201,21 +209,25 @@ object SalaryMonthRules {
             today = todayIds?.let { ids -> pay.trainings.filter { it.trainingId in ids }.sumOf { it.earned } },
             // Шаг 5.3ы: у идущей группы отмеченные дети уже в «today» — в остаток дня идёт только то, что сверх них.
             todayAhead = plannedToday?.let { ids ->
-                val already = pay.trainings.filter { it.trainingId in ids }.sumOf { it.earned }
-                (pay.plannedNow.filter { it.trainingId in ids }.sumOf { it.earned } - already).coerceAtLeast(0)
+                val already = shown.trainings.filter { it.trainingId in ids }.sumOf { it.earned }
+                (shown.plannedNow.filter { it.trainingId in ids }.sumOf { it.earned } - already).coerceAtLeast(0)
             },
             tiers = tierProgress(input, pay, period, ptTypeId, ptPlaceId, on),
             breakdown = breakdown(input, pay),
             advanceActual = advanceActual,
-            chart = SalaryChartRules.build(input, pay, period, today, plan, days),
+            chart = SalaryChartRules.build(input, shown, period, today, plan, days),
             closed = closed,
             days = days,
             colleagues = SettlementRules.colleagues(input, pay, settled),
             todayPt = ofToday?.let { PayRules.ptCount(it, ptIds) },
-            todayPtAhead = ofToday?.let { list -> PayRules.ptCount(list.filter { it.status == TrainingStatus.PLANNED }, ptIds, forecast = true) },
+            todayPtAhead = ofToday?.let { list ->
+                val off = input.types.filter { !it.inForecast }.map { it.id }.toSet()
+                PayRules.ptCount(list.filter { it.status == TrainingStatus.PLANNED && it.typeId !in off }, ptIds, forecast = true)
+            },
             todayCancelled = ofToday?.let { cancelled.count { it.start.date == today } },
             monthCancelled = cancelled.size,
             work = CancelRules.work(input.trainings, month, today, pay.earned),
+            shown = shown,
         )
     }
 

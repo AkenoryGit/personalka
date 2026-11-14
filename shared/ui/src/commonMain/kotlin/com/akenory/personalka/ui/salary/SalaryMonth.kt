@@ -667,15 +667,15 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Un
         val plan = view.plan
         if (plan != null && plan > 0) {
             val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
-            val forecast = if (view.hasForecast) (view.pay.forecast.toFloat() / plan).coerceIn(done, 1f) else done
+            val forecast = if (view.hasForecast) (view.shown.forecast.toFloat() / plan).coerceIn(done, 1f) else done
             TwoPartBar(done, forecast)
         }
         if (view.hasForecast) {
             Row(Modifier.fillMaxWidth()) {
-                Muted(SalaryFormat.forecast(view.pay.forecast), Modifier.weight(1f))
-                view.forecastPercent?.let { Muted(SalaryFormat.ofPlan(it)) }
+                Muted(SalaryFormat.forecast(view.shown.forecast), Modifier.weight(1f))
+                view.shownPercent?.let { Muted(SalaryFormat.ofPlan(it)) }
             }
-            SalaryFormat.scheduled(view.pay)?.let { Muted(it, Modifier.testTag(SALARY_SCHEDULED_TAG)) }
+            SalaryFormat.scheduled(view.shown)?.let { Muted(it, Modifier.testTag(SALARY_SCHEDULED_TAG)) }
         }
         if (view.plan != null && !view.planOwn) Muted(SalaryFormat.PLAN_CARRIED)
         view.shortfall?.let { Note(SalaryFormat.shortfall(it)) }

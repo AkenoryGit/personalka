@@ -188,7 +188,7 @@ object HomeFormat {
      * за 8 недель (доли нет — по расписанию), дети в группах — в среднем по 4 последним занятиям; если ожидаемое
      * расходится с расписанием — «По расписанию, без отмен: 170 ПТ, ≈ 190 000 ₽».
      */
-    fun forecastNote(cancels: CancelShare?, likelyPt: Int, scheduledPt: Int, likely: Long, scheduled: Long): String {
+    fun forecastNote(cancels: CancelShare?, likelyPt: Int, scheduledPt: Int, likely: Long, scheduled: Long, hides: Boolean = false): String {
         val first = if (cancels != null) {
             "Прогноз — с обычными отменами: из запланированных ПТ и сплитов отменяется около " +
                 WatchFormat.percent(cancels.percent) + " (по последним 8 неделям)."
@@ -201,8 +201,14 @@ object HomeFormat {
         } else {
             ""
         }
-        return first + groups + schedule
+        // Шаг 5.10в: часть типов снята в «Настройки → Зарплата → Что считать в „будет“».
+        val hidden = if (hides) " $FORECAST_HIDDEN_NOTE" else ""
+        return first + groups + schedule + hidden
     }
+
+    /** Хвост пояснения, когда часть типов не входит в «будет» (шаг 5.10в). */
+    const val FORECAST_HIDDEN_NOTE = "Часть типов не входит в «будет»: они считаются, только когда проведены (Настройки → Зарплата)."
+
 
     /** Отменённые тренировки колонки «Денег»: «1 отмена», «3 отмены»; отмен нет — строки нет (10.7). */
     fun cancelledLine(n: Int): String? = if (n <= 0) null else RuText.count(n, "отмена", "отмены", "отмен")

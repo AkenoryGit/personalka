@@ -634,8 +634,39 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion19() {
-        assertEquals(19, PersonalkaDatabase.VERSION)
+    fun version19TypesStayInForecast(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v19", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 5.3э–5.10б: отметки «В прогнозе» у типа нет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 19)
+                raw.exec(
+                    "INSERT INTO training_type (id, name, shortName, kind, shade, defaultDurationMin, maxClients, payUnit, countsTowardPt, " +
+                        "tierDependent, diaryPlan, diaryFact, diaryBehavior, splitFallbackTypeId, archived, dutyColor, paidDirect, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('t1', 'Группа', 'Гр', 'GROUP', 1, 45, NULL, 'PER_CLIENT', 0, 0, 1, 1, 0, NULL, 0, NULL, 0, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val type = db.referenceDao().trainingType("t1")!!
+                assertEquals("Гр", type.shortName, "Тип не тронут")
+                assertTrue(type.inForecast, "Прежние типы — в прогнозе, как было")
+                db.referenceDao().upsertTrainingType(type.copy(inForecast = false))
+                assertFalse(db.referenceDao().trainingType("t1")!!.inForecast)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion20() {
+        assertEquals(20, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }

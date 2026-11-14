@@ -108,6 +108,7 @@ object SettingsRoute {
     const val TIERS = "settings/tiers"
     const val PAY_DAY = "settings/pay-day"
     const val SCHEME = "settings/scheme"
+    const val FORECAST = "settings/forecast"
     const val COLLEAGUES = "settings/colleagues"
     const val NEW_COLLEAGUE = "colleague/new"
     const val NEW_PLACE = "place/new"
@@ -201,6 +202,7 @@ fun SettingsScreen(
         route == SettingsRoute.ACCOUNT -> account?.let { AccountScreen(it, settings, now, messages, scope, close, sync) }
         route == SettingsRoute.PROFILE -> ProfileScreen(settings, openFeatures(account, now.date), now.date, shell, scope, messages, onBack, close)
         route == SettingsRoute.PAY_DAY -> PayDayEditor(settings, now.date, messages, scope, close)
+        route == SettingsRoute.FORECAST -> ForecastTypesScreen(settings, scope, close)
         route == SettingsRoute.SCHEME -> SchemeEditor(settings, openFeatures(account, now.date), now.date, messages, scope, close)
         route == SettingsRoute.PLACES -> PlacesAndTypes(loadedPlaces, loadedTypes, shell, settings, scope, onBack = onBack)
         route == SettingsRoute.NEW_PLACE -> PlaceEditor(

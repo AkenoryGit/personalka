@@ -120,6 +120,31 @@ class SalaryMonthTest {
     }
 
     @Test
+    fun forecastWithoutUncheckedTypes() {
+        // Шаг 5.10в: группы сняты из «будет». Проведено 10 ПТ (9 200 ₽), сегодня ещё ПТ (920 ₽), группа на 3 детей
+        // (810 ₽) и идущая группа, где один отмечен, второй ещё ждём (270 ₽ уже, 540 ₽ по полному прогнозу).
+        val running = t(type = "group", status = TrainingStatus.PLANNED, day = 20).copy(clients = listOf(ATTENDED, EXPECTED))
+        val list = pts(10) + t(status = TrainingStatus.PLANNED, day = 20) + t(type = "group", status = TrainingStatus.PLANNED, day = 20, clients = 3) + running
+        val plans = mapOf(october to rub(30_000))
+        val all = build(input(list), plans)
+        assertTrue(all.shown === all.pay, "Все типы отмечены — «будет» как раньше")
+        assertEquals(rub(11_470), all.pay.forecast)
+        assertEquals(rub(2_000), all.todayAhead)
+
+        val off = MonthInput(october, list, types.map { if (it.id == "group") it.copy(inForecast = false) else it }, rates, tiers, owners)
+        val view = build(off, plans)
+        assertEquals(rub(9_470), view.pay.earned, "Отмеченный ребёнок идущей группы — в «Заработано»")
+        assertEquals(rub(11_470), view.pay.forecast, "Полный прогноз — для плана")
+        assertEquals(38, view.forecastPercent)
+        assertEquals(rub(10_390), view.shown.forecast, "«Будет» — без неотмеченных детей групп")
+        assertEquals(34, view.shownPercent)
+        assertEquals(rub(270), view.today)
+        assertEquals(rub(920), view.todayAhead, "Остаток дня — только ПТ")
+        assertEquals(all.shortfall, view.shortfall, "«Не хватает» — по полному прогнозу")
+        assertEquals(rub(10_390), view.chart.forecast.last(), "График кончается на «будет»")
+    }
+
+    @Test
     fun cancelledTodayAndMonth() {
         // Сегодня отменены ПТ и группа, 12-го — ПТ; отменённое дежурство и прошлый месяц не считаются.
         val c = TrainingStatus.CANCELLED

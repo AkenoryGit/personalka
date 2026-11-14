@@ -152,8 +152,9 @@ object WidgetRules {
             todayPt = HomeFormat.ptLine(donePt, donePt + (view.todayPtAhead ?: 0)),
             todayCancelled = HomeFormat.cancelledLine(view.todayCancelled ?: 0),
             month = MoneyFormat.rub(view.pay.earned),
-            monthWill = HomeFormat.willBe(view.pay.earned, view.pay.forecast),
-            monthPt = HomeFormat.ptLine(view.pay.ptCount, view.pay.likelyPtCount),
+            // Шаг 5.10в: «будет» — без снятых типов, план и бассейн — по полному прогнозу.
+            monthWill = HomeFormat.willBe(view.pay.earned, view.shown.forecast),
+            monthPt = HomeFormat.ptLine(view.pay.ptCount, view.shown.likelyPtCount),
             monthCancelled = HomeFormat.cancelledLine(view.monthCancelled),
             done = done,
             forecast = forecast,

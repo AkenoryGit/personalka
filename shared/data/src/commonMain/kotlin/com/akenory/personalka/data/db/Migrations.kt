@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -288,6 +288,13 @@ internal object Migration17To18 : Migration(17, 18) {
 internal object Migration18To19 : Migration(18, 19) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `reconciliation` ADD COLUMN `reviewedAt` INTEGER")
+    }
+}
+
+/** 19 → 20 (шаг 5.10в): «В прогнозе» у типа. Все прежние типы — в прогнозе, как и считалось до этого шага. */
+internal object Migration19To20 : Migration(19, 20) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `training_type` ADD COLUMN `inForecast` INTEGER NOT NULL DEFAULT 1")
     }
 }
 

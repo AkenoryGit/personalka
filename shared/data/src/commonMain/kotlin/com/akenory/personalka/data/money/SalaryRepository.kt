@@ -411,4 +411,4 @@ fun TrainingEntity.pay(participations: List<ParticipationEntity>): PayTraining =
 
 /** Тип из базы — во вход расчёта (3.3). Сплит без своего «ПТ» превращается в ПТ тренера ([ptTypeId]). */
 fun TrainingTypeEntity.payType(ptTypeId: String?): PayType =
-    PayType(id, kind, payUnit, countsTowardPt, tierDependent, splitFallbackTypeId ?: ptTypeId.takeIf { kind == TrainingKind.SPLIT })
+    PayType(id, kind, payUnit, countsTowardPt, tierDependent, splitFallbackTypeId ?: ptTypeId.takeIf { kind == TrainingKind.SPLIT }, inForecast)

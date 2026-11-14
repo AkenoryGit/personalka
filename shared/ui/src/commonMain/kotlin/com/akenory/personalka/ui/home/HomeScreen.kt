@@ -831,8 +831,8 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                         MoneyColumn(
                             title = HomeFormat.MONTH,
                             earned = view.pay.earned,
-                            forecast = view.pay.forecast,
-                            pt = HomeFormat.ptLine(view.pay.ptCount, view.pay.likelyPtCount),
+                            forecast = view.shown.forecast,
+                            pt = HomeFormat.ptLine(view.pay.ptCount, view.shown.likelyPtCount),
                             cancelled = HomeFormat.cancelledLine(view.monthCancelled),
                             modifier = Modifier.weight(1f).testTag(MONEY_MONTH_TAG),
                             onInfo = if (view.period == MonthPeriod.CURRENT) ({ note = !note }) else null,
@@ -841,7 +841,8 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                     if (note && view.period == MonthPeriod.CURRENT) {
                         Note(
                             HomeFormat.forecastNote(
-                                view.pay.cancels, view.pay.likelyPtCount, view.pay.forecastPtCount, view.pay.forecast, view.pay.scheduled,
+                                view.shown.cancels, view.shown.likelyPtCount, view.shown.forecastPtCount, view.shown.forecast, view.shown.scheduled,
+                                hides = view.shown !== view.pay,
                             ),
                             Modifier.padding(top = Dimens.space1).testTag(MONEY_NOTE_TAG),
                         )

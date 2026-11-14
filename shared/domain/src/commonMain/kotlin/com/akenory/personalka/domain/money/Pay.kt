@@ -24,6 +24,11 @@ data class PayType(
     val countsTowardPt: Boolean,
     val tierDependent: Boolean,
     val splitFallbackTypeId: String? = null,
+    /**
+     * Запланированные тренировки типа входят в «будет» дня и месяца (шаг 5.10в, просьба Дмитрия 14.11.2026). Снята —
+     * в «будет» только проведённые и отмеченные; подсказки плана и ступени считаются по полному прогнозу.
+     */
+    val inForecast: Boolean = true,
 )
 
 /** Версия ставки тренера (ТЗ 3.3). [locationId] пусто — для любого места; [sptCloseBonus] — только у СПТ. */
@@ -415,6 +420,8 @@ object PayRules {
      * (4.12): поэтому в [trainings] можно передавать и прошлые месяцы — считаются только тренировки [month].
      * С долей отмен [cancels] (шаг 3.9щ) запланированных ПТ и сплитов в счётчике и в деньгах прогноза — столько, сколько
      * обычно состоится; ступень прогноза — по такому счётчику. «По расписанию» — без скидки.
+     * С [shownOnly] (шаг 5.10в) — прогноз для показа: запланированные типы без [PayType.inForecast] в нём только с
+     * отмеченными клиентами, как в «Заработано»; без него — полный прогноз для плана и ступеней.
      */
     fun month(
         month: YearMonth,
@@ -428,41 +435,46 @@ object PayRules {
         cancels: CancelShare? = null,
         now: LocalDateTime? = null,
         today: LocalDate? = now?.date,
+        shownOnly: Boolean = false,
     ): MonthPay {
         val ofMonth = inMonth(trainings, month)
         val scheme = Versions.activeIn(schemes, month) { it.validFrom }
         val ptIds = ptTypeIds(scheme, types)
+        val byId = types.associateBy { it.id }
+        // Шаг 5.10в: с [shownOnly] запланированные типы без «В прогнозе» идут в прогноз как в факт — только отмеченные.
+        val off = { t: PayTraining -> shownOnly && t.status == TrainingStatus.PLANNED && byId[t.typeId]?.inForecast == false }
+        val fc = { t: PayTraining -> !off(t) }
+        val countForecast = { list: List<PayTraining> -> ptCount(list.filter(fc), ptIds, forecast = true) + ptCount(list.filter(off), ptIds) }
         val n = ptCount(ofMonth, ptIds)
-        val nForecast = ptCount(ofMonth, ptIds, forecast = true)
+        val nForecast = countForecast(ofMonth)
         val tier = tier(scheme, n)
         val forecastTier = tier(scheme, nForecast)
-        val byId = types.associateBy { it.id }
         val pays = ofMonth.map { pay(it, byId, rates, tier, owners = owners) }
         val sptBonus = SptRules.bonusIn(month, spt, rates)
         val adjusted = adjustments.sumOf { it.amount }
         val adjustedInClub = adjustments.filter { it.inClubAccrual }.sumOf { it.amount }
         val kindOf = { t: PayTraining -> byId[t.typeId]?.kind }
         val expectedOf = { t: PayTraining ->
-            if (t.status == TrainingStatus.PLANNED && kindOf(t) == TrainingKind.GROUP) expectedChildren(t, trainings, now) else null
+            if (fc(t) && t.status == TrainingStatus.PLANNED && kindOf(t) == TrainingKind.GROUP) expectedChildren(t, trainings, now) else null
         }
-        val forecastPays = ofMonth.map { pay(it, byId, rates, forecastTier, forecast = true, owners = owners, expected = expectedOf(it)) }
+        val forecastPays = ofMonth.map { pay(it, byId, rates, forecastTier, forecast = fc(it), owners = owners, expected = expectedOf(it)) }
         val forecast = sptBonus + adjusted + forecastPays.sumOf { it.earned }
         // Прогноз с отменами: запланированные ПТ и сплиты, которые принесут деньги, — со скидкой на обычную долю отмен.
-        val discounted = { t: PayTraining -> cancels != null && t.status == TrainingStatus.PLANNED && kindOf(t) in CancelRules.KINDS }
+        val discounted = { t: PayTraining -> cancels != null && fc(t) && t.status == TrainingStatus.PLANNED && kindOf(t) in CancelRules.KINDS }
         val plannedPt = ofMonth.count { discounted(it) && it.typeId in ptIds && paidClients(it, forecast = true) > 0 }
         val likelyPtCount = nForecast - plannedPt + (cancels?.keep(plannedPt) ?: plannedPt)
         val likelyTier = tier(scheme, likelyPtCount)
         val likelyPays = if (likelyTier == forecastTier) forecastPays else ofMonth.map {
-            pay(it, byId, rates, likelyTier, forecast = true, owners = owners, expected = expectedOf(it))
+            pay(it, byId, rates, likelyTier, forecast = fc(it), owners = owners, expected = expectedOf(it))
         }
         // Остаток дня (5.2, шаги 5.3ш и 5.3щ): запланированные — по ступени, до которой доведут сегодняшние ПТ:
         // проведено за месяц плюс запланированные на сегодня. Не переваливаем за порог — по ступени «Заработано».
         val todayPlannedPt = today?.let { day ->
-            ptCount(ofMonth.filter { it.status == TrainingStatus.PLANNED && it.start.date == day }, ptIds, forecast = true)
+            countForecast(ofMonth.filter { it.status == TrainingStatus.PLANNED && it.start.date == day })
         } ?: 0
         val todayTier = tier(scheme, n + todayPlannedPt)
         val plannedNow = ofMonth.filter { it.status == TrainingStatus.PLANNED }
-            .map { pay(it, byId, rates, todayTier, forecast = true, owners = owners, expected = expectedOf(it)) }
+            .map { pay(it, byId, rates, todayTier, forecast = fc(it), owners = owners, expected = expectedOf(it)) }
         val (cut, kept) = ofMonth.zip(likelyPays).partition { (t, _) -> discounted(t) }
         val likely = sptBonus + adjusted + kept.sumOf { it.second.earned } +
             cut.sumOf { it.second.earned }.let { cancels?.keep(it) ?: it }

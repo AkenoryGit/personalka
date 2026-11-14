@@ -34,6 +34,8 @@ import com.akenory.personalka.ui.settings.PAY_DAY_ROW_TAG
 import com.akenory.personalka.ui.settings.PROFILE_ADVANCE_DAY_TAG
 import com.akenory.personalka.ui.settings.PROFILE_PAY_DAY_TAG
 import com.akenory.personalka.ui.settings.CO_COACHING_TAG
+import com.akenory.personalka.ui.settings.FORECAST_ROW_TAG
+import com.akenory.personalka.ui.settings.forecastTypeTag
 import com.akenory.personalka.ui.settings.PROFILE_ROW_TAG
 import com.akenory.personalka.ui.settings.SCHEME_ROW_TAG
 import com.akenory.personalka.ui.settings.profileSchemeTag
@@ -210,6 +212,27 @@ class SalarySetupUiTest {
 
         onNodeWithTag(CO_COACHING_TAG).performScrollTo().performClick()
         waitUntil(timeoutMillis = 5_000) { runBlocking { settings.salary.coCoaching.first() } }
+    }
+
+    @Test
+    fun profileForecastTypes() = runComposeUiTest {
+        // Шаг 5.10в: «Что считать в „будет“» — по умолчанию все типы, выключатель пишется в тип сразу.
+        start()
+        onNodeWithTag(navTag(Section.MORE)).performClick()
+        awaitNode(hasTestTag(PROFILE_ROW_TAG))
+        onNodeWithTag(PROFILE_ROW_TAG).performClick()
+        awaitNode(hasTestTag(FORECAST_ROW_TAG))
+        onNodeWithTag(FORECAST_ROW_TAG).performScrollTo().assertTextContains(SalarySetupFormat.FORECAST_ALL, substring = true)
+        onNodeWithTag(FORECAST_ROW_TAG).performClick()
+
+        val group = typeId("Группа")
+        awaitNode(hasTestTag(forecastTypeTag(group)))
+        // Пояснение — над выключателями: снятый тип не пропадает из «Заработано».
+        onNodeWithText(SalarySetupFormat.FORECAST_OFF).assertExists()
+        onNodeWithTag(forecastTypeTag(group)).performScrollTo().assertIsOn().performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { settings.types.first().single { it.id == group }.inForecast.not() } }
+        onNodeWithTag(forecastTypeTag(group)).assertIsOff()
+        onNodeWithTag(forecastTypeTag(typeId("ПТ"))).assertIsOn()
     }
 
     @Test

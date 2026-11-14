@@ -169,6 +169,12 @@ data class MonthInput(
     val today: LocalDate? = now?.date,
 ) {
     fun pay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments, cancels, now, today)
+
+    /** Прогноз для показа «будет» (шаг 5.10в): без запланированных типов, снятых в «Что считать в „будет“». */
+    fun shownPay(): MonthPay = PayRules.month(month, trainings, types, rates, schemes, owners, spt, adjustments, cancels, now, today, shownOnly = true)
+
+    /** Есть ли типы, снятые из «будет»: нет — показываемый прогноз совпадает с полным. */
+    val hidesForecast: Boolean get() = types.any { !it.inForecast }
 }
 
 /**

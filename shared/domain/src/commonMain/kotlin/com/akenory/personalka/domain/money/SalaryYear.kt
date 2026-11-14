@@ -86,7 +86,7 @@ object SalaryYearRules {
         month = m.month,
         period = m.period,
         earned = m.pay.earned,
-        forecast = m.pay.forecast.takeIf { m.hasForecast },
+        forecast = m.shown.forecast.takeIf { m.hasForecast },
         plan = m.plan,
         ndfl = m.payout.ndfl,
         onHand = m.totals.onHand,

@@ -197,8 +197,15 @@ class SettingsRepository(
             else -> fallbackFor(draft)
         }
         reference.upsertTrainingType(
-            draft.toEntity(id, type.sync.touched(clock()), fallback).copy(archived = archived),
+            draft.toEntity(id, type.sync.touched(clock()), fallback).copy(archived = archived, inForecast = type.inForecast),
         )
+    }
+
+    /** «Что считать в „будет“» (шаг 5.10в): входят ли запланированные тренировки типа в прогноз дня и месяца. */
+    suspend fun setInForecast(id: String, on: Boolean) {
+        val type = reference.trainingType(id) ?: return
+        if (type.inForecast == on) return
+        reference.upsertTrainingType(type.copy(sync = type.sync.touched(clock()), inForecast = on))
     }
 
     private suspend fun fallbackFor(split: TypeDraft): String? {
