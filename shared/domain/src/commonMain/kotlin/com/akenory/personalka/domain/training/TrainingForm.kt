@@ -127,6 +127,30 @@ object TrainingFormRules {
     }
 
     /**
+     * Клиента выбрали первым в новой тренировке (шаг 5.10б): тип и место — как в его последней созданной
+     * тренировке без группы. Тип, который тренер выбрал сам ([keepType]), и место, выбранное им ([keepPlace]),
+     * не меняются; тип или место, которых уже нет в форме (в архиве), — тоже; место ставится, только если тип
+     * в итоге тот же, что был у клиента. Тип меняется так же, как нажатием
+     * чипа: длительность — из типа, если тренер её не менял.
+     */
+    fun fromClientLast(
+        draft: TrainingDraft,
+        lastTypeId: String?,
+        lastPlaceId: String?,
+        types: List<FormType>,
+        placeIds: Set<String>,
+        keepType: Boolean,
+        keepPlace: Boolean,
+        keepDuration: Boolean,
+    ): TrainingDraft {
+        val type = types.firstOrNull { it.id == lastTypeId }?.takeIf { !keepType && it.id != draft.typeId }
+        val typed = type?.let { withType(draft, it, keepDuration) } ?: draft
+        // Тренер выбрал другой тип, чем был у клиента, — место того типа ему не подходит.
+        val place = lastPlaceId?.takeIf { !keepPlace && it in placeIds && typed.typeId == lastTypeId }
+        return if (place != null) typed.copy(locationId = place) else typed
+    }
+
+    /**
      * Тип сменили: длительность — из нового типа, если тренер не менял её сам; клиентов не больше, чем в типе;
      * группа — только у группового.
      */

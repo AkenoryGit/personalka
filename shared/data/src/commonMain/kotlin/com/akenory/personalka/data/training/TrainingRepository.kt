@@ -72,6 +72,9 @@ data class FormClient(val id: String, val name: ClientName) {
     val label: String get() = name.short
 }
 
+/** Тип и место последней тренировки клиента — их форма ставит, когда клиента выбрали (шаг 5.10б). */
+data class ClientLast(val typeId: String, val locationId: String)
+
 /** Группа в форме: её тип и место подставляются, когда группу выбрали. */
 data class FormGroup(val id: String, val name: String, val typeId: String, val locationId: String)
 
@@ -199,6 +202,10 @@ class TrainingRepository internal constructor(
             )
         }
     }
+
+    /** Тип и место последней созданной тренировки клиента без группы (шаг 5.10б); `null` — таких не было. */
+    suspend fun lastOfClient(clientId: String): ClientLast? =
+        trainings.lastOfClient(clientId)?.let { ClientLast(it.typeId, it.locationId) }
 
     /**
      * Начало новой тренировки для «+» (5.5): ближайший свободный целый час на [durationMin] минут в часы работы.

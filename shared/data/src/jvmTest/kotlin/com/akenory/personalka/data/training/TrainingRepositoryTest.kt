@@ -452,6 +452,33 @@ class TrainingRepositoryTest {
         assertEquals(at(tuesday, 20), forms.suggestStart(90))
     }
 
+    // --- Шаг 5.10б: тип и место последней тренировки клиента ---
+
+    @Test
+    fun lastOfClientIsLatestCreatedWithoutGroup(): Unit = runBlocking {
+        val morozov = client("Морозов", "Даниил")
+        val orlova = client("Орлова", "Кира")
+        assertNull(forms.lastOfClient(morozov))
+        // Сначала ПТ в ДБ, потом — уже в ББ: предлагается ББ, хотя тренировка в ДБ позже по дате.
+        saved(forms.create(pt(at(day(3), 10), morozov, place = "ДБ"), confirmed = true))
+        millis += 60_000
+        saved(forms.create(pt(at(day(1), 10), morozov, place = "ББ"), confirmed = true))
+        millis += 60_000
+        // Чужая тренировка и группа клиента не в счёт.
+        saved(forms.create(pt(at(day(2), 12), orlova, place = "ДБ"), confirmed = true))
+        val group = groups.create(GroupDraft("Сб 9:00 ДБ", typeId("Группа"), placeId("ДБ")))
+        groups.addMember(group, morozov, tuesday)
+        millis += 60_000
+        saved(
+            forms.create(
+                TrainingDraft(at(day(4), 9), typeId("Группа"), groupId = group, locationId = placeId("ДБ")),
+                confirmed = true,
+            ),
+        )
+        assertEquals(ClientLast(typeId("ПТ"), placeId("ББ")), forms.lastOfClient(morozov))
+        assertEquals(ClientLast(typeId("ПТ"), placeId("ДБ")), forms.lastOfClient(orlova))
+    }
+
     private companion object {
         /** Изменение без переноса. */
         const val SAVED = "Сохранено"

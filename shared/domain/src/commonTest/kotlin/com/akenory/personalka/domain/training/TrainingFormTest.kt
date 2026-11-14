@@ -79,6 +79,28 @@ class TrainingFormTest {
     }
 
     @Test
+    fun clientLastTypeAndPlace() {
+        val places = setOf("bb", "db")
+        val draft = TrainingDraft(at("17:15"), typeId = split.id, clientIds = listOf("a"), locationId = "db", durationMin = 50)
+        fun last(d: TrainingDraft = draft, type: String? = pt.id, place: String? = "bb", keepType: Boolean = false, keepPlace: Boolean = false, keepDuration: Boolean = false) =
+            TrainingFormRules.fromClientLast(d, type, place, listOf(pt, split, baby), places, keepType, keepPlace, keepDuration)
+        // Последней у клиента была ПТ в ББ — так и ставится.
+        assertEquals(draft.copy(typeId = pt.id, locationId = "bb"), last())
+        // Грудничковое: длительность из типа, если тренер её не менял.
+        assertEquals(30, last(type = baby.id).durationMin)
+        assertEquals(45, last(draft.copy(durationMin = 45), type = baby.id, keepDuration = true).durationMin)
+        // Тип выбран тренером: тип остаётся, место того типа не ставится.
+        assertEquals(draft, last(keepType = true))
+        // Тренер выбрал тот же тип, что был у клиента, — место ставится.
+        assertEquals(draft.copy(typeId = pt.id, locationId = "bb"), last(draft.copy(typeId = pt.id), keepType = true))
+        // Место выбрано тренером — остаётся.
+        assertEquals(draft.copy(typeId = pt.id), last(keepPlace = true))
+        // Тип или место в архиве (нет в форме) — не меняются.
+        assertEquals(draft, last(type = "gone"))
+        assertEquals(draft.copy(typeId = pt.id), last(place = "gone"))
+    }
+
+    @Test
     fun nearestFreeHourLikeMockup() {
         // Макет «Новая тренировка»: в 15:40 с 16:00 до 19:50 всё занято — 20:00–20:50.
         val busy = listOf(span("16:00", "16:50"), span("16:30", "17:20"), span("17:15", "18:05"), span("18:00", "18:50"), span("19:00", "19:50"))

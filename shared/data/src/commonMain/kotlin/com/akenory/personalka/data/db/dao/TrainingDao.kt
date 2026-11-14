@@ -138,6 +138,21 @@ interface TrainingDao {
     )
     fun observeRecentParticipations(limit: Int): Flow<List<ParticipationEntity>>
 
+    /**
+     * Последняя созданная тренировка клиента без группы (шаг 5.10б): её тип и место форма предлагает новой.
+     * Отменённые тоже — тип и место у них настоящие.
+     */
+    @Query(
+        """
+        SELECT t.* FROM training AS t
+        JOIN participation AS p ON p.trainingId = t.id
+        WHERE p.clientId = :clientId AND p.deletedAt IS NULL AND t.deletedAt IS NULL AND t.groupId IS NULL
+        ORDER BY t.createdAt DESC, t.start DESC, t.id DESC
+        LIMIT 1
+        """
+    )
+    suspend fun lastOfClient(clientId: String): TrainingEntity?
+
     /** Тренировки группы по времени, отменённые тоже (5.10). */
     @Query("SELECT * FROM training WHERE groupId = :groupId AND deletedAt IS NULL ORDER BY start")
     suspend fun trainingsOfGroup(groupId: String): List<TrainingEntity>

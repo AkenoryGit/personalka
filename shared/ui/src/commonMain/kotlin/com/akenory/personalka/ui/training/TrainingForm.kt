@@ -388,6 +388,8 @@ private fun TrainingFields(
     var draft by rememberSaveable(key, stateSaver = DraftSaver) { mutableStateOf<TrainingDraft?>(null) }
     var keepDuration by rememberSaveable(key) { mutableStateOf(editId != null || series != null) }
     var keepPlace by rememberSaveable(key) { mutableStateOf(editId != null || series != null) }
+    // Тип выбран тренером (чипом, «Вставить скопированную» или передан в форму) — клиент его не меняет (5.10б).
+    var keepType by rememberSaveable(key) { mutableStateOf(TrainingFormKey.typeId(key) != null) }
     var ownDuration by rememberSaveable(key) { mutableStateOf(false) }
     var ownText by rememberSaveable(key) { mutableStateOf("") }
     var showErrors by rememberSaveable(key) { mutableStateOf(false) }
@@ -414,13 +416,19 @@ private fun TrainingFields(
             val minutes = type?.defaultDurationMin ?: TypePresets.DEFAULT_DURATION
             val start = TrainingFormKey.start(key) ?: forms.suggestStart(minutes)
             val place = TrainingFormKey.locationId(key)?.takeIf { id -> loaded.places.any { it.id == id } }
-            draft = TrainingDraft(
+            val fresh = TrainingDraft(
                 start = start,
                 typeId = type?.id,
                 clientIds = listOfNotNull(TrainingFormKey.clientId(key)),
                 locationId = place ?: type?.let { loaded.lastPlaceByType[it.id] } ?: loaded.places.firstOrNull()?.id,
                 durationMin = minutes,
                 repeat = if (TrainingFormKey.weekly(key)) Repeat(setOf(start.date.dayOfWeek)) else null,
+            )
+            // Из карточки клиента — тип и место его последней тренировки (5.10б).
+            val last = TrainingFormKey.clientId(key)?.let { forms.lastOfClient(it) }
+            draft = if (last == null) fresh else TrainingFormRules.fromClientLast(
+                fresh, last.typeId, last.locationId, loaded.types, loaded.places.map { it.id }.toSet(),
+                keepType = keepType, keepPlace = place != null, keepDuration = false,
             )
         }
     }
@@ -471,8 +479,24 @@ private fun TrainingFields(
 
     fun select(client: FormClient) {
         val limit = type?.let(TrainingFormRules::clientLimit)
+        val first = draft?.clientIds?.isEmpty() == true
         update { it.copy(clientIds = TrainingFormRules.toggleClient(it.clientIds, client.id, limit), groupId = null) }
         query = ""
+        // Первый клиент новой тренировки — тип и место его последней тренировки без группы (5.10б).
+        if (first && editId == null && series == null && !(keepType && keepPlace)) {
+            scope.launch {
+                val last = forms.lastOfClient(client.id) ?: return@launch
+                val loaded = data ?: return@launch
+                update { d ->
+                    if (d.clientIds != listOf(client.id)) d
+                    else TrainingFormRules.fromClientLast(
+                        d, last.typeId, last.locationId, loaded.types, loaded.places.map { it.id }.toSet(),
+                        keepType = keepType, keepPlace = keepPlace, keepDuration = keepDuration,
+                    )
+                }
+                if (!keepDuration) ownDuration = false
+            }
+        }
     }
 
     /** «Да, выбрать» у похожего (5.8): архивный возвращается в действующие — он снова ходит. */
@@ -608,6 +632,7 @@ private fun TrainingFields(
                     }
                     keepDuration = true
                     keepPlace = true
+                    keepType = true
                     ownDuration = paste.durationMin !in ReferenceRules.DURATION_CHIPS
                     ownText = paste.durationMin.toString()
                 },
@@ -629,6 +654,7 @@ private fun TrainingFields(
                     selected = t.id == current.typeId,
                     onClick = {
                         if (t.id == current.typeId) return@ChoiceChip
+                        keepType = true
                         update { d ->
                             val next = TrainingFormRules.withType(d, t, keepDuration)
                             if (keepPlace) next else next.copy(locationId = form.lastPlaceByType[t.id] ?: next.locationId)

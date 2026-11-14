@@ -198,6 +198,28 @@ class TrainingFormUiTest {
     }
 
     @Test
+    fun clientBringsHisLastTypeAndPlace() = runComposeUiTest {
+        // Шаг 5.10б: у Ильина последней был сплит в ДБ, у Беловой — ПТ в ББ. Выбрали Ильина — сплит и ДБ.
+        val ilin = client("Ильин", "Глеб")
+        val belova = client("Белова", "Ева")
+        runBlocking {
+            forms.create(TrainingDraft(at(today.plus(-7, DateTimeUnit.DAY), "10:00"), typeId("Сплит"), listOf(ilin), null, placeId("ДБ"), 50), confirmed = true)
+        }
+        pt(at(today.plus(-6, DateTimeUnit.DAY), "10:00"), belova)
+        openCalendar()
+        holdDay(150f, yOf("19:20"))
+        tap(formClientTag(ilin))
+        waitUntil(timeoutMillis = 5_000) {
+            runCatching { onNodeWithTag(formPlaceTag(placeId("ДБ"))).onChild().assertIsSelected() }.isSuccess
+        }
+        save()
+        awaitBlocks(1)
+        val created = trainings().single { it.start.date == today }
+        assertEquals(typeId("Сплит"), created.typeId)
+        assertEquals(placeId("ДБ"), created.locationId)
+    }
+
+    @Test
     fun requiredClientShownUnderField() = runComposeUiTest {
         openCalendar()
         // «+» — ближайший свободный час: 16:00.
