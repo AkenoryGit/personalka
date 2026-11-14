@@ -91,7 +91,7 @@ class DiaryRepository internal constructor(private val db: PersonalkaDatabase, p
         if (!fields.any) return null
         val people = trainings.participationsOf(id).ordered()
         val open = people.filter { !it.cancelled }
-        val names = open.associate { p -> p.clientId to clients.client(p.clientId)?.let { CalendarFormat.client(ClientName(it.lastName, it.firstName, it.middleName)) }.orEmpty() }
+        val names = open.associate { p -> p.clientId to clients.client(p.clientId)?.let { ClientName(it.lastName, it.firstName).short }.orEmpty() }
         val next = nextOf(t, type.kind)
         val nextPlan = when {
             next != null -> next.plan

@@ -317,14 +317,14 @@ class TrainingCardUiTest {
         awaitNode(hasTestTag(guestPickTag(vera)))
         onNodeWithTag(guestPickTag(kids[0])).assertDoesNotExist()
         onNodeWithTag(guestPickTag(vera)).performClick()
-        awaitNode(hasText(s("Добавили на раз: Зуева_В.")))
+        awaitNode(hasText("Добавили на раз: Зуева Вера"))
         awaitNode(inCard(TrainingCardFormat.members(2, 1)))
         onNode(inCard(TrainingCardFormat.GUEST)).assertIsDisplayed()
         assertEquals(ParticipationStatus.ATTENDED, statusOf(id, vera))
 
         // «×» в строке гостя — убран; у детей из состава вместо него значок отмены.
         onNodeWithTag(cardClientActionTag(vera)).performScrollTo().performClick()
-        awaitNode(hasText(s("Убрали: Зуева_В.")))
+        awaitNode(hasText("Убрали: Зуева Вера"))
         awaitNode(inCard(TrainingCardFormat.members(2)))
         assertEquals(true, runBlocking { db.trainingDao().participationRow(id, vera)!!.sync.deletedAt != null })
 
@@ -335,7 +335,7 @@ class TrainingCardUiTest {
         onNodeWithTag(NEW_GUEST_TAG).performClick()
         awaitNode(hasTestTag(NEW_GUEST_LAST_TAG))
         onNodeWithText(TrainingCardFormat.ADD).performClick()
-        awaitNode(hasText(s("Добавили на раз: Ершов_Т.")))
+        awaitNode(hasText("Добавили на раз: Ершов Тимофей"))
         awaitNode(inCard(TrainingCardFormat.members(2, 1)))
 
         // Набрали заново того, кто уже есть, — «Похожий клиент уже есть», «Да, выбрать»: второй Зуевой нет (шаг 3.9о).
@@ -348,7 +348,7 @@ class TrainingCardUiTest {
         onNodeWithText(TrainingCardFormat.ADD).performClick()
         awaitNode(hasText(ClientFormat.SIMILAR_TITLE))
         onNodeWithText(ClientFormat.SIMILAR_PICK).performClick()
-        awaitNode(hasText(s("Добавили на раз: Зуева_В.")))
+        awaitNode(hasText("Добавили на раз: Зуева Вера"))
         assertEquals(before, runBlocking { db.clientDao().observeAllClients().first().size })
     }
 
@@ -365,14 +365,14 @@ class TrainingCardUiTest {
         onNodeWithTag(cardClientActionTag(nosova)).performClick()
         awaitNode(hasTestTag(CANCEL_PANEL_TAG))
         onNodeWithText(TrainingCardFormat.MOVE_INSTEAD).assertDoesNotExist()
-        onNodeWithText(s("Отменить: Носова_Е.")).performClick()
-        awaitNode(hasText(s("Отменено: Носова_Е.")))
+        onNodeWithText("Отменить: Носова Елена").performClick()
+        awaitNode(hasText("Отменено: Носова Елена"))
         assertEquals(ParticipationStatus.CANCELLED_CHARGED, statusOf(id, nosova))
         assertEquals(ParticipationStatus.EXPECTED, statusOf(id, ilin))
         // Тренировка осталась, у Носовой — «Вернуть».
         awaitNode(hasTestTag(cardClientActionTag(nosova)))
         onNodeWithTag(cardClientActionTag(nosova)).performClick()
-        awaitNode(hasText(s("Вернуть: Носова_Е.")))
+        awaitNode(hasText("Вернуть: Носова Елена"))
         assertEquals(ParticipationStatus.EXPECTED, statusOf(id, nosova))
     }
 

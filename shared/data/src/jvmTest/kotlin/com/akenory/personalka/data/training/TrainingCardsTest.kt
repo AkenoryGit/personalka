@@ -146,7 +146,7 @@ class TrainingCardsTest {
         val id = training(at(tuesday, 16, 0), ilin, nosova, type = "Сплит")
 
         val result = assertNotNull(cards.cancel(id, listOf(nosova), CancelReasons.CANNOT_COME, now))
-        assertEquals(s("Отменено: Носова_Е."), result.message)
+        assertEquals("Отменено: Носова Елена", result.message)
         val c = card(id)
         assertEquals(TrainingStatus.PLANNED, c.state.status)
         assertEquals(listOf(ClientOutcome.PLANNED, ClientOutcome.CANCELLED_CHARGED), c.clients.map { it.outcome })
@@ -238,7 +238,7 @@ class TrainingCardsTest {
         assertEquals(listOf(vera), cards.guestChoices(first).first().map { it.id })
 
         val added = assertNotNull(cards.addGuest(first, vera))
-        assertEquals(s("Добавили на раз: Зуева_В."), added.message)
+        assertEquals("Добавили на раз: Зуева Вера", added.message)
         // До начала минус 15 минут — ждём, как остальных.
         assertEquals(ParticipationStatus.EXPECTED, statusOf(first, vera))
         val c = card(first)
@@ -253,7 +253,7 @@ class TrainingCardsTest {
         // Детей из состава «Убрать» не убирает — только гостя.
         assertNull(cards.removeGuest(first, kids[0]))
         val removed = assertNotNull(cards.removeGuest(first, vera))
-        assertEquals(s("Убрали: Зуева_В."), removed.message)
+        assertEquals("Убрали: Зуева Вера", removed.message)
         assertEquals(kids.toSet(), card(first).clients.map { it.id }.toSet())
         cards.undo(removed.undo)
         assertTrue(card(first).client(vera)!!.guest)
@@ -305,7 +305,7 @@ class TrainingCardsTest {
         val id = ids.single()
         assertNull(cards.addNewGuest(id, "Зуева", " "))
         val result = assertNotNull(cards.addNewGuest(id, " Зуева ", "Вера"))
-        assertEquals(s("Добавили на раз: Зуева_В."), result.message)
+        assertEquals("Добавили на раз: Зуева Вера", result.message)
         val guest = card(id).clients.single { it.guest }
         assertEquals(ParticipationStatus.ATTENDED, guest.state.status)
         assertEquals("Вера", clients.rows(now).first().single { it.client.id == guest.id }.client.firstName)

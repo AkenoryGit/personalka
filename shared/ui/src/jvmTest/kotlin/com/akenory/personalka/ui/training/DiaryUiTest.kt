@@ -148,8 +148,8 @@ class DiaryUiTest {
 
         onNode(inDiary("Ковалёв / Ковалёва")).assertIsDisplayed()
         onNode(inDiary(s("вт_20.10 · 09:00–09:50 · Сплит · ББ"))).assertIsDisplayed()
-        onNode(inDiary(s("Поведение · Ковалёв_Т."))).assertIsDisplayed()
-        onNode(inDiary(s("Поведение · Ковалёва_А."))).assertIsDisplayed()
+        onNode(inDiary("Поведение · Ковалёв Тимур")).assertIsDisplayed()
+        onNode(inDiary("Поведение · Ковалёва Алиса")).assertIsDisplayed()
         onNodeWithTag(diaryBehaviorTag(kovaleva)).performTextInput("Внимательна")
         waitUntil(timeoutMillis = 5_000) { runBlocking { db.trainingDao().participationRow(split, kovaleva)!!.behavior } == "Внимательна" }
 

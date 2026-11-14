@@ -67,9 +67,9 @@ import kotlinx.datetime.LocalTime
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.plus
 
-/** Клиент в форме: «Орлова К.» на чипе; полное имя — для поиска и проверки похожих (5.8). */
+/** Клиент в форме: «Орлова Кира» на чипе — полностью, чтобы не спутать братьев и сестёр (5.10а); ФИО — для поиска и проверки похожих (5.8). */
 data class FormClient(val id: String, val name: ClientName) {
-    val label: String get() = CalendarFormat.client(name)
+    val label: String get() = name.short
 }
 
 /** Группа в форме: её тип и место подставляются, когда группу выбрали. */

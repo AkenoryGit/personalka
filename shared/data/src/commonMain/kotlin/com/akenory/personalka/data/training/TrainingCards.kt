@@ -285,7 +285,7 @@ class TrainingCardRepository internal constructor(
                 val c = names[p.clientId]
                 CardClient(
                     id = p.clientId,
-                    name = c?.let { CalendarFormat.client(ClientName(it.lastName, it.firstName, it.middleName)) } ?: TrainingCardFormat.ERASED_CLIENT,
+                    name = c?.let { ClientName(it.lastName, it.firstName).short } ?: TrainingCardFormat.ERASED_CLIENT,
                     state = p.toState(),
                     outcome = ClientOutcome.of(t.status, p.status),
                     guest = p.clientId in guests,
@@ -346,7 +346,7 @@ class TrainingCardRepository internal constructor(
                 birthdays = if (t.status == TrainingStatus.CANCELLED) emptyList() else inOrder.mapNotNull { p ->
                     val c = names[p.clientId]
                     val birth = c?.birthDate?.takeIf { !p.toState().isCancelled && ClientRules.isBirthday(it, t.start.date) }
-                    birth?.let { ClientFormat.birthday(CalendarFormat.client(ClientName(c.lastName, c.firstName, c.middleName)), it, t.start.date) }
+                    birth?.let { ClientFormat.birthday(ClientName(c.lastName, c.firstName).short, it, t.start.date) }
                 },
                 reliable = t.status == TrainingStatus.PLANNED &&
                     (kind == TrainingKind.GROUP || ReliabilityRules.counts(kind, type?.name.orEmpty(), type?.shortName.orEmpty())),
@@ -948,8 +948,9 @@ class TrainingCardRepository internal constructor(
         )
     }
 
+    // Полностью «Фамилия Имя» (5.10а): у братьев и сестёр в одной группе «Фамилия И.» совпадает.
     private suspend fun clientName(id: String): String =
-        clients.client(id)?.let { CalendarFormat.client(ClientName(it.lastName, it.firstName, it.middleName)) } ?: TrainingCardFormat.ERASED_CLIENT
+        clients.client(id)?.let { ClientName(it.lastName, it.firstName).short } ?: TrainingCardFormat.ERASED_CLIENT
 
     private suspend fun seriesClientIds(seriesId: String): List<String> =
         schedule.seriesClients(seriesId).sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }

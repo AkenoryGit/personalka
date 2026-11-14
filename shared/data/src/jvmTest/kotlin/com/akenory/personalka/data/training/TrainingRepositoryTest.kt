@@ -112,7 +112,7 @@ class TrainingRepositoryTest {
         assertEquals(listOf(belova), form.relatives[belov])
         // Клиенты — по алфавиту, «Белов» раньше «Белова».
         assertEquals(listOf("Белов", "Белова", "Морозов"), form.clients.map { it.name.lastName })
-        assertEquals(s("Морозов_Д."), form.clients.last().label)
+        assertEquals("Морозов Даниил", form.clients.last().label)
         assertSame(calendar.copied, forms.copied)
     }
 

@@ -259,8 +259,8 @@ class TrainingFormUiTest {
         onNodeWithTag(FORM_SEARCH_TAG).performTextInput("Петров Игорь")
         onNodeWithText("Новый клиент «Петров Игорь»").performScrollTo().performClick()
         // У сплита клиентов двое — чипы-флажки.
-        awaitNode(hasText(s("Петров_И.")))
-        onNodeWithText(s("Петров_И.")).assertIsOn()
+        awaitNode(hasText("Петров Игорь"))
+        onNodeWithText("Петров Игорь").assertIsOn()
         onNodeWithTag(formClientTag(alisa)).onChild().assertIsOn()
         save()
         awaitNode(hasText(s("Создано: вт_20.10, 16:00")))

@@ -135,11 +135,11 @@ class DiaryRepositoryTest {
         assertEquals(s("Орлова_К."), pt.title)
         assertEquals(d.orlova, pt.clientId)
         assertEquals("Кроль на груди: дыхание на 3 гребка", pt.plan)
-        assertEquals(listOf(s("Орлова_К.")), pt.behavior.map { it.name })
+        assertEquals(listOf("Орлова Ксения"), pt.behavior.map { it.name })
 
         // Сплит — поведение у каждого ребёнка; группа — без поведения.
         val split = assertNotNull(diaries.diary(d.split))
-        assertEquals(listOf(s("Ковалёв_Т."), s("Ковалёва_А.")), split.behavior.map { it.name })
+        assertEquals(listOf("Ковалёв Тимур", "Ковалёва Алиса"), split.behavior.map { it.name })
         assertNull(split.clientId)
         val group = assertNotNull(diaries.diary(d.group))
         assertEquals(DiaryFields(plan = true, fact = true, behavior = false), group.fields)
