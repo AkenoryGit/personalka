@@ -257,7 +257,7 @@ class HomeUiTest {
         assertEquals(0, onAllNodes(hasText("Петров", substring = true) and hasAnyAncestor(hasTestTag(BIRTHDAYS_TAG))).fetchSemanticsNodes().size)
 
         onNodeWithTag(NEAREST_OPEN_TAG).performClick()
-        awaitNode(inCard(s("День рождения · Ковалёв_А. · 9_лет")))
+        awaitNode(inCard(s("День рождения · Ковалёв Артём · 9_лет")))
     }
 
     @Test

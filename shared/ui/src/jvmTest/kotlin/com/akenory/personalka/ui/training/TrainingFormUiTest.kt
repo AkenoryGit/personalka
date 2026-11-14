@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
@@ -260,7 +261,7 @@ class TrainingFormUiTest {
         onNodeWithText("Новый клиент «Петров Игорь»").performScrollTo().performClick()
         // У сплита клиентов двое — чипы-флажки.
         awaitNode(hasText("Петров Игорь"))
-        onNodeWithText("Петров Игорь").assertIsOn()
+        onNode(hasText("Петров Игорь") and isToggleable()).assertIsOn()
         onNodeWithTag(formClientTag(alisa)).onChild().assertIsOn()
         save()
         awaitNode(hasText(s("Создано: вт_20.10, 16:00")))
