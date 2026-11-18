@@ -95,6 +95,9 @@ var SemanticsPropertyReceiver.monthMoney by MonthMoney
 /** Строка месяца на сложенном (макет «Месяц»): число, число тренировок и точки. */
 private val MONTH_ROW = 64.dp
 
+/** С деньгами — без точек (шаг 5.10з): число и сумма, строка ниже. */
+private val MONTH_ROW_MONEY = 52.dp
+
 /** Строка дней недели над сеткой месяца. */
 private val WEEKDAY_ROW = 28.dp
 
@@ -162,10 +165,11 @@ internal fun MonthView(
     } else {
         // Сложенный: строки по 64 dp; месяц из 4–6 строк — сетка плавно меняет высоту, список под ней едет следом.
         val rows = MonthRules.weeks(MonthRules.firstOf(months.currentPage)).size
-        val height by animateDpAsState(MONTH_ROW * rows, label = "month-height")
+        val row = if (money != null) MONTH_ROW_MONEY else MONTH_ROW
+        val height by animateDpAsState(row * rows, label = "month-height")
         Column(modifier) {
             MonthGrid(
-                months, selected, today, rowHeight = MONTH_ROW, summaryOf, onSelect, Modifier.fillMaxWidth(), pagerHeight = height,
+                months, selected, today, rowHeight = row, summaryOf, onSelect, Modifier.fillMaxWidth(), pagerHeight = height,
                 money = money, moneyOf = moneyOf, onMonths = onMonths,
             )
             list(Modifier.weight(1f).fillMaxWidth())
@@ -292,7 +296,7 @@ private fun MonthCell(
             // С деньгами фон — по сумме дня (шаг 5.10г), выбранный день — рамкой; без денег — плашка, как раньше.
             .background(
                 when {
-                    moneyOn -> colors.heat(money?.level ?: 0)
+                    moneyOn -> colors.dayFill(money)
                     isSelected -> colors.surfaceAlt
                     else -> Color.Transparent
                 },
@@ -319,9 +323,10 @@ private fun MonthCell(
                 text = date.day.toString(),
                 style = MaterialTheme.typography.labelLarge.tabular(),
                 fontWeight = if (inMonth || isToday) FontWeight.Medium else FontWeight.Normal,
+                // С деньгами главное в клетке — сумма: число дня приглушено (шаг 5.10з).
                 color = when {
                     isToday -> colors.onAccent
-                    inMonth -> colors.text
+                    inMonth && !moneyOn -> colors.text
                     else -> colors.textMuted
                 },
             )
@@ -331,7 +336,7 @@ private fun MonthCell(
                 text = money?.let(CalendarMoneyFormat::cell).orEmpty(),
                 modifier = Modifier.height(16.dp),
                 style = MaterialTheme.typography.bodySmall.copy(lineHeight = 16.sp).tabular(),
-                fontWeight = if (money?.forecast == false) FontWeight.Medium else FontWeight.Normal,
+                fontWeight = money?.weight() ?: FontWeight.Normal,
                 color = money?.let { colors.moneyText(it) } ?: colors.textMuted,
                 maxLines = 1,
                 softWrap = false,
@@ -344,8 +349,11 @@ private fun MonthCell(
                 color = colors.textMuted,
             )
         }
-        Row(Modifier.padding(top = Dimens.space1), horizontalArrangement = Arrangement.spacedBy(DOT_GAP)) {
-            summary.dots.forEach { dot -> ShadeDot(PlaceColor.of(dot.color).shade(colors.isDark, dot.shade), size = DOT) }
+        // С деньгами точек типов нет (шаг 5.10з): строка месяца ниже, под сеткой видно больше тренировок.
+        if (!moneyOn) {
+            Row(Modifier.padding(top = Dimens.space1), horizontalArrangement = Arrangement.spacedBy(DOT_GAP)) {
+                summary.dots.forEach { dot -> ShadeDot(PlaceColor.of(dot.color).shade(colors.isDark, dot.shade), size = DOT) }
+            }
         }
     }
 }

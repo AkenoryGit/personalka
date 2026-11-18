@@ -9,10 +9,17 @@ import kotlinx.datetime.YearMonth
 // здесь только раскладка по дням и фильтр места.
 
 /**
- * Деньги дня: [amount] — копейки. [forecast] — сегодня и дальше («будет» по расписанию, бледным), иначе — заработано.
- * [level] — ступень фона клетки 1–4 от самого денежного дня месяца (0 — денег нет).
+ * Деньги дня: [amount] — копейки. [forecast] — сегодня и дальше («будет» по расписанию), иначе — заработано.
+ * [tone] — день против среднего дня месяца (шаг 5.10з): слабый, обычный или сильный.
  */
-data class DayMoney(val amount: Long, val forecast: Boolean, val level: Int)
+data class DayMoney(val amount: Long, val forecast: Boolean, val tone: DayTone)
+
+/**
+ * Какой день по деньгам (шаг 5.10з, вариант Б, решение Дмитрия 18.11.2026): ниже 80 % среднего дня месяца — слабый
+ * (серым), выше 120 % — сильный (зелёным), между — обычный. Средний — по дням месяца с деньгами, поэтому раскраска
+ * сама подстраивается под заработок, без порога в рублях.
+ */
+enum class DayTone { WEAK, NORMAL, STRONG }
 
 /**
  * Деньги месяца в календаре: [days] — по числу месяца (дней без денег нет), [earned] — заработано, [forecast] —
@@ -37,8 +44,9 @@ data class CalendarMoney(
 
 object CalendarMoneyRules {
 
-    /** Ступеней фона клетки (макет «Месяц: сумма в каждом дне»). */
-    const val LEVELS = 4
+    /** Слабый день — ниже стольких процентов среднего, сильный — выше. */
+    const val WEAK_BELOW = 80
+    const val STRONG_ABOVE = 120
 
     /**
      * Деньги месяца [view] для календаря. [placeIds] — фильтр места (`null` — все места): тогда в днях только
@@ -109,10 +117,11 @@ object CalendarMoneyRules {
                 forecast = if (placeIds == null) shown.forecast else sums.sum()
             }
         }
-        val max = sums.maxOrNull() ?: 0L
+        val positive = (1..month.lastDay.day).map { sums[it] }.filter { it > 0 }
+        val average = if (positive.isEmpty()) 0L else positive.sum() / positive.size
         val days = (1..month.lastDay.day).mapNotNull { d ->
             val amount = sums[d]
-            if (amount <= 0L) null else d to DayMoney(amount, d >= forecastFrom, level(amount, max))
+            if (amount <= 0L) null else d to DayMoney(amount, d >= forecastFrom, tone(amount, average))
         }.toMap()
         return CalendarMoney(
             month = month,
@@ -126,17 +135,11 @@ object CalendarMoneyRules {
         )
     }
 
-    /**
-     * Ступень фона 1–4: доля от самого денежного дня месяца [max] — до 35 %, до 60 %, до 85 % и выше. Денег нет — 0.
-     */
-    fun level(amount: Long, max: Long): Int {
-        if (amount <= 0 || max <= 0) return 0
-        val share = amount * 100 / max
-        return when {
-            share < 35 -> 1
-            share < 60 -> 2
-            share < 85 -> 3
-            else -> LEVELS
-        }
+    /** День против среднего [average]: ниже 80 % — слабый, выше 120 % — сильный. */
+    fun tone(amount: Long, average: Long): DayTone = when {
+        average <= 0 -> DayTone.NORMAL
+        amount * 100 < average * WEAK_BELOW -> DayTone.WEAK
+        amount * 100 > average * STRONG_ABOVE -> DayTone.STRONG
+        else -> DayTone.NORMAL
     }
 }

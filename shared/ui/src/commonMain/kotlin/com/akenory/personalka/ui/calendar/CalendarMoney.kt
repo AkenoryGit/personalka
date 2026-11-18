@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -45,6 +46,7 @@ import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.domain.money.CalendarMoney
 import com.akenory.personalka.domain.money.CalendarMoneyRules
 import com.akenory.personalka.domain.money.DayMoney
+import com.akenory.personalka.domain.money.DayTone
 import com.akenory.personalka.domain.money.MonthPeriod
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.icons.PIcons
@@ -66,20 +68,27 @@ const val CALENDAR_MONTHS_PANEL_TAG = "calendar-months-panel"
 fun monthsRowTag(month: YearMonth) = "calendar-months-$month"
 
 /**
- * Фон клетки по сумме — ступени 1–4: графит на 5, 9, 13 и 17 % поверх сетки. Больше 17 % бледная сумма «будет»
- * опускается ниже 4,5 : 1 (ТЗ 10.4): на 17 % в светлой теме 5,2 : 1, в тёмной 5,0 : 1.
+ * Фон сильного дня (шаг 5.10з, вариант Б): цвет «проведено» на 10 % — зелёная сумма на нём не ниже 4,8 : 1 в светлой
+ * теме и 5,4 : 1 в тёмной. У слабого и обычного фона нет.
  */
-private val HEAT = floatArrayOf(0f, 0.05f, 0.09f, 0.13f, 0.17f)
+private const val STRONG_TINT = 0.10f
 
-/** Бледная сумма «будет» — цвет текста на 68 % поверх фона клетки: не ниже 4,9 : 1 на любой ступени фона. */
-private const val PALE = 0.68f
+/** Фон клетки дня: у сильного — зелёный оттенок. */
+internal fun PersonalkaColors.dayFill(day: DayMoney?): Color =
+    if (day?.tone == DayTone.STRONG) lerp(surface, done, STRONG_TINT) else Color.Transparent
 
-/** Фон клетки дня по ступени суммы. */
-internal fun PersonalkaColors.heat(level: Int): Color =
-    if (level <= 0) Color.Transparent else text.copy(alpha = HEAT[level.coerceAtMost(HEAT.size - 1)])
+/**
+ * Цвет суммы дня: сильный — зелёный «проведено», обычный — текст, слабый — приглушённый. Прозрачности нет: она
+ * опускала бы контраст ниже 4,5 : 1 — «будет» отличается от заработанного начертанием, не цветом.
+ */
+internal fun PersonalkaColors.moneyText(day: DayMoney): Color = when (day.tone) {
+    DayTone.STRONG -> done
+    DayTone.NORMAL -> text
+    DayTone.WEAK -> textMuted
+}
 
-/** Цвет суммы дня: заработано — текст, «будет» — бледный текст. */
-internal fun PersonalkaColors.moneyText(day: DayMoney): Color = if (day.forecast) text.copy(alpha = PALE) else text
+/** Заработано — полужирным, «будет» — обычным. */
+internal fun DayMoney.weight(): FontWeight = if (forecast) FontWeight.Normal else FontWeight.SemiBold
 
 /** Деньги месяцев [months] для календаря; пустой список или нет репозитория — пусто. */
 internal fun calendarMoney(

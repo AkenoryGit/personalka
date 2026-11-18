@@ -75,8 +75,9 @@ class CalendarMoneyTest {
         assertEquals(rub(150_000), money.plan)
         // Воскресенье без тренировок — денег нет, клетка пустая.
         assertNull(money.days[25])
-        // Самый денежный день — ступень 4.
-        assertEquals(CalendarMoneyRules.LEVELS, money.days.values.maxOf { it.level })
+        // 22-го 10 ПТ — вдвое больше обычного дня: сильный; обычный день — 5 ПТ.
+        assertEquals(DayTone.STRONG, money.days.getValue(22).tone)
+        assertEquals(DayTone.NORMAL, money.days.getValue(1).tone)
     }
 
     @Test
@@ -117,23 +118,26 @@ class CalendarMoneyTest {
     }
 
     @Test
-    fun levels() {
-        assertEquals(0, CalendarMoneyRules.level(0, rub(9_100)))
-        assertEquals(1, CalendarMoneyRules.level(rub(2_300), rub(9_100)))
-        assertEquals(2, CalendarMoneyRules.level(rub(4_600), rub(9_100)))
-        assertEquals(3, CalendarMoneyRules.level(rub(7_400), rub(9_100)))
-        assertEquals(4, CalendarMoneyRules.level(rub(9_100), rub(9_100)))
+    fun tones() {
+        // Средний день 8 050 ₽ (ноябрь Дмитрия): ниже 6 440 — слабый, выше 9 660 — сильный.
+        val average = rub(8_050)
+        assertEquals(DayTone.WEAK, CalendarMoneyRules.tone(rub(4_820), average))
+        assertEquals(DayTone.WEAK, CalendarMoneyRules.tone(rub(6_320), average))
+        assertEquals(DayTone.NORMAL, CalendarMoneyRules.tone(rub(6_440), average))
+        assertEquals(DayTone.NORMAL, CalendarMoneyRules.tone(rub(9_260), average))
+        assertEquals(DayTone.STRONG, CalendarMoneyRules.tone(rub(9_730), average))
+        assertEquals(DayTone.NORMAL, CalendarMoneyRules.tone(rub(100), 0))
     }
 
     @Test
     fun format() {
-        assertEquals("7${THIN}400", CalendarMoneyFormat.cell(DayMoney(rub(7_400) + 40, forecast = false, level = 3)))
-        assertEquals("6${THIN}440", CalendarMoneyFormat.cell(DayMoney(rub(6_437), forecast = true, level = 3)))
-        assertEquals("заработано 5${THIN}500${NBSP}₽", CalendarMoneyFormat.dayLine(DayMoney(rub(5_500), false, 2)))
-        assertEquals("будет ≈${NBSP}5${THIN}300${NBSP}₽", CalendarMoneyFormat.dayLine(DayMoney(rub(5_300), true, 2)))
+        assertEquals("7${THIN}400", CalendarMoneyFormat.cell(DayMoney(rub(7_400) + 40, forecast = false, tone = DayTone.NORMAL)))
+        assertEquals("6${THIN}440", CalendarMoneyFormat.cell(DayMoney(rub(6_437), forecast = true, tone = DayTone.NORMAL)))
+        assertEquals("заработано 5${THIN}500${NBSP}₽", CalendarMoneyFormat.dayLine(DayMoney(rub(5_500), false, DayTone.NORMAL)))
+        assertEquals("будет ≈${NBSP}5${THIN}300${NBSP}₽", CalendarMoneyFormat.dayLine(DayMoney(rub(5_300), true, DayTone.NORMAL)))
         assertEquals(
             "заработано 3${THIN}200${NBSP}₽ · будет ≈${NBSP}6${THIN}440${NBSP}₽",
-            CalendarMoneyFormat.dayLine(DayMoney(rub(6_440), true, 3), todayEarned = rub(3_200)),
+            CalendarMoneyFormat.dayLine(DayMoney(rub(6_440), true, DayTone.NORMAL), todayEarned = rub(3_200)),
         )
         assertNull(CalendarMoneyFormat.dayLine(null))
     }

@@ -24,6 +24,7 @@ import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.money.DayMoney
+import com.akenory.personalka.domain.money.DayTone
 import com.akenory.personalka.domain.money.RateAmounts
 import com.akenory.personalka.domain.money.SalarySetupDraft
 import com.akenory.personalka.domain.money.TierDraft
@@ -119,7 +120,7 @@ class CalendarMoneyUiTest {
         val fifteenth = LocalDate(2026, 10, 15)
         val planned = LocalDate(2026, 10, 28)
         awaitMoney(fifteenth)
-        assertEquals(DayMoney(rub(920), forecast = false, level = 4), money(fifteenth))
+        assertEquals(DayMoney(rub(920), forecast = false, tone = DayTone.NORMAL), money(fifteenth))
         awaitMoney(planned)
         assertTrue(money(planned)!!.forecast)
         assertNull(money(LocalDate(2026, 10, 21)))

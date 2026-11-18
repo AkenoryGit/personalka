@@ -707,7 +707,7 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
                         text = m?.let(CalendarMoneyFormat::cell).orEmpty(),
                         modifier = Modifier.height(WEEK_MONEY_ROW).clearAndSetSemantics { },
                         style = MaterialTheme.typography.labelSmall.tabular(),
-                        fontWeight = if (m?.forecast == false) FontWeight.Medium else FontWeight.Normal,
+                        fontWeight = m?.weight() ?: FontWeight.Normal,
                         color = m?.let { colors.moneyText(it) } ?: colors.textMuted,
                         maxLines = 1,
                         softWrap = false,
