@@ -14,12 +14,12 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
-import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithTag
@@ -34,17 +34,20 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.prefs.MemoryPrefs
-import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
 import com.akenory.personalka.domain.calendar.CalendarBadge
+import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.client.ClientDraft
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.TrainingCardFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.domain.model.Scope
+import com.akenory.personalka.domain.restriction.BlockKind
+import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.training.CardAction
 import com.akenory.personalka.domain.training.TrainingDraft
@@ -61,6 +64,9 @@ import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.shell.FAB_TAG
 import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.navTag
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DateTimeUnit
@@ -69,9 +75,6 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Форма тренировки (шаг 1.13, ТЗ 5.5, макеты «Новая тренировка» и «Изменение тренировки серии»), дежурства
@@ -454,6 +457,41 @@ class TrainingFormUiTest {
         save()
         awaitNode(hasText(ZoneFormat.CONFLICT_QUESTION))
         onNodeWithText("Детский бассейн 17:00–18:00: групповая тренировка").assertIsDisplayed()
+    }
+
+    @Test
+    fun personalTaskWithTravelAsksAndReminderTakesNoTime() = runComposeUiTest {
+        // Шаги 5.10е, 5.10ж: без включения в настройках «Личного» в форме нет.
+        runBlocking { calendar.settings.savePersonal(true) }
+        val orlov = client("Орлов", "Максим")
+        pt(at(today.plus(-7, DateTimeUnit.DAY), "10:00"), orlov)
+        openCalendar()
+
+        holdDay(150f, yOf("17:00") + 0.5f)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        mode(PersonalFormat.MODE)
+        awaitNode(hasText(PersonalFormat.NEW_TITLE))
+        onNodeWithTag(FORM_REASON_TAG).performScrollTo().performTextInput("Стоматолог")
+        onNodeWithTag(formTravelTag(60)).performScrollTo().performClick()
+        save()
+        awaitNode(hasText(PersonalFormat.TASK_SAVED))
+        val block = runBlocking { db.scheduleDao().blocks().single() }
+        assertEquals(BlockKind.PERSONAL, block.kind)
+        assertEquals(60, block.travelMinutes)
+        assertEquals(Restriction.ALL_PLACES, block.locationId)
+
+        // На сетке: дорога до, дело, дорога после.
+        awaitZones(3)
+        assertEquals(listOf(ZoneKind.TRAVEL, ZoneKind.PERSONAL, ZoneKind.TRAVEL), day().zones.sortedBy { it.place.zone.start }.map { it.kind })
+
+        // Тренировка в дорогу после дела — спрашивает.
+        holdDay(150f, yOf("18:10") + 0.5f)
+        awaitNode(hasText(TrainingFormat.NEW_TITLE))
+        tap(formClientTag(orlov))
+        tap(formPlaceTag(placeId("ДБ")))
+        save()
+        awaitNode(hasText(ZoneFormat.CONFLICT_QUESTION))
+        onNodeWithText("Личное 16:00–19:00", substring = true).assertExists()
     }
 
     @Test
