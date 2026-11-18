@@ -251,33 +251,39 @@ fun SectionScreen(
             onConsentDone = onConsentDone,
         )
         }
-        Section.CALENDAR -> CalendarScreen(
-            calendar = calendar,
-            prefs = prefs,
-            now = now,
-            messages = messages,
-            scope = scope,
-            card = card,
-            onCard = onCard,
-            onEdit = { id -> onForm(TrainingFormKey.edit(id)) },
-            // Карточка клиента или группы открывается в своём разделе; карточка тренировки закрывается.
-            onClient = { id ->
-                onCard(null)
-                openClient(id)
-            },
-            onGroup = { id ->
-                onCard(null)
-                openGroup(id)
-            },
-            onCreate = { start -> onForm(TrainingFormKey.new(start)) },
-            onEditZone = { zone ->
-                onForm(if (zone.kind == ZoneKind.RESTRICTION) TrainingFormKey.restriction(zone.id) else TrainingFormKey.edit(zone.id))
-            },
-            goTo = calendarDay,
-            onWent = { onCalendarDay(null) },
-            onDiary = onDiary,
-            onSlots = { openSlots(SlotsRoute.ROOT) },
-        )
+        Section.CALENDAR -> {
+            // Деньги по дням (шаг 5.10г): только при настроенной зарплате — иначе считать нечего.
+            val calendarSchemes by remember(settings) { settings.salary.schemes }.collectAsState(initial = null)
+            val salaryReady = calendarSchemes?.let { !SalarySetupRules.needed(it) } == true
+            CalendarScreen(
+                calendar = calendar,
+                prefs = prefs,
+                now = now,
+                messages = messages,
+                scope = scope,
+                card = card,
+                onCard = onCard,
+                onEdit = { id -> onForm(TrainingFormKey.edit(id)) },
+                // Карточка клиента или группы открывается в своём разделе; карточка тренировки закрывается.
+                onClient = { id ->
+                    onCard(null)
+                    openClient(id)
+                },
+                onGroup = { id ->
+                    onCard(null)
+                    openGroup(id)
+                },
+                onCreate = { start -> onForm(TrainingFormKey.new(start)) },
+                onEditZone = { zone ->
+                    onForm(if (zone.kind == ZoneKind.RESTRICTION) TrainingFormKey.restriction(zone.id) else TrainingFormKey.edit(zone.id))
+                },
+                goTo = calendarDay,
+                onWent = { onCalendarDay(null) },
+                onDiary = onDiary,
+                onSlots = { openSlots(SlotsRoute.ROOT) },
+                salary = settings.months.takeIf { salaryReady },
+            )
+        }
         Section.CLIENTS -> ClientsScreen(shell, clients, calendar.forms, messages, scope, now, onForm, followup, clientList, voice, waiting, cabinets?.takeIf { cabinetsOn }, onFindTime = { id ->
             openSlots(SlotsRoute.forWait(id))
         }, onReport = { id ->

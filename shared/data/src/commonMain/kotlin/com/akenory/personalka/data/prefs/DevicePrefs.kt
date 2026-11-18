@@ -28,6 +28,9 @@ interface DevicePrefs {
 
         /** Показывать ли отменённые тренировки; по умолчанию — да. */
         const val CALENDAR_SHOW_CANCELLED = "calendar.showCancelled"
+
+        /** Деньги по дням в календаре (шаг 5.10г); по умолчанию — да. */
+        const val CALENDAR_SHOW_MONEY = "calendar.showMoney"
     }
 }
 

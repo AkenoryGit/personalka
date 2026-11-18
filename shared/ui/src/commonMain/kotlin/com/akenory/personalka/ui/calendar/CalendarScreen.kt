@@ -42,9 +42,11 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -53,11 +55,12 @@ import com.akenory.personalka.data.calendar.CalendarPlace
 import com.akenory.personalka.data.calendar.CalendarRepository
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.CalendarZone
-import com.akenory.personalka.data.calendar.joinRestrictionLabels
 import com.akenory.personalka.data.calendar.MoveResult
 import com.akenory.personalka.data.calendar.WorkHours
-import com.akenory.personalka.data.training.EditScope
+import com.akenory.personalka.data.calendar.joinRestrictionLabels
+import com.akenory.personalka.data.money.SalaryRepository
 import com.akenory.personalka.data.prefs.DevicePrefs
+import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.domain.calendar.CalendarDrag
 import com.akenory.personalka.domain.calendar.CalendarGrid
 import com.akenory.personalka.domain.calendar.CalendarView
@@ -67,9 +70,11 @@ import com.akenory.personalka.domain.calendar.MonthRules
 import com.akenory.personalka.domain.calendar.MoveProblem
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.CalendarFormat
+import com.akenory.personalka.domain.format.CalendarMoneyFormat
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.money.DayMoney
 import com.akenory.personalka.domain.reference.TypePresets
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.clients.MenuAction
@@ -79,14 +84,14 @@ import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
-import com.akenory.personalka.ui.training.ConflictPanel
-import com.akenory.personalka.ui.training.ScopePanel
-import com.akenory.personalka.ui.training.TrainingCardHost
-import com.akenory.personalka.ui.training.TrainingCardKey
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.Motion
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
+import com.akenory.personalka.ui.training.ConflictPanel
+import com.akenory.personalka.ui.training.ScopePanel
+import com.akenory.personalka.ui.training.TrainingCardHost
+import com.akenory.personalka.ui.training.TrainingCardKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -95,6 +100,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlinx.datetime.yearMonth
 
 internal const val TODAY_LABEL = "Сегодня"
 
@@ -168,6 +174,7 @@ fun CalendarScreen(
     onWent: () -> Unit = {},
     onDiary: (String) -> Unit = {},
     onSlots: (() -> Unit)? = null,
+    salary: SalaryRepository? = null,
 ) {
     val onOpen: (CalendarTraining) -> Unit = { training -> onCard(TrainingCardKey.card(training.id)) }
     val today = now.date
@@ -281,6 +288,22 @@ fun CalendarScreen(
     // Место убрали в архив — фильтр снова «Все места».
     val place = places.firstOrNull { it.id == placeId }
 
+    // Деньги по дням (ТЗ 5.3, шаг 5.10г): флажок на этом телефоне, по умолчанию включён; [salary] нет — зарплата не
+    // настроена, считать нечего. С фильтром места — суммы только по нему.
+    var showMoney by remember { mutableStateOf(prefs.boolean(DevicePrefs.CALENDAR_SHOW_MONEY) ?: true) }
+    val moneyOn = salary != null && showMoney
+    val placeIds = remember(place?.id) { place?.id?.let { setOf(it) } }
+    val moneyMonths = when {
+        !moneyOn -> emptyList()
+        view == CalendarView.Month -> listOf(MonthRules.firstOf(months.settledPage).yearMonth)
+        view == CalendarView.Day -> DateFormat.weekStart(day).let { listOf(it.yearMonth, it.plus(6, DateTimeUnit.DAY).yearMonth).distinct() }
+        else -> emptyList()
+    }
+    val money = rememberMonthsMoney(salary.takeIf { moneyOn }, moneyMonths, today, placeIds)
+    val dayMoney: ((LocalDate) -> DayMoney?)? = if (moneyOn) { date -> money[date.yearMonth]?.day(date) } else null
+    // «Деньги по месяцам»: открыт — год окна; переживает сложение Fold.
+    var monthsYear by rememberSaveable { mutableStateOf<Int?>(null) }
+
     // Что загружено — по виду. Сетка: три недели вокруг выбранного дня — соседние дни при листании уже на месте.
     // «Месяц»: страница и по месяцу с каждой стороны — при свайпе соседний месяц уже с числами и точками.
     // «Список»: его дни. Пока грузится новое окно, видно старое — дни не мигают пустыми.
@@ -378,6 +401,11 @@ fun CalendarScreen(
                     onPlace = { placeId = it?.id },
                     onPick = { date -> go(date, animate = false) },
                     onSlots = onSlots,
+                    showMoney = if (salary != null) showMoney else null,
+                    onShowMoney = { show ->
+                        showMoney = show
+                        prefs.putBoolean(DevicePrefs.CALENDAR_SHOW_MONEY, show)
+                    },
                 )
                 // Свайп по строке дней — неделя вперёд или назад, тот же день недели.
                 val onWeek: (Int) -> Unit = { days ->
@@ -402,6 +430,8 @@ fun CalendarScreen(
                         onOpen = onOpen,
                         onZone = onZone,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
+                        money = if (moneyOn) money else null,
+                        onMonths = { monthsYear = MonthRules.firstOf(months.currentPage).year },
                     )
                 } else if (view == CalendarView.Agenda) {
                     AgendaView(
@@ -417,7 +447,7 @@ fun CalendarScreen(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                 } else if (view == CalendarView.Day) {
-                    WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } }, onWeek = onWeek)
+                    WeekStrip(day = day, today = today, onSelect = { date -> ui.launch { pager.animateScrollToPage(pageOf(date)) } }, onWeek = onWeek, moneyOf = dayMoney)
                 } else {
                     // Нажатие на день над колонкой — этот день в виде «День».
                     DaysHeader(
@@ -469,6 +499,21 @@ fun CalendarScreen(
                     onMove = { training, start -> moveStored(training.id, start, confirmed = false) },
                     onZoomEnd = { prefs.putFloat(DevicePrefs.CALENDAR_HOUR, grid.hourDp) },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            }
+
+            val openYear = monthsYear
+            if (openYear != null) {
+                MonthsPanel(
+                    year = openYear,
+                    months = rememberYearMoney(salary.takeIf { moneyOn }, openYear, today, placeIds),
+                    current = MonthRules.firstOf(months.currentPage).yearMonth,
+                    onYear = { monthsYear = it },
+                    onMonth = { month ->
+                        monthsYear = null
+                        go(if (month == today.yearMonth) today else month.firstDay, animate = false)
+                    },
+                    onDismiss = { monthsYear = null },
                 )
             }
 
@@ -583,12 +628,15 @@ private fun viewKey(wide: Boolean): String = if (wide) DevicePrefs.CALENDAR_VIEW
 /** Тренировка или зона в месте, выбранном фильтром: `null` — все места. */
 private fun inPlace(place: CalendarPlace?, placeId: String): Boolean = place == null || placeId == place.id
 
+/** Строка суммы под числом в строке недели (шаг 5.10г). */
+private val WEEK_MONEY_ROW = 14.dp
+
 /**
  * Строка недели пн–вс под шапкой (ТЗ 5.3): нажатие открывает день, сегодняшнее число — в оранжевом кружке.
  * Свайп по строке — неделя вперёд или назад ([onWeek]); новая неделя въезжает с той стороны, куда листают.
  */
 @Composable
-private fun WeekStrip(day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit, onWeek: (Int) -> Unit) {
+private fun WeekStrip(day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit, onWeek: (Int) -> Unit, moneyOf: ((LocalDate) -> DayMoney?)? = null) {
     AnimatedContent(
         targetState = DateFormat.weekStart(day),
         modifier = Modifier.fillMaxWidth().clipToBounds().weekSwipe(onWeek).testTag(DAYS_ROW_TAG),
@@ -599,14 +647,15 @@ private fun WeekStrip(day: LocalDate, today: LocalDate, onSelect: (LocalDate) ->
         },
         label = "week",
     ) { monday ->
-        WeekRow(monday, day, today, onSelect)
+        WeekRow(monday, day, today, onSelect, moneyOf)
     }
 }
 
 @Composable
-private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit) {
+private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit, moneyOf: ((LocalDate) -> DayMoney?)? = null) {
     val colors = PersonalkaTheme.colors
-    Row(Modifier.fillMaxWidth().height(Dimens.row).padding(horizontal = Dimens.space2)) {
+    // С деньгами строка выше на строку суммы (макет «День: суммы в строке недели»).
+    Row(Modifier.fillMaxWidth().height(if (moneyOf != null) Dimens.row + WEEK_MONEY_ROW else Dimens.row).padding(horizontal = Dimens.space2)) {
         repeat(7) { i ->
             val date = monday.plus(i, DateTimeUnit.DAY)
             val isSelected = date == day
@@ -621,7 +670,7 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
                     .clickable(role = Role.Tab) { onSelect(date) }
                     .semantics(mergeDescendants = true) {
                         selected = isSelected
-                        contentDescription = DateFormat.short(date)
+                        contentDescription = DateFormat.short(date) + CalendarMoneyFormat.cellDescription(moneyOf?.invoke(date))
                     }
                     .testTag(weekDayTag(date)),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -639,6 +688,18 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
                         text = date.day.toString(),
                         style = MaterialTheme.typography.titleMedium.tabular(),
                         color = if (isToday) colors.onAccent else colors.text,
+                    )
+                }
+                if (moneyOf != null) {
+                    val m = moneyOf(date)
+                    Text(
+                        text = m?.let(CalendarMoneyFormat::cell).orEmpty(),
+                        modifier = Modifier.height(WEEK_MONEY_ROW).clearAndSetSemantics { },
+                        style = MaterialTheme.typography.labelSmall.tabular(),
+                        fontWeight = if (m?.forecast == false) FontWeight.Medium else FontWeight.Normal,
+                        color = m?.let { colors.moneyText(it) } ?: colors.textMuted,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }

@@ -77,6 +77,9 @@ fun agendaTitleKey(date: LocalDate) = "title-$date"
 /** Заголовок дня в «Месяце» и «Списке»: нажатие — этот день в «Дне». */
 fun dayTitleTag(date: LocalDate) = "day-title-$date"
 
+/** Деньги дня под заголовком (шаг 5.10г). */
+fun dayMoneyTag(date: LocalDate) = "day-money-$date"
+
 /** Отступ снизу у списков: «+» не закрывает последнюю строку (56 dp и по 16 dp над и под ним). */
 internal val FAB_CLEARANCE = 88.dp
 
@@ -137,26 +140,38 @@ internal fun LazyListScope.dayRows(entries: List<DayEntry>, onOpen: (CalendarTra
  * в клетке месяца. Нажатие — этот день в виде «День», как день над колонками «Нескольких дней».
  */
 @Composable
-internal fun DayTitle(date: LocalDate, count: Int, onDay: (LocalDate) -> Unit) {
+internal fun DayTitle(date: LocalDate, count: Int, onDay: (LocalDate) -> Unit, money: String? = null) {
     val colors = PersonalkaTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(Dimens.touch)
+            .heightIn(min = Dimens.touch)
             .clickable(role = Role.Button) { onDay(date) }
             .semantics(mergeDescendants = true) { heading() }
             .testTag(dayTitleTag(date))
             .padding(horizontal = Dimens.space4),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = DateFormat.header(date),
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // Деньги дня (шаг 5.10г) — второй строкой под датой: «заработано 3 200 ₽ · будет ≈ 6 440 ₽».
+        Column(Modifier.weight(1f).padding(vertical = if (money != null) Dimens.space1 else 0.dp)) {
+            Text(
+                text = DateFormat.header(date),
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (money != null) {
+                Text(
+                    text = money,
+                    modifier = Modifier.testTag(dayMoneyTag(date)),
+                    style = MaterialTheme.typography.bodySmall.tabular(),
+                    color = colors.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         if (count > 0) Text(CalendarFormat.trainings(count), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
     }
 }
