@@ -4,7 +4,7 @@ import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.entity.SeriesEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.data.db.entity.WaitEntryEntity
-import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.restrictions.restrictions
 import com.akenory.personalka.data.series.Undo
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.Busy
@@ -91,7 +91,7 @@ internal suspend fun PersonalkaDatabase.waitingFor(
     if (slots.isEmpty()) return emptyList()
     val clientDao = clientDao()
     val types = referenceDao().trainingTypes().associateBy { it.id }
-    val restrictions = scheduleDao().blocks().map { it.toRestriction() }
+    val restrictions = this.restrictions()
     val busyOn = mutableMapOf<LocalDate, List<Busy>>()
     suspend fun busy(date: LocalDate) = busyOn.getOrPut(date) {
         trainingDao().trainingsBetween(LocalDateTime(date, LocalTime(0, 0)), LocalDateTime(date.plus(1, DateTimeUnit.DAY), LocalTime(0, 0)))

@@ -11,6 +11,8 @@
          Точный будильник не нужен: сводке в 21:03 вместо 21:00 это не мешает. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Точный будильник для личных напоминаний «за 5 минут» (шаг 5.10ж): нет разрешения — неточный. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- Голосовой ввод в дневнике (шаг 2.1): с Android 11 приложение видит службу распознавания речи
          и её окно, только если назовёт их здесь; так же — Макс (шаг 3.9ж). -->

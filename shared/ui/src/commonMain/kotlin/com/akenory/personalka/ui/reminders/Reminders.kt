@@ -9,6 +9,7 @@ import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.reminders.DiaryPrefs
 import com.akenory.personalka.data.training.MissingDiary
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.home.HomeRules
 import com.akenory.personalka.domain.money.AdvanceState
@@ -26,11 +27,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.yearMonth
 
 /** Канал уведомления: его видно в настройках телефона, каждый можно выключить отдельно. */
-enum class NoticeChannel { DIGEST, INSTANT }
+enum class NoticeChannel { DIGEST, INSTANT, PERSONAL }
 
 /**
  * Уведомление, которое пора показать. [key] — одно и то же у повторного уведомления о том же: новое заменяет старое.
@@ -43,6 +45,8 @@ data class Notice(
     val text: String,
     val open: AppLink,
     val diary: AppLink? = null,
+    /** Личное (шаг 5.10ж): кнопки «Готово» и «Через 10 мин». */
+    val snooze: Boolean = false,
 )
 
 /** Что показать сейчас и когда проверить в следующий раз; `null` — напоминания выключены, будильник не нужен. */
@@ -106,9 +110,10 @@ class Reminders(
         val noDiary = calendar.diaries.missing.first()
         val advance = salary?.advance(now.date.yearMonth)?.first()
         val advanceDays = advanceDays(now.date).first()
-        val due = ReminderRules.due(last, now, settings, slots, noDiary.map { it.id }.toSet(), advanceDays)
+        val personal = calendar.personalAlerts(now.date.minus(1, DateTimeUnit.DAY), now.date.plus(PERSONAL_DAYS, DateTimeUnit.DAY))
+        val due = ReminderRules.due(last, now, settings, slots, noDiary.map { it.id }.toSet(), advanceDays, personal)
         val notices = notices(due, now, home, noDiary, advance)
-        return ReminderCheck(notices, ReminderRules.next(now, settings, slots, advanceDays))
+        return ReminderCheck(notices, ReminderRules.next(now, settings, slots, advanceDays, personal))
     }
 
     /**
@@ -123,14 +128,15 @@ class Reminders(
         val noDiary = calendar.diaries.missing.first()
         var from = ClubTime.now(clock())
         val advance = salary?.advance(from.date.yearMonth)?.first()
+        val personal = calendar.personalAlerts(from.date, from.date.plus(UPCOMING_DAYS, DateTimeUnit.DAY))
         val out = mutableListOf<Pair<LocalDateTime, Notice>>()
         repeat(limit) {
             val home = calendar.homeTrainings(from.date).first()
             val slots = home.map { it.slot() }
             val advanceDays = advanceDays(from.date).first()
-            val at = ReminderRules.next(from, settings, slots, advanceDays) ?: return out
+            val at = ReminderRules.next(from, settings, slots, advanceDays, personal) ?: return out
             val ahead = noDiary.map { it.id }.toSet() + slots.filter { it.end > from }.map { it.id }
-            val due = ReminderRules.due(from, at, settings, slots, ahead, advanceDays)
+            val due = ReminderRules.due(from, at, settings, slots, ahead, advanceDays, personal)
             notices(due, at, home, noDiary, advance).forEach { out += at to it }
             if (out.size >= limit) return out.take(limit)
             from = at
@@ -188,6 +194,9 @@ class Reminders(
                 is Reminder.Group -> byId[reminder.id]?.let { t ->
                     Notice(t.id, NoticeChannel.INSTANT, t.title, ReminderFormat.instantGroup(t.start, t.slot().end), AppLink.Card(t.id))
                 }
+                is Reminder.Personal -> reminder.alert.let { a ->
+                    Notice(a.key, NoticeChannel.PERSONAL, a.title, PersonalFormat.alertText(a.at, a.start, a.travelMinutes), AppLink.Home, snooze = true)
+                }
             }
         }
     }
@@ -199,8 +208,12 @@ class Reminders(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun nextCheck(): Flow<LocalDateTime?> = calendar.reminders.prefs.flatMapLatest { diary ->
         val today = ClubTime.now(clock()).date
-        combine(calendar.homeTrainings(today), advanceDays(today)) { home, advance ->
-            ReminderRules.next(ClubTime.now(clock()), settings(diary), home.map { it.slot() }, advance)
+        combine(
+            calendar.homeTrainings(today),
+            advanceDays(today),
+            calendar.observePersonalAlerts(today, today.plus(PERSONAL_DAYS, DateTimeUnit.DAY)),
+        ) { home, advance, personal ->
+            ReminderRules.next(ClubTime.now(clock()), settings(diary), home.map { it.slot() }, advance, personal)
         }
     }
 
@@ -212,6 +225,12 @@ class Reminders(
         const val ADVANCE_KEY = "advance"
         const val DIGEST_KEY = "digest"
         const val DAY_PLAN_KEY = "dayPlan"
+
+        /** Личные уведомления: на сколько дней вперёд будильник знает о них (шаг 5.10ж). */
+        const val PERSONAL_DAYS = 7
+
+        /** iPhone: личные уведомления наперёд — на месяц. */
+        const val UPCOMING_DAYS = 31
 
         /** Сколько проверок наперёд отдаётся системе (у iPhone предел — 64 ожидающих уведомления). */
         const val UPCOMING = 40

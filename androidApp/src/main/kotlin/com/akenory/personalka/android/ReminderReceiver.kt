@@ -3,6 +3,7 @@ package com.akenory.personalka.android
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -13,6 +14,25 @@ import kotlinx.coroutines.launch
  */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Кнопки личного уведомления (шаг 5.10ж): «Готово» — снять, «Через 10 мин» — показать снова позже.
+        val id = intent.getIntExtra(AndroidReminders.EXTRA_ID, 0)
+        val title = intent.getStringExtra(AndroidReminders.EXTRA_TITLE).orEmpty()
+        val text = intent.getStringExtra(AndroidReminders.EXTRA_TEXT).orEmpty()
+        val link = intent.getStringExtra(AndroidReminders.EXTRA_LINK)
+        when (intent.action) {
+            AndroidReminders.ACTION_DONE -> {
+                NotificationManagerCompat.from(context).cancel(id)
+                return
+            }
+            AndroidReminders.ACTION_SNOOZE -> {
+                AndroidReminders.snooze(context, id, title, text, link)
+                return
+            }
+            AndroidReminders.ACTION_SHOW -> {
+                AndroidReminders.showAgain(context, id, title, text, link)
+                return
+            }
+        }
         if (intent.action !in ACTIONS) return
         val app = context.applicationContext as PersonalkaApplication
         val pending = goAsync()

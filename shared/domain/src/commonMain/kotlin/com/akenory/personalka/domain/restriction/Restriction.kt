@@ -33,8 +33,21 @@ data class Restriction(
     val validTo: LocalDate? = null,
     /** Исключённые даты: «Пропустить этот день». */
     val skipDates: Set<LocalDate> = emptySet(),
+    /** Что это (шаг 5.10е): запрет, личное дело, напоминание или час вне рабочего графика. */
+    val kind: BlockKind = BlockKind.RESTRICTION,
+    /** Личное дело: дорога до и после, минуты — тоже занятое время. */
+    val travelMinutes: Int = 0,
+    /** Личное дело: можно ли ставить на него тренировки. Можно — время не занято. */
+    val blocksTrainings: Boolean = true,
+    /** Повтор каждый месяц в число [validFrom] (напоминание); дни недели тогда пусты. */
+    val monthly: Boolean = false,
+    /** Уведомление за столько минут до начала (личное дело и напоминание); `null` — без уведомления. */
+    val notifyMinutes: Int? = null,
 ) {
-    val isOneOff: Boolean get() = weekdays.isEmpty()
+    val isOneOff: Boolean get() = weekdays.isEmpty() && !monthly
+
+    /** Личное дело или напоминание: видит только тренер, в списке запретов его нет. */
+    val personal: Boolean get() = kind == BlockKind.PERSONAL || kind == BlockKind.REMINDER
 
     /** Запрет на все места, в том числе на места, добавленные потом. */
     val allPlaces: Boolean get() = locationId == ALL_PLACES
@@ -57,6 +70,13 @@ data class Restriction(
         const val ALL_PLACES = "*"
     }
 }
+
+/**
+ * Что за запись в таблице запретов (шаг 5.10е): [RESTRICTION] — запрет места; [PERSONAL] — личное дело тренера;
+ * [REMINDER] — напоминание (время не занимает); [SCHEDULE] — час вне рабочего графика: такой записи в базе нет,
+ * правила строят её из графика (шаг 5.10д).
+ */
+enum class BlockKind { RESTRICTION, PERSONAL, REMINDER, SCHEDULE }
 
 /** Что не так с запретом: форма показывает это под полем и не сохраняет. */
 enum class RestrictionProblem {

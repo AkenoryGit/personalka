@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +35,12 @@ import com.akenory.personalka.data.calendar.ZoneRow
 import com.akenory.personalka.domain.calendar.CalendarSettingsRules
 import com.akenory.personalka.domain.calendar.Vacation
 import com.akenory.personalka.domain.format.CalendarSettingsFormat
+import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.TrainingFormat
+import com.akenory.personalka.domain.restriction.DayHours
+import com.akenory.personalka.domain.restriction.WorkSchedule
+import com.akenory.personalka.domain.restriction.problem
 import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
@@ -42,9 +48,12 @@ import com.akenory.personalka.ui.components.NavRow
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PanelActions
+import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SectionLabel
+import com.akenory.personalka.ui.components.SwitchRow
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.setup.ColorPalette
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -56,6 +65,7 @@ import com.akenory.personalka.ui.training.TimePickerPanel
 import com.akenory.personalka.ui.training.TrainingFormKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -72,6 +82,12 @@ internal fun stepTag(minutes: Int) = "step-$minutes"
 internal fun horizonTag(weeks: Int) = "horizon-$weeks"
 internal fun noticeTag(minutes: Int) = "notice-$minutes"
 internal fun zoneRowTag(key: String) = "zone-$key"
+internal fun scheduleDayTag(day: DayOfWeek) = "schedule-$day"
+internal const val SCHEDULE_SWITCH_TAG = "schedule-switch"
+internal const val SCHEDULE_DAY_SWITCH_TAG = "schedule-day-switch"
+internal const val SCHEDULE_DAY_START_TAG = "schedule-day-start"
+internal const val SCHEDULE_DAY_END_TAG = "schedule-day-end"
+internal const val PERSONAL_SWITCH_TAG = "personal-switch"
 
 /** Какое окно выбора открыто: начало или конец часов работы, первый или последний день отпуска. */
 private enum class Picker { START, END, FROM, TO }
@@ -104,6 +120,9 @@ internal fun CalendarSettingsScreen(
     var end by rememberSaveable { mutableStateOf<String?>(null) }
     var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
     var vacationOpen by rememberSaveable { mutableStateOf(false) }
+    // День графика, который сейчас меняют (шаг 5.10д): имя дня недели.
+    var dayEdit by rememberSaveable { mutableStateOf<String?>(null) }
+    var dayPicker by rememberSaveable { mutableStateOf<String?>(null) }
     var from by rememberSaveable { mutableStateOf(today.toString()) }
     var to by rememberSaveable { mutableStateOf(today.toString()) }
 
@@ -154,6 +173,42 @@ internal fun CalendarSettingsScreen(
                 }
                 hoursProblem?.let { ErrorText(it) }
                 Hint(CalendarSettingsFormat.WORK_HOURS_NOTE)
+
+                // Рабочий график по дням (шаг 5.10д): слоты — только в эти часы, вне их — вопрос при записи.
+                SectionLabel(PersonalFormat.SECTION_SCHEDULE)
+                SwitchRow(
+                    title = PersonalFormat.SCHEDULE,
+                    checked = loaded.schedule != null,
+                    onToggle = { on -> scope.launch { settings.saveSchedule(if (on) WorkSchedule.DEFAULT else null) } },
+                    modifier = Modifier.testTag(SCHEDULE_SWITCH_TAG),
+                    subtitle = PersonalFormat.SCHEDULE_NOTE,
+                )
+                loaded.schedule?.let { schedule ->
+                    ListCard {
+                        DateFormat.WEEK.forEachIndexed { index, day ->
+                            if (index > 0) RowDivider()
+                            InfoRow(
+                                DateFormat.weekdayShort(day),
+                                PersonalFormat.day(schedule.on(day)),
+                                Modifier.clickable { dayEdit = day.name }.testTag(scheduleDayTag(day)),
+                            )
+                        }
+                    }
+                }
+
+                // Личные дела и напоминания (шаг 5.10е): выключены — календарь как раньше.
+                SectionLabel(PersonalFormat.SECTION_PERSONAL)
+                SwitchRow(
+                    title = PersonalFormat.PERSONAL,
+                    checked = loaded.personal,
+                    onToggle = { on -> scope.launch { settings.savePersonal(on) } },
+                    modifier = Modifier.testTag(PERSONAL_SWITCH_TAG),
+                    subtitle = PersonalFormat.PERSONAL_NOTE,
+                )
+                if (loaded.personal) {
+                    SectionLabel(PersonalFormat.COLOR)
+                    ColorPalette(loaded.personalColor) { key -> scope.launch { settings.savePersonalColor(key) } }
+                }
 
                 SectionLabel(CalendarSettingsFormat.DRAG_STEP)
                 Chips(CalendarSettingsRules.DRAG_STEPS, loaded.dragStep, CalendarSettingsFormat::step, ::stepTag) {
@@ -235,6 +290,49 @@ internal fun CalendarSettingsScreen(
                     onSecondary = { vacationOpen = false },
                     primaryEnabled = fromProblem == null && toProblem == null && loadedPreview != null,
                 )
+            }
+        }
+
+        val editing = dayEdit?.let(DayOfWeek::valueOf)
+        val schedule = loaded.schedule
+        if (editing != null && schedule != null) {
+            val hours = schedule.on(editing)
+            fun save(next: DayHours?) {
+                scope.launch { settings.saveSchedule(WorkSchedule(schedule.days + (editing to next))) }
+            }
+            Panel(PersonalFormat.weekday(editing), onDismiss = { dayEdit = null }) {
+                SwitchRow(
+                    title = PersonalFormat.WORK_DAY,
+                    checked = hours != null,
+                    onToggle = { on -> save(if (on) WorkSchedule.DEFAULT.on(DayOfWeek.MONDAY) else null) },
+                    modifier = Modifier.testTag(SCHEDULE_DAY_SWITCH_TAG),
+                )
+                if (hours != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        PickBox(
+                            text = CalendarSettingsFormat.from(hours.start),
+                            icon = PIcons.Schedule,
+                            onClick = { dayPicker = "start" },
+                            modifier = Modifier.weight(1f).testTag(SCHEDULE_DAY_START_TAG),
+                            error = hours.problem(),
+                        )
+                        PickBox(
+                            text = CalendarSettingsFormat.to(hours.end),
+                            icon = null,
+                            onClick = { dayPicker = "end" },
+                            modifier = Modifier.weight(1f).testTag(SCHEDULE_DAY_END_TAG),
+                            error = hours.problem(),
+                        )
+                    }
+                    hours.problem()?.let { ErrorText(it) }
+                }
+                PrimaryButton(PersonalFormat.DONE, { dayEdit = null }, Modifier.fillMaxWidth())
+            }
+            if (hours != null) {
+                when (dayPicker) {
+                    "start" -> TimePickerPanel(hours.start, { dayPicker = null; save(hours.copy(start = it)) }, { dayPicker = null }, title = START_TITLE)
+                    "end" -> TimePickerPanel(hours.end, { dayPicker = null; save(hours.copy(end = it)) }, { dayPicker = null }, title = END_TITLE)
+                }
             }
         }
 

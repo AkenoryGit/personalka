@@ -27,7 +27,16 @@ data class RestrictionDraft(
      * место — дальше каждый меняется и удаляется сам. У изменения запрета и у «Все места» всегда пусто.
      */
     val otherPlaces: Set<String> = emptySet(),
+    /** Запрет, личное дело или напоминание (шаги 5.10е, 5.10ж); у личного [reason] — его название. */
+    val kind: BlockKind = BlockKind.RESTRICTION,
+    val travelMinutes: Int = 0,
+    val blocksTrainings: Boolean = true,
+    val notifyMinutes: Int? = null,
+    /** Напоминание «каждый месяц» — в число [date]. */
+    val monthly: Boolean = false,
 ) {
+    val personal: Boolean get() = kind == BlockKind.PERSONAL || kind == BlockKind.REMINDER
+
     /** «Все места» (шаг 5.3ю): [locationId] — [Restriction.ALL_PLACES], запрет — одна запись. */
     val allPlaces: Boolean get() = locationId == Restriction.ALL_PLACES
 
@@ -39,7 +48,10 @@ data class RestrictionDraft(
 }
 
 /** Поля формы запрета, под которыми показывается ошибка. */
-enum class RestrictionField { PLACE, TIME, WEEKDAYS, PERIOD }
+enum class RestrictionField { PLACE, TIME, WEEKDAYS, PERIOD, TITLE }
+
+/** Повтор напоминания (шаг 5.10ж). */
+enum class ReminderRepeat { NONE, DAILY, WEEKDAYS, WEEKLY, MONTHLY }
 
 /** Правила формы запрета (ТЗ 5.5): черновик по умолчанию, запрет из черновика и обратно, ошибки словами тренера. */
 object RestrictionFormRules {
@@ -57,6 +69,60 @@ object RestrictionFormRules {
             date = start.date,
         )
     }
+
+    /**
+     * Новое личное дело (шаг 5.10е) с [start] на час — время занято, без дороги, напоминание за 15 минут; или
+     * напоминание (шаг 5.10ж) на [start], уведомление за 10 минут.
+     */
+    fun newPersonal(start: LocalDateTime, kind: BlockKind): RestrictionDraft {
+        val base = new(start, Restriction.ALL_PLACES)
+        return if (kind == BlockKind.REMINDER) {
+            reminderEnd(base.copy(kind = kind, notifyMinutes = REMINDER_NOTIFY_DEFAULT))
+        } else {
+            base.copy(kind = kind, notifyMinutes = TASK_NOTIFY_DEFAULT)
+        }
+    }
+
+    /** Дело ↔ напоминание в той же форме: время, дата, название и повтор остаются. */
+    fun switchKind(draft: RestrictionDraft, kind: BlockKind): RestrictionDraft = when (kind) {
+        BlockKind.REMINDER -> reminderEnd(draft.copy(kind = kind, notifyMinutes = draft.notifyMinutes ?: REMINDER_NOTIFY_DEFAULT))
+        else -> {
+            val from = draft.start.hour * 60 + draft.start.minute
+            val to = minOf(from + DEFAULT_MINUTES, ClubTime.MINUTES_PER_DAY) % ClubTime.MINUTES_PER_DAY
+            draft.copy(kind = kind, monthly = false, end = LocalTime(to / 60, to % 60))
+        }
+    }
+
+    /** Конец напоминания: только чтобы его было видно и можно было нажать — 15 минут, не дальше полуночи. */
+    fun reminderEnd(draft: RestrictionDraft): RestrictionDraft {
+        val from = draft.start.hour * 60 + draft.start.minute
+        val to = minOf(from + PersonalRules.REMINDER_SPAN, ClubTime.MINUTES_PER_DAY) % ClubTime.MINUTES_PER_DAY
+        return draft.copy(end = LocalTime(to / 60, to % 60))
+    }
+
+    /** Повтор напоминания из черновика. */
+    fun repeatOf(draft: RestrictionDraft): ReminderRepeat = when {
+        draft.monthly -> ReminderRepeat.MONTHLY
+        !draft.weekly -> ReminderRepeat.NONE
+        draft.weekdays.size == 7 -> ReminderRepeat.DAILY
+        draft.weekdays == WORKDAYS -> ReminderRepeat.WEEKDAYS
+        else -> ReminderRepeat.WEEKLY
+    }
+
+    /** Выбрать повтор напоминания. «Каждую неделю» — в день даты. */
+    fun withRepeat(draft: RestrictionDraft, repeat: ReminderRepeat): RestrictionDraft = when (repeat) {
+        ReminderRepeat.NONE -> draft.copy(weekly = false, monthly = false)
+        ReminderRepeat.DAILY -> draft.copy(weekly = true, monthly = false, weekdays = DayOfWeek.entries.toSet())
+        ReminderRepeat.WEEKDAYS -> draft.copy(weekly = true, monthly = false, weekdays = WORKDAYS)
+        ReminderRepeat.WEEKLY -> draft.copy(weekly = true, monthly = false, weekdays = setOf(draft.date.dayOfWeek))
+        ReminderRepeat.MONTHLY -> draft.copy(weekly = false, monthly = true)
+    }
+
+    private val WORKDAYS = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)
+
+    /** Напоминание у дела по умолчанию — за 15 минут; у напоминания — за 10. */
+    const val TASK_NOTIFY_DEFAULT = 15
+    const val REMINDER_NOTIFY_DEFAULT = 10
 
     /** «Каждую неделю» включили — по умолчанию день даты, как у повтора тренировки. */
     fun weekly(draft: RestrictionDraft, on: Boolean): RestrictionDraft = when {
@@ -95,11 +161,16 @@ object RestrictionFormRules {
         reason = draft.reason.trim(),
         startTime = draft.start,
         endTime = draft.end,
-        weekdays = if (draft.weekly) draft.weekdays else emptySet(),
-        date = if (draft.weekly) null else draft.date,
+        weekdays = if (draft.weekly && !draft.monthly) draft.weekdays else emptySet(),
+        date = if (draft.weekly || draft.monthly) null else draft.date,
         validFrom = draft.date,
-        validTo = if (draft.weekly) draft.validTo else null,
+        validTo = if (draft.weekly || draft.monthly) draft.validTo else null,
         skipDates = skipDates,
+        kind = draft.kind,
+        travelMinutes = if (draft.kind == BlockKind.PERSONAL) draft.travelMinutes else 0,
+        blocksTrainings = draft.kind != BlockKind.PERSONAL || draft.blocksTrainings,
+        monthly = draft.monthly,
+        notifyMinutes = if (draft.personal) draft.notifyMinutes else null,
     )
 
     /** Сохранённый запрет в форме изменения. */
@@ -108,10 +179,15 @@ object RestrictionFormRules {
         start = restriction.startTime,
         end = restriction.endTime,
         reason = restriction.reason,
-        weekly = !restriction.isOneOff,
+        weekly = !restriction.isOneOff && !restriction.monthly,
         weekdays = restriction.weekdays,
         date = restriction.date ?: restriction.validFrom,
         validTo = restriction.validTo,
+        kind = restriction.kind,
+        travelMinutes = restriction.travelMinutes,
+        blocksTrainings = restriction.blocksTrainings,
+        notifyMinutes = restriction.notifyMinutes,
+        monthly = restriction.monthly,
     )
 
     /**
@@ -119,7 +195,10 @@ object RestrictionFormRules {
      * конец периода не раньше начала. Пусто — можно сохранять.
      */
     fun problems(draft: RestrictionDraft): Map<RestrictionField, String> = buildMap {
-        if (draft.locationId == null) put(RestrictionField.PLACE, "Выберите место")
+        if (draft.personal && draft.reason.isBlank()) {
+            put(RestrictionField.TITLE, if (draft.kind == BlockKind.REMINDER) "Напишите, о чём напомнить" else "Напишите, что за дело")
+        }
+        if (draft.locationId == null && !draft.personal) put(RestrictionField.PLACE, "Выберите место")
         if (draft.weekly && draft.weekdays.isEmpty()) put(RestrictionField.WEEKDAYS, "Выберите дни недели")
         when (RestrictionRules.problem(toRestriction("", draft.copy(weekdays = draft.weekdays.ifEmpty { setOf(draft.date.dayOfWeek) })))) {
             RestrictionProblem.TIME_REVERSED -> put(RestrictionField.TIME, "Конец должен быть позже начала")

@@ -3,6 +3,7 @@ package com.akenory.personalka.domain.calendar
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.client.WaitWant
 import com.akenory.personalka.domain.model.TimeRange
+import com.akenory.personalka.domain.restriction.BlockKind
 import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import kotlinx.datetime.DateTimeUnit
@@ -122,8 +123,12 @@ object FreeSlots {
         busy.filter { !it.duty || query.dutyBusy }.forEach { close(closed, span(it)) }
         val place = query.locationId
         if (query.restrictions && place != null) {
-            RestrictionRules.on(restrictions, date, place).forEach { close(closed, it.restriction.startMinute until it.restriction.endMinute) }
+            RestrictionRules.on(restrictions, date, place).filter { it.restriction.kind == BlockKind.RESTRICTION }
+                .forEach { close(closed, it.restriction.startMinute until it.restriction.endMinute) }
         }
+        // Личные дела с дорогой и часы вне рабочего графика (шаги 5.10д, 5.10е) закрыты всегда, в любом месте.
+        RestrictionRules.on(restrictions, date).filter { it.restriction.kind != BlockKind.RESTRICTION }
+            .forEach { close(closed, it.restriction.startMinute until it.restriction.endMinute) }
         // Рамки дня.
         close(closed, 0 until minute(query.dayStart))
         close(closed, minute(query.dayEnd, end = true) until ClubTime.MINUTES_PER_DAY)

@@ -14,7 +14,7 @@ import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.syncGroupTrainings
 import com.akenory.personalka.data.groups.toSeriesTraining
 import com.akenory.personalka.data.money.SptRepository
-import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.restrictions.restrictions
 import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.series.Recorder
 import com.akenory.personalka.data.series.Undo
@@ -531,7 +531,7 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         val mine = schedule.seriesOfClient(clientId).filter { it.groupId == null && (it.validTo == null || it.validTo >= clubNow.date) }
         if (mine.isEmpty()) return null
         val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
-        val restrictions = schedule.blocks().map { it.toRestriction() }
+        val restrictions = db.restrictions()
         val recorder = Recorder(db, now)
         mine.forEach { entity ->
             val people = schedule.seriesClients(entity.id).sortedWith(compareBy({ it.sync.createdAt }, { it.id })).map { it.clientId }

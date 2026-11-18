@@ -26,7 +26,8 @@ import com.akenory.personalka.data.money.SptRepository
 import com.akenory.personalka.data.money.reconcileSpt
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
-import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.restrictions.restrictions
+import com.akenory.personalka.data.restrictions.restrictionsOf
 import com.akenory.personalka.data.series.Recorder
 import com.akenory.personalka.data.series.Undo
 import com.akenory.personalka.data.series.restore
@@ -55,6 +56,7 @@ import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.money.CoCoachingRules
 import com.akenory.personalka.domain.money.SalaryMonthRules
 import com.akenory.personalka.domain.money.Sharing
+import com.akenory.personalka.domain.restriction.BlockKind
 import com.akenory.personalka.domain.restriction.RestrictionRules
 import com.akenory.personalka.domain.series.Series
 import com.akenory.personalka.domain.series.SeriesChanges
@@ -303,8 +305,9 @@ class TrainingCardRepository internal constructor(
                 emptyList()
             } else {
                 val placement = t.placement(isDuty = false)
-                val restricted = RestrictionRules.hits(placement, blocks.map { it.toRestriction() }).map { hit ->
-                    TrainingCardFormat.overRestriction(ZoneFormat.restriction(if (hit.restriction.allPlaces) ZoneFormat.ALL_PLACES else placeShort, hit.restriction.startMinute, hit.restriction.endMinute, hit.restriction.reason))
+                val restricted = RestrictionRules.hits(placement, restrictionsOf(blocks, settingsRow)).map { hit ->
+                    val where = if (hit.restriction.allPlaces && hit.restriction.kind == BlockKind.RESTRICTION) ZoneFormat.ALL_PLACES else ZoneFormat.place(hit.restriction) { placeShort }
+                    TrainingCardFormat.overRestriction(ZoneFormat.restriction(where, hit.restriction.startMinute, hit.restriction.endMinute, hit.restriction.reason))
                 }
                 val duties = sameDay.filter { typeById[it.typeId]?.kind == TrainingKind.DUTY && it.sync.deletedAt == null }
                 val overDuty = RestrictionRules.dutyOverlaps(placement, duties.map { it.placed(isDuty = true) }).map { d ->
@@ -610,7 +613,7 @@ class TrainingCardRepository internal constructor(
             val changes = SeriesRules.skip(stored, training, all, clubNow)
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val recorder = Recorder(db, now)
-            recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
+            recorder.write(db, changes, coach.id, now, db.restrictions(), stored.pattern) { it in duties }
             result = CardResult(TrainingCardFormat.skipped(t.start.date), recorder.alignedUndo(db, now))
             result?.let { db.recordFreed(it.undo, now) }
         }
@@ -631,7 +634,7 @@ class TrainingCardRepository internal constructor(
             val duty = trainings.training(id)?.let { reference.trainingType(it.typeId) }?.kind == TrainingKind.DUTY
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val recorder = Recorder(db, now)
-            recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
+            recorder.write(db, changes, coach.id, now, db.restrictions(), stored.pattern) { it in duties }
             val from = changes.deleted.minOf { it.date }
             val message = if (duty) ZoneFormat.dutiesDeleted(changes.deleted.size, from)
                 else TrainingCardFormat.deletedFollowing(changes.deleted.size, from)

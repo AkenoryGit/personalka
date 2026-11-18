@@ -199,6 +199,8 @@ fun CalendarScreen(
     var askKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     val work by remember(calendar) { calendar.workHours }.collectAsState(initial = WorkHours())
+    // Время вне рабочего графика (шаг 5.10д) — приглушённый фон сетки.
+    val offHours by remember(calendar) { calendar.offHours }.collectAsState(initial = { _: LocalDate -> emptyList<IntRange>() })
     val step by remember(calendar) { calendar.dragStep }.collectAsState(initial = CalendarDrag.STEP_DEFAULT)
     // Пунктирный блок новой тренировки — такой длины, какую подставит форма: у типа, который в ней первый.
     val newDuration by remember(calendar) {
@@ -411,7 +413,15 @@ fun CalendarScreen(
                 val onWeek: (Int) -> Unit = { days ->
                     ui.launch { pager.animateScrollToPage((pager.currentPage + days).coerceIn(0, PAGE_COUNT - 1)) }
                 }
-                val onZone: (CalendarZone) -> Unit = { zone -> zoneKey = zoneKeyOf(zone) }
+                // Дорога открывает своё дело (шаг 5.10е).
+                val onZone: (CalendarZone) -> Unit = { zone ->
+                    val target = if (zone.kind == ZoneKind.TRAVEL) {
+                        zonesOf(zone.date).firstOrNull { it.kind == ZoneKind.PERSONAL && it.id == zone.blockId } ?: zone
+                    } else {
+                        zone
+                    }
+                    zoneKey = zoneKeyOf(target)
+                }
                 if (view == CalendarView.Month) {
                     MonthView(
                         months = months,
@@ -499,6 +509,7 @@ fun CalendarScreen(
                     onMove = { training, start -> moveStored(training.id, start, confirmed = false) },
                     onZoomEnd = { prefs.putFloat(DevicePrefs.CALENDAR_HOUR, grid.hourDp) },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    offHours = offHours,
                 )
             }
 

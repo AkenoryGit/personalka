@@ -319,6 +319,7 @@ internal fun DayGrid(
     onMove: (CalendarTraining, LocalDateTime) -> Unit,
     onZoomEnd: () -> Unit,
     modifier: Modifier = Modifier,
+    offHours: (LocalDate) -> List<IntRange> = { emptyList() },
 ) {
     val colors = PersonalkaTheme.colors
     val density = LocalDensity.current.density
@@ -499,6 +500,7 @@ internal fun DayGrid(
                         date = date,
                         items = itemsOf(date),
                         zones = zonesOf(date),
+                        off = offHours(date),
                         hours = hours,
                         hourDp = hourDp,
                         now = now,
@@ -890,6 +892,7 @@ private fun DayColumn(
     date: LocalDate,
     items: List<CalendarTraining>,
     zones: List<CalendarZone>,
+    off: List<IntRange>,
     hours: GridHours,
     hourDp: Float,
     now: LocalDateTime,
@@ -958,6 +961,7 @@ private fun DayColumn(
                 .testTag(calendarDayTag(date)),
         ) {
             drawBackground(date, hours, hourDp, now, colors)
+            drawOffHours(off, hours, hourDp, colors)
             drawZones(day.zones, zoneById, colors)
             day.zones.forEach { zone ->
                 val info = zoneById[zone.kind to zone.id] ?: return@forEach
@@ -1088,6 +1092,16 @@ private val STRIP_EDGE = 1.dp
 
 /** Штриховка самой зоны запрета: цвет места на 50 % поверх сетки, «Все места» — цвет текста на 35 %, как прежний серый. */
 private const val HATCH_PLACE = 0.5f
+
+/** Заливка личного дела (шаг 5.10е): полоса цвета на 28 %, «можно ставить» — на 12 %. */
+private const val PERSONAL_FILL = 0.28f
+private const val PERSONAL_FREE = 0.12f
+
+/** Черта напоминания (шаг 5.10ж). */
+private val REMINDER_LINE = 2.dp
+
+/** Время вне рабочего графика (шаг 5.10д): графит на 7 % поверх сетки. */
+private const val OFF_TINT = 0.07f
 private const val HATCH_ALL = 0.35f
 
 /**
@@ -1316,8 +1330,8 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
 /** Подпись зоны в одну строку: у дежурства — справа, у запрета — слева, на плашке. */
 private fun DrawScope.measureLabel(measurer: TextMeasurer, zone: ZoneInfo, style: TextStyle): TextLayoutResult {
     val room = when (zone.kind) {
-        ZoneKind.DUTY -> Dimens.blockInset * 2 + LABEL_END
-        ZoneKind.RESTRICTION -> LABEL_START + LABEL_PAD * 2 + Dimens.blockInset
+        ZoneKind.DUTY, ZoneKind.PERSONAL, ZoneKind.TRAVEL -> Dimens.blockInset * 2 + LABEL_END
+        ZoneKind.RESTRICTION, ZoneKind.REMINDER -> LABEL_START + LABEL_PAD * 2 + Dimens.blockInset
     }
     return measurer.measure(
         text = zone.label,
@@ -1327,6 +1341,18 @@ private fun DrawScope.measureLabel(measurer: TextMeasurer, zone: ZoneInfo, style
         maxLines = 1,
         constraints = Constraints(maxWidth = (size.width - room.toPx()).toInt().coerceAtLeast(0)),
     )
+}
+
+/** Время вне рабочего графика (шаг 5.10д): чуть темнее сетки; блоки и зоны рисуются поверх. */
+private fun DrawScope.drawOffHours(off: List<IntRange>, hours: GridHours, hourDp: Float, colors: PersonalkaColors) {
+    if (off.isEmpty()) return
+    val hourPx = hourDp.dp.toPx()
+    val tint = colors.text.copy(alpha = OFF_TINT)
+    off.forEach { range ->
+        val from = ((range.first - hours.startMinute) * hourPx / 60f).coerceIn(0f, size.height)
+        val to = ((range.last + 1 - hours.startMinute) * hourPx / 60f).coerceIn(0f, size.height)
+        if (to > from) drawRect(tint, Offset(0f, from), Size(size.width, to - from))
+    }
 }
 
 /** Фон дня: приглушённое прошлое — только фон, блоки сохраняют цвета. */
@@ -1358,13 +1384,21 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
                 val fill = lerp(colors.surface, restrictionInk(info, colors), if (isAllPlaces(info)) HATCH_ALL else HATCH_PLACE)
                 hatch(area, fill, Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
             }
+            // Личное дело (шаг 5.10е): заливка цвета личных дел; «можно ставить» — вдвое бледнее.
+            ZoneKind.PERSONAL -> {
+                val free = byId[zone.kind to zone.id]?.free == true
+                drawRect(lerp(colors.surface, place(zone).tone(colors.isDark).stripe, if (free) PERSONAL_FREE else PERSONAL_FILL), area.topLeft, area.size)
+            }
+            ZoneKind.TRAVEL -> hatch(area, lerp(colors.surface, place(zone).tone(colors.isDark).stripe, HATCH_PLACE), Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
+            // Напоминание (шаг 5.10ж): черта во всю ширину в его время.
+            ZoneKind.REMINDER -> drawLine(place(zone).tone(colors.isDark).stripe, area.topLeft, Offset(area.right, area.top), REMINDER_LINE.toPx())
         }
     }
     val strip = Dimens.zoneStrip.toPx()
     zones.forEach { zone ->
         val area = rect(zone, zone.lane * strip, (zone.lane + 1) * strip)
         when (zone.kind) {
-            ZoneKind.DUTY -> drawRect(place(zone).tone(colors.isDark).stripe, area.topLeft, area.size)
+            ZoneKind.DUTY, ZoneKind.PERSONAL -> drawRect(place(zone).tone(colors.isDark).stripe, area.topLeft, area.size)
             ZoneKind.RESTRICTION -> {
                 val info = byId[zone.kind to zone.id]
                 val ink = restrictionInk(info, colors)
@@ -1373,6 +1407,8 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
                 val edge = STRIP_EDGE.toPx()
                 drawRect(ink, Offset(area.right - edge, area.top), Size(edge, area.height))
             }
+            ZoneKind.TRAVEL -> hatch(area, place(zone).tone(colors.isDark).stripe, STRIP_HATCH_STROKE.toPx(), STRIP_HATCH_STEP.toPx())
+            ZoneKind.REMINDER -> Unit
         }
     }
 }
@@ -1411,9 +1447,21 @@ private fun DrawScope.drawZoneLabel(zone: ZoneInfo, info: CalendarZone, label: T
     val top = zone.y.dp.toPx() + LABEL_TOP.toPx() + zone.labelRow * LABEL_ROW.toPx()
     if (zone.label.isEmpty() || top + label.size.height > (zone.y + zone.height).dp.toPx()) return
     when (zone.kind) {
-        ZoneKind.DUTY -> {
+        ZoneKind.DUTY, ZoneKind.PERSONAL, ZoneKind.TRAVEL -> {
             val text = PlaceColor.of(info.color).tone(colors.isDark).text
             drawText(label, color = text, topLeft = Offset(size.width - LABEL_END.toPx() - label.size.width, top))
+        }
+        ZoneKind.REMINDER -> {
+            val pad = LABEL_PAD.toPx()
+            val left = LABEL_START.toPx()
+            val tone = PlaceColor.of(info.color).tone(colors.isDark)
+            drawRoundRect(
+                tone.block(2),
+                topLeft = Offset(left, top),
+                size = Size(label.size.width + pad * 2, label.size.height.toFloat()),
+                cornerRadius = CornerRadius(LABEL_RADIUS.toPx()),
+            )
+            drawText(label, color = tone.text, topLeft = Offset(left + pad, top))
         }
         ZoneKind.RESTRICTION -> {
             val pad = LABEL_PAD.toPx()

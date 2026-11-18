@@ -2,6 +2,7 @@ package com.akenory.personalka.domain.reminder
 
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.home.HomeSlot
+import com.akenory.personalka.domain.restriction.PersonalAlert
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -42,6 +43,9 @@ sealed interface Reminder {
 
     /** «Группа сразу» — группа [id] прошла, никого не отметили. */
     data class Group(val id: String) : Reminder
+
+    /** Личное дело или напоминание (шаги 5.10е, 5.10ж): время уведомления пришло. */
+    data class Personal(val alert: PersonalAlert) : Reminder
 }
 
 /**
@@ -78,6 +82,7 @@ object ReminderRules {
         slots: List<HomeSlot>,
         noDiary: Set<String>,
         advance: List<LocalDate> = emptyList(),
+        personal: List<PersonalAlert> = emptyList(),
     ): List<Reminder> {
         val start = maxOf(from, ClubTime.plusMinutes(to, -CATCH_UP_HOURS * 60))
         if (start >= to) return emptyList()
@@ -96,6 +101,8 @@ object ReminderRules {
                     .forEach { add(Reminder.Diary(it.id)) }
             }
             if (settings.digest && daily(settings.digestTime, start, to)) add(Reminder.Digest)
+            // Личное — каждое в своё время; пропущенное за ночь придёт утром, как сводка (не старше 12 часов).
+            personal.filter { inside(it.at) }.sortedBy { it.at }.forEach { add(Reminder.Personal(it)) }
         }
     }
 
@@ -103,8 +110,15 @@ object ReminderRules {
      * Следующий момент проверки после [after]: сводка, план на день, аванс, конец тренировки плюс 15 минут. `null` — всё
      * выключено, будильник не нужен. Есть ли у тренировки дневник, заранее не известно — это решит [due].
      */
-    fun next(after: LocalDateTime, settings: ReminderSettings, slots: List<HomeSlot>, advance: List<LocalDate> = emptyList()): LocalDateTime? {
+    fun next(
+        after: LocalDateTime,
+        settings: ReminderSettings,
+        slots: List<HomeSlot>,
+        advance: List<LocalDate> = emptyList(),
+        personal: List<PersonalAlert> = emptyList(),
+    ): LocalDateTime? {
         val moments = buildList {
+            personal.map { it.at }.filter { it > after }.let(::addAll)
             if (settings.digest) add(nextDaily(settings.digestTime, after))
             if (settings.dayPlan) add(nextDaily(DAY_PLAN_TIME, after))
             if (settings.advance) advance.map { LocalDateTime(it, ADVANCE_TIME) }.filter { it > after }.let(::addAll)

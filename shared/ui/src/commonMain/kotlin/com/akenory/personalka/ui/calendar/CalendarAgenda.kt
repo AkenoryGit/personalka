@@ -55,6 +55,7 @@ import com.akenory.personalka.domain.calendar.MonthRules
 import com.akenory.personalka.domain.calendar.ZoneKind
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -122,7 +123,11 @@ internal sealed interface DayEntry {
  * тренировками, которые на нём стоят.
  */
 internal fun dayEntries(trainings: List<CalendarTraining>, zones: List<CalendarZone>): List<DayEntry> =
-    (trainings.map { DayEntry.Training(it) } + zones.filter { it.kind == ZoneKind.DUTY }.map { DayEntry.Duty(it) })
+    (
+        trainings.map { DayEntry.Training(it) } +
+            // Личные дела и напоминания (шаги 5.10е, 5.10ж) — тоже строками, как дежурства; дорога — нет.
+            zones.filter { it.kind == ZoneKind.DUTY || it.kind == ZoneKind.PERSONAL || it.kind == ZoneKind.REMINDER }.map { DayEntry.Duty(it) }
+        )
         .sortedWith(compareBy<DayEntry> { it.start }.thenByDescending { it.length })
 
 /** Строки дня в списке: нажатие на тренировку — как на блок, на дежурство — как на его заливку. */
@@ -203,8 +208,12 @@ private fun DutyRow(zone: CalendarZone, onClick: () -> Unit) {
     EntryRow(
         time = DateFormat.minuteOfDay(zone.start),
         stripe = PlaceColor.of(zone.color).tone(colors.isDark).stripe,
-        title = zone.title,
-        line = CalendarFormat.dutyLine(zone.placeShort, zone.end, zone.coverFor),
+        title = if (zone.kind == ZoneKind.DUTY) zone.title else zone.reason,
+        line = when (zone.kind) {
+            ZoneKind.PERSONAL -> PersonalFormat.listLine(zone.end, zone.free)
+            ZoneKind.REMINDER -> PersonalFormat.REMINDER
+            else -> CalendarFormat.dutyLine(zone.placeShort, zone.end, zone.coverFor)
+        },
         crossed = false,
         badges = emptyList(),
         tag = calendarRowTag(zone.id),

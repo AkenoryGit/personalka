@@ -2,8 +2,11 @@ package com.akenory.personalka.domain.calendar
 
 // ТЗ 5.3, «Слои снизу вверх»: дежурства и запреты лежат под тренировками, у левого края колонки дня — их полоски.
 
-/** Зона дня: дежурство — сплошная заливка, запрет — штриховка. */
-enum class ZoneKind { DUTY, RESTRICTION }
+/**
+ * Зона дня: дежурство — сплошная заливка, запрет — штриховка; личное дело — заливка цвета личных дел, дорога —
+ * его штриховка, напоминание — черта с подписью (шаги 5.10е, 5.10ж). Порядок — порядок рисования снизу вверх.
+ */
+enum class ZoneKind { DUTY, RESTRICTION, TRAVEL, PERSONAL, REMINDER }
 
 /** Зона в дне: минуты от полуночи, [start] включительно, [end] — нет. */
 data class ZoneSpan(val id: String, val kind: ZoneKind, val start: Int, val end: Int)

@@ -69,6 +69,12 @@ data class CoachSettingsEntity(
     val weekViewDays: Int = 3,
     val backupFolderUri: String? = null,
     val backupFrequency: BackupFrequency = BackupFrequency.DAILY,
+    /** Рабочий график по дням (версия 21, шаг 5.10д): `WorkSchedule.encode`; `null` — выключен. */
+    val workSchedule: String? = null,
+    /** Личные дела и напоминания (шаг 5.10е): выключены у нового тренера — кому нужны, включит сам. */
+    val personalEnabled: Boolean = false,
+    /** Цвет личных дел — ключ `PlaceColor`. */
+    val personalColor: String = "mustard",
 )
 
 /** Категория тренера, версия с даты. */

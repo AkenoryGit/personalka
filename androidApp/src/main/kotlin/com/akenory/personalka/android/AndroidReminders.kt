@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import com.akenory.personalka.R
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.ui.reminders.AppLink
 import com.akenory.personalka.ui.reminders.Notice
@@ -35,14 +36,25 @@ import kotlinx.datetime.LocalDateTime
 object AndroidReminders {
     private const val CHANNEL_DIGEST = "digest"
     private const val CHANNEL_INSTANT = "instant"
+    private const val CHANNEL_PERSONAL = "personal"
     const val ACTION_CHECK = "com.akenory.personalka.REMINDERS"
     const val EXTRA_LINK = "link"
+
+    /** Кнопки личного уведомления (шаг 5.10ж) и показ отложенного. */
+    const val ACTION_DONE = "com.akenory.personalka.PERSONAL_DONE"
+    const val ACTION_SNOOZE = "com.akenory.personalka.PERSONAL_SNOOZE"
+    const val ACTION_SHOW = "com.akenory.personalka.PERSONAL_SHOW"
+    const val EXTRA_ID = "id"
+    const val EXTRA_TITLE = "title"
+    const val EXTRA_TEXT = "text"
 
     /** Каналы создаются при каждом запуске: повторное создание ничего не меняет, выбор тренера в настройках остаётся. */
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL_DIGEST, ReminderFormat.CHANNEL_DIGEST, NotificationManager.IMPORTANCE_DEFAULT))
         manager.createNotificationChannel(NotificationChannel(CHANNEL_INSTANT, ReminderFormat.CHANNEL_INSTANT, NotificationManager.IMPORTANCE_DEFAULT))
+        // Личные дела и напоминания (шаг 5.10ж) — всплывают поверх экрана: ради них их и ставят.
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_PERSONAL, PersonalFormat.CHANNEL, NotificationManager.IMPORTANCE_HIGH))
     }
 
     /** Будильник следующей проверки на время клуба [at]; `null` — напоминания выключены, будильник снимается. */
@@ -57,9 +69,68 @@ object AndroidReminders {
         if (at == null) {
             alarms.cancel(pending)
         } else {
-            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, ClubTime.toMillis(at), pending)
+            wake(alarms, ClubTime.toMillis(at), pending)
         }
     }
+
+    /**
+     * Будильник на [millis]: точный, если телефон разрешает («Будильники и напоминания» — нужен для личных
+     * напоминаний «за 5 минут», шаг 5.10ж), иначе неточный — в глубоком сне он может опоздать на несколько минут.
+     */
+    private fun wake(alarms: AlarmManager, millis: Long, pending: PendingIntent) {
+        val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
+        try {
+            if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending) else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+        } catch (_: SecurityException) {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+        }
+    }
+
+    /** «Через 10 мин»: снять уведомление и показать его снова через 10 минут. */
+    fun snooze(context: Context, id: Int, title: String, text: String, link: String?) {
+        NotificationManagerCompat.from(context).cancel(id)
+        val pending = PendingIntent.getBroadcast(
+            context,
+            id,
+            Intent(context, ReminderReceiver::class.java).setAction(ACTION_SHOW)
+                .putExtra(EXTRA_ID, id).putExtra(EXTRA_TITLE, title).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_LINK, link),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val at = System.currentTimeMillis() + PersonalFormat.SNOOZE_MINUTES * 60_000L
+        wake(context.getSystemService(AlarmManager::class.java), at, pending)
+    }
+
+    /** Показать отложенное личное уведомление снова — с теми же кнопками. */
+    fun showAgain(context: Context, id: Int, title: String, text: String, link: String?) {
+        if (!allowed(context)) return
+        val open = AppLink.parse(link ?: AppLink.Home.code) ?: AppLink.Home
+        try {
+            NotificationManagerCompat.from(context).notify(id, personalBuilder(context, id, title, text, open).build())
+        } catch (_: SecurityException) {
+            return
+        }
+    }
+
+    private fun personalBuilder(context: Context, id: Int, title: String, text: String, link: AppLink): NotificationCompat.Builder =
+        NotificationCompat.Builder(context, CHANNEL_PERSONAL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(open(context, id * 2, link))
+            .setAutoCancel(true)
+            .addAction(0, PersonalFormat.DONE_ACTION, action(context, ACTION_DONE, id * 4 + 2, id, title, text, link))
+            .addAction(0, PersonalFormat.SNOOZE_ACTION, action(context, ACTION_SNOOZE, id * 4 + 3, id, title, text, link))
+
+    private fun action(context: Context, action: String, code: Int, id: Int, title: String, text: String, link: AppLink): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            code,
+            Intent(context, ReminderReceiver::class.java).setAction(action)
+                .putExtra(EXTRA_ID, id).putExtra(EXTRA_TITLE, title).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_LINK, link.code),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
     /** Показать уведомления; без разрешения ничего не показывается (и не падает). */
     fun show(context: Context, notices: List<Notice>) {
@@ -67,7 +138,20 @@ object AndroidReminders {
         val manager = NotificationManagerCompat.from(context)
         for (notice in notices) {
             val id = notice.key.hashCode()
-            val builder = NotificationCompat.Builder(context, if (notice.channel == NoticeChannel.DIGEST) CHANNEL_DIGEST else CHANNEL_INSTANT)
+            if (notice.snooze) {
+                try {
+                    manager.notify(id, personalBuilder(context, id, notice.title, notice.text, notice.open).build())
+                } catch (_: SecurityException) {
+                    return
+                }
+                continue
+            }
+            val channel = when (notice.channel) {
+                NoticeChannel.DIGEST -> CHANNEL_DIGEST
+                NoticeChannel.INSTANT -> CHANNEL_INSTANT
+                NoticeChannel.PERSONAL -> CHANNEL_PERSONAL
+            }
+            val builder = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(notice.title)
                 .setContentText(notice.text)

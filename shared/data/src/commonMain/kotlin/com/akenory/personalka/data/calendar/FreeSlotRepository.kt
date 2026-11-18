@@ -2,7 +2,7 @@ package com.akenory.personalka.data.calendar
 
 import com.akenory.personalka.data.clients.want
 import com.akenory.personalka.data.db.PersonalkaDatabase
-import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.restrictions.restrictionsOf
 import com.akenory.personalka.domain.calendar.DayStarts
 import com.akenory.personalka.domain.calendar.FreeSlots
 import com.akenory.personalka.domain.calendar.PlaceStarts
@@ -48,16 +48,16 @@ class FreeSlotRepository internal constructor(private val db: PersonalkaDatabase
         }
         return combine(
             db.trainingDao().observeTrainingsBetween(from, to),
-            db.scheduleDao().observeBlocks(),
+            // Запреты вместе с личными делами и графиком (шаги 5.10д, 5.10е).
+            combine(db.scheduleDao().observeBlocks(), db.coachDao().observeSettings()) { blocks, settings -> restrictionsOf(blocks, settings) },
             reference.observeTrainingTypes(),
             reference.observeLocations(),
             waits,
-        ) { trainings, blocks, types, places, waiting ->
+        ) { trainings, restrictions, types, places, waiting ->
             val typeById = types.associateBy { it.id }
             val busy = trainings
                 .filter { it.status != TrainingStatus.CANCELLED && it.conductedBy != ConductedBy.COLLEAGUE }
                 .map { SlotBusy(it.start, it.durationMin, duty = typeById[it.typeId]?.kind == TrainingKind.DUTY) }
-            val restrictions = blocks.map { it.toRestriction() }
             val days = FreeSlots.find(query, busy, restrictions, places.filter { !it.archived }.map { it.id }, now)
             val byPlace = FreeSlots.byPlace(days, query.durationMin, query.stepMin)
             val marks = byPlace.flatMap { it.days }.associateWith { day ->

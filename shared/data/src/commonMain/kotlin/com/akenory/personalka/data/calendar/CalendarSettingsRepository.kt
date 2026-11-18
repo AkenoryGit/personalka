@@ -6,6 +6,8 @@ import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.VacationNoticeEntity
 import com.akenory.personalka.data.groups.toSeriesTraining
+import com.akenory.personalka.data.restrictions.recalcRestrictionFlags
+import com.akenory.personalka.data.restrictions.restrictions
 import com.akenory.personalka.data.restrictions.toRestriction
 import com.akenory.personalka.data.series.Recorder
 import com.akenory.personalka.data.series.Undo
@@ -28,6 +30,9 @@ import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingKind
+import com.akenory.personalka.domain.restriction.BlockKind
+import com.akenory.personalka.domain.restriction.PersonalRules
+import com.akenory.personalka.domain.restriction.WorkSchedule
 import com.akenory.personalka.domain.series.Series
 import com.akenory.personalka.domain.series.SeriesChanges
 import com.akenory.personalka.domain.series.SeriesRules
@@ -47,6 +52,11 @@ data class CalendarPrefs(
     val dragStep: Int = CalendarDrag.STEP_DEFAULT,
     val horizonWeeks: Int = SeriesRules.DEFAULT_HORIZON_WEEKS,
     val cancelNoticeMinutes: Int = 60,
+    /** Рабочий график (шаг 5.10д); `null` — выключен. */
+    val schedule: WorkSchedule? = null,
+    /** Личные дела и напоминания (шаг 5.10е) и их цвет. */
+    val personal: Boolean = false,
+    val personalColor: String = PersonalRules.COLOR_DEFAULT,
 )
 
 /**
@@ -110,8 +120,43 @@ class CalendarSettingsRepository internal constructor(
     private val clients = db.clientDao()
 
     val prefs: Flow<CalendarPrefs> = coaches.observeSettings().map { s ->
-        if (s == null) CalendarPrefs() else CalendarPrefs(s.workDayStart, s.workDayEnd, s.dragStepMinutes, s.seriesHorizonWeeks, s.cancelNoticeMinutes)
+        if (s == null) {
+            CalendarPrefs()
+        } else {
+            CalendarPrefs(
+                s.workDayStart, s.workDayEnd, s.dragStepMinutes, s.seriesHorizonWeeks, s.cancelNoticeMinutes,
+                WorkSchedule.decode(s.workSchedule), s.personalEnabled, s.personalColor,
+            )
+        }
     }
+
+    /**
+     * Рабочий график (шаг 5.10д): включить — с [WorkSchedule.DEFAULT] или прежним, выключить — `null`. Флаг «поверх
+     * запрета» у будущих тренировок пересчитывается: вне графика — как под запретом.
+     */
+    suspend fun saveSchedule(schedule: WorkSchedule?) {
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val s = coaches.settings(coach.id) ?: return@withWriteTransaction
+            val now = clock()
+            coaches.upsertSettings(s.copy(workSchedule = schedule?.encode(), sync = s.sync.touched(now)))
+            db.recalcRestrictionFlags(now)
+        }
+    }
+
+    /** Личные дела и напоминания включены или выключены (шаг 5.10е); флаг «поверх запрета» пересчитывается. */
+    suspend fun savePersonal(enabled: Boolean) {
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val s = coaches.settings(coach.id) ?: return@withWriteTransaction
+            val now = clock()
+            coaches.upsertSettings(s.copy(personalEnabled = enabled, sync = s.sync.touched(now)))
+            db.recalcRestrictionFlags(now)
+        }
+    }
+
+    /** Цвет личных дел — ключ `PlaceColor` (шаг 5.10е). */
+    suspend fun savePersonalColor(color: String) = update { it.copy(personalColor = color) }
 
     /** Часы работы; возвращает ошибку и ничего не пишет, если конец не позже начала. */
     suspend fun saveWorkHours(start: LocalTime, end: LocalTime): String? {
@@ -177,7 +222,7 @@ class CalendarSettingsRepository internal constructor(
         var result: VacationResult = VacationResult.Invalid(null, null)
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
-            val restrictions = schedule.blocks().map { it.toRestriction() }
+            val restrictions = db.restrictions()
             val recorder = Recorder(db, now)
             // По серии за раз: отложенные планы идут клиентам или группе своей серии.
             val planned = plan(vacation, clubNow)
@@ -274,7 +319,8 @@ class CalendarSettingsRepository internal constructor(
             reference.observeLocations(),
         ) { blocks, series, upcoming, types, places ->
             val place = places.associate { it.id to it.shortName }
-            val restrictions = CalendarSettingsRules.current(blocks.map { it.toRestriction() }, today)
+            // Только запреты: личные дела и напоминания в этом списке не показываются (шаг 5.10е).
+            val restrictions = CalendarSettingsRules.current(blocks.filter { it.kind == BlockKind.RESTRICTION }.map { it.toRestriction() }, today)
             val scopes = blocks.associate { it.id to it.scope }
             // Только свои запреты: раздела «Клуб» и запретов клуба нет (шаг 5.3а).
             val rows = restrictions.filter { scopes[it.id] == Scope.COACH }.map { r ->

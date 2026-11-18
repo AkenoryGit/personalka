@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.format
 
+import com.akenory.personalka.domain.restriction.BlockKind
 import com.akenory.personalka.domain.restriction.Restriction
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -21,6 +22,16 @@ object ZoneFormat {
      */
     fun restrictionPlace(locationId: String, name: (String) -> String?): String =
         if (locationId == Restriction.ALL_PLACES) ALL_PLACES else name(locationId).orEmpty()
+
+    /** Что стоит в окне «Поставить всё равно?» вместо места (шаги 5.10д, 5.10е): «Личное», «График» или место запрета. */
+    fun place(r: Restriction, name: (String) -> String?): String = when (r.kind) {
+        BlockKind.PERSONAL, BlockKind.REMINDER -> PERSONAL
+        BlockKind.SCHEDULE -> SCHEDULE
+        BlockKind.RESTRICTION -> restrictionPlace(r.locationId, name)
+    }
+
+    const val PERSONAL = "Личное"
+    const val SCHEDULE = "График"
 
     /**
      * Подпись на штриховке нескольких запретов одного времени и одной причины (шаг 5.3ю): «ББ, ДБ · групповая

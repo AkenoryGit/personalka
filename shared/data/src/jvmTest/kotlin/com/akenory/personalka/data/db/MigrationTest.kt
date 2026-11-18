@@ -634,6 +634,38 @@ class MigrationTest {
     }
 
     @Test
+    fun version20RestrictionsStayRestrictions(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v20", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 5.10в–5.10г: личных дел и графика нет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 20)
+                raw.exec(
+                    "INSERT INTO schedule_block (id, scope, locationId, reason, weekdays, date, startTime, endTime, validFrom, validTo, skipDates, " +
+                        "coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('b1', 'COACH', '*', 'Групповая', '', '2026-10-20', '17:00', '18:00', '2026-10-20', NULL, '', 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val block = db.scheduleDao().block("b1")!!
+                assertEquals("Групповая", block.reason, "Запрет не тронут")
+                assertEquals(com.akenory.personalka.domain.restriction.BlockKind.RESTRICTION, block.kind)
+                assertTrue(block.blocksTrainings)
+                assertEquals(0, block.travelMinutes)
+                assertEquals(null, block.notifyMinutes)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
     fun version19TypesStayInForecast(): Unit = runBlocking {
         val file = File.createTempFile("personalka-v19", ".db")
         file.delete()

@@ -6,6 +6,7 @@ import androidx.room3.Index
 import androidx.room3.PrimaryKey
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.domain.model.Scope
+import com.akenory.personalka.domain.restriction.BlockKind
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -32,6 +33,16 @@ data class ScheduleBlockEntity(
     val validTo: LocalDate? = null,
     /** Исключённые даты: «в эту субботу группы нет». */
     val skipDates: List<LocalDate> = emptyList(),
+    /** Запрет, личное дело или напоминание (версия 21, шаг 5.10е); у личного [reason] — его название. */
+    val kind: BlockKind = BlockKind.RESTRICTION,
+    /** Личное дело: дорога до и после, минуты. */
+    val travelMinutes: Int = 0,
+    /** Личное дело: время занято — тренировки на него не ставятся без вопроса. */
+    val blocksTrainings: Boolean = true,
+    /** Повтор каждый месяц (напоминание). */
+    val monthly: Boolean = false,
+    /** Уведомление за столько минут; `null` — без уведомления. */
+    val notifyMinutes: Int? = null,
 )
 
 /** Постоянное расписание. Клиенты ПТ, сплита и СПТ — в [SeriesClientEntity], группа — в [groupId]. */

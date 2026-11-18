@@ -6,6 +6,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 /**
  * Запреты, дежурства и наложения (ТЗ 4.5). Правила ничего не сохраняют и не знают о Room: слой данных
@@ -36,7 +37,14 @@ object RestrictionRules {
     fun occursOn(restriction: Restriction, date: LocalDate): Boolean {
         if (problem(restriction) != null) return false
         if (date in restriction.skipDates) return false
-        return if (restriction.isOneOff) {
+        return if (restriction.monthly) {
+            // Каждый месяц в число первого дня; в месяце без этого числа (31-е) — в последний день.
+            val day = restriction.validFrom.day
+            val last = LocalDate(date.year, date.month, 1).plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).day
+            date >= restriction.validFrom &&
+                (restriction.validTo == null || date <= restriction.validTo) &&
+                date.day == minOf(day, last)
+        } else if (restriction.isOneOff) {
             restriction.date == date
         } else {
             date >= restriction.validFrom &&

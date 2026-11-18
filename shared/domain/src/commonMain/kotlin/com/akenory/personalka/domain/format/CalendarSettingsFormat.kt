@@ -11,8 +11,8 @@ object CalendarSettingsFormat {
     private const val DOT = " · "
 
     const val TITLE = "Календарь"
-    const val WORK_HOURS = "Часы работы"
-    const val WORK_HOURS_NOTE = "Часы сетки календаря. Тренировку можно поставить и вне них — сетка этого дня расширится."
+    const val WORK_HOURS = "Часы сетки"
+    const val WORK_HOURS_NOTE = "Что видно в календаре — часы клуба. Тренировку можно поставить и вне них — сетка этого дня расширится."
     const val DRAG_STEP = "Шаг перетаскивания"
     const val HORIZON = "Постоянное расписание вперёд"
     const val HORIZON_NOTE = "На столько недель серии ставят тренировки в календарь. Дальше — продлеваются сами."

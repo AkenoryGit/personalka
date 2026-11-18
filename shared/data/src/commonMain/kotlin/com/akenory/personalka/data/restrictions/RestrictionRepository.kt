@@ -5,9 +5,11 @@ import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.domain.Ids
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.Scope
+import com.akenory.personalka.domain.restriction.BlockKind
 import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
@@ -77,12 +79,22 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
                     validFrom = r.validFrom,
                     validTo = r.validTo,
                     skipDates = r.skipDates.sorted(),
+                    kind = r.kind,
+                    travelMinutes = r.travelMinutes,
+                    blocksTrainings = r.blocksTrainings,
+                    monthly = r.monthly,
+                    notifyMinutes = r.notifyMinutes,
                 )
                 schedule.upsertBlock(entity)
                 undo[newId] = before
             }
             db.recalcRestrictionFlags(now)
-            val message = if (before == null) TrainingFormat.restrictionsCreated(places.size) else TrainingFormat.RESTRICTION_SAVED
+            val message = when {
+                draft.kind == BlockKind.PERSONAL -> PersonalFormat.TASK_SAVED
+                draft.kind == BlockKind.REMINDER -> PersonalFormat.REMINDER_SAVED
+                before == null -> TrainingFormat.restrictionsCreated(places.size)
+                else -> TrainingFormat.RESTRICTION_SAVED
+            }
             result = RestrictionSaveResult.Saved(message, RestrictionUndo(undo))
         }
         return result
@@ -154,7 +166,7 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
         db.withWriteTransaction {
             val coach = coaches.currentCoach() ?: return@withWriteTransaction
             val places = reference.locations().filter { !it.archived }.map { it.id }.toSet()
-            val own = schedule.blocks().filter { it.scope == Scope.COACH && it.sync.coachId == coach.id }
+            val own = schedule.blocks().filter { it.scope == Scope.COACH && it.sync.coachId == coach.id && it.kind == BlockKind.RESTRICTION }
             val byId = own.associateBy { it.id }
             val merges = RestrictionRules.allPlacesMerges(own.map { it.toRestriction() }, places)
             merges.forEach { merge ->

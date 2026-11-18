@@ -68,6 +68,7 @@ import com.akenory.personalka.domain.client.ClientDraft
 import com.akenory.personalka.domain.client.ClientName
 import com.akenory.personalka.domain.client.ClientRules
 import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.WaitFormat
 import com.akenory.personalka.domain.model.ClientStatus
@@ -212,6 +213,9 @@ enum class FormMode(val label: String) {
     TRAINING(TrainingFormat.MODE_TRAINING),
     DUTY(TrainingFormat.MODE_DUTY),
     RESTRICTION(TrainingFormat.MODE_RESTRICTION),
+
+    /** Личное дело или напоминание (шаги 5.10е, 5.10ж) — только когда включено в настройках. */
+    PERSONAL(PersonalFormat.MODE),
 }
 
 /**
@@ -260,9 +264,14 @@ fun TrainingFormSheet(
     }
     var picked by rememberSaveable(key) { mutableStateOf(FormMode.TRAINING.name) }
     val isNew = editId == null && restrictionId == null && seriesId == null
-    val modes = listOfNotNull(FormMode.TRAINING, FormMode.DUTY.takeIf { data?.duty != null }, FormMode.RESTRICTION)
+    val modes = listOfNotNull(
+        FormMode.TRAINING,
+        FormMode.DUTY.takeIf { data?.duty != null },
+        FormMode.RESTRICTION,
+        FormMode.PERSONAL.takeIf { data?.personal == true },
+    )
     val mode = when {
-        restrictionId != null -> FormMode.RESTRICTION
+        restrictionId != null -> if (storedRestriction?.personal == true) FormMode.PERSONAL else FormMode.RESTRICTION
         stored?.isDuty == true -> FormMode.DUTY
         editId != null -> FormMode.TRAINING
         else -> modes.firstOrNull { it.name == picked } ?: FormMode.TRAINING
@@ -289,6 +298,7 @@ fun TrainingFormSheet(
             FormMode.TRAINING -> TrainingFields(key, editId, stored, storedSeries, data, forms, clients, now, messages, scope, onClose, switch, onCreated)
             FormMode.DUTY -> DutyFields(key, editId, stored, data, forms, messages, scope, onClose, switch)
             FormMode.RESTRICTION -> RestrictionFields(key, restrictionId, storedRestriction, data, restrictions, forms, messages, scope, onClose, switch)
+            FormMode.PERSONAL -> PersonalFields(key, restrictionId, storedRestriction, data, restrictions, forms, messages, scope, onClose, switch)
         }
     }
 }

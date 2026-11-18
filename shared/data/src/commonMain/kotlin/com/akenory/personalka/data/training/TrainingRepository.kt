@@ -14,7 +14,7 @@ import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.groups.member
 import com.akenory.personalka.data.groups.toSeriesTraining
 import com.akenory.personalka.data.restrictions.placement
-import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.restrictions.restrictions
 import com.akenory.personalka.data.series.Recorder
 import com.akenory.personalka.data.series.Undo
 import com.akenory.personalka.data.series.restore
@@ -97,6 +97,8 @@ data class TrainingFormData(
     val lastPlaceByType: Map<String, String> = emptyMap(),
     val relatives: Map<String, List<String>> = emptyMap(),
     val duty: FormType? = null,
+    /** Личные дела и напоминания включены (шаг 5.10е): в переключателе формы есть «Личное». */
+    val personal: Boolean = false,
 )
 
 /**
@@ -185,7 +187,12 @@ class TrainingRepository internal constructor(
                     .groupBy({ it.first }, { it.second }),
             )
         }
-        return combine(lists, trainings.observeLastCreated(RECENT_TRAININGS), trainings.observeRecentParticipations(RECENT_PARTICIPATIONS)) { l, last, parts ->
+        return combine(
+            lists,
+            trainings.observeLastCreated(RECENT_TRAININGS),
+            trainings.observeRecentParticipations(RECENT_PARTICIPATIONS),
+            coaches.observeSettings(),
+        ) { l, last, parts, settings ->
             val types = l.types.associateBy { it.id }
             val active = l.clients.map { it.id }.toSet()
             val groupIds = l.groups.map { it.id }.toSet()
@@ -199,6 +206,7 @@ class TrainingRepository internal constructor(
                 lastPlaceByType = last.reversed().associate { it.typeId to it.locationId },
                 relatives = l.relatives,
                 duty = l.duty,
+                personal = settings?.personalEnabled == true,
             )
         }
     }
@@ -271,7 +279,7 @@ class TrainingRepository internal constructor(
                 result = SaveResult.Invalid(problems)
                 return@withWriteTransaction
             }
-            val restrictions = schedule.blocks().map { it.toRestriction() }
+            val restrictions = db.restrictions()
             val recorder = Recorder(db, now)
             val repeat = draft.repeat
             val locationId = draft.locationId!!
@@ -392,7 +400,7 @@ class TrainingRepository internal constructor(
             }
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val isDuty = { typeId: String -> typeId in duties }
-            val restrictions = schedule.blocks().map { it.toRestriction() }
+            val restrictions = db.restrictions()
             val recorder = Recorder(db, now)
             val edit = TrainingEdit(
                 start = draft.start,
@@ -584,7 +592,7 @@ class TrainingRepository internal constructor(
             )
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val isDuty = { typeId: String -> typeId in duties }
-            val restrictions = schedule.blocks().map { it.toRestriction() }
+            val restrictions = db.restrictions()
             val old = all.associateBy { it.id }
             val placed = changes.created.map { it.placement(isDuty(it.typeId)) } +
                 changes.updated.filter { u -> old[u.id]?.let { RestrictionRules.moved(it.placement(), u.placement()) } ?: true }
@@ -623,7 +631,7 @@ class TrainingRepository internal constructor(
             val changes = SeriesRules.end(stored, lastDay, all, clubNow)
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
             val recorder = Recorder(db, now)
-            recorder.write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, stored.pattern) { it in duties }
+            recorder.write(db, changes, coach.id, now, db.restrictions(), stored.pattern) { it in duties }
             result = SaveResult.Saved(ClientFormat.SERIES_ENDED, recorder.alignedUndo(db, now))
         }
         // Освободилось время — кто его ждёт из листа ожидания (4.16).
@@ -652,7 +660,7 @@ class TrainingRepository internal constructor(
             val changes = SeriesRules.extendAll(series, existing, clubNow, weeks, members)
             if (changes.isEmpty) return@withWriteTransaction
             val duties = reference.trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
-            Recorder(db, now).write(db, changes, coach.id, now, schedule.blocks().map { it.toRestriction() }, owner = null) { it in duties }
+            Recorder(db, now).write(db, changes, coach.id, now, db.restrictions(), owner = null) { it in duties }
             count = changes.created.size
         }
         return count
@@ -723,14 +731,14 @@ class TrainingRepository internal constructor(
     /** Строки окна «Поставить всё равно?» — полным названием места (4.5). */
     private suspend fun conflictLines(hits: List<RestrictionHit>): List<String> {
         val places = reference.locations().associateBy { it.id }
-        return hits.map { conflict(it.restriction, ZoneFormat.restrictionPlace(it.restriction.locationId) { id -> places[id]?.name }) }
+        return hits.map { conflict(it.restriction, ZoneFormat.place(it.restriction) { id -> places[id]?.name }) }
     }
 
     /** Окно на серию: «… — 9 из 17 тренировок, первая вт 20.10» по строке на запрет. */
     private suspend fun batchLines(batch: BatchConflicts): List<String> {
         val places = reference.locations().associateBy { it.id }
         return batch.groups.map { g ->
-            TrainingFormat.batchConflict(conflict(g.restriction, ZoneFormat.restrictionPlace(g.restriction.locationId) { id -> places[id]?.name }), g.dates.size, batch.checked, g.dates.first())
+            TrainingFormat.batchConflict(conflict(g.restriction, ZoneFormat.place(g.restriction) { id -> places[id]?.name }), g.dates.size, batch.checked, g.dates.first())
         }
     }
 

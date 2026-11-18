@@ -11,15 +11,15 @@ import com.akenory.personalka.data.db.entity.TrainingTypeEntity
 import com.akenory.personalka.data.groups.sharing
 import com.akenory.personalka.data.reminders.ReminderSettingsRepository
 import com.akenory.personalka.data.restrictions.RestrictionRepository
-import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.restrictions.placed
 import com.akenory.personalka.data.restrictions.placement
 import com.akenory.personalka.data.restrictions.recalcRestrictionFlags
 import com.akenory.personalka.data.restrictions.toRestriction
+import com.akenory.personalka.data.results.ResultRepository
 import com.akenory.personalka.data.series.Undo
+import com.akenory.personalka.data.training.DiaryRepository
 import com.akenory.personalka.data.training.EditScope
 import com.akenory.personalka.data.training.SaveResult
-import com.akenory.personalka.data.training.DiaryRepository
 import com.akenory.personalka.data.training.TrainingCardRepository
 import com.akenory.personalka.data.training.TrainingRepository
 import com.akenory.personalka.domain.ClubTime
@@ -37,26 +37,31 @@ import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.format.BlockWho
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.CoCoachingFormat
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.ZoneFormat
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.Scope
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.domain.reference.ReferenceRules
+import com.akenory.personalka.domain.restriction.BlockKind
+import com.akenory.personalka.domain.restriction.PersonalAlert
+import com.akenory.personalka.domain.restriction.PersonalRules
 import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionHit
 import com.akenory.personalka.domain.restriction.RestrictionRules
+import com.akenory.personalka.domain.restriction.WorkSchedule
 import com.akenory.personalka.domain.training.DiaryRules
 import com.akenory.personalka.domain.training.TrainingTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -168,16 +173,65 @@ data class CalendarZone(
     val repeating: Boolean = false,
     /** Причина запрета — для общей подписи запретов одного времени (шаг 5.3ю); у дежурства пусто. */
     val reason: String = "",
+    /** Личное дело, на которое можно ставить тренировки (шаг 5.10е): рисуется бледнее, время не занято. */
+    val free: Boolean = false,
 ) {
     /** Запрет на все места (шаг 5.3ю): виден при любом фильтре места. */
     val allPlaces: Boolean get() = kind == ZoneKind.RESTRICTION && placeId == Restriction.ALL_PLACES
 
     /** Видна ли зона при фильтре места [placeId] (пусто — все места). */
-    fun shownIn(placeId: String?): Boolean = placeId == null || allPlaces || this.placeId == placeId
+    fun shownIn(placeId: String?): Boolean =
+        placeId == null || allPlaces || this.placeId == placeId || kind == ZoneKind.PERSONAL || kind == ZoneKind.TRAVEL || kind == ZoneKind.REMINDER
 
     val span: ZoneSpan get() = ZoneSpan(id, kind, start, end)
 
+    /** Запись в таблице запретов: у дороги — её дело (шаг 5.10е). */
+    val blockId: String get() = id.substringBefore(TRAVEL_MARK)
+
     companion object {
+        /** Метка дороги в id зоны: «id|до», «id|после» — две зоны одного дела. */
+        const val TRAVEL_MARK = '|'
+
+        /**
+         * Личное дело в его день (шаг 5.10е): [color] — цвет личных дел из настроек. Дорога — отдельные зоны
+         * [ZoneKind.TRAVEL] до и после ([travel]), если дело занимает время.
+         */
+        fun personal(hit: RestrictionHit, color: String): List<CalendarZone> {
+            val r = hit.restriction
+            val repeat = if (r.monthly) null else ZoneFormat.repeat(r.weekdays, r.validTo)
+            if (r.kind == BlockKind.REMINDER) {
+                return listOf(
+                    CalendarZone(
+                        id = r.id, kind = ZoneKind.REMINDER, date = hit.date, start = r.startMinute,
+                        end = minOf(r.startMinute + PersonalRules.REMINDER_SPAN, ClubTime.MINUTES_PER_DAY),
+                        placeId = Restriction.ALL_PLACES, placeShort = "", color = color,
+                        title = PersonalFormat.REMINDER, text = PersonalFormat.reminderLabel(r.startMinute, r.reason),
+                        label = PersonalFormat.reminderLabel(r.startMinute, r.reason), repeat = repeat,
+                        repeating = !r.isOneOff, reason = r.reason,
+                    ),
+                )
+            }
+            val main = CalendarZone(
+                id = r.id, kind = ZoneKind.PERSONAL, date = hit.date, start = r.startMinute, end = r.endMinute,
+                placeId = Restriction.ALL_PLACES, placeShort = "", color = color,
+                title = PersonalFormat.EDIT_TASK_TITLE,
+                text = PersonalFormat.taskText(r.reason, r.startMinute, r.endMinute, if (r.blocksTrainings) r.travelMinutes else 0),
+                label = if (r.blocksTrainings) r.reason else PersonalFormat.freeLabel(r.reason),
+                repeat = repeat, repeating = !r.isOneOff, reason = r.reason, free = !r.blocksTrainings,
+            )
+            val travel = if (r.blocksTrainings) r.travelMinutes else 0
+            if (travel <= 0) return listOf(main)
+            fun road(part: String, from: Int, to: Int) = main.copy(
+                id = r.id + TRAVEL_MARK + part, kind = ZoneKind.TRAVEL, start = from, end = to,
+                label = PersonalFormat.travelLabel(travel),
+            )
+            return listOfNotNull(
+                road("before", (r.startMinute - travel).coerceAtLeast(0), r.startMinute).takeIf { r.startMinute > 0 },
+                main,
+                road("after", r.endMinute, (r.endMinute + travel).coerceAtMost(ClubTime.MINUTES_PER_DAY)).takeIf { r.endMinute < ClubTime.MINUTES_PER_DAY },
+            )
+        }
+
         /**
          * Запрет в его день. [placeShort] — «ББ» или «Все места»; [color] — ключ цвета места, у «Все места» пусто:
          * штриховка запрета — цвета места, у «Все места» — цвета текста (шаг 5.3ю).
@@ -413,7 +467,8 @@ class CalendarRepository(
             trainings.observeTrainingsBetween(start, end),
             reference.observeTrainingTypes(),
             reference.observeLocations(),
-        ) { blocks, list, types, places ->
+            coaches.observeSettings(),
+        ) { blocks, list, types, places, settings ->
             val typeById = types.associateBy { it.id }
             val placeById = places.associateBy { it.id }
             val duties = list.mapNotNull { t ->
@@ -427,10 +482,18 @@ class CalendarRepository(
                     done = t.status == TrainingStatus.DONE,
                 )
             }
-            val restrictions = blocks.map { it.toRestriction() }
+            val restrictions = blocks.filter { it.kind == BlockKind.RESTRICTION }.map { it.toRestriction() }
+            // Личные дела и напоминания (шаги 5.10е, 5.10ж) — только когда включены в настройках.
+            val personal = if (settings?.personalEnabled == true) {
+                blocks.filter { it.kind == BlockKind.PERSONAL || it.kind == BlockKind.REMINDER }.map { it.toRestriction() }
+            } else {
+                emptyList()
+            }
+            val personalColor = settings?.personalColor ?: PersonalRules.COLOR_DEFAULT
             val own = blocks.filter { it.scope == Scope.COACH }.map { it.id }.toSet()
-            val hatched = generateSequence(from) { it.plus(1, DateTimeUnit.DAY) }
-                .takeWhile { it < to }
+            val days = generateSequence(from) { it.plus(1, DateTimeUnit.DAY) }.takeWhile { it < to }.toList()
+            val mine = days.flatMap { date -> RestrictionRules.on(personal, date) }.flatMap { CalendarZone.personal(it, personalColor) }
+            val hatched = days.asSequence()
                 .flatMap { date -> RestrictionRules.on(restrictions, date) }
                 .map { hit ->
                     CalendarZone.restriction(
@@ -441,8 +504,53 @@ class CalendarRepository(
                     )
                 }
                 .toList()
-            duties + hatched
+            duties + hatched + mine
         }
+    }
+
+    /**
+     * Время вне рабочего графика (шаг 5.10д) — приглушённый фон сетки: по дням, минуты от полуночи. График выключен —
+     * пусто.
+     */
+    val offHours: Flow<(LocalDate) -> List<IntRange>> = coaches.observeSettings().map { settings ->
+        val schedule = WorkSchedule.decode(settings?.workSchedule)
+        val fn: (LocalDate) -> List<IntRange> = { date ->
+            if (schedule == null) {
+                emptyList()
+            } else {
+                val hours = schedule.on(date.dayOfWeek)
+                if (hours == null) {
+                    listOf(0 until ClubTime.MINUTES_PER_DAY)
+                } else {
+                    listOfNotNull(
+                        (0 until hours.startMinute).takeIf { hours.startMinute > 0 },
+                        (hours.endMinute until ClubTime.MINUTES_PER_DAY).takeIf { hours.endMinute < ClubTime.MINUTES_PER_DAY },
+                    )
+                }
+            }
+        }
+        fn
+    }
+
+    /**
+     * Личные дела и напоминания с уведомлением (шаг 5.10ж): моменты уведомлений с [from] по [to]. Личное выключено —
+     * пусто.
+     */
+    fun observePersonalAlerts(from: LocalDate, to: LocalDate): Flow<List<PersonalAlert>> =
+        combine(schedule.observeBlocks(), coaches.observeSettings()) { blocks, settings ->
+            if (settings?.personalEnabled != true) {
+                emptyList()
+            } else {
+                PersonalRules.alerts(blocks.filter { it.kind == BlockKind.PERSONAL || it.kind == BlockKind.REMINDER }.map { it.toRestriction() }, from, to)
+            }
+        }
+
+    /** То же одним чтением — для проверки по будильнику. */
+    suspend fun personalAlerts(from: LocalDate, to: LocalDate): List<PersonalAlert> {
+        val settings = coaches.currentCoach()?.let { coaches.settings(it.id) }
+        if (settings?.personalEnabled != true) return emptyList()
+        val blocks = schedule.blocks().filter { it.kind == BlockKind.PERSONAL || it.kind == BlockKind.REMINDER }.map { it.toRestriction() }
+        return PersonalRules.alerts(blocks, from, to)
     }
 
     /**

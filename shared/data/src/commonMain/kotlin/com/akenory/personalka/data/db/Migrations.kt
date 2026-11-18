@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20, Migration20To21)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -295,6 +295,23 @@ internal object Migration18To19 : Migration(18, 19) {
 internal object Migration19To20 : Migration(19, 20) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `training_type` ADD COLUMN `inForecast` INTEGER NOT NULL DEFAULT 1")
+    }
+}
+
+/**
+ * 20 → 21 (шаги 5.10д–5.10ж): рабочий график, личные дела и напоминания. График выключен, личное выключено —
+ * у прежних тренеров всё работает, как до этого шага; прежние записи таблицы запретов — запреты.
+ */
+internal object Migration20To21 : Migration(20, 21) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `coach_settings` ADD COLUMN `workSchedule` TEXT")
+        connection.exec("ALTER TABLE `coach_settings` ADD COLUMN `personalEnabled` INTEGER NOT NULL DEFAULT 0")
+        connection.exec("ALTER TABLE `coach_settings` ADD COLUMN `personalColor` TEXT NOT NULL DEFAULT 'mustard'")
+        connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `kind` TEXT NOT NULL DEFAULT 'RESTRICTION'")
+        connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `travelMinutes` INTEGER NOT NULL DEFAULT 0")
+        connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `blocksTrainings` INTEGER NOT NULL DEFAULT 1")
+        connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `monthly` INTEGER NOT NULL DEFAULT 0")
+        connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `notifyMinutes` INTEGER")
     }
 }
 

@@ -1,6 +1,7 @@
 package com.akenory.personalka.ui.training
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,8 +27,13 @@ import com.akenory.personalka.data.training.SaveResult
 import com.akenory.personalka.data.training.StoredTraining
 import com.akenory.personalka.data.training.TrainingFormData
 import com.akenory.personalka.data.training.TrainingRepository
+import com.akenory.personalka.domain.format.DateFormat
+import com.akenory.personalka.domain.format.PersonalFormat
 import com.akenory.personalka.domain.format.TrainingFormat
 import com.akenory.personalka.domain.format.ZoneFormat
+import com.akenory.personalka.domain.restriction.BlockKind
+import com.akenory.personalka.domain.restriction.PersonalRules
+import com.akenory.personalka.domain.restriction.ReminderRepeat
 import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionDraft
 import com.akenory.personalka.domain.restriction.RestrictionField
@@ -41,6 +47,7 @@ import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.components.SectionLabel
+import com.akenory.personalka.ui.components.SwitchRow
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -456,6 +463,280 @@ internal fun RestrictionFields(
     }
 }
 
+/**
+ * Личное дело или напоминание (шаги 5.10е, 5.10ж; макет «Персоналка — личные дела и рабочий график»): «Дело /
+ * Напоминание», название, дата и время, повтор. У дела — «Можно ставить тренировки», «Дорога до и после» и
+ * «Напомнить»; у напоминания — «Уведомление». Места нет: личное — во всех местах. Пишется в таблицу запретов —
+ * дальше то же, что у запрета: «Поставить всё равно?», флаг «поверх запрета», слоты.
+ */
+@Composable
+internal fun PersonalFields(
+    key: String,
+    restrictionId: String?,
+    stored: RestrictionDraft?,
+    data: TrainingFormData?,
+    restrictions: RestrictionRepository,
+    forms: TrainingRepository,
+    messages: MessageState,
+    scope: CoroutineScope,
+    onClose: () -> Unit,
+    switch: @Composable () -> Unit,
+) {
+    var draft by rememberSaveable(key, stateSaver = RestrictionSaver) { mutableStateOf<RestrictionDraft?>(null) }
+    var showErrors by rememberSaveable(key) { mutableStateOf(false) }
+    var panel by rememberSaveable(key) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(key, data != null, stored) {
+        if (data == null || draft != null) return@LaunchedEffect
+        draft = if (restrictionId != null) {
+            stored ?: return@LaunchedEffect
+        } else {
+            val start = TrainingFormKey.start(key) ?: forms.suggestStart(RestrictionFormRules.DEFAULT_MINUTES)
+            RestrictionFormRules.newPersonal(start, BlockKind.PERSONAL)
+        }
+    }
+
+    val current = draft
+    val problems = if (showErrors && current != null) RestrictionFormRules.problems(current) else emptyMap()
+
+    fun update(change: (RestrictionDraft) -> RestrictionDraft) {
+        draft = draft?.let(change)
+    }
+
+    fun save() {
+        val d = draft ?: return
+        showErrors = true
+        if (RestrictionFormRules.problems(d).isNotEmpty()) return
+        scope.launch {
+            when (val result = restrictions.save(restrictionId, d)) {
+                is RestrictionSaveResult.Saved -> {
+                    onClose()
+                    messages.showUndo(result.message) { scope.launch { restrictions.undo(result.undo) } }
+                }
+                is RestrictionSaveResult.Invalid -> if (result.problems.isEmpty()) onClose()
+            }
+        }
+    }
+
+    fun delete(id: String, reminder: Boolean) {
+        scope.launch {
+            val undo = restrictions.delete(id)
+            onClose()
+            val text = if (reminder) PersonalFormat.REMINDER_DELETED else PersonalFormat.TASK_DELETED
+            if (undo != null) messages.showUndo(text) { scope.launch { restrictions.undo(undo) } }
+        }
+    }
+
+    val reminder = current?.kind == BlockKind.REMINDER
+    FormFrame(
+        title = when {
+            restrictionId == null -> PersonalFormat.NEW_TITLE
+            reminder -> PersonalFormat.EDIT_REMINDER_TITLE
+            else -> PersonalFormat.EDIT_TASK_TITLE
+        },
+        onClose = onClose,
+        switch = switch,
+        ready = current != null && data != null,
+        onSave = ::save,
+        panels = {
+            val open = panel
+            if (open != null && current != null) {
+                when (open) {
+                    Panels.DATE -> DatePickerPanel(
+                        initial = current.date,
+                        onPick = { date ->
+                            panel = null
+                            update { d ->
+                                val days = if (d.weekdays == setOf(d.date.dayOfWeek)) setOf(date.dayOfWeek) else d.weekdays
+                                d.copy(date = date, weekdays = days)
+                            }
+                        },
+                        onDismiss = { panel = null },
+                    )
+                    Panels.TIME -> TimePickerPanel(
+                        initial = current.start,
+                        title = START_TITLE,
+                        onPick = { time ->
+                            panel = null
+                            update { d -> d.copy(start = time).let { if (it.kind == BlockKind.REMINDER) RestrictionFormRules.reminderEnd(it) else it } }
+                        },
+                        onDismiss = { panel = null },
+                    )
+                    Panels.END -> TimePickerPanel(
+                        initial = current.end,
+                        title = END_TITLE,
+                        onPick = { time ->
+                            panel = null
+                            update { it.copy(end = time) }
+                        },
+                        onDismiss = { panel = null },
+                    )
+                    Panels.UNTIL -> DatePickerPanel(
+                        initial = current.validTo ?: current.date,
+                        onPick = { date ->
+                            panel = null
+                            update { it.copy(validTo = date) }
+                        },
+                        onDismiss = { panel = null },
+                        onClear = {
+                            panel = null
+                            update { it.copy(validTo = null) }
+                        },
+                    )
+                }
+            }
+        },
+    ) {
+        if (current == null || data == null) return@FormFrame
+        // Дело или напоминание — у новой записи; изменение остаётся тем, чем было.
+        if (restrictionId == null) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                ChoiceChip(
+                    PersonalFormat.TASK,
+                    selected = !reminder,
+                    onClick = { update { RestrictionFormRules.switchKind(it, BlockKind.PERSONAL) } },
+                    modifier = Modifier.testTag(FORM_PERSONAL_TASK_TAG),
+                )
+                ChoiceChip(
+                    PersonalFormat.REMINDER,
+                    selected = reminder,
+                    onClick = { update { RestrictionFormRules.switchKind(it, BlockKind.REMINDER) } },
+                    modifier = Modifier.testTag(FORM_PERSONAL_REMINDER_TAG),
+                )
+            }
+        }
+
+        Field(
+            label = if (reminder) PersonalFormat.REMINDER_NAME else PersonalFormat.TASK_NAME,
+            value = current.reason,
+            onValueChange = { text -> update { it.copy(reason = text) } },
+            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space3),
+            tag = FORM_REASON_TAG,
+            placeholder = if (reminder) PersonalFormat.REMINDER_NAME_PLACEHOLDER else PersonalFormat.TASK_NAME_PLACEHOLDER,
+            error = problems[RestrictionField.TITLE],
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        )
+
+        SectionLabel(PersonalFormat.WHEN)
+        PickBox(
+            text = TrainingFormat.date(current.date),
+            icon = PIcons.CalendarMonth,
+            onClick = { panel = Panels.DATE },
+            modifier = Modifier.fillMaxWidth().testTag(FORM_DATE_TAG),
+        )
+        if (reminder) {
+            PickBox(
+                text = DateFormat.time(current.start),
+                icon = PIcons.Schedule,
+                onClick = { panel = Panels.TIME },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(FORM_TIME_TAG),
+            )
+        } else {
+            Column(Modifier.padding(top = Dimens.space2)) {
+                TimeRow(
+                    start = current.start,
+                    end = current.end,
+                    error = problems[RestrictionField.TIME],
+                    onStart = { panel = Panels.TIME },
+                    onEnd = { panel = Panels.END },
+                )
+            }
+        }
+
+        SectionLabel(PersonalFormat.REPEAT)
+        if (reminder) {
+            val repeat = RestrictionFormRules.repeatOf(current)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                ReminderRepeat.entries.forEach { r ->
+                    ChoiceChip(PersonalFormat.repeat(r), selected = r == repeat, onClick = { update { RestrictionFormRules.withRepeat(it, r) } })
+                }
+            }
+        } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                ChoiceChip(TrainingFormat.NO_REPEAT, selected = !current.weekly, onClick = { update { RestrictionFormRules.weekly(it, on = false) } })
+                ChoiceChip(
+                    TrainingFormat.WEEKLY,
+                    selected = current.weekly,
+                    onClick = { update { RestrictionFormRules.weekly(it, on = true) } },
+                    modifier = Modifier.testTag(FORM_WEEKLY_TAG),
+                )
+            }
+            if (current.weekly) WeekdayRow(current.weekdays, problems[RestrictionField.WEEKDAYS]) { days -> update { it.copy(weekdays = days) } }
+        }
+        if (current.weekly || current.monthly) {
+            PickBox(
+                text = current.validTo?.let(TrainingFormat::until) ?: TrainingFormat.FOREVER,
+                icon = null,
+                onClick = { panel = Panels.UNTIL },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(FORM_UNTIL_TAG),
+                error = problems[RestrictionField.PERIOD],
+            )
+            problems[RestrictionField.PERIOD]?.let { ErrorText(it) }
+        }
+
+        if (reminder) {
+            SectionLabel(PersonalFormat.REMINDER_NOTIFY)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                PersonalRules.REMINDER_NOTIFY.forEach { m ->
+                    ChoiceChip(PersonalFormat.reminderNotify(m), selected = current.notifyMinutes == m, onClick = { update { it.copy(notifyMinutes = m) } })
+                }
+            }
+            Text(
+                PersonalFormat.REMINDER_NOTE,
+                modifier = Modifier.padding(top = Dimens.space3),
+                style = MaterialTheme.typography.bodySmall,
+                color = PersonalkaTheme.colors.textMuted,
+            )
+        } else {
+            SwitchRow(
+                title = PersonalFormat.ALLOW_TRAININGS,
+                checked = !current.blocksTrainings,
+                onToggle = { allow -> update { it.copy(blocksTrainings = !allow) } },
+                modifier = Modifier.padding(top = Dimens.space3).testTag(FORM_PERSONAL_ALLOW_TAG),
+                subtitle = PersonalFormat.ALLOW_TRAININGS_NOTE,
+            )
+            if (current.blocksTrainings) {
+                SectionLabel(PersonalFormat.TRAVEL)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    PersonalRules.TRAVELS.forEach { m ->
+                        ChoiceChip(
+                            PersonalFormat.travel(m),
+                            selected = current.travelMinutes == m,
+                            onClick = { update { it.copy(travelMinutes = m) } },
+                            modifier = Modifier.testTag(formTravelTag(m)),
+                        )
+                    }
+                }
+            }
+            SectionLabel(PersonalFormat.TASK_NOTIFY)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                PersonalRules.TASK_NOTIFY.forEach { m ->
+                    ChoiceChip(PersonalFormat.taskNotify(m), selected = current.notifyMinutes == m, onClick = { update { it.copy(notifyMinutes = m) } })
+                }
+            }
+            val travel = if (current.blocksTrainings) current.travelMinutes else 0
+            PersonalFormat.leaveAt(current.start, travel, current.notifyMinutes)?.let {
+                Text(it, modifier = Modifier.padding(top = Dimens.space2), style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+            }
+        }
+
+        if (restrictionId != null) {
+            SecondaryButton(
+                text = if (reminder) PersonalFormat.DELETE_REMINDER else PersonalFormat.DELETE_TASK,
+                onClick = { delete(restrictionId, reminder) },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space6),
+                icon = PIcons.Delete,
+            )
+        }
+    }
+}
+
+/** Чипы и переключатель личного (шаг 5.10е) для тестов. */
+const val FORM_PERSONAL_TASK_TAG = "form-personal-task"
+const val FORM_PERSONAL_REMINDER_TAG = "form-personal-reminder"
+const val FORM_PERSONAL_ALLOW_TAG = "form-personal-allow"
+fun formTravelTag(minutes: Int) = "form-travel-$minutes"
+
 /** Место чипами, как в форме тренировки; [allPlaces] — первым чип «Все места», когда мест больше одного (запрет). */
 @Composable
 private fun PlaceChips(places: List<FormPlace>, selected: String?, error: String?, allPlaces: Boolean = false, onPick: (String) -> Unit) {
@@ -555,6 +836,11 @@ private val RestrictionSaver: Saver<RestrictionDraft?, Any> = Saver(
                 d.date.toString(),
                 d.validTo?.toString().orEmpty(),
                 d.otherPlaces.joinToString(","),
+                d.kind.name,
+                d.travelMinutes.toString(),
+                d.blocksTrainings.toString(),
+                d.notifyMinutes?.toString().orEmpty(),
+                d.monthly.toString(),
             )
         }
     },
@@ -574,6 +860,11 @@ private val RestrictionSaver: Saver<RestrictionDraft?, Any> = Saver(
                 date = LocalDate.parse(v[6]),
                 validTo = v[7].ifEmpty { null }?.let(LocalDate::parse),
                 otherPlaces = v.getOrElse(8) { "" }.split(',').filter { it.isNotEmpty() }.toSet(),
+                kind = v.getOrNull(9)?.let { BlockKind.valueOf(it) } ?: BlockKind.RESTRICTION,
+                travelMinutes = v.getOrNull(10)?.toIntOrNull() ?: 0,
+                blocksTrainings = v.getOrNull(11)?.toBoolean() ?: true,
+                notifyMinutes = v.getOrNull(12)?.toIntOrNull(),
+                monthly = v.getOrNull(13)?.toBoolean() ?: false,
             )
         }
     },

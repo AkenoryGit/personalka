@@ -1,15 +1,18 @@
 package com.akenory.personalka.data.restrictions
 
 import com.akenory.personalka.data.db.PersonalkaDatabase
+import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.data.db.entity.ScheduleBlockEntity
 import com.akenory.personalka.data.db.entity.TrainingEntity
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.model.TrainingStatus
+import com.akenory.personalka.domain.restriction.PersonalRules
 import com.akenory.personalka.domain.restriction.PlacedTraining
 import com.akenory.personalka.domain.restriction.Placement
 import com.akenory.personalka.domain.restriction.Restriction
 import com.akenory.personalka.domain.restriction.RestrictionRules
+import com.akenory.personalka.domain.restriction.WorkSchedule
 
 // Запреты в базе и правила 4.5 (`RestrictionRules`, шаг 1.4). Форма запрета (1.13) пишет через то же.
 
@@ -25,7 +28,29 @@ fun ScheduleBlockEntity.toRestriction(): Restriction = Restriction(
     validFrom = validFrom,
     validTo = validTo,
     skipDates = skipDates.toSet(),
+    kind = kind,
+    travelMinutes = travelMinutes,
+    blocksTrainings = blocksTrainings,
+    monthly = monthly,
+    notifyMinutes = notifyMinutes,
 )
+
+/**
+ * Запреты для правил 4.5 и свободных слотов (шаги 5.10д, 5.10е): запреты мест, личные дела, которые занимают время
+ * (с дорогой), и часы вне рабочего графика — по настройкам тренера [settings].
+ */
+fun restrictionsOf(blocks: List<ScheduleBlockEntity>, settings: CoachSettingsEntity?): List<Restriction> =
+    PersonalRules.forTrainings(
+        blocks.map { it.toRestriction() },
+        personalOn = settings?.personalEnabled == true,
+        schedule = WorkSchedule.decode(settings?.workSchedule),
+    )
+
+/** То же из базы: настройки тренера этого телефона. */
+internal suspend fun PersonalkaDatabase.restrictions(): List<Restriction> {
+    val settings = coachDao().currentCoach()?.let { coachDao().settings(it.id) }
+    return restrictionsOf(scheduleDao().blocks(), settings)
+}
 
 /** Место и время тренировки для правил; дежурство ли это — по типу, его знает вызывающий. */
 fun TrainingEntity.placement(isDuty: Boolean): Placement = Placement(start, durationMin, locationId, isDuty)
@@ -44,7 +69,7 @@ fun TrainingEntity.placed(isDuty: Boolean): PlacedTraining = PlacedTraining(
 internal suspend fun PersonalkaDatabase.recalcRestrictionFlags(nowMillis: Long) {
     val dao = trainingDao()
     val now = ClubTime.now(nowMillis)
-    val restrictions = scheduleDao().blocks().map { it.toRestriction() }
+    val restrictions = this.restrictions()
     val duties = referenceDao().trainingTypes().filter { it.kind == TrainingKind.DUTY }.map { it.id }.toSet()
     val future = dao.trainingsAfter(now)
     val byId = future.associateBy { it.id }
