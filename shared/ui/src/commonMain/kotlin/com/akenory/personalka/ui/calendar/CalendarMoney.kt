@@ -106,11 +106,12 @@ internal fun MonthMoneyLine(money: CalendarMoney?, onClick: () -> Unit, modifier
             .fillMaxWidth()
             .height(40.dp)
             .clickable(role = Role.Button, onClick = onClick)
+            // Метка — левее: clearAndSetSemantics стирает и то, что стоит правее него в цепочке.
+            .testTag(CALENDAR_MONEY_LINE_TAG)
             .clearAndSetSemantics {
                 role = Role.Button
                 contentDescription = money?.let(CalendarMoneyFormat::monthDescription) ?: CalendarMoneyFormat.MONTHS_TITLE
             }
-            .testTag(CALENDAR_MONEY_LINE_TAG)
             .padding(start = Dimens.space4, end = Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -208,6 +209,7 @@ private fun MonthRow(month: YearMonth, money: CalendarMoney?, top: Long, isCurre
             .clip(MaterialTheme.shapes.small)
             .background(if (isCurrent) colors.surfaceAlt else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
+            .testTag(monthsRowTag(month))
             .clearAndSetSemantics {
                 role = Role.Button
                 selected = isCurrent
@@ -216,7 +218,6 @@ private fun MonthRow(month: YearMonth, money: CalendarMoney?, top: Long, isCurre
                         (CalendarMoneyFormat.rowNote(money)?.let { ", $it" } ?: "")
                     )
             }
-            .testTag(monthsRowTag(month))
             .padding(horizontal = Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.space3),

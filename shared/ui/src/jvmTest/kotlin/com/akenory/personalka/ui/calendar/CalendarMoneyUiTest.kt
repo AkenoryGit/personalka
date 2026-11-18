@@ -134,7 +134,7 @@ class CalendarMoneyUiTest {
         // Выбран день с деньгами — строка под заголовком дня.
         onNodeWithTag(monthDayTag(fifteenth)).performClick()
         waitForIdle()
-        onNodeWithTag(dayMoneyTag(fifteenth)).assertExists()
+        onNodeWithTag(dayMoneyTag(fifteenth), useUnmergedTree = true).assertExists()
 
         // «Деньги по месяцам»: нажатие на месяц закрывает окно.
         onNodeWithTag(CALENDAR_MONEY_LINE_TAG).performClick()
