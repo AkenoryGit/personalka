@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.reports
 
+import androidx.compose.foundation.layout.padding
 import com.akenory.personalka.ui.components.SegmentTabs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
