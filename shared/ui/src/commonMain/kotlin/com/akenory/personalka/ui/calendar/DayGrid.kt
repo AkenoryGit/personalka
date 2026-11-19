@@ -326,8 +326,8 @@ internal fun DayGrid(
 ) {
     val colors = PersonalkaTheme.colors
     val density = LocalDensity.current.density
-    // Шаг 5.13б: сетка — ровный уровень, карточкой со скруглением 18 сверху и отступом 8 от краёв экрана.
-    BoxWithConstraints(modifier.padding(horizontal = GRID_MARGIN).clip(RoundedCornerShape(topStart = GRID_RADIUS, topEnd = GRID_RADIUS)).background(colors.surface).clipToBounds()) {
+    // Шаг 5.13б: сетка — ровный уровень (`surface`) во всю ширину: блоки и запреты над ней — уровни +1 и −1.
+    BoxWithConstraints(modifier.background(colors.surface).clipToBounds()) {
         val heightDp = maxHeight.value
         // Ширина колонки дня, dp: у «Дня» — вся ширина сетки, у «Нескольких дней» — её доля.
         val columnWidth = (maxWidth - Dimens.timeColumn).value / columns
@@ -1054,10 +1054,6 @@ private val SELECTED_STROKE = 2.dp
  */
 private val BLOCK_GAP = 1.dp
 private val BLOCK_RADIUS = 8.dp
-
-/** Сетка карточкой (шаг 5.13б): отступ от краёв экрана и скругление сверху. */
-private val GRID_MARGIN = 8.dp
-private val GRID_RADIUS = 18.dp
 
 /** Свечение линии «сейчас»: полупрозрачная полоса под ней. */
 private val NOW_GLOW = 6.dp
