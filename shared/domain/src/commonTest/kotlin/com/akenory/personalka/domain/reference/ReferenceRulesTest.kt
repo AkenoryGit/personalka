@@ -211,4 +211,18 @@ class ReferenceRulesTest {
             TypeFormat.presetNote(TrainingKind.GROUP),
         )
     }
+
+    @Test
+    fun gradientFollowsOldColorUntilChosen() {
+        // Переход базы на версию 22 (шаг 5.13в): второго цвета нет — подбирается по первому.
+        assertEquals("blue" to "teal", ReferenceRules.gradient("blue", ""), "Синий — «Лагуна»")
+        assertEquals("violet" to "pink", ReferenceRules.gradient("violet", ""), "Фиолетовый — «Сирень»")
+        assertEquals("pink" to "pink", ReferenceRules.gradient("pink", "pink"), "Тот же цвет — без перехода")
+        assertEquals("brown" to "green", ReferenceRules.gradient("brown", "green"), "Свой второй цвет")
+        assertEquals("slate" to "blue", ReferenceRules.gradient("нет такого", "тоже"), "Потерянные ключи — сланцевый и его пара")
+        ReferenceRules.COLORS.forEach { assertTrue(ReferenceRules.gradientPartner(it) in ReferenceRules.COLORS && ReferenceRules.gradientPartner(it) != it, "$it: пара из палитры и другая") }
+        assertEquals("Лагуна", ReferenceRules.presetOf("blue" to "teal")?.name)
+        assertEquals(null, ReferenceRules.presetOf("blue" to "red"), "Свой переход")
+        assertEquals("teal", PlaceDraft("Бассейн", "ББ", "blue").gradient.second)
+    }
 }

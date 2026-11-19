@@ -152,7 +152,7 @@ class SettingsRepository(
         return place.id
     }
 
-    /** Название, короткое имя и цвет места, архив. */
+    /** Название, короткое имя, цвет и переход цвета места, архив. */
     suspend fun updatePlace(id: String, draft: PlaceDraft, archived: Boolean) {
         val place = reference.location(id) ?: return
         reference.upsertLocation(
@@ -161,6 +161,7 @@ class SettingsRepository(
                 name = draft.name.trim(),
                 shortName = draft.shortName.trim(),
                 color = draft.color,
+                color2 = draft.color2,
                 archived = archived,
             ),
         )
@@ -221,6 +222,7 @@ class SettingsRepository(
         shortName = draft.shortName.trim(),
         sort = sort,
         color = draft.color,
+        color2 = draft.color2,
     )
 
     private fun newType(id: String, coachId: String, now: Long, draft: TypeDraft, fallback: String?) =
@@ -246,7 +248,7 @@ fun TrainingTypeEntity.draft(): TypeDraft = TypeDraft(
 )
 
 /** Место из базы — в форму места. */
-fun LocationEntity.draft(): PlaceDraft = PlaceDraft(name = name, shortName = shortName, color = color)
+fun LocationEntity.draft(): PlaceDraft = PlaceDraft(name = name, shortName = shortName, color = color, color2 = color2)
 
 private fun TypeDraft.toEntity(id: String, sync: SyncFields, fallback: String?) = TrainingTypeEntity(
     id = id,

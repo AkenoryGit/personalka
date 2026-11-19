@@ -6,7 +6,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 
-/** Цвета «Персоналки» (шаг 0.2). Все пары текста проверены: не ниже 4,5:1 в обеих темах. */
+/**
+ * Цвета «Персоналки» (шаг 0.2, стиль «Сияние» — шаг 5.13а). Все пары текста проверены: не ниже 4,5:1 в обеих темах.
+ * [inset] — дно вдавленного уровня (−1), [nav] — плавающая нижняя панель (уровень +1).
+ */
 @Immutable
 data class PersonalkaColors(
     val bg: Color,
@@ -40,23 +43,25 @@ data class PersonalkaColors(
     val inverseText: Color,
     val inverseAction: Color,
     val scrim: Color,
+    val inset: Color,
+    val nav: Color,
     val isDark: Boolean,
 )
 
 val LightColors = PersonalkaColors(
-    bg = Color(0xFFF3EFE6),
-    surface = Color(0xFFFBFAF7),
+    bg = Color(0xFFEFEAE0),
+    surface = Color(0xFFF7F4EE),
     surfaceAlt = Color(0xFFEAE6DC),
     divider = Color(0xFFDCD9D0),
     outline = Color(0xFF86837B),
     text = Color(0xFF15171A),
-    textMuted = Color(0xFF69665E),
+    textMuted = Color(0xFF62605A),
     primary = Color(0xFF15171A),
     onPrimary = Color(0xFFF3EFE6),
-    accent = Color(0xFFFF5A1F),
+    accent = Color(0xFFFF6A4D),
     onAccent = Color(0xFF15171A),
-    accentGraphic = Color(0xFFF55111),
-    accentText = Color(0xFFBA3800),
+    accentGraphic = Color(0xFFE9502F),
+    accentText = Color(0xFFB23A20),
     done = Color(0xFF007634),
     doneContainer = Color(0xFFD0F0D5),
     onDoneContainer = Color(0xFF1B5B2F),
@@ -70,28 +75,30 @@ val LightColors = PersonalkaColors(
     errorContainer = Color(0xFFFFDDDD),
     onErrorContainer = Color(0xFF862430),
     hatch = Color(0xFFAAABAA),
-    pastTint = Color(0xFFF3F2EF),
+    pastTint = Color(0xFFF0EDE6),
     inverseSurface = Color(0xFF15171A),
     inverseText = Color(0xFFF3EFE6),
-    inverseAction = Color(0xFFFF5A1F),
+    inverseAction = Color(0xFFFF6A4D),
     scrim = Color(0x6615171A),
+    inset = Color(0xFFE7E2D7),
+    nav = Color(0xFFFBFAF7),
     isDark = false,
 )
 
 val DarkColors = PersonalkaColors(
-    bg = Color(0xFF15171A),
-    surface = Color(0xFF212428),
-    surfaceAlt = Color(0xFF2A2D31),
-    divider = Color(0xFF34373B),
+    bg = Color(0xFF0B1019),
+    surface = Color(0xFF171D27),
+    surfaceAlt = Color(0xFF222834),
+    divider = Color(0xFF2C3340),
     outline = Color(0xFF72767C),
-    text = Color(0xFFF3EFE6),
-    textMuted = Color(0xFF98958D),
-    primary = Color(0xFFF3EFE6),
+    text = Color(0xFFF1EEE7),
+    textMuted = Color(0xFFA3A8B4),
+    primary = Color(0xFFF1EEE7),
     onPrimary = Color(0xFF15171A),
-    accent = Color(0xFFFF5A1F),
+    accent = Color(0xFFFF6A4D),
     onAccent = Color(0xFF15171A),
-    accentGraphic = Color(0xFFFF5A1F),
-    accentText = Color(0xFFFE632F),
+    accentGraphic = Color(0xFFFF6A4D),
+    accentText = Color(0xFFFF7A5E),
     done = Color(0xFF64B376),
     doneContainer = Color(0xFF1C3E24),
     onDoneContainer = Color(0xFFC2E1C7),
@@ -105,11 +112,13 @@ val DarkColors = PersonalkaColors(
     errorContainer = Color(0xFF50282A),
     onErrorContainer = Color(0xFFFFC7C8),
     hatch = Color(0xFF696968),
-    pastTint = Color(0xFF171A1C),
-    inverseSurface = Color(0xFFF3EFE6),
+    pastTint = Color(0xFF12161F),
+    inverseSurface = Color(0xFFF1EEE7),
     inverseText = Color(0xFF15171A),
-    inverseAction = Color(0xFFBA3800),
+    inverseAction = Color(0xFFB23A20),
     scrim = Color(0xA3000000),
+    inset = Color(0xFF0D1017),
+    nav = Color(0xFF161D2A),
     isDark = true,
 )
 
@@ -214,4 +223,50 @@ fun whoTone(kind: WhoKind, dark: Boolean): WhoTone = when (kind) {
     WhoKind.MINE_TOGETHER -> if (dark) WhoTone(Color(0xFFE8B85C), Color(0xFF2E1F00)) else WhoTone(Color(0xFF8A5A00), Color.White)
     WhoKind.THEIRS -> if (dark) WhoTone(Color(0xFFE3A0E8), Color(0xFF33153A)) else WhoTone(Color(0xFF8E3A94), Color.White)
     WhoKind.NOT_ME -> if (dark) WhoTone(Color(0xFFB4C0CC), Color(0xFF1F262D)) else WhoTone(Color(0xFF4F5B67), Color.White)
+}
+
+/**
+ * Переход цвета места (шаг 5.13в): блок тренировки — переливом от оттенка [from] к тому же оттенку [to]. Тип
+ * по-прежнему выбирает оттенок: группа — тот же перелив, ярче. Один цвет — [from] равен [to].
+ */
+@Immutable
+data class PlaceGradient(val from: PlaceColor, val to: PlaceColor) {
+    val single: Boolean get() = from == to
+
+    /** Концы перелива блока с оттенком [shade]. */
+    fun ends(dark: Boolean, shade: Int): Pair<Color, Color> = from.tone(dark).block(shade) to to.tone(dark).block(shade)
+
+    /**
+     * Текст блока: тот из двух тонов текста, который читается лучше на обоих концах перелива. Проверено тестом
+     * для всех пар цветов и оттенков — не ниже 4,5 : 1 (ТЗ 10.4).
+     */
+    fun ink(dark: Boolean, shade: Int): Color {
+        val (a, b) = ends(dark, shade)
+        val first = from.tone(dark).text
+        if (single) return first
+        val second = to.tone(dark).text
+        fun worst(c: Color) = minOf(contrastRatio(c, a), contrastRatio(c, b))
+        return if (worst(first) >= worst(second)) first else second
+    }
+
+    /** Полоса и точки: цвет полосы первого цвета (графика 3 : 1 на сетке). */
+    fun stripe(dark: Boolean): Color = from.tone(dark).stripe
+
+    companion object {
+        /** Переход места по ключам из базы (`Location.color`, `Location.color2`); места нет — сланцевый без перехода. */
+        fun of(color: String?, color2: String?): PlaceGradient {
+            if (color.isNullOrEmpty()) return PlaceGradient(PlaceColor.SLATE, PlaceColor.SLATE)
+            val (a, b) = com.akenory.personalka.domain.reference.ReferenceRules.gradient(color, color2.orEmpty())
+            return PlaceGradient(PlaceColor.of(a), PlaceColor.of(b))
+        }
+    }
+}
+
+/** Контраст двух цветов по WCAG 2.x. */
+fun contrastRatio(a: Color, b: Color): Double {
+    fun lin(v: Float): Double = v.toDouble().let { if (it <= 0.04045) it / 12.92 else kotlin.math.exp(2.4 * kotlin.math.ln((it + 0.055) / 1.055)) }
+    fun lum(c: Color): Double = 0.2126 * lin(c.red) + 0.7152 * lin(c.green) + 0.0722 * lin(c.blue)
+    val la = lum(a)
+    val lb = lum(b)
+    return (maxOf(la, lb) + 0.05) / (minOf(la, lb) + 0.05)
 }

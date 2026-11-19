@@ -1,5 +1,8 @@
 package com.akenory.personalka.ui.calendar
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.PlaceGradient
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -323,7 +326,8 @@ internal fun DayGrid(
 ) {
     val colors = PersonalkaTheme.colors
     val density = LocalDensity.current.density
-    BoxWithConstraints(modifier.background(colors.surface).clipToBounds()) {
+    // Шаг 5.13б: сетка — ровный уровень, карточкой со скруглением 18 сверху и отступом 8 от краёв экрана.
+    BoxWithConstraints(modifier.padding(horizontal = GRID_MARGIN).clip(RoundedCornerShape(topStart = GRID_RADIUS, topEnd = GRID_RADIUS)).background(colors.surface).clipToBounds()) {
         val heightDp = maxHeight.value
         // Ширина колонки дня, dp: у «Дня» — вся ширина сетки, у «Нескольких дней» — её доля.
         val columnWidth = (maxWidth - Dimens.timeColumn).value / columns
@@ -1049,7 +1053,14 @@ private val SELECTED_STROKE = 2.dp
  * при часе 64 dp входят три строки по 16 (шаг 3.9д).
  */
 private val BLOCK_GAP = 1.dp
-private val BLOCK_RADIUS = 5.dp
+private val BLOCK_RADIUS = 8.dp
+
+/** Сетка карточкой (шаг 5.13б): отступ от краёв экрана и скругление сверху. */
+private val GRID_MARGIN = 8.dp
+private val GRID_RADIUS = 18.dp
+
+/** Свечение линии «сейчас»: полупрозрачная полоса под ней. */
+private val NOW_GLOW = 6.dp
 private val TEXT_START = 9.dp
 private val TEXT_END = 6.dp
 private val TEXT_TOP = 3.dp
@@ -1379,9 +1390,11 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
         val area = rect(zone, 0f, size.width)
         when (zone.kind) {
             ZoneKind.DUTY -> drawRect(dutyFill(place(zone), colors), area.topLeft, area.size)
+            // Шаг 5.13б: запрет — вдавленный (уровень −1): углубление с тенью сверху, штриховка — на его дне.
             ZoneKind.RESTRICTION -> {
                 val info = byId[zone.kind to zone.id]
-                val fill = lerp(colors.surface, restrictionInk(info, colors), if (isAllPlaces(info)) HATCH_ALL else HATCH_PLACE)
+                drawInset(area, colors)
+                val fill = lerp(colors.inset, restrictionInk(info, colors), if (isAllPlaces(info)) HATCH_ALL else HATCH_PLACE)
                 hatch(area, fill, Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
             }
             // Личное дело (шаг 5.10е): заливка цвета личных дел; «можно ставить» — вдвое бледнее.
@@ -1411,6 +1424,17 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
             ZoneKind.REMINDER -> Unit
         }
     }
+}
+
+/** Дно вдавленного уровня в сетке: заливка [PersonalkaColors.inset], тень 6 dp внутри по верху, светлая черта снизу. */
+private fun DrawScope.drawInset(area: Rect, colors: PersonalkaColors) {
+    if (area.width <= 0f || area.height <= 0f) return
+    drawRect(colors.inset, area.topLeft, area.size)
+    val shade = if (colors.isDark) Color.Black.copy(alpha = 0.6f) else Color(0xFF15171A).copy(alpha = 0.16f)
+    val depth = minOf(6.dp.toPx(), area.height)
+    drawRect(Brush.verticalGradient(listOf(shade, Color.Transparent), startY = area.top, endY = area.top + depth), area.topLeft, Size(area.width, depth))
+    val line = 1.dp.toPx()
+    if (area.height > line) drawRect(Color.White.copy(alpha = if (colors.isDark) 0.06f else 0.9f), Offset(area.left, area.bottom - line), Size(area.width, line))
 }
 
 /** Запрет на все места — или место не найдено: рисуется без цвета места (шаг 5.3ю). */
@@ -1494,9 +1518,9 @@ private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: Persona
 }
 
 /**
- * Блок (ТЗ 5.3): фон — цвет места оттенком типа (ПТ светлая, группа тёмная), слева полоса 3 dp цвета места, текст —
- * тёмным тоном того же цвета (в тёмной теме — светлым); вокруг — зазор 1 dp цвета фона. Отменённая — серая
- * и зачёркнутая, текст без прозрачности.
+ * Блок (ТЗ 5.3, стиль «Сияние» — шаг 5.13б): уровень «сверху» — мягкая тень под блоком и светлая черта по верху;
+ * фон — перелив цветов места ([PlaceGradient], шаг 5.13в) оттенком типа (ПТ светлая, группа ярче), текст —
+ * тот тон, что читается на обоих концах перелива. Отменённая — серая, ровная, с полосой и зачёркнутая.
  */
 private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, text: BlockText, icons: BadgeIcons, colors: PersonalkaColors) {
     val gap = BLOCK_GAP.toPx()
@@ -1507,15 +1531,21 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
         bottom = (block.y + block.height).dp.toPx() - gap,
     )
     if (rect.width <= 0f || rect.height <= 0f) return
-    val tone = PlaceColor.of(training.color).tone(colors.isDark)
-    val fill = if (training.cancelled) colors.surfaceAlt else tone.block(training.shade)
-    val stripe = if (training.cancelled) colors.outline else tone.stripe
-    val ink = if (training.cancelled) colors.textMuted else tone.text
+    val gradient = PlaceGradient.of(training.color, training.color2)
+    val (fromFill, toFill) = gradient.ends(colors.isDark, training.shade)
+    val ink = if (training.cancelled) colors.textMuted else gradient.ink(colors.isDark, training.shade)
     val whoTone = block.whoKind?.let { whoTone(it, colors.isDark) }
-    val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = CornerRadius(BLOCK_RADIUS.toPx()))) }
+    val corner = CornerRadius(BLOCK_RADIUS.toPx())
+    if (!training.cancelled) drawBlockShadow(rect, corner, colors)
+    val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = corner)) }
     clipPath(shape) {
-        drawRect(fill, rect.topLeft, rect.size)
-        drawRect(stripe, rect.topLeft, Size(Dimens.blockStripe.toPx(), rect.height))
+        if (training.cancelled) {
+            drawRect(colors.surfaceAlt, rect.topLeft, rect.size)
+            drawRect(colors.outline, rect.topLeft, Size(Dimens.blockStripe.toPx(), rect.height))
+        } else {
+            drawRect(Brush.linearGradient(listOf(fromFill, toFill), start = rect.topLeft, end = Offset(rect.right, rect.top + rect.width * 0.47f)), rect.topLeft, rect.size)
+            drawRect(Color.White.copy(alpha = if (colors.isDark) 0.16f else 0.55f), rect.topLeft, Size(rect.width, 1.dp.toPx()))
+        }
         val left = rect.left + TEXT_START.toPx()
         var y = rect.top + TEXT_TOP.toPx()
         val line = text.name.first().size.height.toFloat()
@@ -1687,12 +1717,33 @@ private fun DrawScope.drawMore(more: MoreInfo, measurer: TextMeasurer, style: Te
     drawText(label, color = colors.text, topLeft = Offset(rect.center.x - label.size.width / 2f, rect.top + (area - label.size.height) / 2f))
 }
 
-/** Линия «сейчас» — фирменная оранжевая с точкой, поверх тренировок (ТЗ 5.3). */
+/**
+ * Тень блока на уровне «сверху» (шаг 5.13б): три полупрозрачных скруглённых слоя со сдвигом вниз — мягкий край
+ * без размытия, одинаково на Android, iPhone и в тестах.
+ */
+private fun DrawScope.drawBlockShadow(rect: Rect, corner: CornerRadius, colors: PersonalkaColors) {
+    val base = if (colors.isDark) Color.Black else Color(0xFF15171A)
+    val alphas = if (colors.isDark) floatArrayOf(0.28f, 0.16f, 0.08f) else floatArrayOf(0.10f, 0.06f, 0.03f)
+    alphas.forEachIndexed { i, a ->
+        val d = (i + 1).dp.toPx()
+        drawRoundRect(
+            base.copy(alpha = a),
+            topLeft = Offset(rect.left - d / 2, rect.top + d),
+            size = Size(rect.width + d, rect.height),
+            cornerRadius = CornerRadius(corner.x + d, corner.y + d),
+        )
+    }
+}
+
+/** Линия «сейчас» — коралловая с точкой и мягким свечением, поверх тренировок (ТЗ 5.3, шаг 5.13б). */
 private fun DrawScope.drawNow(hours: GridHours, hourDp: Float, now: LocalDateTime, colors: PersonalkaColors) {
     val minute = ClubTime.minuteOfDay(now)
     if (minute < hours.startMinute || minute > hours.endMinute) return
     val y = (minute - hours.startMinute) * hourDp.dp.toPx() / 60f
     val dot = Dimens.nowDot.toPx()
+    val glow = colors.accent.copy(alpha = if (colors.isDark) 0.30f else 0.22f)
+    drawLine(glow, Offset(0f, y), Offset(size.width, y), NOW_GLOW.toPx())
     drawLine(colors.accentGraphic, Offset(0f, y), Offset(size.width, y), Dimens.nowLine.toPx())
-    drawCircle(colors.accentGraphic, radius = dot / 2, center = Offset(dot / 2, y))
+    drawCircle(glow, radius = dot, center = Offset(dot / 2, y))
+    drawCircle(colors.accent, radius = dot / 2, center = Offset(dot / 2, y))
 }

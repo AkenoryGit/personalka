@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -338,7 +339,7 @@ internal fun FormFrame(
                 .fillMaxWidth()
                 .fillMaxSize()
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(colors.bg)
+                .screenBackground(colors)
                 .testTag(TRAINING_FORM_TAG),
         ) {
             Box(Modifier.fillMaxWidth().padding(top = Dimens.space2), contentAlignment = Alignment.Center) {

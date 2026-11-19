@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.setup
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.PlaceGradient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -40,10 +44,18 @@ import com.akenory.personalka.ui.theme.PlaceColor
 
 internal fun colorTag(key: String) = "color-$key"
 internal fun shadeTag(shade: Int) = "shade-$shade"
+internal fun gradientTag(name: String) = "gradient-$name"
+internal fun secondColorTag(key: String) = "color2-$key"
 
-/** 16 цветов в два ряда (TypeColors 0.2): выбранный — кольцо primary 2 dp с зазором 2 dp и галочка. */
+/** Плитка «Один цвет» среди готовых переходов. */
+internal const val SINGLE_COLOR = "Один цвет"
+
+/**
+ * 16 цветов в два ряда (TypeColors 0.2): выбранный — кольцо primary 2 dp с зазором 2 dp и галочка. [tag] —
+ * метка кружка для тестов: у второго цвета перехода своя ([secondColorTag]).
+ */
 @Composable
-internal fun ColorPalette(selected: String, onSelect: (String) -> Unit) {
+internal fun ColorPalette(selected: String, onSelect: (String) -> Unit, tag: (String) -> String = ::colorTag) {
     val colors = PersonalkaTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         PlaceColor.entries.chunked(8).forEach { row ->
@@ -56,7 +68,7 @@ internal fun ColorPalette(selected: String, onSelect: (String) -> Unit) {
                             .heightIn(min = Dimens.touch)
                             .selectable(selected = isSelected, role = Role.RadioButton) { onSelect(color.key) }
                             .semantics { contentDescription = color.title }
-                            .testTag(colorTag(color.key)),
+                            .testTag(tag(color.key)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
@@ -115,20 +127,65 @@ internal fun ShadePicker(selected: Int, place: PlaceColor, onSelect: (Int) -> Un
     }
 }
 
-/** Образец блока календаря (CalendarBlock): фон — цвет места оттенком, полоса 3 dp, две строки текста. */
+/**
+ * Образец блока календаря (CalendarBlock, шаг 5.13в): фон — перелив цветов места [gradient] оттенком, уровень
+ * «сверху», две строки текста цветом, что читается на обоих концах.
+ */
 @Composable
-internal fun BlockSample(place: PlaceColor, shade: Int, title: String, line: String, modifier: Modifier = Modifier) {
-    val tone = place.tone(PersonalkaTheme.colors.isDark)
-    Row(
+internal fun BlockSample(gradient: PlaceGradient, shade: Int, title: String, line: String, modifier: Modifier = Modifier) {
+    val colors = PersonalkaTheme.colors
+    val (from, to) = gradient.ends(colors.isDark, shade)
+    val ink = gradient.ink(colors.isDark, shade)
+    Column(
         modifier
             .height(56.dp)
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(tone.block(shade)),
+            .raised(MaterialTheme.shapes.extraSmall, colors, elevation = 3)
+            .background(Brush.linearGradient(listOf(from, to)))
+            .padding(horizontal = Dimens.space2, vertical = 6.dp),
     ) {
-        Box(Modifier.width(Dimens.blockStripe).fillMaxHeight().background(tone.stripe))
-        Column(Modifier.padding(horizontal = Dimens.space2, vertical = 6.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(line, style = MaterialTheme.typography.bodySmall, color = tone.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, style = MaterialTheme.typography.labelMedium, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(line, style = MaterialTheme.typography.bodySmall, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Образец одного цвета — как раньше, по ключу места. */
+@Composable
+internal fun BlockSample(place: PlaceColor, shade: Int, title: String, line: String, modifier: Modifier = Modifier) =
+    BlockSample(PlaceGradient(place, place), shade, title, line, modifier)
+
+/**
+ * Готовые переходы плитками по два в ряд (холст «Сияние», ряд В): полоса перелива и название; выбранная — в рамке
+ * primary. Последняя — «Один цвет» (переход в тот же цвет). [selected] — название выбранной или `null` («Свой»).
+ */
+@Composable
+internal fun GradientPresets(color: String, selected: String?, onPick: (from: String, to: String) -> Unit) {
+    val colors = PersonalkaTheme.colors
+    val items = ReferenceRules.gradientPresets.map { Triple(it.name, it.from, it.to) } + Triple(SINGLE_COLOR, color, color)
+    Column(verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        items.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                row.forEach { (name, from, to) ->
+                    val isSelected = name == selected
+                    val shape = MaterialTheme.shapes.medium
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clip(shape)
+                            .background(colors.surface)
+                            .then(if (isSelected) Modifier.border(2.dp, colors.primary, shape) else Modifier)
+                            .selectable(selected = isSelected, role = Role.RadioButton) { onPick(from, to) }
+                            .testTag(gradientTag(name))
+                            .padding(Dimens.space2),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        val a = PlaceColor.of(from).tone(colors.isDark).stripe
+                        val b = PlaceColor.of(to).tone(colors.isDark).stripe
+                        Box(Modifier.fillMaxWidth().height(28.dp).clip(MaterialTheme.shapes.small).background(Brush.horizontalGradient(listOf(a, b))))
+                        Text(name, style = MaterialTheme.typography.labelMedium, color = colors.text, maxLines = 1)
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
         }
     }
 }

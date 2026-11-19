@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.slots
 
+import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -176,7 +177,7 @@ internal fun SlotsScreen(
     val period = PeriodPick(query.from, query.to, params.custom(now.date)) { picking = it }
 
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg)) {
+        Column(Modifier.fillMaxSize().screenBackground(PersonalkaTheme.colors)) {
             TopBar(SlotFormat.TITLE, onBack = onBack)
             if (!loaded) return@Column
             wait?.let {

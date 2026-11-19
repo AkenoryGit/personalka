@@ -53,28 +53,31 @@ import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.Shade
+import com.akenory.personalka.ui.theme.AuroraBrush
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.raised
 
 // Элементы форм дизайн-системы 0.2 (Button, Chip, TextField, Toggles): первыми их собрали первый запуск
 // и конструктор типа (шаг 1.6), дальше ими пользуются все формы.
 
-/** Главная кнопка экрана: графит на кремовом, высота 48, скругление 12. Одна на экран. */
+/**
+ * Главная кнопка экрана (стиль «Сияние», шаг 5.13а): перелив «Сияние», белый текст, уровень «сверху»,
+ * высота 48, скругление 14. Одна на экран. Недоступная — ровная `surfaceAlt` с `textMuted` (4,6 : 1).
+ */
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val colors = PersonalkaTheme.colors
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.heightIn(min = Dimens.button),
-        shape = MaterialTheme.shapes.medium,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = colors.primary,
-            contentColor = colors.onPrimary,
-            // Недоступная: surface-alt и text-muted (4,6 : 1).
-            disabledContainerColor = colors.surfaceAlt,
-            disabledContentColor = colors.textMuted,
-        ),
+    val shape = MaterialTheme.shapes.medium
+    Box(
+        modifier = modifier
+            .heightIn(min = Dimens.button)
+            .then(if (enabled) Modifier.raised(shape, colors).background(AuroraBrush) else Modifier.clip(shape).background(colors.surfaceAlt))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = Dimens.space6, vertical = Dimens.space2),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) OnAurora else colors.textMuted)
     }
 }
 
@@ -151,7 +154,7 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Поле ввода с подписью над ним (TextField): высота 56, фон surface, рамка 1 dp outline, в фокусе — 2 dp primary.
+ * Поле ввода с подписью над ним (TextField): высота 56, вдавленное (уровень −1, шаг 5.13а), в фокусе — рамка 2 dp primary.
  * Ошибка — рамка и строка под полем цветом error. [placeholder] — серым внутри пустого поля: «Необязательно».
  * Многострочное ([singleLine] = `false`) растёт вниз по тексту — план тренировки. Пароль — с [visualTransformation] точками.
  */
@@ -176,7 +179,7 @@ fun Field(
     val border = when {
         error != null -> colors.error
         focused -> colors.primary
-        else -> colors.outline
+        else -> Color.Transparent
     }
     val held = rememberHeldText(value, onValueChange)
     Column(modifier) {
@@ -208,8 +211,9 @@ fun Field(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = Dimens.field)
-                        .background(colors.surface, MaterialTheme.shapes.medium)
-                        .border(if (focused || error != null) 2.dp else 1.dp, border, MaterialTheme.shapes.medium)
+                        // Шаг 5.13а: поле — вдавленное; рамка только в фокусе и при ошибке.
+                        .insetLevel(MaterialTheme.shapes.medium, colors)
+                        .border(2.dp, border, MaterialTheme.shapes.medium)
                         .padding(
                             start = Dimens.space4,
                             end = if (trailing != null) 0.dp else Dimens.space4,
@@ -246,7 +250,7 @@ fun Field(
 }
 
 /**
- * Чип (Chip): высота 36, зона нажатия 48. Выбранный — primary с галочкой, невыбранный — surface-alt;
+ * Чип (Chip): высота 36, зона нажатия 48. Выбранный — «Сияние» с белой галочкой (шаг 5.13а), невыбранный — surface-alt;
  * у типа до выбора — точка его цвета. Узкие чипы в ряд (дни недели) — без галочки и во всю свою ширину ([fill]).
  */
 @Composable
@@ -273,13 +277,13 @@ fun ChoiceChip(
                 .then(if (fill) Modifier.fillMaxWidth() else Modifier)
                 .height(Dimens.chip)
                 .clip(shape)
-                .background(if (selected) colors.primary else colors.surfaceAlt, shape)
+                .then(if (selected) Modifier.background(AuroraBrush) else Modifier.background(colors.surfaceAlt))
                 .then(select)
                 .padding(horizontal = if (fill) 0.dp else Dimens.space3),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (fill) Arrangement.Center else Arrangement.spacedBy(6.dp),
         ) {
-            val content = if (selected) colors.onPrimary else colors.text
+            val content = if (selected) OnAurora else colors.text
             when {
                 fill -> Unit
                 selected -> Icon(PIcons.Check, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
@@ -381,7 +385,7 @@ fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect:
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = Dimens.touch)
-            .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+            .insetLevel(MaterialTheme.shapes.medium, colors)
             .padding(4.dp),
     ) {
         options.forEach { option ->
@@ -390,15 +394,17 @@ fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect:
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isSelected) colors.primary else Color.Transparent)
+                    .then(
+                        if (isSelected) Modifier.raised(RoundedCornerShape(10.dp), colors, elevation = 4).background(AuroraBrush)
+                        else Modifier.clip(RoundedCornerShape(10.dp)),
+                    )
                     .selectable(selected = isSelected, role = Role.RadioButton) { onSelect(option) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = label(option),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isSelected) colors.onPrimary else colors.text,
+                    color = if (isSelected) OnAurora else colors.text,
                 )
             }
         }

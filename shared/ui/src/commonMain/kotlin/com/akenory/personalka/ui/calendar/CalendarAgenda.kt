@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.calendar
 
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.PlaceGradient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
@@ -199,6 +201,8 @@ private fun TrainingRow(training: CalendarTraining, onClick: () -> Unit) {
         tag = calendarRowTag(training.id),
         onClick = onClick,
         tint = if (cancelled) colors.surfaceAlt else PlaceColor.of(training.color).tone(colors.isDark).block(1),
+        // Шаг 5.13в: строка — переливом цветов места, как блок в сетке.
+        tintTo = if (cancelled) null else PlaceGradient.of(training.color, training.color2).ends(colors.isDark, 1).second,
     )
 }
 
@@ -240,6 +244,7 @@ internal fun EntryRow(
     status: String? = null,
     highlighted: Boolean = false,
     tint: Color? = null,
+    tintTo: Color? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val decoration = if (crossed) TextDecoration.LineThrough else null
@@ -248,7 +253,7 @@ internal fun EntryRow(
         modifier = Modifier
             .fillMaxWidth()
             // Шаг 5.12в: в «Месяце» и «Списке» строка — карточкой на светлом оттенке цвета места ([tint]), как блок в сетке.
-            .then(if (tint != null) Modifier.padding(horizontal = Dimens.space3, vertical = 2.dp).clip(MaterialTheme.shapes.small).background(tint) else Modifier)
+            .then(if (tint != null) Modifier.padding(horizontal = Dimens.space3, vertical = 2.dp).clip(MaterialTheme.shapes.small).then(if (tintTo != null && tintTo != tint) Modifier.background(Brush.horizontalGradient(listOf(tint, tintTo))) else Modifier.background(tint)) else Modifier)
             .heightIn(min = ROW_HEIGHT)
             .then(if (highlighted) Modifier.clip(MaterialTheme.shapes.medium).background(colors.surface) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)

@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.setup
 
+import com.akenory.personalka.ui.theme.PlaceGradient
 import com.akenory.personalka.ui.components.SettingsGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -385,7 +386,7 @@ private fun BlockPreview(draft: TypeDraft, places: List<PlaceDraft>) {
     SampleCard {
         shown.forEach { place ->
             val line = listOfNotNull("19:00", draft.shortName.trim().ifEmpty { null }, place?.shortName).joinToString(" · ")
-            BlockSample(PlaceColor.of(place?.color), draft.shade, name, line, Modifier.fillMaxWidth())
+            BlockSample(PlaceGradient.of(place?.color, place?.color2), draft.shade, name, line, Modifier.fillMaxWidth())
         }
     }
 }

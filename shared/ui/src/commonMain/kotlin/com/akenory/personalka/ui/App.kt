@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui
 
+import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -420,7 +421,7 @@ fun App(
         }
 
         // Нажатие мимо поля ввода убирает клавиатуру — на всех экранах (5.20, шаг 5.3д).
-        Box(Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg).hideKeyboardOnTap()) {
+        Box(Modifier.fillMaxSize().screenBackground(PersonalkaTheme.colors).hideKeyboardOnTap()) {
             when (hasCoach) {
                 null -> Unit
                 false -> FirstRun(settings, backHandler, onDone = { tourGo(TourStop.CALENDAR) }, account, sync?.repository, clock)

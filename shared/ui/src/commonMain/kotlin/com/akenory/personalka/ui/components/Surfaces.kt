@@ -46,11 +46,15 @@ import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.theme.tabular
+import com.akenory.personalka.ui.theme.AuroraBrush
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.raised
 
 /**
  * Общие элементы нового оформления (шаг 5.11а, `docs/mockups/redesign`): цвет — у карточек, а не только у меток.
  * Зелёный — деньги и «проведено», янтарный — списание и «без записи», цвет места — всё про одну тренировку,
- * остальное — нейтральные плитки `surface` на фоне `bg`. Оранжевый здесь не используется (ТЗ 10.5).
+ * остальное — нейтральные плитки `surface` на фоне `bg`. Уровни и «Сияние» — `theme/Levels.kt` (шаг 5.13а).
  */
 @Immutable
 data class Tone(val fill: Color, val content: Color, val strong: Color, val muted: Color)
@@ -70,13 +74,17 @@ fun PlaceColor.cardTone(colors: PersonalkaColors): Tone {
     return Tone(t.block(1), t.text, if (colors.isDark) Color.White else colors.text, t.text)
 }
 
-/** Цветная карточка: скругление 20, отступы 16. Сумма месяца, «Сейчас», шапка карточки тренировки. */
+/**
+ * Цветная карточка: скругление 20, отступы 16. Сумма месяца, «Сейчас», шапка карточки тренировки.
+ * С [raised] — уровень «сверху» (шаг 5.13а): «Сейчас» на «Главной».
+ */
 @Composable
-fun ToneCard(tone: Tone, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun ToneCard(tone: Tone, modifier: Modifier = Modifier, raised: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    val shape = MaterialTheme.shapes.extraLarge
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.extraLarge)
+            .then(if (raised) Modifier.raised(shape, PersonalkaTheme.colors) else Modifier.clip(shape))
             .background(tone.fill)
             .padding(Dimens.space4),
         verticalArrangement = Arrangement.spacedBy(Dimens.space2),
@@ -101,6 +109,7 @@ fun SurfaceCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.
 /**
  * Плитка с цифрой: «94 / 149» крупно (20 sp, 600), «ПТ проведено» подписью 12 sp. Три-четыре плитки
  * в ряд — [TileRow]. С [onClick] плитка нажимается; с [selected] она ещё и фильтр (клиенты): выбранная обведена рамкой `primary`.
+ * Нейтральная плитка — вдавленная (уровень −1, шаг 5.13а), цветная — заливкой своего тона.
  */
 @Composable
 fun RowScope.Tile(
@@ -121,8 +130,7 @@ fun RowScope.Tile(
         modifier
             .weight(1f)
             .fillMaxHeight()
-            .clip(shape)
-            .background(tone.fill)
+            .then(if (tone.fill == colors.surface) Modifier.insetLevel(shape, colors) else Modifier.clip(shape).background(tone.fill))
             .then(if (selected == true) Modifier.border(2.dp, colors.primary, shape) else Modifier)
             .then(
                 when {
@@ -163,8 +171,8 @@ fun TileRow(modifier: Modifier = Modifier, content: @Composable RowScope.() -> U
 }
 
 /**
- * Вкладки внутри экрана — сегменты на `surface`: выбранный залит `primary` («Тренировки / Результаты / Инфо /
- * Расписание», «Месяц / Выплаты / Коллеги / Год», отчёты). Заменяет подчёркнутые вкладки трёх экранов.
+ * Вкладки внутри экрана — сегменты во вдавленной дорожке: выбранный — «Сияние» на уровне «сверху» (шаг 5.13а)
+ * («Тренировки / Результаты / Инфо / Расписание», «Месяц / Выплаты / Коллеги / Год», отчёты).
  */
 @Composable
 fun <T> SegmentTabs(
@@ -179,8 +187,7 @@ fun <T> SegmentTabs(
     Row(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(colors.surface)
+            .insetLevel(MaterialTheme.shapes.medium, colors)
             .padding(4.dp),
     ) {
         items.forEach { item ->
@@ -190,8 +197,10 @@ fun <T> SegmentTabs(
                 Modifier
                     .weight(1f)
                     .height(40.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(if (isSelected) colors.primary else Color.Transparent)
+                    .then(
+                        if (isSelected) Modifier.raised(MaterialTheme.shapes.small, colors, elevation = 4).background(AuroraBrush)
+                        else Modifier.clip(MaterialTheme.shapes.small),
+                    )
                     .selectable(selected = isSelected, role = Role.Tab) { onSelect(item) }
                     .then(if (t != null) Modifier.testTag(t) else Modifier),
                 contentAlignment = Alignment.Center,
@@ -199,7 +208,7 @@ fun <T> SegmentTabs(
                 Text(
                     title(item),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isSelected) colors.onPrimary else colors.text,
+                    color = if (isSelected) OnAurora else colors.text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 4.dp),

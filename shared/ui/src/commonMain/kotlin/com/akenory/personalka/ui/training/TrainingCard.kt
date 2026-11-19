@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.screenBackground
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.components.cardTone
 import androidx.compose.foundation.background
@@ -455,7 +456,7 @@ fun TrainingCardHost(
                                 .fillMaxWidth()
                                 .heightIn(max = maxHeight * 0.88f)
                                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                                .background(PersonalkaTheme.colors.bg)
+                                .screenBackground(PersonalkaTheme.colors)
                                 .swallowTaps()
                                 .semantics { paneTitle = shown?.title.orEmpty() }
                                 .testTag(TRAINING_CARD_TAG),
@@ -474,7 +475,7 @@ fun TrainingCardHost(
                     Modifier
                         .width(CARD_WIDTH)
                         .fillMaxHeight()
-                        .background(PersonalkaTheme.colors.bg)
+                        .screenBackground(PersonalkaTheme.colors)
                         .semantics { paneTitle = shown?.title.orEmpty() }
                         .testTag(TRAINING_CARD_TAG),
                 ) { pane() }

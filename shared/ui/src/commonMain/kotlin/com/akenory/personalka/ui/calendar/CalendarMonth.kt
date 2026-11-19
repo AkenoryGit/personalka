@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.AuroraBrush
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -316,7 +318,7 @@ private fun MonthCell(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            modifier = Modifier.size(28.dp).clip(CircleShape).background(if (isToday) colors.accent else Color.Transparent),
+            modifier = Modifier.size(28.dp).clip(CircleShape).then(if (isToday) Modifier.background(AuroraBrush) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -325,7 +327,7 @@ private fun MonthCell(
                 fontWeight = if (inMonth || isToday) FontWeight.Medium else FontWeight.Normal,
                 // С деньгами главное в клетке — сумма: число дня приглушено (шаг 5.10з).
                 color = when {
-                    isToday -> colors.onAccent
+                    isToday -> OnAurora
                     inMonth && !moneyOn -> colors.text
                     else -> colors.textMuted
                 },
@@ -451,11 +453,11 @@ private fun MiniDay(date: LocalDate, inMonth: Boolean, isSelected: Boolean, isTo
             modifier = Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(
+                .then(
                     when {
-                        isToday -> colors.accent
-                        isSelected -> colors.surfaceAlt
-                        else -> Color.Transparent
+                        isToday -> Modifier.background(AuroraBrush)
+                        isSelected -> Modifier.background(colors.surfaceAlt)
+                        else -> Modifier
                     },
                 ),
             contentAlignment = Alignment.Center,
@@ -464,7 +466,7 @@ private fun MiniDay(date: LocalDate, inMonth: Boolean, isSelected: Boolean, isTo
                 text = date.day.toString(),
                 style = MaterialTheme.typography.bodyLarge.tabular(),
                 color = when {
-                    isToday -> colors.onAccent
+                    isToday -> OnAurora
                     inMonth -> colors.text
                     else -> colors.textMuted
                 },

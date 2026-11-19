@@ -24,8 +24,21 @@ data class CoachName(val lastName: String, val firstName: String, val middleName
 /**
  * Место (3.3): «Большой бассейн», «ББ» и цвет — ключ палитры 16 цветов. Тренировки места красятся его цветом,
  * а оттенок выбирает тип (шаг 1.13в): по цвету тренер сразу видит, в каком бассейне работает.
+ * [color2] — второй цвет перехода (шаг 5.13в): пусто — по прежнему цвету ([ReferenceRules.gradientPartner]),
+ * равен [color] — один цвет.
  */
-data class PlaceDraft(val name: String, val shortName: String, val color: String = ReferenceRules.FALLBACK_COLOR)
+data class PlaceDraft(
+    val name: String,
+    val shortName: String,
+    val color: String = ReferenceRules.FALLBACK_COLOR,
+    val color2: String = "",
+) {
+    /** Переход места: «с» и «в» (пустой второй цвет — подобранный к первому). */
+    val gradient: Pair<String, String> get() = ReferenceRules.gradient(color, color2)
+}
+
+/** Готовый переход цвета места (шаг 5.13в): «Лагуна» — синий → бирюзовый. */
+data class GradientPreset(val name: String, val from: String, val to: String)
 
 /**
  * Тип тренировки (3.3) — всё, что задаётся в конструкторе (5.16). Своего цвета у типа нет: блок красится цветом
@@ -141,6 +154,41 @@ object ReferenceRules {
 
     /** Цвет места, если ключ потерялся: нейтральный сланцевый. */
     const val FALLBACK_COLOR = "slate"
+
+    /**
+     * Переход по прежнему цвету (переход базы на версию 22, шаг 5.13в): у каждого из 16 цветов — соседний, с которым
+     * перелив мягкий. У синего — бирюзовый («Лагуна»), у фиолетового — розовый («Сирень»).
+     */
+    private val PARTNERS = mapOf(
+        "red" to "pink", "orange" to "red", "amber" to "orange", "mustard" to "amber",
+        "lime" to "green", "green" to "lime", "emerald" to "teal", "teal" to "sky",
+        "sky" to "blue", "blue" to "teal", "indigo" to "violet", "violet" to "pink",
+        "magenta" to "violet", "pink" to "violet", "brown" to "amber", "slate" to "blue",
+    )
+
+    /** Второй цвет перехода, если тренер его не выбирал. */
+    fun gradientPartner(color: String): String = PARTNERS[color] ?: color
+
+    /** Переход места «с» → «в»: пустой или неизвестный второй цвет — подобранный к первому. */
+    fun gradient(color: String, color2: String): Pair<String, String> {
+        val from = color.takeIf { it in COLORS } ?: FALLBACK_COLOR
+        val to = color2.takeIf { it in COLORS } ?: gradientPartner(from)
+        return from to to
+    }
+
+    /** Готовые переходы на экране «Переход цвета» (холст «Сияние», ряд В); «Один цвет» — без перелива. */
+    val gradientPresets: List<GradientPreset> = listOf(
+        GradientPreset("Лагуна", "blue", "teal"),
+        GradientPreset("Сирень", "violet", "pink"),
+        GradientPreset("Мята", "emerald", "teal"),
+        GradientPreset("Закат", "red", "magenta"),
+        GradientPreset("Изумруд", "green", "lime"),
+        GradientPreset("Из тёмного", "slate", "blue"),
+    )
+
+    /** Готовый переход, который совпадает с [gradient], или `null` — «Свой переход». */
+    fun presetOf(gradient: Pair<String, String>): GradientPreset? =
+        gradientPresets.firstOrNull { it.from == gradient.first && it.to == gradient.second }
 
     /**
      * Оттенки типа (шаг 1.13в): 1 — светлый … 4 — тёмный. Больше четырёх оттенков одного цвета на ходу не различить,

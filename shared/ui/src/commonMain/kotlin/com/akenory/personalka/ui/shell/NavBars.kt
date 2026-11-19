@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,10 +37,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.raised
 import com.akenory.personalka.ui.theme.tabular
 
-/** Высота нижней панели (дизайн-система, BottomNav). */
-internal val NavBarHeight: Dp = 72.dp
+/** Место под нижней панелью: сама панель 70 и отступ 10 под ней (шаг 5.13а — панель плавает). */
+internal val NavBarHeight: Dp = 80.dp
+
+/** Высота самой плавающей панели. */
+private val NavPanelHeight: Dp = 70.dp
 
 /** Ширина боковой панели на разложенном Fold (макеты «Разложенный Fold» шагов 0.6). */
 internal val RailWidth: Dp = 80.dp
@@ -50,8 +56,9 @@ val WideFrom: Dp = 600.dp
 internal fun navTag(section: Section) = "nav-${section.name}"
 
 /**
- * Нижняя панель на обычном и сложенном экране (ТЗ 5.1): пять разделов поровну, фон `surface`,
- * сверху линия `divider`. Фон уходит под полосу жестов системы, кнопки — над ней.
+ * Нижняя панель на обычном и сложенном экране (ТЗ 5.1, стиль «Сияние» — шаг 5.13а): плавает над экраном
+ * с отступом 10 по бокам и снизу, скругление 22, уровень «сверху». Пять разделов поровну; под панелью — полоса
+ * жестов системы, панель стоит над ней.
  */
 @Composable
 internal fun BottomNav(
@@ -62,13 +69,14 @@ internal fun BottomNav(
     modifier: Modifier = Modifier,
 ) {
     val colors = PersonalkaTheme.colors
-    Column(modifier.fillMaxWidth().background(colors.surface)) {
-        HorizontalDivider(thickness = 1.dp, color = colors.divider)
+    val shape = RoundedCornerShape(22.dp)
+    Box(modifier.fillMaxWidth().padding(insets).padding(start = 10.dp, end = 10.dp, bottom = 10.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(insets)
-                .height(NavBarHeight - 1.dp)
+                .height(NavPanelHeight)
+                .raised(shape, colors, elevation = 12)
+                .background(colors.nav)
                 .selectableGroup(),
         ) {
             Section.entries.forEach { section ->
@@ -96,7 +104,7 @@ internal fun NavRail(
     modifier: Modifier = Modifier,
 ) {
     val colors = PersonalkaTheme.colors
-    Row(modifier.fillMaxHeight().background(colors.bg)) {
+    Row(modifier.fillMaxHeight()) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
@@ -122,9 +130,9 @@ internal fun NavRail(
 }
 
 /**
- * Раздел: значок над подписью. Выбранный — залитый значок на плашке 56 × 32 `surfaceAlt`, подпись `text`;
- * остальные — контурный значок и подпись `textMuted`. У «Главной» — оранжевый счётчик дел (одно из пяти
- * мест фирменного оранжевого), больше 99 — «99+», ноль не показывается.
+ * Раздел: значок над подписью. Выбранный — залитый значок во вдавленной плашке 56 × 32 (шаг 5.13а), подпись `text`;
+ * остальные — контурный значок и подпись `textMuted`. У «Главной» — коралловый счётчик дел, больше 99 — «99+»,
+ * ноль не показывается.
  */
 @Composable
 private fun NavItem(
@@ -146,7 +154,7 @@ private fun NavItem(
         Box(
             modifier = Modifier
                 .size(width = 56.dp, height = 32.dp)
-                .background(if (selected) colors.surfaceAlt else Color.Transparent, CircleShape),
+                .then(if (selected) Modifier.insetLevel(CircleShape, colors) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

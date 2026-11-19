@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.setup
 
+import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -159,7 +160,7 @@ class FirstRunState(
 
     /** Новое место — отмеченным в конце списка. */
     fun addPlace(place: PlaceDraft) {
-        places = places + Picked(PlaceDraft(place.name.trim(), place.shortName.trim(), place.color))
+        places = places + Picked(PlaceDraft(place.name.trim(), place.shortName.trim(), place.color, place.color2))
         page = FirstRunPage.SETUP
     }
 
@@ -179,7 +180,7 @@ class FirstRunState(
                     s.name.lastName,
                     s.name.firstName,
                     s.name.middleName.orEmpty(),
-                    s.places.joinToString(ITEM) { (if (it.on) "1" else "0") + it.item.name + FIELD + it.item.shortName + FIELD + it.item.color },
+                    s.places.joinToString(ITEM) { (if (it.on) "1" else "0") + it.item.name + FIELD + it.item.shortName + FIELD + it.item.color + FIELD + it.item.color2 },
                     s.types.joinToString(ITEM) { (if (it.on) "1" else "0") + encodeType(it.item) },
                 )
             },
@@ -190,8 +191,8 @@ class FirstRunState(
                     page = FirstRunPage.valueOf(v[0]),
                     name = CoachName(v[1], v[2], v[3]),
                     places = v[4].split(ITEM).filter { it.isNotEmpty() }.map {
-                        val (name, short, color) = it.drop(1).split(FIELD)
-                        Picked(PlaceDraft(name, short, color), on = it.startsWith("1"))
+                        val parts = it.drop(1).split(FIELD)
+                        Picked(PlaceDraft(parts[0], parts[1], parts[2], parts.getOrElse(3) { "" }), on = it.startsWith("1"))
                     },
                     types = v[5].split(ITEM).filter { it.isNotEmpty() }.map {
                         Picked(decodeType(it.drop(1)), on = it.startsWith("1"))
@@ -230,7 +231,7 @@ fun FirstRun(
     // Отступы под системные панели — без «поглощения»: формы внутри сами поднимаются над клавиатурой.
     val safe = WindowInsets.systemBars.union(WindowInsets.displayCutout).asPaddingValues()
     Box(
-        Modifier.fillMaxSize().background(PersonalkaTheme.colors.bg).padding(safe),
+        Modifier.fillMaxSize().screenBackground(PersonalkaTheme.colors).padding(safe),
         contentAlignment = Alignment.TopCenter,
     ) {
         // На разложенном Fold — колонка по центру: строки во всю ширину 840 dp читать неудобно.

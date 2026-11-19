@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.settings
 
+import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,7 +35,7 @@ fun CrashReport(text: String, onCopy: (String) -> Unit, onContinue: () -> Unit) 
         val colors = PersonalkaTheme.colors
         var copied by remember { mutableStateOf(false) }
         Column(
-            Modifier.fillMaxSize().background(colors.bg).safeDrawingPadding().padding(Dimens.space4)
+            Modifier.fillMaxSize().screenBackground(colors).safeDrawingPadding().padding(Dimens.space4)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Dimens.space3),
         ) {

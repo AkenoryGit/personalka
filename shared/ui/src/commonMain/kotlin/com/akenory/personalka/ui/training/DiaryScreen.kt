@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -145,7 +146,7 @@ fun DiaryScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(colors.bg)
+            .screenBackground(colors)
             .swallowTaps()
             .testTag(DIARY_TAG),
         contentAlignment = Alignment.TopCenter,

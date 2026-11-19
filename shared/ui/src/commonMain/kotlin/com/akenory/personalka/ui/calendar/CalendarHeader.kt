@@ -1,5 +1,8 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.AuroraBrush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -232,7 +235,7 @@ internal fun CalendarHeader(
     }
 }
 
-/** Кнопка шапки с выпадающим списком (макеты «3 дня»): плашка 36 dp цвета surface-alt, зона нажатия 48. */
+/** Кнопка шапки с выпадающим списком (макеты «3 дня»): плашка 36 dp на уровне «сверху» (шаг 5.13б), зона нажатия 48. */
 @Composable
 private fun HeaderMenu(text: String, tag: String, items: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
     val colors = PersonalkaTheme.colors
@@ -241,8 +244,8 @@ private fun HeaderMenu(text: String, tag: String, items: @Composable ColumnScope
         Row(
             modifier = Modifier
                 .height(Dimens.chip)
-                .clip(MaterialTheme.shapes.small)
-                .background(colors.surfaceAlt)
+                .raised(MaterialTheme.shapes.small, colors, elevation = 3)
+                .background(colors.nav)
                 .clickable(role = Role.DropdownList) { open = true }
                 .testTag(tag)
                 .padding(start = Dimens.space3, end = Dimens.space1),
@@ -314,13 +317,13 @@ private fun DayLabel(date: LocalDate, today: LocalDate, wide: Boolean, onOpen: (
     val label = @Composable {
         Text(DateFormat.weekdayShort(date.dayOfWeek), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
         Box(
-            modifier = Modifier.size(32.dp).clip(CircleShape).background(if (isToday) colors.accent else Color.Transparent),
+            modifier = Modifier.size(32.dp).clip(CircleShape).then(if (isToday) Modifier.background(AuroraBrush) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = date.day.toString(),
                 style = MaterialTheme.typography.titleMedium.tabular(),
-                color = if (isToday) colors.onAccent else colors.text,
+                color = if (isToday) OnAurora else colors.text,
             )
         }
     }

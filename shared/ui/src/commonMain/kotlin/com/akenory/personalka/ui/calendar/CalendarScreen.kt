@@ -1,5 +1,8 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.AuroraBrush
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
@@ -686,8 +689,8 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
                     .weight(1f)
                     .fillMaxHeight()
                     .padding(vertical = Dimens.space1, horizontal = 2.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(if (isSelected) colors.surfaceAlt else Color.Transparent)
+                    // Шаг 5.13б: выбранный день — вдавленный.
+                    .then(if (isSelected) Modifier.insetLevel(MaterialTheme.shapes.medium, colors) else Modifier.clip(MaterialTheme.shapes.medium))
                     .clickable(role = Role.Tab) { onSelect(date) }
                     .semantics(mergeDescendants = true) {
                         selected = isSelected
@@ -702,13 +705,13 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(if (isToday) colors.accent else Color.Transparent),
+                        .then(if (isToday) Modifier.background(AuroraBrush) else Modifier),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = date.day.toString(),
                         style = MaterialTheme.typography.titleMedium.tabular(),
-                        color = if (isToday) colors.onAccent else colors.text,
+                        color = if (isToday) OnAurora else colors.text,
                     )
                 }
                 if (moneyOf != null) {

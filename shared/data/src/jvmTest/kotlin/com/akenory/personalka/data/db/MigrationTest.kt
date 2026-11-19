@@ -697,8 +697,39 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion21() {
-        assertEquals(21, PersonalkaDatabase.VERSION)
+    fun version21PlacesKeepColorAndGetAutoGradient(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v21", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шагов 5.10д–5.12е: у места один цвет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 21)
+                raw.exec(
+                    "INSERT INTO location (id, scope, name, shortName, sort, archived, color, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('p1', 'COACH', 'Большой бассейн', 'ББ', 0, 0, 'blue', 'c1', 1, 1, 1, NULL)",
+                )
+            }
+
+            val db = personalkaDatabase(path)
+            try {
+                val place = db.referenceDao().location("p1")!!
+                assertEquals("blue", place.color, "Цвет места не тронут")
+                assertEquals("", place.color2, "Второго цвета нет — переход подбирается по прежнему")
+                assertEquals("blue" to "teal", com.akenory.personalka.domain.reference.ReferenceRules.gradient(place.color, place.color2), "Синий — «Лагуна»")
+                db.referenceDao().upsertLocation(place.copy(color2 = "violet"))
+                assertEquals("violet", db.referenceDao().location("p1")!!.color2)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion22() {
+        assertEquals(22, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }

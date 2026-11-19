@@ -240,7 +240,6 @@ internal fun SalaryMonthScreen(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .background(colors.bg)
                     .verticalScroll(scroll)
                     .padding(Dimens.space4)
                     .padding(bottom = 56.dp),

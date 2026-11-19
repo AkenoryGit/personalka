@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.setup
 
+import com.akenory.personalka.ui.theme.PlaceGradient
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,7 +44,8 @@ const val PLACE_SHORT_TAG = "place-short"
 
 /**
  * Место (ТЗ 3.3, 5.16): название, короткое имя до 4 знаков — его видно в календаре и в строках тренировок — и цвет:
- * им красятся тренировки места, а оттенок выбирает тип (шаг 1.13в). Под палитрой — четыре оттенка с типами.
+ * им красятся тренировки места, а оттенок выбирает тип (шаг 1.13в). Ниже — переход цвета (шаг 5.13в): готовые,
+ * «Один цвет» и свой второй цвет; под ними — четыре оттенка с типами переливом.
  *
  * @param others другие действующие места: короткое имя не повторяется, о том же цвете — предупреждение.
  * @param samples подписи образцов оттенков 1–4: короткое имя типа с этим оттенком или название оттенка.
@@ -64,8 +66,10 @@ fun PlaceEditor(
     var name by rememberSaveable { mutableStateOf(initial.name) }
     var short by rememberSaveable { mutableStateOf(initial.shortName) }
     var color by rememberSaveable { mutableStateOf(initial.color) }
+    var color2 by rememberSaveable { mutableStateOf(initial.color2) }
     var showErrors by rememberSaveable { mutableStateOf(false) }
-    val draft = PlaceDraft(name, short, color)
+    val draft = PlaceDraft(name, short, color, color2)
+    val pair = draft.gradient
     val problems = ReferenceRules.placeProblems(draft, others)
     val shown = if (showErrors) problems else emptyMap()
 
@@ -99,6 +103,7 @@ fun PlaceEditor(
             )
 
             SectionLabel("Цвет")
+            // Шаг 5.13в: новый первый цвет — переход снова подбирается к нему, если тренер не выбирал свой второй.
             ColorPalette(selected = color, onSelect = { color = it })
             ReferenceRules.sameColor(color, others)?.let { twin ->
                 Text(
@@ -109,9 +114,28 @@ fun PlaceEditor(
                 )
             }
 
+            // Шаг 5.13в: переход цвета — готовые, «Один цвет» и свой второй цвет.
+            SectionLabel("Переход цвета")
+            GradientPresets(
+                color = color,
+                selected = if (pair.first == pair.second) SINGLE_COLOR else ReferenceRules.presetOf(pair)?.name,
+                onPick = { from, to ->
+                    color = from
+                    color2 = to
+                },
+            )
+            SectionLabel("Свой переход: второй цвет")
+            ColorPalette(selected = pair.second, onSelect = { color2 = it }, tag = ::secondColorTag)
+            Text(
+                text = "Цвет текста на блоке подбирается сам — чтобы имя читалось",
+                modifier = Modifier.padding(top = Dimens.space2),
+                style = MaterialTheme.typography.bodySmall,
+                color = PersonalkaTheme.colors.textMuted,
+            )
+
             SectionLabel("Так будет в календаре")
             SampleCard {
-                val place = PlaceColor.of(color)
+                val place = PlaceGradient(PlaceColor.of(pair.first), PlaceColor.of(pair.second))
                 val where = short.trim().ifEmpty { null }
                 ReferenceRules.SHADES.chunked(2).forEach { pair ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.space1)) {

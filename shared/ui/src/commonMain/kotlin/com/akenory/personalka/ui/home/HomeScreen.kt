@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.home
 
+import com.akenory.personalka.ui.theme.AuroraColors
+import com.akenory.personalka.ui.theme.raised
 import androidx.compose.runtime.LaunchedEffect
 import com.akenory.personalka.ui.components.insetWell
 import com.akenory.personalka.ui.components.LocalTilt
@@ -582,7 +584,7 @@ private fun NearestBlock(
     }
     // Шаг 5.11б: ближайшая — карточка цвета своего места, как блок в календаре.
     val tone = PlaceColor.of(nearest.color).cardTone(colors)
-    ToneCard(tone, Modifier.testTag(NEAREST_TAG)) { NearestBody(nearest, card, now, tone, onOpen, onDone, onDiary) }
+    ToneCard(tone, Modifier.testTag(NEAREST_TAG), raised = true) { NearestBody(nearest, card, now, tone, onOpen, onDone, onDiary) }
     if (later.isNotEmpty()) LaterList(later, onOpen = onOpen, onDay = { onDay(today) })
 }
 
@@ -1026,8 +1028,8 @@ private fun InsetNote(text: String, tone: Tone, modifier: Modifier = Modifier) {
     }
 }
 
-/** «Сияние»: бирюза → индиго → фиолет; одинаково в обеих темах, текст белый (не ниже 5 : 1 и под бликом). */
-private val AURORA = listOf(Color(0xFF0E3A48), Color(0xFF145A66), Color(0xFF2E3F86), Color(0xFF4B2F8C))
+/** «Сияние» — общий перелив темы (`theme/Levels.kt`, шаг 5.13а); текст белый (не ниже 5 : 1 и под бликом). */
+private val AURORA = AuroraColors
 /** Точка «Хорошо идёте» и молния ступени — мятная; «Поднажать» — янтарная. На «Сиянии» обе читаются. */
 private val AURORA_GOOD = Color(0xFF9EF2E2)
 private val AURORA_BEHIND = Color(0xFFFFC970)
@@ -1051,7 +1053,7 @@ private fun AuroraCard(modifier: Modifier = Modifier, content: @Composable Colum
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.extraLarge)
+            .raised(MaterialTheme.shapes.extraLarge, PersonalkaTheme.colors, elevation = 10)
             .background(Brush.linearGradient(AURORA))
             .drawBehind {
                 val w = size.width

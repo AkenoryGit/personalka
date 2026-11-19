@@ -28,6 +28,9 @@ class ThemeContrastTest {
                 "textMuted / bg" to (c.textMuted to c.bg),
                 "textMuted / surface" to (c.textMuted to c.surface),
                 "textMuted / surfaceAlt" to (c.textMuted to c.surfaceAlt),
+                "text / inset" to (c.text to c.inset),
+                "textMuted / inset" to (c.textMuted to c.inset),
+                "textMuted / nav" to (c.textMuted to c.nav),
                 "onPrimary / primary" to (c.onPrimary to c.primary),
                 "onAccent / accent" to (c.onAccent to c.accent),
                 "accentText / surface" to (c.accentText to c.surface),
@@ -80,6 +83,27 @@ class ThemeContrastTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun gradientTextReadsOnBothEndsForEveryPairAndShade() {
+        // Шаг 5.13в: свой переход — любые два цвета палитры; текст блока не ниже 4,5 : 1 на обоих концах перелива.
+        for ((name, c) in themes) {
+            for (from in PlaceColor.entries) for (to in PlaceColor.entries) {
+                val g = PlaceGradient(from, to)
+                for (shade in 1..4) {
+                    val (a, b) = g.ends(c.isDark, shade)
+                    val ink = g.ink(c.isDark, shade)
+                    assertAtLeast(4.5, ink, a, "$name тема, ${from.key} → ${to.key}, оттенок $shade: начало")
+                    assertAtLeast(4.5, ink, b, "$name тема, ${from.key} → ${to.key}, оттенок $shade: конец")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun textOnAuroraIsReadable() {
+        for (stop in AuroraColors) assertAtLeast(4.5, OnAurora, stop, "белый на «Сиянии»")
     }
 
     @Test

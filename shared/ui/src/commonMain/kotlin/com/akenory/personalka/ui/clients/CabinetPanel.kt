@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -291,7 +292,7 @@ fun CabinetPanel(
 @Composable
 private fun CabinetPreviewScreen(preview: CabinetPreview.Ready, adult: Boolean, browser: CabinetBrowser, onClose: () -> Unit) {
     val colors = PersonalkaTheme.colors
-    Column(Modifier.fillMaxSize().background(colors.bg).testTag(PREVIEW_SCREEN_TAG)) {
+    Column(Modifier.fillMaxSize().screenBackground(colors).testTag(PREVIEW_SCREEN_TAG)) {
         Row(
             Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = Dimens.space2, vertical = Dimens.space1),
             verticalAlignment = Alignment.CenterVertically,

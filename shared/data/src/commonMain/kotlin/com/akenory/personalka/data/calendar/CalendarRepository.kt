@@ -77,6 +77,7 @@ import kotlinx.datetime.plus
  * @param typeShort короткое название типа — на блоке: «ПТ», «Груд».
  * @param typeName полное название типа — в строках «Месяца» и «Списка»: «Грудничковое · ДБ · 30 мин».
  * @param color ключ цвета места (`Location.color`): у каждой темы свои тона.
+ * @param color2 второй цвет перехода места (`Location.color2`, шаг 5.13в): блок — переливом от [color] к нему.
  * @param shade оттенок типа (`TrainingType.shade`): 1 — светлый … 4 — тёмный; фон блока — цвет места этим оттенком.
  * @param badges значки по важности (`CalendarBadges`); сколько из них видно, решает высота блока.
  * @param marked проведена или в ней отмечены пришедшие: в будущее её не перенести (`CalendarDrag.problem`).
@@ -95,6 +96,7 @@ data class CalendarTraining(
     val color: String,
     val cancelled: Boolean,
     val badges: List<CalendarBadge> = emptyList(),
+    val color2: String = "",
     val marked: Boolean = false,
     val shade: Int = ReferenceRules.SHADE_LIGHT,
     val typeName: String = typeShort,
@@ -293,7 +295,7 @@ data class CalendarZone(
 
 /** Место в фильтре календаря (5.3): «ББ» на чипе, «Большой бассейн» в списке. */
 /** [color] — ключ цвета места из палитры (шаг 5.12а: квадратики и время в «Свободных слотах»). */
-data class CalendarPlace(val id: String, val shortName: String, val name: String, val color: String? = null)
+data class CalendarPlace(val id: String, val shortName: String, val name: String, val color: String? = null, val color2: String = "")
 
 /** Часы работы из настроек — часы сетки (3.2); по умолчанию — часы клуба 07:00–23:00. */
 data class WorkHours(val start: LocalTime = LocalTime(7, 0), val end: LocalTime = LocalTime(23, 0))
@@ -330,7 +332,7 @@ class CalendarRepository(
 
     /** Места для фильтра в шапке (5.3) — действующие, в порядке тренера; архивные не фильтруются отдельно. */
     val places: Flow<List<CalendarPlace>> = reference.observeLocations().map { list ->
-        list.filter { !it.archived }.map { CalendarPlace(it.id, it.shortName, it.name, it.color) }
+        list.filter { !it.archived }.map { CalendarPlace(it.id, it.shortName, it.name, it.color, it.color2) }
     }
 
     private val copiedState = MutableStateFlow<TrainingCopy?>(null)
@@ -655,6 +657,7 @@ private fun TrainingEntity.toCalendar(
     placeId = locationId,
     placeShort = place?.shortName.orEmpty(),
     color = place?.color.orEmpty(),
+    color2 = place?.color2.orEmpty(),
     shade = type?.shade ?: ReferenceRules.SHADE_LIGHT,
     cancelled = status == TrainingStatus.CANCELLED,
     badges = badges,

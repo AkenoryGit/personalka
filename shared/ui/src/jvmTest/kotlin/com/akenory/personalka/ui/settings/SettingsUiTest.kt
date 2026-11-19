@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.settings
 
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
@@ -179,6 +180,33 @@ class SettingsUiTest {
         onNodeWithText("Сохранить").performClick()
         awaitNode(hasTestTag(placeRowTag("ДБ2")))
         runBlocking { assertEquals("teal", settings.places.first().single { it.shortName == "ДБ2" }.color) }
+    }
+
+    @Test
+    fun placeGradientPresetAndOwnSecondColor() = runComposeUiTest {
+        // Шаг 5.13в: переход цвета у места — готовый, свой второй цвет и «Один цвет».
+        setContent { Box(Modifier.size(folded, height)) { App("0.1.0", settings, TestData.clientsOf(settings), TestData.groupsOf(settings), TestData.calendarOf(settings), clock = TestData.clock) } }
+        openPlacesAndTypes()
+        fun bb() = runBlocking { settings.places.first().single { it.shortName == "ББ" } }
+
+        onNodeWithTag(placeRowTag("ББ")).performClick()
+        // Синий без второго цвета — «Лагуна» (переход подобран по прежнему цвету).
+        onNodeWithTag(com.akenory.personalka.ui.setup.gradientTag("Лагуна")).performScrollTo().assertIsSelected()
+        onNodeWithTag(com.akenory.personalka.ui.setup.gradientTag("Сирень")).performScrollTo().performClick()
+        onNodeWithTag(com.akenory.personalka.ui.setup.gradientTag("Сирень")).assertIsSelected()
+        onNodeWithText("Сохранить").performClick()
+        waitUntil(timeoutMillis = 5_000) { bb().color == "violet" && bb().color2 == "pink" }
+
+        onNodeWithTag(placeRowTag("ББ")).performClick()
+        onNodeWithTag(com.akenory.personalka.ui.setup.secondColorTag("amber")).performScrollTo().performClick()
+        onNodeWithTag(com.akenory.personalka.ui.setup.gradientTag("Сирень")).assertIsNotSelected()
+        onNodeWithText("Сохранить").performClick()
+        waitUntil(timeoutMillis = 5_000) { bb().color2 == "amber" }
+
+        onNodeWithTag(placeRowTag("ББ")).performClick()
+        onNodeWithTag(com.akenory.personalka.ui.setup.gradientTag(com.akenory.personalka.ui.setup.SINGLE_COLOR)).performScrollTo().performClick()
+        onNodeWithText("Сохранить").performClick()
+        waitUntil(timeoutMillis = 5_000) { bb().color2 == "violet" }
     }
 
     @Test

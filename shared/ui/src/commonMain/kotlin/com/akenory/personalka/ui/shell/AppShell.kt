@@ -21,8 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +40,13 @@ import androidx.compose.ui.unit.dp
 import com.akenory.personalka.ui.components.MessageHost
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.icons.PIcons
+import com.akenory.personalka.ui.theme.AuroraBrush
+import com.akenory.personalka.ui.theme.OnAurora
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.screenBackground
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 
 /**
  * Широкий ли экран: разложенный Fold или планшет, от 600 dp (ТЗ 5.1). Экраны читают его, чтобы показать
@@ -86,7 +90,7 @@ fun AppShell(
     val safeTop = safe.calculateTopPadding()
     val safeBottom = safe.calculateBottomPadding()
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(colors.bg)) {
+    BoxWithConstraints(Modifier.fillMaxSize().screenBackground(colors)) {
         val wide = maxWidth >= WideFrom
         // Форма во весь экран (конструктор типа) на сложенном прячет нижнюю панель; на разложенном боковая остаётся.
         val showBottomNav = !wide && !immersive
@@ -137,26 +141,23 @@ fun AppShell(
 }
 
 /**
- * Кнопка «+» — новая тренировка (дизайн-система, Fab): оранжевая заливка, «+» графитом, 56 dp, скругление 16.
+ * Кнопка «+» — новая тренировка (шаг 5.13а): «Сияние» с белым «+», уровень «сверху», 56 dp, скругление 16.
  * Одна на экран и не меняется: другое действие — это обычная кнопка.
  */
 @Composable
 private fun NewTrainingButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = PersonalkaTheme.colors
-    FloatingActionButton(
-        onClick = onClick,
-        modifier = modifier.size(56.dp).testTag(FAB_TAG),
-        shape = MaterialTheme.shapes.large,
-        containerColor = colors.accent,
-        contentColor = colors.onAccent,
-        elevation = FloatingActionButtonDefaults.elevation(
-            defaultElevation = 3.dp,
-            pressedElevation = 3.dp,
-            focusedElevation = 3.dp,
-            hoveredElevation = 3.dp,
-        ),
+    val shape = MaterialTheme.shapes.large
+    Box(
+        modifier
+            .size(56.dp)
+            .raised(shape, colors, elevation = 10)
+            .background(AuroraBrush)
+            .clickable(role = Role.Button, onClickLabel = "Новая тренировка", onClick = onClick)
+            .testTag(FAB_TAG),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(PIcons.Add, contentDescription = "Новая тренировка", modifier = Modifier.size(28.dp))
+        Icon(PIcons.Add, contentDescription = "Новая тренировка", tint = OnAurora, modifier = Modifier.size(28.dp))
     }
 }
 

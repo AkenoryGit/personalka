@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20, Migration20To21)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20, Migration20To21, Migration21To22)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -312,6 +312,16 @@ internal object Migration20To21 : Migration(20, 21) {
         connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `blocksTrainings` INTEGER NOT NULL DEFAULT 1")
         connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `monthly` INTEGER NOT NULL DEFAULT 0")
         connection.exec("ALTER TABLE `schedule_block` ADD COLUMN `notifyMinutes` INTEGER")
+    }
+}
+
+/**
+ * 21 → 22 (шаг 5.13в): второй цвет места — переход цвета. Пусто у всех прежних мест: переход подбирается
+ * по прежнему цвету (`ReferenceRules.gradientPartner`), сам цвет места не меняется.
+ */
+internal object Migration21To22 : Migration(21, 22) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `location` ADD COLUMN `color2` TEXT NOT NULL DEFAULT ''")
     }
 }
 

@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.AuroraBrush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -322,15 +324,15 @@ private fun RemovableChip(text: String, onRemove: () -> Unit) {
             Modifier
                 .height(Dimens.chip)
                 .clip(MaterialTheme.shapes.small)
-                .background(colors.primary)
+                .background(AuroraBrush)
                 .clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Убрать фильтр «$text»" }
                 .padding(start = Dimens.space3, end = Dimens.space2),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(text, style = MaterialTheme.typography.labelMedium, color = colors.onPrimary)
-            Icon(PIcons.Close, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(18.dp))
+            Text(text, style = MaterialTheme.typography.labelMedium, color = OnAurora)
+            Icon(PIcons.Close, contentDescription = null, tint = OnAurora, modifier = Modifier.size(18.dp))
         }
     }
 }

@@ -56,14 +56,7 @@ fun EmptyState(
         Text(text, style = MaterialTheme.typography.bodyLarge, color = colors.textMuted, textAlign = TextAlign.Center)
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(Dimens.space2))
-            Button(
-                onClick = onAction,
-                modifier = Modifier.heightIn(min = Dimens.button),
-                shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-            ) {
-                Text(actionLabel, style = MaterialTheme.typography.labelLarge)
-            }
+            PrimaryButton(actionLabel, onClick = onAction)
         }
     }
 }
