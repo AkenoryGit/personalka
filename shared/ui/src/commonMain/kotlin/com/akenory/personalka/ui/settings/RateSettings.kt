@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.settings
 
+import com.akenory.personalka.ui.components.SettingsGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -336,7 +337,7 @@ internal fun TierEditor(
                 )
                 Hint(RateFormat.TIERS_MONTH_NOTE)
                 Spacer(Modifier.height(Dimens.space2))
-                SwitchRow(RateFormat.TIERS_ON, enabled, { enabled = it }, Modifier.testTag(TIERS_ON_TAG), subtitle = if (enabled) null else RateFormat.TIERS_ON_NOTE)
+                SettingsGroup { SwitchRow(RateFormat.TIERS_ON, enabled, { enabled = it }, Modifier.testTag(TIERS_ON_TAG), subtitle = if (enabled) null else RateFormat.TIERS_ON_NOTE) }
                 if (enabled) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                         Field(RateFormat.T2_FROM, t2, { t2 = it }, Modifier.weight(1f), error = if (t2From == null) "" else null, keyboardOptions = NUMBER, tag = T2_FROM_TAG, placeholder = RateFormat.example(RateRules.T2_FROM))

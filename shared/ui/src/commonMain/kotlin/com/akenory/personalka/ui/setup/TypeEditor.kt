@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.setup
 
+import com.akenory.personalka.ui.components.SettingsGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -278,8 +279,10 @@ fun TypeEditor(
                 onSelect = { draft = draft.copy(payUnit = it) },
             )
 
+            // Шаг 5.12в: переключатели оплаты и галочки дневника — карточками на `surface`.
             if (TypePresets.hasClients(draft.kind)) {
                 Spacer(Modifier.height(Dimens.space3))
+                SettingsGroup {
                 // Шаг 5.3с: оплата напрямую — отдельный заработок, без счёта ПТ и ступеней.
                 SwitchRow(
                     title = TypeFormat.DIRECT_TITLE,
@@ -290,9 +293,8 @@ fun TypeEditor(
                     },
                     modifier = Modifier.testTag(TYPE_DIRECT_TAG),
                 )
-            }
 
-            if (TypePresets.hasClients(draft.kind) && !draft.paidDirect) {
+            if (!draft.paidDirect) {
                 SwitchRow(
                     title = "Считать как ПТ",
                     subtitle = "Идёт в счётчик ПТ и в ступень месяца",
@@ -305,11 +307,13 @@ fun TypeEditor(
                     checked = draft.tierDependent,
                     onToggle = { draft = draft.copy(tierDependent = it) },
                 )
-
+            }
+                }
             }
 
             if (TypePresets.hasClients(draft.kind)) {
                 SectionLabel("Дневник")
+                SettingsGroup {
                 CheckRow("План", checked = draft.diaryPlan, onToggle = { draft = draft.copy(diaryPlan = it) })
                 CheckRow("Факт", checked = draft.diaryFact, onToggle = { draft = draft.copy(diaryFact = it) })
                 CheckRow(
@@ -318,6 +322,7 @@ fun TypeEditor(
                     checked = draft.diaryBehavior,
                     onToggle = { draft = draft.copy(diaryBehavior = it) },
                 )
+                }
             }
 
             Spacer(Modifier.height(Dimens.space4))

@@ -198,6 +198,7 @@ private fun TrainingRow(training: CalendarTraining, onClick: () -> Unit) {
         badges = training.badges,
         tag = calendarRowTag(training.id),
         onClick = onClick,
+        tint = if (cancelled) colors.surfaceAlt else PlaceColor.of(training.color).tone(colors.isDark).block(1),
     )
 }
 
@@ -218,6 +219,7 @@ private fun DutyRow(zone: CalendarZone, onClick: () -> Unit) {
         badges = emptyList(),
         tag = calendarRowTag(zone.id),
         onClick = onClick,
+        tint = colors.surface,
     )
 }
 
@@ -237,6 +239,7 @@ internal fun EntryRow(
     onClick: () -> Unit,
     status: String? = null,
     highlighted: Boolean = false,
+    tint: Color? = null,
 ) {
     val colors = PersonalkaTheme.colors
     val decoration = if (crossed) TextDecoration.LineThrough else null
@@ -244,12 +247,14 @@ internal fun EntryRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Шаг 5.12в: в «Месяце» и «Списке» строка — карточкой на светлом оттенке цвета места ([tint]), как блок в сетке.
+            .then(if (tint != null) Modifier.padding(horizontal = Dimens.space3, vertical = 2.dp).clip(MaterialTheme.shapes.small).background(tint) else Modifier)
             .heightIn(min = ROW_HEIGHT)
             .then(if (highlighted) Modifier.clip(MaterialTheme.shapes.medium).background(colors.surface) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {}
             .testTag(tag)
-            .padding(horizontal = Dimens.space4, vertical = Dimens.space1),
+            .padding(horizontal = if (tint != null) Dimens.space1 + 4.dp else Dimens.space4, vertical = Dimens.space1),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.space3),
     ) {

@@ -37,6 +37,7 @@ import com.akenory.personalka.domain.reminder.ReminderRules
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.SectionLabel
 import com.akenory.personalka.ui.components.SwitchRow
+import com.akenory.personalka.ui.components.SettingsGroup
 import com.akenory.personalka.ui.watch.WatchSettings
 import com.akenory.personalka.ui.watch.WatchTools
 import com.akenory.personalka.ui.icons.PIcons
@@ -118,6 +119,8 @@ internal fun ReminderSettingsScreen(
                         )
                     }
                 }
+                // Шаг 5.12в: переключатели — карточками на `surface`.
+                SettingsGroup(Modifier.padding(top = Dimens.space2)) {
                 SwitchRow(ReminderFormat.DIARY, loaded.diary, { on -> save { saveDiary(on) } }, Modifier.testTag(DIARY_SWITCH_TAG), ReminderFormat.DIARY_NOTE)
                 SwitchRow(ReminderFormat.AUTO_DONE, loaded.autoDone, { on -> save { saveAutoDone(on) } }, Modifier.testTag(AUTO_DONE_TAG), ReminderFormat.AUTO_DONE_NOTE)
                 SwitchRow(ReminderFormat.DIGEST, loaded.digest, { on -> save { saveDigest(on) } }, Modifier.testTag(DIGEST_TAG), ReminderFormat.DIGEST_NOTE)
@@ -152,8 +155,9 @@ internal fun ReminderSettingsScreen(
                         ReminderFormat.ADVANCE_NOTE,
                     )
                 }
+                }
                 MoreRow(more) { more = !more }
-                if (more) {
+                if (more) SettingsGroup {
                     if (loaded.diary) {
                         SwitchRow(
                             ReminderFormat.INSTANT_DIARY,

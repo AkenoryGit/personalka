@@ -27,6 +27,7 @@ import com.akenory.personalka.ui.components.BottomAction
 import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.SwitchRow
+import com.akenory.personalka.ui.components.SettingsGroup
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -64,6 +65,7 @@ internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: Messa
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4),
             verticalArrangement = Arrangement.spacedBy(Dimens.space4),
         ) {
+            SettingsGroup(Modifier.padding(top = Dimens.space2)) {
             SwitchRow(
                 title = CabinetLinkFormat.SETTINGS_SWITCH,
                 checked = enabled,
@@ -79,6 +81,7 @@ internal fun CabinetSettingsScreen(settings: SettingsRepository, messages: Messa
                     subtitle = if (groupDiary) CabinetLinkFormat.GROUP_DIARY_ON else CabinetLinkFormat.GROUP_DIARY_OFF,
                     modifier = Modifier.testTag(CABINETS_GROUP_DIARY_TAG),
                 )
+            }
             }
             Field(
                 CabinetLinkFormat.CONTACT,

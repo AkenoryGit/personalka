@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.settings
 
+import com.akenory.personalka.ui.components.SettingsGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -176,13 +177,15 @@ internal fun CalendarSettingsScreen(
 
                 // Рабочий график по дням (шаг 5.10д): слоты — только в эти часы, вне их — вопрос при записи.
                 SectionLabel(PersonalFormat.SECTION_SCHEDULE)
-                SwitchRow(
-                    title = PersonalFormat.SCHEDULE,
-                    checked = loaded.schedule != null,
-                    onToggle = { on -> scope.launch { settings.saveSchedule(if (on) WorkSchedule.DEFAULT else null) } },
-                    modifier = Modifier.testTag(SCHEDULE_SWITCH_TAG),
-                    subtitle = PersonalFormat.SCHEDULE_NOTE,
-                )
+                SettingsGroup {
+                    SwitchRow(
+                        title = PersonalFormat.SCHEDULE,
+                        checked = loaded.schedule != null,
+                        onToggle = { on -> scope.launch { settings.saveSchedule(if (on) WorkSchedule.DEFAULT else null) } },
+                        modifier = Modifier.testTag(SCHEDULE_SWITCH_TAG),
+                        subtitle = PersonalFormat.SCHEDULE_NOTE,
+                    )
+                }
                 loaded.schedule?.let { schedule ->
                     ListCard {
                         DateFormat.WEEK.forEachIndexed { index, day ->
@@ -198,13 +201,15 @@ internal fun CalendarSettingsScreen(
 
                 // Личные дела и напоминания (шаг 5.10е): выключены — календарь как раньше.
                 SectionLabel(PersonalFormat.SECTION_PERSONAL)
-                SwitchRow(
-                    title = PersonalFormat.PERSONAL,
-                    checked = loaded.personal,
-                    onToggle = { on -> scope.launch { settings.savePersonal(on) } },
-                    modifier = Modifier.testTag(PERSONAL_SWITCH_TAG),
-                    subtitle = PersonalFormat.PERSONAL_NOTE,
-                )
+                SettingsGroup {
+                    SwitchRow(
+                        title = PersonalFormat.PERSONAL,
+                        checked = loaded.personal,
+                        onToggle = { on -> scope.launch { settings.savePersonal(on) } },
+                        modifier = Modifier.testTag(PERSONAL_SWITCH_TAG),
+                        subtitle = PersonalFormat.PERSONAL_NOTE,
+                    )
+                }
                 if (loaded.personal) {
                     SectionLabel(PersonalFormat.COLOR)
                     ColorPalette(loaded.personalColor) { key -> scope.launch { settings.savePersonalColor(key) } }

@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.settings
 
+import com.akenory.personalka.ui.components.SettingsGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -254,13 +255,15 @@ internal fun DataSettingsScreen(
                     }
                 }
 
-                SwitchRow(
-                    title = BackupFormat.ENCRYPT,
-                    checked = state.encrypt,
-                    onToggle = { backup.setEncrypt(it) },
-                    subtitle = BackupFormat.ENCRYPT_NOTE,
-                    modifier = Modifier.padding(top = Dimens.space3).testTag(ENCRYPT_TAG),
-                )
+                SettingsGroup(Modifier.padding(top = Dimens.space3)) {
+                    SwitchRow(
+                        title = BackupFormat.ENCRYPT,
+                        checked = state.encrypt,
+                        onToggle = { backup.setEncrypt(it) },
+                        subtitle = BackupFormat.ENCRYPT_NOTE,
+                        modifier = Modifier.testTag(ENCRYPT_TAG),
+                    )
+                }
 
                 Column(Modifier.padding(top = Dimens.space4), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
                     PrimaryButton(

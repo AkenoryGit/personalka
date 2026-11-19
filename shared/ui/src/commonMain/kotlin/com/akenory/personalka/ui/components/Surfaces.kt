@@ -294,3 +294,19 @@ fun ValueRow(
         }
     }
 }
+
+/**
+ * Карточка настроек (шаг 5.12в): переключатели и галочки раздела — на `surface` со скруглением 14, как пункты «Ещё»,
+ * а не строками прямо на фоне. Отступы строк внутри — 16 по бокам.
+ */
+@Composable
+fun SettingsGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(PersonalkaTheme.colors.surface)
+            .padding(horizontal = Dimens.space4, vertical = Dimens.space1),
+        content = content,
+    )
+}
