@@ -128,7 +128,7 @@ struct LargeView: View {
             }
             Spacer(minLength: 0)
         }
-        .widgetBg(P.surface)
+        .widgetBg(P.aurora)
         .open(nil)
     }
 }
@@ -144,7 +144,7 @@ struct MoneyView: View {
                 NoData()
             }
         }
-        .widgetBg(P.surface)
+        .widgetBg(P.aurora)
         .open(nil)
     }
 }
@@ -194,7 +194,7 @@ struct NowView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .widgetBg(P.surface)
+        .widgetBg(P.aurora)
         .open(e.frame?.id)
     }
 
@@ -290,7 +290,7 @@ struct MonthView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .widgetBg(P.surface)
+        .widgetBg(P.aurora)
         .open(nil)
     }
 

@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Виджеты (шаг 5.9): роли дизайн-системы тёмной темы. -->
+<!-- Ночью — то же «Сияние» (шаг 5.17). Виджеты (шаг 5.9; стиль «Сияние» — шаг 5.17): фон — перелив «Сияние» в обеих темах, текст белый, плашки и дорожки —
+     вдавленные (чёрный 20–24 %), проведено — белым, со ступени 2 и «Хорошо идёте» — мятным, «Поднажать» — янтарным. -->
 <resources>
-    <color name="widget_surface">#1E2124</color>
-    <color name="widget_surface_alt">#2A2D31</color>
-    <color name="widget_divider">#34373B</color>
-    <color name="widget_outline">#72767C</color>
-    <color name="widget_text">#F3EFE6</color>
-    <color name="widget_text_muted">#98958D</color>
-    <color name="widget_primary">#F3EFE6</color>
-    <color name="widget_done">#64B376</color>
-    <color name="widget_charged">#CF9037</color>
-    <color name="widget_done_container">#1C3E24</color>
-    <color name="widget_on_done_container">#C2E1C7</color>
-    <color name="widget_accent">#FF5A1F</color>
+    <color name="widget_surface">#2E3F86</color>
+    <color name="widget_surface_alt">#3D000000</color>
+    <color name="widget_divider">#26FFFFFF</color>
+    <color name="widget_outline">#B8FFFFFF</color>
+    <color name="widget_text">#FFFFFF</color>
+    <color name="widget_text_muted">#DBFFFFFF</color>
+    <color name="widget_primary">#FFFFFF</color>
+    <color name="widget_done">#9EF2E2</color>
+    <color name="widget_charged">#FFC970</color>
+    <color name="widget_done_container">#2E9EF2E2</color>
+    <color name="widget_on_done_container">#FFFFFF</color>
+    <color name="widget_accent">#FF8A70</color>
+    <color name="widget_aurora_start">#145A66</color>
+    <color name="widget_aurora_center">#2E3F86</color>
+    <color name="widget_aurora_end">#4B2F8C</color>
+    <color name="widget_forecast">#66FFFFFF</color>
 </resources>

@@ -24,26 +24,31 @@ extension Color {
         Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(rgb: dark) : UIColor(rgb: light) })
     }
 
-    /// Полоска места: светлый и тёмный тон от приложения.
+    /// Полоска места: на «Сиянии» (шаг 5.17) — яркий ночной тон в обеих темах.
     static func stripe(_ light: String?, _ dark: String?) -> Color {
         let l = UIColor(hex: light) ?? UIColor(rgb: 0x738497)
-        let d = UIColor(hex: dark) ?? l
-        return Color(UIColor { $0.userInterfaceStyle == .dark ? d : l })
+        return Color(UIColor(hex: dark) ?? l)
     }
 }
 
-/// Роли дизайн-системы (шаг 0.2).
+/// Роли виджетов (шаг 0.2; стиль «Сияние» — шаг 5.17): фон — перелив «Сияние» в обеих темах, текст белый,
+/// плашки и дорожки — вдавленные (чёрный 24 %), проведено — белым, «хорошо» — мятным, «поднажать» — янтарным.
 enum P {
-    static let surface = Color.dyn(0xFBFAF7, 0x1E2124)
-    static let alt = Color.dyn(0xEAE6DC, 0x2A2D31)
-    static let divider = Color.dyn(0xDCD9D0, 0x34373B)
-    static let outline = Color.dyn(0x86837B, 0x72767C)
-    static let text = Color.dyn(0x15171A, 0xF3EFE6)
-    static let muted = Color.dyn(0x69665E, 0x98958D)
-    static let primary = Color.dyn(0x15171A, 0xF3EFE6)
-    static let done = Color.dyn(0x007634, 0x64B376)
-    static let charged = Color.dyn(0x8E5B00, 0xCF9037)
-    static let accent = Color.dyn(0xF55111, 0xFF5A1F)
+    static let surface = Color(UIColor(rgb: 0x2E3F86))
+    static let aurora = LinearGradient(
+        colors: [Color(UIColor(rgb: 0x0E3A48)), Color(UIColor(rgb: 0x145A66)), Color(UIColor(rgb: 0x2E3F86)), Color(UIColor(rgb: 0x4B2F8C))],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let alt = Color.black.opacity(0.24)
+    static let divider = Color.white.opacity(0.15)
+    static let outline = Color.white.opacity(0.40)
+    static let text = Color.white
+    static let muted = Color.white.opacity(0.86)
+    static let primary = Color.white
+    static let done = Color(UIColor(rgb: 0x9EF2E2))
+    static let charged = Color(UIColor(rgb: 0xFFC970))
+    static let accent = Color(UIColor(rgb: 0xFF8A70))
     static let yellow = Color(UIColor(rgb: 0xFFD54A))
 }
 

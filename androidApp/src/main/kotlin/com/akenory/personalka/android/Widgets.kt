@@ -8,7 +8,6 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
@@ -269,15 +268,10 @@ object Widgets {
         }
     }
 
-    /** Полоска цвета места, как в расписании «Главной»; с Android 12 — свой тон в светлой и тёмной теме сам. */
+    /** Полоска цвета места, как в расписании «Главной». Фон виджета — «Сияние» в обеих темах (шаг 5.17): тон — яркий, ночной. */
+    @Suppress("UNUSED_PARAMETER")
     private fun stripe(context: Context, v: RemoteViews, id: Int, key: String?) {
-        val color = PlaceColor.of(key)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            v.setColorInt(id, "setBackgroundColor", color.tone(false).stripe.toArgb(), color.tone(true).stripe.toArgb())
-        } else {
-            val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-            v.setInt(id, "setBackgroundColor", color.tone(dark).stripe.toArgb())
-        }
+        v.setInt(id, "setBackgroundColor", PlaceColor.of(key).tone(true).stripe.toArgb())
     }
 
     fun open(context: Context, link: AppLink): PendingIntent = PendingIntent.getActivity(

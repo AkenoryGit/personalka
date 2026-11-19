@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Фон виджета (шаг 5.17): перелив «Сияние» по диагонали, как карточка «Деньги» на «Главной». -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/widget_surface" />
-    <corners android:radius="22dp" />
+    <gradient
+        android:angle="315"
+        android:startColor="@color/widget_aurora_start"
+        android:centerColor="@color/widget_aurora_center"
+        android:endColor="@color/widget_aurora_end"
+        android:type="linear" />
+    <corners android:radius="24dp" />
 </shape>
