@@ -41,7 +41,7 @@ class MoreMenuUiTest {
         onNodeWithText(MoreFormat.WORK).assertIsDisplayed()
         onNodeWithTag(moreRowTag(MoreItem.VACATION)).assertContentDescriptionContains(MoreFormat.VACATION_NOTE, substring = true)
         onNodeWithText(MoreFormat.SETUP).performScrollTo().assertIsDisplayed()
-        onNodeWithTag(moreRowTag(MoreItem.REMINDERS)).performScrollTo().assertTextContains(MoreFormat.REMINDERS_NOTE, substring = true)
+        onNodeWithTag(moreRowTag(MoreItem.REMINDERS)).performScrollTo().assertContentDescriptionContains(MoreFormat.REMINDERS_NOTE, substring = true)
         // Без совместного ведения нет «Коллег», без сервера — «Кабинетов», без копий на платформе — «Данных» (10.7).
         onNodeWithTag(moreRowTag(MoreItem.COLLEAGUES)).assertDoesNotExist()
         onNodeWithTag(moreRowTag(MoreItem.CABINETS)).assertDoesNotExist()
