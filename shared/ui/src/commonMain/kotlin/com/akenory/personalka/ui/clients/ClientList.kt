@@ -373,7 +373,7 @@ internal fun SearchField(value: String, onValueChange: (String) -> Unit, placeho
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = Dimens.button)
-                    .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+                    .insetLevel(MaterialTheme.shapes.medium, colors)
                     .padding(start = Dimens.space3, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

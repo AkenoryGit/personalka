@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -355,7 +356,7 @@ fun RelativeEditor(
                     Spacer(Modifier.height(Dimens.space5))
                     val word = Relations.word(role.reverse, client.sex ?: clientSex, otherBack.takeIf { role.kind == RelationKind.OTHER })
                     Row(
-                        Modifier.fillMaxWidth().background(colors.surfaceAlt, MaterialTheme.shapes.medium).padding(Dimens.space3),
+                        Modifier.fillMaxWidth().insetLevel(MaterialTheme.shapes.medium, colors).padding(Dimens.space3),
                         horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

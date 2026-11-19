@@ -969,9 +969,8 @@ private fun StatusChip(label: String, bg: Color, fg: Color, icon: ImageVector, o
     Row(
         Modifier
             .height(32.dp)
-            .clip(shape)
-            .background(bg, shape)
-            .then(if (outlined) Modifier.border(1.dp, PersonalkaTheme.colors.outline, shape) else Modifier)
+            // Шаг 5.15: «рамочный» статус — вдавленной плашкой, остальные — своим цветом.
+            .then(if (outlined) Modifier.insetLevel(shape, PersonalkaTheme.colors) else Modifier.clip(shape).background(bg, shape))
             .padding(horizontal = Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -990,7 +989,7 @@ private fun PlanQuestion(whom: String, first: Pair<String, String>, second: Pair
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+                .insetLevel(MaterialTheme.shapes.medium, colors)
                 .padding(Dimens.space3),
             verticalArrangement = Arrangement.spacedBy(Dimens.space1),
         ) {
@@ -1008,7 +1007,7 @@ private fun BirthdayLine(text: String) {
         Modifier
             .padding(top = Dimens.space3)
             .fillMaxWidth()
-            .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+            .insetLevel(MaterialTheme.shapes.medium, colors)
             .padding(Dimens.space3)
             .semantics(mergeDescendants = true) {}
             .testTag(CARD_BIRTHDAY_TAG),
@@ -1027,7 +1026,7 @@ private fun WarningLine(text: String) {
         Modifier
             .padding(top = Dimens.space3)
             .fillMaxWidth()
-            .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+            .insetLevel(MaterialTheme.shapes.medium, colors)
             .padding(Dimens.space3),
         horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,

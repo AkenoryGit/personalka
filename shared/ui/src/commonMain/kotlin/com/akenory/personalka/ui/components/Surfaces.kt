@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.components
 
+import com.akenory.personalka.ui.theme.AuroraSolid
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.background
@@ -61,6 +62,9 @@ import com.akenory.personalka.ui.theme.raised
 @Immutable
 data class Tone(val fill: Color, val content: Color, val strong: Color, val muted: Color)
 
+/** «Сияние» (шаг 5.15): главная сумма экрана — «На руки», «Заработано за год». [ToneCard] рисует её переливом. */
+fun auroraTone() = Tone(AuroraSolid, OnAurora.copy(alpha = 0.92f), OnAurora, OnAurora.copy(alpha = 0.86f))
+
 /** Нейтральная плитка или карточка: `surface`, текст — `text`, подписи — `textMuted`. */
 fun PersonalkaColors.neutralTone() = Tone(surface, text, text, textMuted)
 
@@ -87,7 +91,7 @@ fun ToneCard(tone: Tone, modifier: Modifier = Modifier, raised: Boolean = true, 
         modifier
             .fillMaxWidth()
             .then(if (raised) Modifier.raised(shape, PersonalkaTheme.colors) else Modifier.clip(shape))
-            .background(tone.fill)
+            .then(if (tone.fill == AuroraSolid) Modifier.background(AuroraBrush) else Modifier.background(tone.fill))
             .padding(Dimens.space4),
         verticalArrangement = Arrangement.spacedBy(Dimens.space2),
         content = content,
@@ -370,5 +374,28 @@ fun RaisedIconButton(
         ) {
             Icon(icon, contentDescription = contentDescription, tint = if (aurora) OnAurora else colors.text, modifier = Modifier.size(22.dp).rotate(iconRotation))
         }
+    }
+}
+
+/**
+ * Строка выбора (шаг 5.15): выпуклая карточка с подписью слева, значением справа и стрелкой — «С 01.11.2026»,
+ * «Группы: все · 4». Нажатие открывает выбор.
+ */
+@Composable
+fun ChooserRow(title: String, onClick: () -> Unit, modifier: Modifier = Modifier, value: String? = null) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .raised(MaterialTheme.shapes.medium, colors, elevation = 4)
+            .background(colors.nav)
+            .clickable(role = Role.Button, onClick = onClick)
+            .heightIn(min = Dimens.field)
+            .padding(start = Dimens.space4, end = Dimens.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (value != null) colors.textMuted else colors.text)
+        if (value != null) Text(value, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text)
+        Icon(com.akenory.personalka.ui.icons.PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.padding(start = Dimens.space2))
     }
 }

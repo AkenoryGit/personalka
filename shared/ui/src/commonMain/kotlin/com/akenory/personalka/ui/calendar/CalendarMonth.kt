@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.ui.components.RaisedIconButton
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.OnAurora
 import com.akenory.personalka.ui.theme.AuroraBrush
 import androidx.compose.animation.core.animateDpAsState
@@ -294,16 +296,12 @@ private fun MonthCell(
     Column(
         modifier = modifier
             .padding(start = 2.dp, end = 2.dp, top = 3.dp, bottom = 2.dp)
-            .clip(MaterialTheme.shapes.medium)
-            // С деньгами фон — по сумме дня (шаг 5.10г), выбранный день — рамкой; без денег — плашка, как раньше.
-            .background(
-                when {
-                    moneyOn -> colors.dayFill(money)
-                    isSelected -> colors.surfaceAlt
-                    else -> Color.Transparent
-                },
+            // С деньгами фон — по сумме дня (шаг 5.10г); выбранный день — вдавленный (шаг 5.15, было — чёрная рамка),
+            // дно углубления — цветом его суммы.
+            .then(
+                if (isSelected) Modifier.insetLevel(MaterialTheme.shapes.medium, colors, fill = colors.dayFill(money).takeIf { moneyOn && it != Color.Transparent } ?: colors.inset)
+                else Modifier.clip(MaterialTheme.shapes.medium).background(if (moneyOn) colors.dayFill(money) else Color.Transparent),
             )
-            .then(if (moneyOn && isSelected) Modifier.border(2.dp, colors.text, MaterialTheme.shapes.medium) else Modifier)
             .clickable(role = Role.Tab, onClick = onClick)
             // Метка — левее: clearAndSetSemantics стирает и то, что стоит правее него в цепочке.
             .testTag(monthDayTag(date))
@@ -402,9 +400,7 @@ internal fun MiniCalendar(selected: LocalDate, today: LocalDate, onPick: (LocalD
     val scope = rememberCoroutineScope()
     Column(Modifier.width(MINI_CELL * 7 + Dimens.space4).padding(horizontal = Dimens.space2)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { scope.launch { pager.animateScrollToPage((pager.currentPage - 1).coerceAtLeast(0)) } }) {
-                Icon(PIcons.ChevronRight, contentDescription = CalendarFormat.PREVIOUS_MONTH, tint = colors.text, modifier = Modifier.rotate(180f))
-            }
+            RaisedIconButton(PIcons.ChevronRight, CalendarFormat.PREVIOUS_MONTH, { scope.launch { pager.animateScrollToPage((pager.currentPage - 1).coerceAtLeast(0)) } }, iconRotation = 180f)
             Text(
                 text = DateFormat.monthYear(MonthRules.firstOf(pager.currentPage)),
                 modifier = Modifier.weight(1f).semantics { heading() },
@@ -412,9 +408,7 @@ internal fun MiniCalendar(selected: LocalDate, today: LocalDate, onPick: (LocalD
                 color = colors.text,
                 textAlign = TextAlign.Center,
             )
-            IconButton(onClick = { scope.launch { pager.animateScrollToPage((pager.currentPage + 1).coerceAtMost(MonthRules.PAGE_COUNT - 1)) } }) {
-                Icon(PIcons.ChevronRight, contentDescription = CalendarFormat.NEXT_MONTH, tint = colors.text)
-            }
+            RaisedIconButton(PIcons.ChevronRight, CalendarFormat.NEXT_MONTH, { scope.launch { pager.animateScrollToPage((pager.currentPage + 1).coerceAtMost(MonthRules.PAGE_COUNT - 1)) } })
         }
         WeekdayRow()
         HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(MINI_CELL * MINI_ROWS), verticalAlignment = Alignment.Top) { page ->
@@ -456,7 +450,7 @@ private fun MiniDay(date: LocalDate, inMonth: Boolean, isSelected: Boolean, isTo
                 .then(
                     when {
                         isToday -> Modifier.background(AuroraBrush)
-                        isSelected -> Modifier.background(colors.surfaceAlt)
+                        isSelected -> Modifier.insetLevel(CircleShape, colors)
                         else -> Modifier
                     },
                 ),

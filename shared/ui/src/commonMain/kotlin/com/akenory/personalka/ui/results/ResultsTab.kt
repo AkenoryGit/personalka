@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.results
 
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.domain.model.ResultKind
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.components.PlaceBadge
@@ -160,7 +161,7 @@ private fun ChartCard(events: List<SwimEvent>, event: SwimEvent, chart: ResultCh
             Row(
                 Modifier
                     .heightIn(min = Dimens.touch)
-                    .background(colors.surfaceAlt, MaterialTheme.shapes.small)
+                    .insetLevel(MaterialTheme.shapes.small, colors)
                     .clickable(enabled = events.size > 1) { menu = true }
                     .semantics { contentDescription = ResultFormat.CHART_EVENT + ": " + ResultFormat.event(event) }
                     .testTag(CHART_EVENT_TAG)

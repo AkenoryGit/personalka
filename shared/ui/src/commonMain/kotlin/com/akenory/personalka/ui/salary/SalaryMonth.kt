@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.salary
 
+import com.akenory.personalka.ui.theme.AuroraSolid
+import com.akenory.personalka.ui.components.auroraTone
 import androidx.compose.foundation.layout.RowScope
 import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.raised
@@ -408,13 +410,13 @@ private fun SalaryTabs(tabs: List<SalaryTab>, selected: SalaryTab, onSelect: (Sa
     SegmentTabs(tabs, selected, { it.title }, onSelect, Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space2), tag = { salaryTabTag(it) })
 }
 
-/** Карточка на ровном уровне (`surface`), скругление 20, отступы 16 (шаг 5.14в). */
+/** Карточка на уровне «сверху» (шаг 5.15, как карточки-списки), скругление 20, отступы 16. */
 @Composable
 internal fun SalaryCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.extraLarge)
+            .raised(MaterialTheme.shapes.extraLarge, PersonalkaTheme.colors, elevation = 4)
             .background(PersonalkaTheme.colors.surface)
             .padding(Dimens.space4),
         verticalArrangement = Arrangement.spacedBy(Dimens.space2),
@@ -581,12 +583,12 @@ private fun ChartCard(data: SalaryMonthData, day: LocalDate?, onDay: (LocalDate)
                 drawPath(line(chart.forecast, chart.factDay), colors.text, style = Stroke(width = 2.dp.toPx(), pathEffect = dash))
             }
             if (chart.earned.size > 1) {
-                drawPath(line(chart.earned, 0), colors.primary, style = Stroke(width = 2.5.dp.toPx()))
+                drawPath(line(chart.earned, 0), AuroraSolid, style = Stroke(width = 2.5.dp.toPx()))
             }
             if (view.period == MonthPeriod.CURRENT) {
                 val x = px(chart.factDay)
                 drawLine(colors.outline, Offset(x, top), Offset(x, bottom), strokeWidth = thin, pathEffect = dash)
-                drawCircle(colors.primary, 4.dp.toPx(), Offset(x, py(chart.earned.last())))
+                drawCircle(AuroraSolid, 4.dp.toPx(), Offset(x, py(chart.earned.last())))
             }
             selected?.let { d ->
                 val x = px(d.day)
@@ -595,7 +597,7 @@ private fun ChartCard(data: SalaryMonthData, day: LocalDate?, onDay: (LocalDate)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
-            if (view.period != MonthPeriod.FUTURE) LineLegend(colors.primary, SalaryFormat.CHART_EARNED)
+            if (view.period != MonthPeriod.FUTURE) LineLegend(AuroraSolid, SalaryFormat.CHART_EARNED)
             if (chart.forecast.size > 1) LineLegend(colors.text, SalaryFormat.CHART_FORECAST, dashed = true)
             if (chart.plan != null) LineLegend(colors.outline, SalaryFormat.CHART_PACE)
         }
@@ -728,8 +730,9 @@ internal fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp, onTone:
     val colors = PersonalkaTheme.colors
     // На зелёной карточке (шаг 5.11г) — дорожка и прогноз тоном её текста, проведено — зелёным «проведено».
     val track = if (onTone) colors.onDoneContainer.copy(alpha = 0.14f) else colors.surfaceAlt
-    val ahead = if (onTone) colors.onDoneContainer.copy(alpha = 0.32f) else colors.outline
-    val doneColor = if (onTone) colors.done else colors.primary
+    // Шаг 5.15: проведено — «Сиянием», прогноз — им же бледно.
+    val ahead = if (onTone) colors.onDoneContainer.copy(alpha = 0.32f) else AuroraSolid.copy(alpha = 0.32f)
+    val doneColor = if (onTone) colors.done else AuroraSolid
     // Шаг 5.14в: дорожка — вдавленная.
     Box(Modifier.fillMaxWidth().height(height).then(if (onTone) Modifier.clip(RoundedCornerShape(height / 2)).background(track) else Modifier.insetLevel(RoundedCornerShape(height / 2), colors))) {
         if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(ahead))
@@ -759,8 +762,8 @@ private fun TierCard(t: TierProgress, period: MonthPeriod, data: SalaryMonthData
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
-            Legend(colors.primary, SalaryFormat.tierDone(t.count))
-            if (period != MonthPeriod.PAST && t.forecastCount > t.count) Legend(colors.outline, SalaryFormat.tierPlanned(t.forecastCount - t.count))
+            Legend(AuroraSolid, SalaryFormat.tierDone(t.count))
+            if (period != MonthPeriod.PAST && t.forecastCount > t.count) Legend(AuroraSolid.copy(alpha = 0.32f), SalaryFormat.tierPlanned(t.forecastCount - t.count))
         }
         if (period != MonthPeriod.PAST) {
             val next = SalaryFormat.toNext(t)
@@ -806,7 +809,7 @@ private fun BreakdownCard(data: SalaryMonthData, onAdjust: (String) -> Unit) {
                 onClick = { onAdjust(a.id) },
             )
         }
-        HorizontalDivider(thickness = 2.dp, color = colors.text)
+        HorizontalDivider(thickness = 1.dp, color = colors.divider)
         MoneyRow(SalaryFormat.EARNED, MoneyFormat.rub(view.pay.earned), Modifier.testTag(SALARY_TOTAL_TAG), bold = true)
     }
 }
@@ -833,7 +836,8 @@ private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () ->
     val payout = view.payout
     val colors = PersonalkaTheme.colors
     // Шаг 5.12б: главная цифра вкладки — «На руки» в зелёной карточке; расчёт — нейтральной карточкой ниже.
-    val hand = colors.doneTone()
+    // Шаг 5.15: «На руки» — главная сумма вкладки, «Сиянием», как «Заработано».
+    val hand = auroraTone()
     ToneCard(hand) {
         Text(SalaryFormat.ON_HAND, style = MaterialTheme.typography.labelMedium, color = hand.muted)
         Text(
@@ -888,7 +892,7 @@ private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () ->
                 note = SettlementFormat.payoutNote(view.colleagues.any { it.colleagueId == id && it.isSettled }),
             )
         }
-        HorizontalDivider(thickness = 2.dp, color = colors.text)
+        HorizontalDivider(thickness = 1.dp, color = colors.divider)
         MoneyRow(SalaryFormat.ON_HAND, MoneyFormat.rub(view.totals.onHand), bold = true)
     }
     data.direct?.let { DirectCard(it, onHand = view.totals.onHand) }
@@ -921,7 +925,7 @@ private fun AdvanceChip(received: Boolean) {
     // Шаг 5.12б: пришёл — зелёная метка, ожидается — нейтральная.
     StatusLabel(
         if (received) SalaryFormat.ADVANCE_RECEIVED else SalaryFormat.ADVANCE_EXPECTED,
-        if (received) colors.doneTone() else colors.neutralTone().copy(fill = colors.surfaceAlt),
+        if (received) colors.doneTone() else colors.neutralTone().copy(fill = colors.inset),
         Modifier.padding(top = Dimens.space1),
     )
 }

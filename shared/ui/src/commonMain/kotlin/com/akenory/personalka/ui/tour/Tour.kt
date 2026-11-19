@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.tour
 
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -256,7 +257,7 @@ private fun TourCardView(card: TourCard, modifier: Modifier) {
         }
         card.gesture?.let {
             Row(
-                Modifier.fillMaxWidth().background(colors.surfaceAlt, MaterialTheme.shapes.medium).padding(horizontal = Dimens.space3, vertical = Dimens.space2),
+                Modifier.fillMaxWidth().insetLevel(MaterialTheme.shapes.medium, colors).padding(horizontal = Dimens.space3, vertical = Dimens.space2),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
             ) {

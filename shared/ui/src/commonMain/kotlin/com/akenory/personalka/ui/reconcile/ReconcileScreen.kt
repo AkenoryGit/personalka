@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.reconcile
 
+import com.akenory.personalka.ui.components.RaisedIconButton
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
@@ -178,12 +179,8 @@ private fun MonthRow(month: YearMonth, onPrev: () -> Unit, onNext: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             color = colors.text,
         )
-        IconButton(onClick = onPrev, modifier = Modifier.testTag(RECONCILE_PREV_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = "Прошлый месяц", tint = colors.text, modifier = Modifier.rotate(180f))
-        }
-        IconButton(onClick = onNext, modifier = Modifier.testTag(RECONCILE_NEXT_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = "Следующий месяц", tint = colors.text)
-        }
+        RaisedIconButton(PIcons.ChevronRight, "Прошлый месяц", onPrev, Modifier.testTag(RECONCILE_PREV_TAG), iconRotation = 180f)
+        RaisedIconButton(PIcons.ChevronRight, "Следующий месяц", onNext, Modifier.testTag(RECONCILE_NEXT_TAG))
     }
 }
 

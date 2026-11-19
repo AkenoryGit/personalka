@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.components.PlaceBadge
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.components.PlaceDot
@@ -560,13 +561,13 @@ private fun CardHeader(row: ClientRow, today: LocalDate, noBooking: Boolean, wai
     }
 }
 
-/** Метка с рамкой: «Ребёнок», «В архиве», «Нет записи» — со значком. */
+/** Метка во вдавленной плашке (шаг 5.15, было — рамка): «Ребёнок», «В архиве», «Нет записи» — со значком. */
 @Composable
 private fun OutlineLabel(text: String, icon: ImageVector? = null) {
     val colors = PersonalkaTheme.colors
     Row(
         Modifier
-            .border(1.dp, colors.outline, MaterialTheme.shapes.small)
+            .insetLevel(MaterialTheme.shapes.small, colors)
             .padding(horizontal = Dimens.space2, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

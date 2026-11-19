@@ -275,7 +275,7 @@ fun ChoiceChip(
                 .then(if (fill) Modifier.fillMaxWidth() else Modifier)
                 .height(Dimens.chip)
                 .clip(shape)
-                .then(if (selected) Modifier.background(AuroraBrush) else Modifier.background(colors.surfaceAlt))
+                .then(if (selected) Modifier.background(AuroraBrush) else Modifier.insetLevel(shape, colors))
                 .then(select)
                 .padding(horizontal = if (fill) 0.dp else Dimens.space3),
             verticalAlignment = Alignment.CenterVertically,

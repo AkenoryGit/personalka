@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.reports
 
+import com.akenory.personalka.ui.components.RaisedIconButton
+import com.akenory.personalka.ui.components.ChooserRow
 import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.domain.backup.Xlsx
 import com.akenory.personalka.domain.format.GroupReportFormat
@@ -585,24 +587,12 @@ private fun StepRow(title: String, onPrev: () -> Unit, onNext: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             color = colors.text,
         )
-        IconButton(onClick = onPrev, modifier = Modifier.testTag(REPORTS_PREV_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = "Назад", tint = colors.text, modifier = Modifier.rotate(180f))
-        }
-        IconButton(onClick = onNext, modifier = Modifier.testTag(REPORTS_NEXT_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = "Вперёд", tint = colors.text)
-        }
+        RaisedIconButton(PIcons.ChevronRight, "Назад", onPrev, Modifier.testTag(REPORTS_PREV_TAG), iconRotation = 180f)
+        RaisedIconButton(PIcons.ChevronRight, "Вперёд", onNext, Modifier.testTag(REPORTS_NEXT_TAG))
     }
 }
 
-/** Дата периода: «С» слева, дата справа; нажатие — календарь. */
+/** Дата периода: «С» слева, дата справа; нажатие — календарь. Шаг 5.15 — выпуклой строкой выбора. */
 @Composable
-private fun DateRow(title: String, date: LocalDate, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val colors = PersonalkaTheme.colors
-    Row(
-        modifier.fillMaxWidth().heightIn(min = Dimens.touch).clickable(role = Role.Button, onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)
-        Text(DateFormat.full(date), style = MaterialTheme.typography.bodyLarge, color = colors.text)
-    }
-}
+private fun DateRow(title: String, date: LocalDate, modifier: Modifier = Modifier, onClick: () -> Unit) =
+    ChooserRow(title, onClick, modifier.padding(vertical = 4.dp), value = DateFormat.full(date))

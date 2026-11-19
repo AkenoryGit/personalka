@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.reports
 
+import com.akenory.personalka.ui.components.ChooserRow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,13 +71,7 @@ internal fun GroupReportContent(
     val total = view.groups.size
     if (total > 0) {
         val count = chosen?.count { id -> view.groups.any { it.first == id } } ?: total
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = Dimens.touch).clickable(role = Role.Button, onClick = onPick).testTag(REPORTS_GROUPS_PICK_TAG),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(GroupReportFormat.picked(count, total), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.text)
-            Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
-        }
+        ChooserRow(GroupReportFormat.picked(count, total), onPick, Modifier.testTag(REPORTS_GROUPS_PICK_TAG))
     }
     if (view.report.isEmpty) {
         Text(GroupReportFormat.EMPTY, Modifier.testTag(REPORTS_EMPTY_TAG), style = MaterialTheme.typography.bodyLarge, color = colors.textMuted)

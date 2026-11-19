@@ -1,5 +1,11 @@
 package com.akenory.personalka.ui.salary
 
+import com.akenory.personalka.ui.components.RaisedIconButton
+import com.akenory.personalka.ui.theme.AuroraSolid
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.AuroraColors
+import com.akenory.personalka.ui.components.auroraTone
 import com.akenory.personalka.ui.components.neutralTone
 import com.akenory.personalka.ui.components.doneTone
 import com.akenory.personalka.ui.components.StatusLabel
@@ -75,9 +81,8 @@ internal fun YearTab(year: SalaryYear, onMonth: (YearMonth) -> Unit) {
         SalaryCard { Muted(SalaryFormat.YEAR_EMPTY) }
         return
     }
-    // Шаг 5.12б: итог года — цветной карточкой (зелёной, если план выполнен хотя бы в половине месяцев), под ней плитки.
-    val good = year.planMonths > 0 && year.planMetMonths * 2 >= year.planMonths
-    val tone = if (good) colors.doneTone() else colors.neutralTone()
+    // Шаг 5.15: итог года — «Сиянием», как «Заработано» месяца; «план выполнен» — в строке под суммой.
+    val tone = auroraTone()
     ToneCard(tone) {
         Text(SalaryFormat.yearTitle(year.year), style = MaterialTheme.typography.bodySmall, color = tone.muted)
         Text(
@@ -138,9 +143,10 @@ private fun YearChart(year: SalaryYear) {
             if (row != null) {
                 val forecast = row.forecast
                 if (forecast != null && forecast > row.earned) {
-                    drawRect(colors.outline, Offset(x, py(forecast)), Size(bar, py(row.earned) - py(forecast)))
+                    drawRoundRect(AuroraColors[2].copy(alpha = 0.35f), Offset(x, py(forecast)), Size(bar, py(row.earned) - py(forecast)), CornerRadius(4.dp.toPx()))
                 }
-                if (row.earned > 0) drawRect(colors.primary, Offset(x, py(row.earned)), Size(bar, bottom - py(row.earned)))
+                // Шаг 5.15: столбцы — «Сиянием» снизу вверх, прогноз — им же бледно.
+                if (row.earned > 0) drawRoundRect(Brush.verticalGradient(AuroraColors.reversed(), startY = py(row.earned), endY = bottom), Offset(x, py(row.earned)), Size(bar, bottom - py(row.earned)), CornerRadius(4.dp.toPx()))
                 row.plan?.let { plan ->
                     val y = py(plan)
                     drawLine(colors.text, Offset(x - slot * 0.06f, y), Offset(x + bar + slot * 0.06f, y), strokeWidth = 1.5.dp.toPx())
@@ -152,8 +158,8 @@ private fun YearChart(year: SalaryYear) {
         }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
-        BoxLegend(colors.primary, SalaryFormat.CHART_EARNED)
-        if (year.rows.any { it.forecast != null }) BoxLegend(colors.outline, SalaryFormat.CHART_FORECAST)
+        BoxLegend(AuroraSolid, SalaryFormat.CHART_EARNED)
+        if (year.rows.any { it.forecast != null }) BoxLegend(AuroraColors[2].copy(alpha = 0.35f), SalaryFormat.CHART_FORECAST)
         if (year.rows.any { it.plan != null }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Canvas(Modifier.size(width = 14.dp, height = 10.dp)) {
@@ -227,12 +233,8 @@ internal fun YearSide(
                 style = MaterialTheme.typography.headlineSmall,
                 color = colors.text,
             )
-            IconButton(onClick = onPrev, modifier = Modifier.testTag(SALARY_SIDE_PREV_TAG)) {
-                Icon(PIcons.ChevronRight, contentDescription = "Прошлый год", tint = colors.text, modifier = Modifier.rotate(180f))
-            }
-            IconButton(onClick = onNext, modifier = Modifier.testTag(SALARY_SIDE_NEXT_TAG)) {
-                Icon(PIcons.ChevronRight, contentDescription = "Следующий год", tint = colors.text)
-            }
+            RaisedIconButton(PIcons.ChevronRight, "Прошлый год", onPrev, Modifier.testTag(SALARY_SIDE_PREV_TAG), iconRotation = 180f)
+            RaisedIconButton(PIcons.ChevronRight, "Следующий год", onNext, Modifier.testTag(SALARY_SIDE_NEXT_TAG))
         }
         if (year == null || year.year != yearNumber) return@Column
         Column(

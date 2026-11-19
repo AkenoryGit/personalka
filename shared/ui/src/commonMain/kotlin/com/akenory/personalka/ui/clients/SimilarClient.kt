@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,7 +57,7 @@ fun SimilarClientPanel(
     val client = similar ?: return
     val colors = PersonalkaTheme.colors
     Panel(title = ClientFormat.SIMILAR_TITLE, onDismiss = onDismiss, modifier = Modifier.testTag(SIMILAR_PANEL_TAG)) {
-        Column(Modifier.fillMaxWidth().background(colors.surfaceAlt, MaterialTheme.shapes.medium).padding(Dimens.space3)) {
+        Column(Modifier.fillMaxWidth().insetLevel(MaterialTheme.shapes.medium, colors).padding(Dimens.space3)) {
             val name = listOfNotNull(client.lastName, client.firstName, client.middleName?.takeIf { it.isNotBlank() }).joinToString(" ")
             Text(name, style = MaterialTheme.typography.labelLarge, color = colors.text)
             val detail = ClientFormat.similarDetail(client.birthDate, client.contactPhone, client.status == ClientStatus.ARCHIVED, today)

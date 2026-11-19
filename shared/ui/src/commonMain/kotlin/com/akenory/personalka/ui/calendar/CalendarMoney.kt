@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.ui.components.RaisedIconButton
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -161,13 +163,9 @@ internal fun MonthsPanel(
     val top = months.values.maxOfOrNull { maxOf(it.total, it.plan ?: 0) }?.coerceAtLeast(1) ?: 1
     Panel(CalendarMoneyFormat.MONTHS_TITLE, onDismiss, Modifier.testTag(CALENDAR_MONTHS_PANEL_TAG)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onYear(year - 1) }) {
-                Icon(PIcons.ChevronRight, contentDescription = CalendarMoneyFormat.PREVIOUS_YEAR, tint = colors.text, modifier = Modifier.rotate(180f))
-            }
+            RaisedIconButton(PIcons.ChevronRight, CalendarMoneyFormat.PREVIOUS_YEAR, { onYear(year - 1) }, iconRotation = 180f)
             Text(year.toString(), style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text)
-            IconButton(onClick = { onYear(year + 1) }) {
-                Icon(PIcons.ChevronRight, contentDescription = CalendarMoneyFormat.NEXT_YEAR, tint = colors.text)
-            }
+            RaisedIconButton(PIcons.ChevronRight, CalendarMoneyFormat.NEXT_YEAR, { onYear(year + 1) })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
             Legend(colors.text, CalendarMoneyFormat.EARNED)
@@ -241,7 +239,7 @@ private fun MonthRow(month: YearMonth, money: CalendarMoney?, top: Long, isCurre
         )
         // Полоса: заработано графитом, «по расписанию» сверху серым, отметка плана зелёным.
         Box(Modifier.weight(1f).height(16.dp), contentAlignment = Alignment.CenterStart) {
-            Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(3.dp)).background(colors.surfaceAlt))
+            Box(Modifier.fillMaxWidth().height(10.dp).insetLevel(RoundedCornerShape(3.dp), colors))
             if (money != null && total > 0) {
                 val earned = (money.earned.coerceAtLeast(0).toFloat() / top).coerceIn(0f, 1f)
                 val all = (total.toFloat() / top).coerceIn(0f, 1f)

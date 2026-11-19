@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -282,7 +283,7 @@ private fun PlanWas(plan: String, onEdit: () -> Unit) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+                .insetLevel(MaterialTheme.shapes.medium, colors)
                 .padding(start = Dimens.space4, top = Dimens.space1, bottom = Dimens.space1),
             verticalAlignment = Alignment.CenterVertically,
         ) {

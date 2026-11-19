@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.components
 
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,7 +47,7 @@ fun EmptyState(
         verticalArrangement = Arrangement.spacedBy(Dimens.space2),
     ) {
         Box(
-            modifier = Modifier.size(64.dp).background(colors.surfaceAlt, CircleShape),
+            modifier = Modifier.size(64.dp).insetLevel(CircleShape, colors),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp), tint = colors.textMuted)

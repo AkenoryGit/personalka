@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.AuroraBrush
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -417,7 +421,7 @@ private fun FollowupItem(
             Spacer(Modifier.size(6.dp))
             Row(
                 Modifier
-                    .border(1.dp, colors.outline, MaterialTheme.shapes.small)
+                    .insetLevel(MaterialTheme.shapes.small, colors)
                     .padding(horizontal = Dimens.space2, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -563,12 +567,12 @@ private fun WaitItem(
         if (from != null && (row.deferred || due)) {
             Spacer(Modifier.size(6.dp))
             Row(
-                (if (due) Modifier.background(colors.primary, MaterialTheme.shapes.small) else Modifier.border(1.dp, colors.outline, MaterialTheme.shapes.small))
+                (if (due) Modifier.raised(MaterialTheme.shapes.small, colors, elevation = 3).background(AuroraBrush) else Modifier.insetLevel(MaterialTheme.shapes.small, colors))
                     .padding(horizontal = Dimens.space2, vertical = 4.dp)
                     .testTag(waitRemindTag(title)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val tint = if (due) colors.onPrimary else colors.text
+                val tint = if (due) OnAurora else colors.text
                 Icon(PIcons.Schedule, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(if (due) WaitFormat.remindDue(from) else WaitFormat.remindFrom(from), style = MaterialTheme.typography.labelMedium, color = tint)
@@ -581,14 +585,15 @@ private fun WaitItem(
                     // Освободилось время (макет ClNoBooking): пометка графитом — главное в строке.
                     Row(
                         Modifier
-                            .background(colors.primary, MaterialTheme.shapes.small)
+                            .raised(MaterialTheme.shapes.small, colors, elevation = 3)
+                            .background(AuroraBrush)
                             .padding(horizontal = Dimens.space2, vertical = 4.dp)
                             .testTag(waitFreedTag(title)),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(PIcons.EventAvailable, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(16.dp))
+                        Icon(PIcons.EventAvailable, contentDescription = null, tint = OnAurora, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(WaitFormat.freed(match), style = MaterialTheme.typography.labelMedium, color = colors.onPrimary)
+                        Text(WaitFormat.freed(match), style = MaterialTheme.typography.labelMedium, color = OnAurora)
                     }
                 }
                 if (contacted != null) Text(contacted, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)

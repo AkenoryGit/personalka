@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.home
 
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.AuroraColors
 import com.akenory.personalka.ui.theme.raised
 import androidx.compose.runtime.LaunchedEffect
@@ -845,7 +846,7 @@ private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: ()
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.space3),
     ) {
-        Box(Modifier.size(40.dp).background(colors.surfaceAlt, CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(40.dp).insetLevel(CircleShape, colors), contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
             if (dot) {
                 Box(

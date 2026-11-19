@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.setup
 
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.graphics.Brush
 import com.akenory.personalka.ui.theme.raised
@@ -197,7 +198,7 @@ internal fun SampleCard(content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+            .insetLevel(MaterialTheme.shapes.medium, colors)
             .padding(Dimens.space2),
         verticalArrangement = Arrangement.spacedBy(Dimens.space1),
     ) {

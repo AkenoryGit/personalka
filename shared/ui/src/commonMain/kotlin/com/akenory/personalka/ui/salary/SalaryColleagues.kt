@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.salary
 
+import com.akenory.personalka.ui.theme.insetLevel
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
@@ -93,9 +94,10 @@ private fun ColleagueCard(
                 SettlementFormat.scheme(data.colleagueSchemes[row.colleagueId], view.scheme?.kind)?.let { Muted(it) }
             }
         }
-        val tone = if (row.isSettled) colors.doneTone() else colors.neutralTone().copy(fill = colors.surfaceAlt)
+        val tone = if (row.isSettled) colors.doneTone() else colors.neutralTone().copy(fill = colors.inset)
+        // Шаг 5.15: итог — во вдавленной плашке (рассчитались — зелёной).
         Column(
-            Modifier.padding(top = Dimens.space2).fillMaxWidth().clip(MaterialTheme.shapes.small).background(tone.fill)
+            Modifier.padding(top = Dimens.space2).fillMaxWidth().insetLevel(MaterialTheme.shapes.medium, colors, fill = tone.fill)
                 .padding(horizontal = Dimens.space3, vertical = Dimens.space2),
         ) {
             Text(SettlementFormat.totalTitle(view.month), style = MaterialTheme.typography.bodySmall, color = tone.muted)
@@ -106,7 +108,7 @@ private fun ColleagueCard(
             CaseRow(data, c, name, c.key in expanded) { onExpand(c.key) }
         }
         if (row.cases.isNotEmpty()) {
-            HorizontalDivider(thickness = 2.dp, color = colors.text)
+            HorizontalDivider(thickness = 1.dp, color = colors.divider)
             MoneyRow(SalaryFormat.settlement(name, row.total), MoneyFormat.rub(kotlin.math.abs(row.total)), bold = true)
         }
         if (view.period != MonthPeriod.PAST && row.forecast != row.total) Muted(SettlementFormat.forecast(view.month, name, row.forecast))

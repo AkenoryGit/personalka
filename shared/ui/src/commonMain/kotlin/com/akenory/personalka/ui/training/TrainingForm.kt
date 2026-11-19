@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1012,16 +1013,15 @@ internal fun WeekdayRow(weekdays: Set<DayOfWeek>, error: String?, onChange: (Set
     error?.let { ErrorText(it) }
 }
 
-/** Поле, которое открывает выбор: значок и значение, рамка как у поля ввода. */
+/** Поле, которое открывает выбор: значок и значение; вдавленное, как поле ввода (шаг 5.15), рамка — только при ошибке. */
 @Composable
 internal fun PickBox(text: String, icon: ImageVector?, onClick: () -> Unit, modifier: Modifier = Modifier, error: String? = null) {
     val colors = PersonalkaTheme.colors
     Row(
         modifier
             .heightIn(min = Dimens.field)
-            .clip(MaterialTheme.shapes.medium)
-            .background(colors.surface)
-            .border(if (error != null) 2.dp else 1.dp, if (error != null) colors.error else colors.outline, MaterialTheme.shapes.medium)
+            .insetLevel(MaterialTheme.shapes.medium, colors)
+            .then(if (error != null) Modifier.border(2.dp, colors.error, MaterialTheme.shapes.medium) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics {
                 contentDescription = text

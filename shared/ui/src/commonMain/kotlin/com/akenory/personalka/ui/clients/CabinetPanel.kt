@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -177,7 +178,7 @@ fun CabinetPanel(
                 val text = CabinetLinkRules.shareText(url, link.pin, adult)
                 SectionLabel(CabinetLinkFormat.LINK)
                 Row(
-                    Modifier.fillMaxWidth().background(colors.surfaceAlt, MaterialTheme.shapes.medium).padding(Dimens.space3),
+                    Modifier.fillMaxWidth().insetLevel(MaterialTheme.shapes.medium, colors).padding(Dimens.space3),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(PIcons.Link, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))

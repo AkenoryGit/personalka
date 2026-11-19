@@ -1,5 +1,8 @@
 package com.akenory.personalka.ui.settings
 
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.PlaceGradient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -479,7 +482,7 @@ private fun ReorderablePlaces(places: List<LocationEntity>, onOpen: (LocationEnt
 @Composable
 private fun PlaceRow(place: LocationEntity, modifier: Modifier = Modifier, handle: Modifier? = null) {
     val colors = PersonalkaTheme.colors
-    val tone = PlaceColor.of(place.color).tone(colors.isDark)
+    val gradient = PlaceGradient.of(place.color, place.color2)
     Row(
         modifier
             .fillMaxWidth()
@@ -491,12 +494,13 @@ private fun PlaceRow(place: LocationEntity, modifier: Modifier = Modifier, handl
         Box(
             Modifier
                 .widthIn(min = 36.dp)
-                .background(tone.block(2), MaterialTheme.shapes.small)
-                .border(1.5.dp, tone.stripe, MaterialTheme.shapes.small)
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                // Шаг 5.15: короткое имя — на переливе цветов места, выпуклой плашкой (было — рамка).
+                .raised(MaterialTheme.shapes.small, colors, elevation = 3)
+                .background(Brush.linearGradient(gradient.ends(colors.isDark, 2).toList()))
+                .padding(horizontal = 8.dp, vertical = 5.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(place.shortName, style = MaterialTheme.typography.labelMedium, color = tone.text)
+            Text(place.shortName, style = MaterialTheme.typography.labelMedium, color = gradient.ink(colors.isDark, 2))
         }
         Spacer(Modifier.width(Dimens.space4))
         Column(Modifier.weight(1f)) {
