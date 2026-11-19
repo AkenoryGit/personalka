@@ -81,7 +81,9 @@ class ShellUiTest {
         val home = onNodeWithTag(navTag(Section.HOME)).getBoundsInRoot()
         val more = onNodeWithTag(navTag(Section.MORE)).getBoundsInRoot()
         assertEquals(home.top, more.top, "Разделы в один ряд")
-        assertTrue(home.top > height - 80.dp, "Панель внизу")
+        // Шаг 5.13а: панель плавает — 70 dp высотой в 10 dp над низом экрана.
+        assertTrue(home.top >= height - 80.dp, "Панель внизу")
+        assertTrue(home.bottom <= height - 10.dp, "Под панелью — отступ")
 
         width = unfolded
         waitForIdle()

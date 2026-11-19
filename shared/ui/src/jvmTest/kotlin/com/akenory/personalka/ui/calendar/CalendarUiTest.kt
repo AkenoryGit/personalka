@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.ui.theme.PlaceGradient
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
@@ -291,7 +292,8 @@ class CalendarUiTest {
         // В 15:40 «сейчас − 1 час» упирается в конец часов работы: в 576 dp — 14:00–23:00, на Fold — 11:00–23:00.
         near(openTop(), topMinute(), "Верх сетки")
         // Шаг 5.12е: под неделей зазор 8 dp — окно сетки ниже на 8 dp, верх у конца дня на 7,5 минуты позже.
-        near(847.5f, openTop(), "Верх сетки в окне теста")
+        // Шаг 5.13а: место под плавающей панелью — 80 dp вместо 72, окно ещё на 8 dp ниже — ещё 7,5 минуты.
+        near(855f, openTop(), "Верх сетки в окне теста")
     }
 
     @Test
@@ -690,10 +692,13 @@ class CalendarUiTest {
         // Справа от блока, между линиями сетки, — хоть одна точка штриховки на фоне.
         val margin = (357..363).flatMap { x -> (zone.y.toInt() + 4..zone.y.toInt() + 28).map { y -> pixel(x.toFloat(), y.toFloat()) } }
         assertTrue(margin.any { !close(LightColors.surface, it) }, "Штриховки справа от блока нет")
-        // Низ блока без текста — ровный цвет блока: штриховка под ним. ПТ в ДБ — розовый светлого оттенка (шаг 1.13в).
-        val blockColor = PlaceColor.PINK.light.block(1)
+        // Низ блока без текста — перелив блока, штриховка под ним. ПТ в ДБ — светлый оттенок перехода розовый → фиолетовый
+        // (шаги 1.13в, 5.13в): каждая точка — между цветами концов перелива.
+        val (from, to) = PlaceGradient.of("pink", "").ends(dark = false, shade = 1)
+        fun between(c: Color) = listOf(c.red to (from.red to to.red), c.green to (from.green to to.green), c.blue to (from.blue to to.blue))
+            .all { (v, ends) -> v >= minOf(ends.first, ends.second) - 0.03f && v <= maxOf(ends.first, ends.second) + 0.03f }
         val inside = (150..330 step 10).flatMap { x -> listOf(pixel(x.toFloat(), block.y + block.height - 6f), pixel(x.toFloat(), block.y + block.height - 4f)) }
-        assertTrue(inside.all { close(blockColor, it) }, "Штриховка поверх блока: ${inside.firstOrNull { !close(blockColor, it) }}")
+        assertTrue(inside.all { between(it) }, "Штриховка поверх блока: ${inside.firstOrNull { !between(it) }}")
     }
 
     @Test
