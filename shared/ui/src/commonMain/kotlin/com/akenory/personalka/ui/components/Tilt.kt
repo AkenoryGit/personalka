@@ -21,4 +21,4 @@ val LocalTilt = staticCompositionLocalOf<TiltSource?> { null }
 
 /** Из нормированной гравитации телефона (вбок и вдоль, обычный хват — вдоль ≈ 0,7) — наклон для блика. */
 fun tiltOf(side: Float, along: Float): Offset =
-    Offset((side * 1.5f).coerceIn(-1f, 1f), ((along - 0.7f) * 2f).coerceIn(-1f, 1f))
+    Offset((side * 2f).coerceIn(-1f, 1f), ((along - 0.7f) * 2.5f).coerceIn(-1f, 1f))

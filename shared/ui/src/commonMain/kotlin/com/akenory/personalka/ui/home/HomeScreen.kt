@@ -1074,19 +1074,28 @@ private fun AuroraCard(modifier: Modifier = Modifier, content: @Composable Colum
             .drawBehind {
                 val w = size.width
                 val h = size.height
+                // Шаг 5.19 (просьба Дмитрия 19.11.2026: «эффект почти не заметен, но не переборщи»): пятно и полоса
+                // ярче (0,12 → 0,18 и 0,09 → 0,13; выше — белый текст теряет контраст) и ходят шире; напротив пятна — слабое бирюзовое свечение.
                 drawRect(
                     Brush.radialGradient(
-                        listOf(Color.White.copy(alpha = 0.12f), Color.Transparent),
-                        center = Offset(w * (0.5f + x * 0.45f), h * (0.35f + y * 0.4f)),
+                        listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
+                        center = Offset(w * (0.5f + x * 0.6f), h * (0.35f + y * 0.55f)),
                         radius = w * 0.6f,
                     ),
                 )
-                val cx = w * (0.5f + x * 0.6f)
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color(0xFF3FB7B0).copy(alpha = 0.14f), Color.Transparent),
+                        center = Offset(w * (0.5f - x * 0.6f), h * (0.65f - y * 0.55f)),
+                        radius = w * 0.55f,
+                    ),
+                )
+                val cx = w * (0.5f + x * 0.8f)
                 drawRect(
                     Brush.linearGradient(
-                        listOf(Color.Transparent, Color.White.copy(alpha = 0.09f), Color.Transparent),
-                        start = Offset(cx - w * 0.22f, 0f),
-                        end = Offset(cx + w * 0.22f, h),
+                        listOf(Color.Transparent, Color.White.copy(alpha = 0.13f), Color.Transparent),
+                        start = Offset(cx - w * 0.2f, 0f),
+                        end = Offset(cx + w * 0.2f, h),
                     ),
                 )
             }

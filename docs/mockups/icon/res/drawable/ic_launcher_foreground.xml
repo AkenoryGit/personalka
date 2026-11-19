@@ -1,16 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Передний слой адаптивной иконки «Персоналка». Холст 108 dp, видимая часть — центр 72 dp. -->
+<!-- Передний слой (шаг 5.19, вариант Б): объёмная белая «П» с тенью и бликом, коралловая точка-кнопка. Видимая часть — центр 72 dp. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:pathData="M41,71 V39 H67 V71"
-        android:fillColor="#00000000"
-        android:strokeColor="#FF15171A"
-        android:strokeWidth="8" />
-    <path
-        android:pathData="M49,65 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z"
-        android:fillColor="#FFFF5A1F" />
+    <!-- тень: та же «П» и точка темнее и ниже -->
+    <path android:pathData="M41,74.2 V42.2 H67 V74.2" android:fillColor="#00000000" android:strokeColor="#40060B1A" android:strokeWidth="10" android:strokeLineJoin="round" />
+    <path android:pathData="M41,73 V41 H67 V73" android:fillColor="#00000000" android:strokeColor="#59060B1A" android:strokeWidth="8.6" android:strokeLineJoin="round" />
+    <path android:pathData="M48.6,67.2 a5.4,5.4 0 1,0 10.8,0 a5.4,5.4 0 1,0 -10.8,0 Z" android:fillColor="#59060B1A" />
+    <path android:pathData="M41,71 V39 H67 V71" android:fillColor="#00000000" android:strokeWidth="8" android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="0" android:startY="35" android:endX="0" android:endY="75">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#FFDCE3F2" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M48.6,65 a5.4,5.4 0 1,0 10.8,0 a5.4,5.4 0 1,0 -10.8,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="59.6" android:endX="0" android:endY="70.4">
+                <item android:offset="0" android:color="#FFFF8A6E" />
+                <item android:offset="1" android:color="#FFFF5A3C" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>
