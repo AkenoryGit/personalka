@@ -1540,7 +1540,7 @@ private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: Persona
 /**
  * Блок (ТЗ 5.3, стиль «Сияние» — шаг 5.13б): уровень «сверху» — мягкая тень под блоком и светлая черта по верху;
  * фон — перелив цветов места ([PlaceGradient], шаг 5.13в) оттенком типа (ПТ светлая, группа ярче), текст —
- * тот тон, что читается на обоих концах перелива. Отменённая — серая, ровная, с полосой и зачёркнутая.
+ * тот тон, что читается на обоих концах перелива. Отменённая — вдавленная (шаг 5.20), с пунктирной рамкой и зачёркнутая.
  */
 private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, text: BlockText, icons: BadgeIcons, colors: PersonalkaColors) {
     val gap = BLOCK_GAP.toPx()
@@ -1560,8 +1560,19 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
     val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = corner)) }
     clipPath(shape) {
         if (training.cancelled) {
-            drawRect(colors.surfaceAlt, rect.topLeft, rect.size)
-            drawRect(colors.outline, rect.topLeft, Size(Dimens.blockStripe.toPx(), rect.height))
+            // Шаг 5.20 (просьба Дмитрия 19.11.2026: ночью отмены почти не отличить): отменённая — «вдавлена» (уровень −1,
+            // как дно [insetLevel]): тёмное дно, тень сверху внутрь, пунктирная рамка вместо полосы; живые — «сверху».
+            val shade = if (colors.isDark) Color.Black.copy(alpha = 0.6f) else Color(0xFF15171A).copy(alpha = 0.16f)
+            drawRect(colors.inset, rect.topLeft, rect.size)
+            drawRect(Brush.verticalGradient(listOf(shade, Color.Transparent), startY = rect.top, endY = rect.top + 6.dp.toPx()), rect.topLeft, rect.size)
+            val w = 1.dp.toPx()
+            drawRoundRect(
+                color = colors.outline,
+                topLeft = Offset(rect.left + w / 2, rect.top + w / 2),
+                size = Size(rect.width - w, rect.height - w),
+                cornerRadius = CornerRadius(corner.x - w / 2),
+                style = Stroke(width = w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
+            )
         } else {
             drawRect(Brush.linearGradient(listOf(fromFill, toFill), start = rect.topLeft, end = Offset(rect.right, rect.top + rect.width * 0.47f)), rect.topLeft, rect.size)
             drawRect(Color.White.copy(alpha = if (colors.isDark) 0.16f else 0.55f), rect.topLeft, Size(rect.width, 1.dp.toPx()))
