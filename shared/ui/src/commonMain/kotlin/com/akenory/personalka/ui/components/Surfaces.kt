@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.components
 
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -146,7 +147,8 @@ fun RowScope.Tile(
                     else -> Modifier.clickable(role = Role.Button, onClick = onClick)
                 },
             )
-            .then(if (tag != null) Modifier.testTag(tag) else Modifier)
+            // Шаг 5.14в: плитка с меткой — один узел для диктора и тестов: цифра, подпись и третья строка вместе.
+            .then(if (tag != null) Modifier.semantics(mergeDescendants = true) {}.testTag(tag) else Modifier)
             .heightIn(min = Dimens.touch)
             .padding(horizontal = Dimens.space3, vertical = 10.dp),
     ) {
