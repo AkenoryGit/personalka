@@ -141,6 +141,43 @@ fun BottomAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
     }
 }
 
+/** Подпись внутри шага формы ([FormStep], шаг 5.18): «Место», «Длительность, мин» — ближе к своим чипам. */
+@Composable
+fun StepLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        modifier = modifier.padding(top = Dimens.space3, bottom = Dimens.space1),
+        style = MaterialTheme.typography.labelMedium,
+        color = PersonalkaTheme.colors.textMuted,
+    )
+}
+
+/**
+ * Чип места (шаг 5.18): всегда переливом цветов места на уровне «сверху», как блок в календаре; выбранный — с галочкой
+ * и рамкой цвета текста. [ends] — концы перелива, [ink] — текст, читаемый на обоих.
+ */
+@Composable
+fun PlaceChip(text: String, selected: Boolean, ends: Pair<Color, Color>, ink: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = PersonalkaTheme.colors
+    val shape = MaterialTheme.shapes.small
+    Box(modifier.heightIn(min = Dimens.touch), contentAlignment = Alignment.Center) {
+        Row(
+            Modifier
+                .height(Dimens.chip)
+                .then(if (selected) Modifier.border(2.dp, colors.text, shape).padding(3.dp) else Modifier)
+                .raised(shape, colors, elevation = 3)
+                .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(ends.first, ends.second)))
+                .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+                .padding(horizontal = Dimens.space3),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (selected) Icon(PIcons.Check, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = ink)
+        }
+    }
+}
+
 /** Подпись раздела формы: «Места», «Как работает», «Цвет». */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {

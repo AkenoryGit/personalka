@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.PlaceGradient
+import com.akenory.personalka.ui.components.PlaceChip
+import com.akenory.personalka.ui.components.StepLabel
+import com.akenory.personalka.ui.components.FormStep
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -203,55 +207,61 @@ internal fun DutyFields(
     ) {
         val form = data
         if (current == null || form == null) return@FormFrame
-        PlaceChips(form.places, current.locationId, problems[FormField.PLACE]) { id -> update { it.copy(locationId = id) } }
-
-        SectionLabel("Дата")
-        PickBox(
-            text = TrainingFormat.date(current.start.date),
-            icon = PIcons.CalendarMonth,
-            onClick = { panel = Panels.DATE },
-            modifier = Modifier.fillMaxWidth().testTag(FORM_DATE_TAG),
-        )
-
-        SectionLabel("Время")
-        TimeRow(
-            start = current.start.time,
-            end = TrainingFormRules.endTime(current),
-            error = problems[FormField.TIME],
-            onStart = { panel = Panels.TIME },
-            onEnd = { panel = Panels.END },
-        )
-
-        SectionLabel("Повтор")
-        val seriesRepeat = stored?.seriesRepeat
-        if (seriesRepeat != null) {
-            // Повтор серии меняет «Эту и следующие» (4.4), а не это поле — как у тренировки.
-            Text(
-                TrainingFormat.seriesRepeat(seriesRepeat.weekdays, seriesRepeat.until),
-                style = MaterialTheme.typography.bodyLarge.tabular(),
-                color = colors.text,
-            )
-        } else {
-            RepeatChoice(
-                draft = current,
-                weekdaysError = problems[FormField.WEEKDAYS],
-                untilError = problems[FormField.UNTIL],
-                onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
-                onUntil = { panel = Panels.UNTIL },
-            )
+        // Шаг 5.18 (вариант А): дежурство — шагами «Где», «Когда», «Повтор».
+        val placeShort = form.places.firstOrNull { it.id == current.locationId }?.shortName
+        FormStep(1, "Где", placeShort) {
+            PlaceChips(form.places, current.locationId, problems[FormField.PLACE]) { id -> update { it.copy(locationId = id) } }
         }
-
-        // «За кого» — у одного дежурства: подмена коллеги не повторяется каждую неделю.
-        if (seriesRepeat == null && current.repeat == null) {
-            Field(
-                label = ZoneFormat.COVER_FOR_LABEL,
-                value = current.coverFor,
-                onValueChange = { text -> update { it.copy(coverFor = text.take(TrainingFormRules.COVER_FOR_MAX)) } },
-                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space5),
-                tag = FORM_COVER_FOR_TAG,
-                placeholder = ZoneFormat.COVER_FOR_PLACEHOLDER,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+        FormStep(2, "Когда", TrainingFormat.date(current.start.date) + " · " + DateFormat.time(current.start.time)) {
+            PickBox(
+                text = TrainingFormat.date(current.start.date),
+                icon = PIcons.CalendarMonth,
+                onClick = { panel = Panels.DATE },
+                modifier = Modifier.fillMaxWidth().testTag(FORM_DATE_TAG),
             )
+
+            StepLabel("Время")
+            TimeRow(
+                start = current.start.time,
+                end = TrainingFormRules.endTime(current),
+                error = problems[FormField.TIME],
+                onStart = { panel = Panels.TIME },
+                onEnd = { panel = Panels.END },
+            )
+
+
+        }
+        FormStep(3, "Повтор", if (current.repeat == null && stored?.seriesRepeat == null) "один раз" else "каждую неделю") {
+            val seriesRepeat = stored?.seriesRepeat
+            if (seriesRepeat != null) {
+                // Повтор серии меняет «Эту и следующие» (4.4), а не это поле — как у тренировки.
+                Text(
+                    TrainingFormat.seriesRepeat(seriesRepeat.weekdays, seriesRepeat.until),
+                    style = MaterialTheme.typography.bodyLarge.tabular(),
+                    color = colors.text,
+                )
+            } else {
+                RepeatChoice(
+                    draft = current,
+                    weekdaysError = problems[FormField.WEEKDAYS],
+                    untilError = problems[FormField.UNTIL],
+                    onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
+                    onUntil = { panel = Panels.UNTIL },
+                )
+            }
+
+            // «За кого» — у одного дежурства: подмена коллеги не повторяется каждую неделю.
+            if (seriesRepeat == null && current.repeat == null) {
+                Field(
+                    label = ZoneFormat.COVER_FOR_LABEL,
+                    value = current.coverFor,
+                    onValueChange = { text -> update { it.copy(coverFor = text.take(TrainingFormRules.COVER_FOR_MAX)) } },
+                    modifier = Modifier.fillMaxWidth().padding(top = Dimens.space5),
+                    tag = FORM_COVER_FOR_TAG,
+                    placeholder = ZoneFormat.COVER_FOR_PLACEHOLDER,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                )
+            }
         }
     }
 }
@@ -378,77 +388,80 @@ internal fun RestrictionFields(
     ) {
         val form = data
         if (current == null || form == null) return@FormFrame
-        if (restrictionId == null) {
-            // Новый запрет — сразу на несколько мест (шаг 1.13д): по запрету на каждое; все места — один «Все места» (5.3ю).
-            val order = form.places.map { it.id }
-            ManyPlaceChips(
-                places = form.places,
-                selected = current.selected(order),
-                error = problems[RestrictionField.PLACE],
-                onToggle = { id -> update { RestrictionFormRules.togglePlace(it, id, order) } },
-                onAll = { update { RestrictionFormRules.toggleAll(it, order) } },
-            )
-        } else {
-            // Изменение — одно место или «Все места» (шаг 5.3ю).
-            PlaceChips(form.places, current.locationId, problems[RestrictionField.PLACE], allPlaces = true) { id ->
-                update { RestrictionFormRules.pickPlace(it, id) }
+        // Шаг 5.18 (вариант А): запрет — шагами «Где», «Когда», «Причина».
+        FormStep(1, "Где", null) {
+            if (restrictionId == null) {
+                // Новый запрет — сразу на несколько мест (шаг 1.13д): по запрету на каждое; все места — один «Все места» (5.3ю).
+                val order = form.places.map { it.id }
+                ManyPlaceChips(
+                    places = form.places,
+                    selected = current.selected(order),
+                    error = problems[RestrictionField.PLACE],
+                    onToggle = { id -> update { RestrictionFormRules.togglePlace(it, id, order) } },
+                    onAll = { update { RestrictionFormRules.toggleAll(it, order) } },
+                )
+            } else {
+                // Изменение — одно место или «Все места» (шаг 5.3ю).
+                PlaceChips(form.places, current.locationId, problems[RestrictionField.PLACE], allPlaces = true) { id ->
+                    update { RestrictionFormRules.pickPlace(it, id) }
+                }
             }
         }
-
-        SectionLabel("Время")
-        TimeRow(
-            start = current.start,
-            end = current.end,
-            error = problems[RestrictionField.TIME],
-            onStart = { panel = Panels.TIME },
-            onEnd = { panel = Panels.END },
-        )
-
-        Field(
-            label = "Причина",
-            value = current.reason,
-            onValueChange = { text -> update { it.copy(reason = text) } },
-            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space5),
-            tag = FORM_REASON_TAG,
-            placeholder = TrainingFormat.REASON_PLACEHOLDER,
-        )
-
-        SectionLabel("Повтор")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            ChoiceChip(TrainingFormat.NO_REPEAT, selected = !current.weekly, onClick = { update { RestrictionFormRules.weekly(it, on = false) } })
-            ChoiceChip(
-                TrainingFormat.WEEKLY,
-                selected = current.weekly,
-                onClick = { update { RestrictionFormRules.weekly(it, on = true) } },
-                modifier = Modifier.testTag(FORM_WEEKLY_TAG),
+        FormStep(2, "Когда", DateFormat.timeRange(current.start, current.end)) {
+            TimeRow(
+                start = current.start,
+                end = current.end,
+                error = problems[RestrictionField.TIME],
+                onStart = { panel = Panels.TIME },
+                onEnd = { panel = Panels.END },
             )
-        }
-        if (current.weekly) {
-            WeekdayRow(current.weekdays, problems[RestrictionField.WEEKDAYS]) { days -> update { it.copy(weekdays = days) } }
-            SectionLabel("Период")
-            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+            StepLabel("Повтор")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                ChoiceChip(TrainingFormat.NO_REPEAT, selected = !current.weekly, onClick = { update { RestrictionFormRules.weekly(it, on = false) } })
+                ChoiceChip(
+                    TrainingFormat.WEEKLY,
+                    selected = current.weekly,
+                    onClick = { update { RestrictionFormRules.weekly(it, on = true) } },
+                    modifier = Modifier.testTag(FORM_WEEKLY_TAG),
+                )
+            }
+            if (current.weekly) {
+                WeekdayRow(current.weekdays, problems[RestrictionField.WEEKDAYS]) { days -> update { it.copy(weekdays = days) } }
+                StepLabel("Период")
+                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    PickBox(
+                        text = TrainingFormat.periodFrom(current.date),
+                        icon = PIcons.CalendarMonth,
+                        onClick = { panel = Panels.DATE },
+                        modifier = Modifier.weight(1f).testTag(FORM_PERIOD_FROM_TAG),
+                    )
+                    PickBox(
+                        text = current.validTo?.let(TrainingFormat::until) ?: TrainingFormat.FOREVER,
+                        icon = null,
+                        onClick = { panel = Panels.UNTIL },
+                        modifier = Modifier.weight(1f).testTag(FORM_UNTIL_TAG),
+                        error = problems[RestrictionField.PERIOD],
+                    )
+                }
+                problems[RestrictionField.PERIOD]?.let { ErrorText(it) }
+            } else {
+                StepLabel("Дата")
                 PickBox(
-                    text = TrainingFormat.periodFrom(current.date),
+                    text = TrainingFormat.date(current.date),
                     icon = PIcons.CalendarMonth,
                     onClick = { panel = Panels.DATE },
-                    modifier = Modifier.weight(1f).testTag(FORM_PERIOD_FROM_TAG),
-                )
-                PickBox(
-                    text = current.validTo?.let(TrainingFormat::until) ?: TrainingFormat.FOREVER,
-                    icon = null,
-                    onClick = { panel = Panels.UNTIL },
-                    modifier = Modifier.weight(1f).testTag(FORM_UNTIL_TAG),
-                    error = problems[RestrictionField.PERIOD],
+                    modifier = Modifier.fillMaxWidth().testTag(FORM_DATE_TAG),
                 )
             }
-            problems[RestrictionField.PERIOD]?.let { ErrorText(it) }
-        } else {
-            SectionLabel("Дата")
-            PickBox(
-                text = TrainingFormat.date(current.date),
-                icon = PIcons.CalendarMonth,
-                onClick = { panel = Panels.DATE },
-                modifier = Modifier.fillMaxWidth().testTag(FORM_DATE_TAG),
+        }
+        FormStep(3, "Причина", null) {
+            Field(
+                label = "Причина",
+                value = current.reason,
+                onValueChange = { text -> update { it.copy(reason = text) } },
+                modifier = Modifier.fillMaxWidth(),
+                tag = FORM_REASON_TAG,
+                placeholder = TrainingFormat.REASON_PLACEHOLDER,
             )
         }
 
@@ -588,135 +601,138 @@ internal fun PersonalFields(
         },
     ) {
         if (current == null || data == null) return@FormFrame
-        // Дело или напоминание — у новой записи; изменение остаётся тем, чем было.
-        if (restrictionId == null) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                ChoiceChip(
-                    PersonalFormat.TASK,
-                    selected = !reminder,
-                    onClick = { update { RestrictionFormRules.switchKind(it, BlockKind.PERSONAL) } },
-                    modifier = Modifier.testTag(FORM_PERSONAL_TASK_TAG),
-                )
-                ChoiceChip(
-                    PersonalFormat.REMINDER,
-                    selected = reminder,
-                    onClick = { update { RestrictionFormRules.switchKind(it, BlockKind.REMINDER) } },
-                    modifier = Modifier.testTag(FORM_PERSONAL_REMINDER_TAG),
-                )
-            }
-        }
-
-        Field(
-            label = if (reminder) PersonalFormat.REMINDER_NAME else PersonalFormat.TASK_NAME,
-            value = current.reason,
-            onValueChange = { text -> update { it.copy(reason = text) } },
-            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space3),
-            tag = FORM_REASON_TAG,
-            placeholder = if (reminder) PersonalFormat.REMINDER_NAME_PLACEHOLDER else PersonalFormat.TASK_NAME_PLACEHOLDER,
-            error = problems[RestrictionField.TITLE],
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-        )
-
-        SectionLabel(PersonalFormat.WHEN)
-        PickBox(
-            text = TrainingFormat.date(current.date),
-            icon = PIcons.CalendarMonth,
-            onClick = { panel = Panels.DATE },
-            modifier = Modifier.fillMaxWidth().testTag(FORM_DATE_TAG),
-        )
-        if (reminder) {
-            PickBox(
-                text = DateFormat.time(current.start),
-                icon = PIcons.Schedule,
-                onClick = { panel = Panels.TIME },
-                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(FORM_TIME_TAG),
-            )
-        } else {
-            Column(Modifier.padding(top = Dimens.space2)) {
-                TimeRow(
-                    start = current.start,
-                    end = current.end,
-                    error = problems[RestrictionField.TIME],
-                    onStart = { panel = Panels.TIME },
-                    onEnd = { panel = Panels.END },
-                )
-            }
-        }
-
-        SectionLabel(PersonalFormat.REPEAT)
-        if (reminder) {
-            val repeat = RestrictionFormRules.repeatOf(current)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                ReminderRepeat.entries.forEach { r ->
-                    ChoiceChip(PersonalFormat.repeat(r), selected = r == repeat, onClick = { update { RestrictionFormRules.withRepeat(it, r) } })
+        // Шаг 5.18 (вариант А): личное — шагами «Что», «Когда», «Повтор», «Тренировки и уведомление».
+        FormStep(1, "Что", current.reason.trim().ifEmpty { null }) {
+            // Дело или напоминание — у новой записи; изменение остаётся тем, чем было.
+            if (restrictionId == null) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    ChoiceChip(
+                        PersonalFormat.TASK,
+                        selected = !reminder,
+                        onClick = { update { RestrictionFormRules.switchKind(it, BlockKind.PERSONAL) } },
+                        modifier = Modifier.testTag(FORM_PERSONAL_TASK_TAG),
+                    )
+                    ChoiceChip(
+                        PersonalFormat.REMINDER,
+                        selected = reminder,
+                        onClick = { update { RestrictionFormRules.switchKind(it, BlockKind.REMINDER) } },
+                        modifier = Modifier.testTag(FORM_PERSONAL_REMINDER_TAG),
+                    )
                 }
             }
-        } else {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                ChoiceChip(TrainingFormat.NO_REPEAT, selected = !current.weekly, onClick = { update { RestrictionFormRules.weekly(it, on = false) } })
-                ChoiceChip(
-                    TrainingFormat.WEEKLY,
-                    selected = current.weekly,
-                    onClick = { update { RestrictionFormRules.weekly(it, on = true) } },
-                    modifier = Modifier.testTag(FORM_WEEKLY_TAG),
-                )
-            }
-            if (current.weekly) WeekdayRow(current.weekdays, problems[RestrictionField.WEEKDAYS]) { days -> update { it.copy(weekdays = days) } }
-        }
-        if (current.weekly || current.monthly) {
-            PickBox(
-                text = current.validTo?.let(TrainingFormat::until) ?: TrainingFormat.FOREVER,
-                icon = null,
-                onClick = { panel = Panels.UNTIL },
-                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(FORM_UNTIL_TAG),
-                error = problems[RestrictionField.PERIOD],
-            )
-            problems[RestrictionField.PERIOD]?.let { ErrorText(it) }
-        }
 
-        if (reminder) {
-            SectionLabel(PersonalFormat.REMINDER_NOTIFY)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                PersonalRules.REMINDER_NOTIFY.forEach { m ->
-                    ChoiceChip(PersonalFormat.reminderNotify(m), selected = current.notifyMinutes == m, onClick = { update { it.copy(notifyMinutes = m) } })
+            Field(
+                label = if (reminder) PersonalFormat.REMINDER_NAME else PersonalFormat.TASK_NAME,
+                value = current.reason,
+                onValueChange = { text -> update { it.copy(reason = text) } },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space3),
+                tag = FORM_REASON_TAG,
+                placeholder = if (reminder) PersonalFormat.REMINDER_NAME_PLACEHOLDER else PersonalFormat.TASK_NAME_PLACEHOLDER,
+                error = problems[RestrictionField.TITLE],
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            )
+        }
+        FormStep(2, "Когда", TrainingFormat.date(current.date) + " · " + DateFormat.time(current.start)) {
+            PickBox(
+                text = TrainingFormat.date(current.date),
+                icon = PIcons.CalendarMonth,
+                onClick = { panel = Panels.DATE },
+                modifier = Modifier.fillMaxWidth().testTag(FORM_DATE_TAG),
+            )
+            if (reminder) {
+                PickBox(
+                    text = DateFormat.time(current.start),
+                    icon = PIcons.Schedule,
+                    onClick = { panel = Panels.TIME },
+                    modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(FORM_TIME_TAG),
+                )
+            } else {
+                Column(Modifier.padding(top = Dimens.space2)) {
+                    TimeRow(
+                        start = current.start,
+                        end = current.end,
+                        error = problems[RestrictionField.TIME],
+                        onStart = { panel = Panels.TIME },
+                        onEnd = { panel = Panels.END },
+                    )
                 }
             }
-            Text(
-                PersonalFormat.REMINDER_NOTE,
-                modifier = Modifier.padding(top = Dimens.space3),
-                style = MaterialTheme.typography.bodySmall,
-                color = PersonalkaTheme.colors.textMuted,
-            )
-        } else {
-            SwitchRow(
-                title = PersonalFormat.ALLOW_TRAININGS,
-                checked = !current.blocksTrainings,
-                onToggle = { allow -> update { it.copy(blocksTrainings = !allow) } },
-                modifier = Modifier.padding(top = Dimens.space3).testTag(FORM_PERSONAL_ALLOW_TAG),
-                subtitle = PersonalFormat.ALLOW_TRAININGS_NOTE,
-            )
-            if (current.blocksTrainings) {
-                SectionLabel(PersonalFormat.TRAVEL)
+        }
+        FormStep(3, "Повтор", null) {
+            if (reminder) {
+                val repeat = RestrictionFormRules.repeatOf(current)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                    PersonalRules.TRAVELS.forEach { m ->
-                        ChoiceChip(
-                            PersonalFormat.travel(m),
-                            selected = current.travelMinutes == m,
-                            onClick = { update { it.copy(travelMinutes = m) } },
-                            modifier = Modifier.testTag(formTravelTag(m)),
-                        )
+                    ReminderRepeat.entries.forEach { r ->
+                        ChoiceChip(PersonalFormat.repeat(r), selected = r == repeat, onClick = { update { RestrictionFormRules.withRepeat(it, r) } })
                     }
                 }
-            }
-            SectionLabel(PersonalFormat.TASK_NOTIFY)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-                PersonalRules.TASK_NOTIFY.forEach { m ->
-                    ChoiceChip(PersonalFormat.taskNotify(m), selected = current.notifyMinutes == m, onClick = { update { it.copy(notifyMinutes = m) } })
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    ChoiceChip(TrainingFormat.NO_REPEAT, selected = !current.weekly, onClick = { update { RestrictionFormRules.weekly(it, on = false) } })
+                    ChoiceChip(
+                        TrainingFormat.WEEKLY,
+                        selected = current.weekly,
+                        onClick = { update { RestrictionFormRules.weekly(it, on = true) } },
+                        modifier = Modifier.testTag(FORM_WEEKLY_TAG),
+                    )
                 }
+                if (current.weekly) WeekdayRow(current.weekdays, problems[RestrictionField.WEEKDAYS]) { days -> update { it.copy(weekdays = days) } }
             }
-            val travel = if (current.blocksTrainings) current.travelMinutes else 0
-            PersonalFormat.leaveAt(current.start, travel, current.notifyMinutes)?.let {
-                Text(it, modifier = Modifier.padding(top = Dimens.space2), style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+            if (current.weekly || current.monthly) {
+                PickBox(
+                    text = current.validTo?.let(TrainingFormat::until) ?: TrainingFormat.FOREVER,
+                    icon = null,
+                    onClick = { panel = Panels.UNTIL },
+                    modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2).testTag(FORM_UNTIL_TAG),
+                    error = problems[RestrictionField.PERIOD],
+                )
+                problems[RestrictionField.PERIOD]?.let { ErrorText(it) }
+            }
+        }
+        FormStep(4, if (reminder) PersonalFormat.REMINDER_NOTIFY else "Тренировки и уведомление", null) {
+            if (reminder) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    PersonalRules.REMINDER_NOTIFY.forEach { m ->
+                        ChoiceChip(PersonalFormat.reminderNotify(m), selected = current.notifyMinutes == m, onClick = { update { it.copy(notifyMinutes = m) } })
+                    }
+                }
+                Text(
+                    PersonalFormat.REMINDER_NOTE,
+                    modifier = Modifier.padding(top = Dimens.space3),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PersonalkaTheme.colors.textMuted,
+                )
+            } else {
+                SwitchRow(
+                    title = PersonalFormat.ALLOW_TRAININGS,
+                    checked = !current.blocksTrainings,
+                    onToggle = { allow -> update { it.copy(blocksTrainings = !allow) } },
+                    modifier = Modifier.testTag(FORM_PERSONAL_ALLOW_TAG),
+                    subtitle = PersonalFormat.ALLOW_TRAININGS_NOTE,
+                )
+                if (current.blocksTrainings) {
+                    StepLabel(PersonalFormat.TRAVEL)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        PersonalRules.TRAVELS.forEach { m ->
+                            ChoiceChip(
+                                PersonalFormat.travel(m),
+                                selected = current.travelMinutes == m,
+                                onClick = { update { it.copy(travelMinutes = m) } },
+                                modifier = Modifier.testTag(formTravelTag(m)),
+                            )
+                        }
+                    }
+                }
+                StepLabel(PersonalFormat.TASK_NOTIFY)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2), verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                    PersonalRules.TASK_NOTIFY.forEach { m ->
+                        ChoiceChip(PersonalFormat.taskNotify(m), selected = current.notifyMinutes == m, onClick = { update { it.copy(notifyMinutes = m) } })
+                    }
+                }
+                val travel = if (current.blocksTrainings) current.travelMinutes else 0
+                PersonalFormat.leaveAt(current.start, travel, current.notifyMinutes)?.let {
+                    Text(it, modifier = Modifier.padding(top = Dimens.space2), style = MaterialTheme.typography.bodySmall, color = PersonalkaTheme.colors.textMuted)
+                }
             }
         }
 
@@ -740,7 +756,7 @@ fun formTravelTag(minutes: Int) = "form-travel-$minutes"
 /** Место чипами, как в форме тренировки; [allPlaces] — первым чип «Все места», когда мест больше одного (запрет). */
 @Composable
 private fun PlaceChips(places: List<FormPlace>, selected: String?, error: String?, allPlaces: Boolean = false, onPick: (String) -> Unit) {
-    SectionLabel("Место")
+    val colors = PersonalkaTheme.colors
     FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         if (allPlaces && places.size > 1) {
             ChoiceChip(
@@ -751,9 +767,13 @@ private fun PlaceChips(places: List<FormPlace>, selected: String?, error: String
             )
         }
         places.forEach { place ->
-            ChoiceChip(
+            // Шаг 5.18: место — чипом своего цвета.
+            val g = PlaceGradient.of(place.color, place.color2)
+            PlaceChip(
                 text = place.shortName,
                 selected = place.id == selected,
+                ends = g.ends(colors.isDark, 1),
+                ink = g.ink(colors.isDark, 1),
                 onClick = { onPick(place.id) },
                 modifier = Modifier.testTag(formPlaceTag(place.id)),
             )
@@ -771,7 +791,6 @@ private fun ManyPlaceChips(
     onToggle: (String) -> Unit,
     onAll: () -> Unit,
 ) {
-    SectionLabel("Место")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         if (places.size > 1) {
             ChoiceChip(

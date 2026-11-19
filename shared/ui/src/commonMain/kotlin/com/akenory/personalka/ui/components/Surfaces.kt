@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.components
 
+import androidx.compose.foundation.layout.widthIn
 import com.akenory.personalka.ui.theme.AuroraSolid
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.rotate
@@ -397,5 +398,49 @@ fun ChooserRow(title: String, onClick: () -> Unit, modifier: Modifier = Modifier
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (value != null) colors.textMuted else colors.text)
         if (value != null) Text(value, style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text)
         Icon(com.akenory.personalka.ui.icons.PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.padding(start = Dimens.space2))
+    }
+}
+
+/**
+ * Шаг формы (шаг 5.18, вариант А по холсту «Сияние», ряд Ж): объёмная карточка с номером в кружке «Сиянием»,
+ * названием и справа — что уже выбрано ([summary]). Формы тренировки, дежурства, запрета и личного читаются сверху
+ * вниз по номерам, а не сплошным списком.
+ */
+@Composable
+fun FormStep(
+    number: Int,
+    title: String,
+    summary: String?,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = PersonalkaTheme.colors
+    Column(
+        modifier
+            .padding(top = Dimens.space3)
+            .fillMaxWidth()
+            .raised(MaterialTheme.shapes.extraLarge, colors, elevation = 5)
+            .background(colors.surface)
+            .padding(start = Dimens.space3, end = Dimens.space3, top = Dimens.space3, bottom = Dimens.space4),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(bottom = Dimens.space1), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(26.dp).clip(CircleShape).background(AuroraBrush), contentAlignment = Alignment.Center) {
+                Text("$number", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = OnAurora)
+            }
+            Spacer(Modifier.width(Dimens.space2))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = colors.text, maxLines = 1)
+            Spacer(Modifier.weight(1f).widthIn(min = Dimens.space2))
+            if (!summary.isNullOrBlank()) {
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodySmall.tabular(),
+                    color = colors.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 200.dp),
+                )
+            }
+        }
+        content()
     }
 }

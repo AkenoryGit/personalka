@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.PlaceGradient
+import com.akenory.personalka.ui.components.StepLabel
+import com.akenory.personalka.ui.components.PlaceChip
+import com.akenory.personalka.ui.components.FormStep
 import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
@@ -653,181 +657,200 @@ private fun TrainingFields(
             )
         }
 
-        // Тип: пять чипов, остальные — под «Ещё N»; выбранный виден всегда.
-        SectionLabel("Тип")
-        val index = form.types.indexOfFirst { it.id == current.typeId }
-        val showAll = moreTypes || index >= TrainingFormRules.TYPE_CHIPS
-        // Точка типа — цвет выбранного места его оттенком: так блок будет выглядеть в календаре.
-        val placeColor = PlaceColor.of(form.places.firstOrNull { it.id == current.locationId }?.color)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            form.types.take(if (showAll) form.types.size else TrainingFormRules.TYPE_CHIPS).forEach { t ->
-                ChoiceChip(
-                    text = t.name,
-                    selected = t.id == current.typeId,
-                    onClick = {
-                        if (t.id == current.typeId) return@ChoiceChip
-                        keepType = true
-                        update { d ->
-                            val next = TrainingFormRules.withType(d, t, keepDuration)
-                            if (keepPlace) next else next.copy(locationId = form.lastPlaceByType[t.id] ?: next.locationId)
-                        }
-                        if (!keepDuration) ownDuration = false
-                    },
-                    modifier = Modifier.testTag(formTypeTag(t.id)),
-                    dot = placeColor.shade(colors.isDark, t.shade),
-                )
+        // Шаг 5.18 (вариант А): форма — карточками-шагами с номерами; справа в шапке — что уже выбрано.
+        val placeShort = form.places.firstOrNull { it.id == current.locationId }?.shortName
+        val repeatNow = current.repeat
+        val seriesWeekdays = series != null && repeatNow?.weekdays != null
+        var step = 0
+        FormStep(++step, "Что и где", listOfNotNull(type?.name, placeShort).joinToString(" · ")) {
+            val index = form.types.indexOfFirst { it.id == current.typeId }
+            val showAll = moreTypes || index >= TrainingFormRules.TYPE_CHIPS
+            // Точка типа — цвет выбранного места его оттенком: так блок будет выглядеть в календаре.
+            val placeColor = PlaceColor.of(form.places.firstOrNull { it.id == current.locationId }?.color)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                form.types.take(if (showAll) form.types.size else TrainingFormRules.TYPE_CHIPS).forEach { t ->
+                    ChoiceChip(
+                        text = t.name,
+                        selected = t.id == current.typeId,
+                        onClick = {
+                            if (t.id == current.typeId) return@ChoiceChip
+                            keepType = true
+                            update { d ->
+                                val next = TrainingFormRules.withType(d, t, keepDuration)
+                                if (keepPlace) next else next.copy(locationId = form.lastPlaceByType[t.id] ?: next.locationId)
+                            }
+                            if (!keepDuration) ownDuration = false
+                        },
+                        modifier = Modifier.testTag(formTypeTag(t.id)),
+                        dot = placeColor.shade(colors.isDark, t.shade),
+                    )
+                }
+                if (!showAll && form.types.size > TrainingFormRules.TYPE_CHIPS) {
+                    ChoiceChip(
+                        text = TrainingFormat.moreTypes(form.types.size - TrainingFormRules.TYPE_CHIPS),
+                        selected = false,
+                        onClick = { moreTypes = true },
+                        icon = PIcons.ArrowDropDown,
+                    )
+                }
             }
-            if (!showAll && form.types.size > TrainingFormRules.TYPE_CHIPS) {
-                ChoiceChip(
-                    text = TrainingFormat.moreTypes(form.types.size - TrainingFormRules.TYPE_CHIPS),
-                    selected = false,
-                    onClick = { moreTypes = true },
-                    icon = PIcons.ArrowDropDown,
-                )
-            }
-        }
-        problems[FormField.TYPE]?.let { ErrorText(it) }
+            problems[FormField.TYPE]?.let { ErrorText(it) }
 
+
+            StepLabel("Место")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                form.places.forEach { place ->
+                    // Шаг 5.18: место — чипом своего цвета, как блок в календаре.
+                    val g = PlaceGradient.of(place.color, place.color2)
+                    PlaceChip(
+                        text = place.shortName,
+                        selected = place.id == current.locationId,
+                        ends = g.ends(colors.isDark, 1),
+                        ink = g.ink(colors.isDark, 1),
+                        onClick = {
+                            keepPlace = true
+                            update { it.copy(locationId = place.id) }
+                        },
+                        modifier = Modifier.testTag(formPlaceTag(place.id)),
+                    )
+                }
+            }
+            problems[FormField.PLACE]?.let { ErrorText(it) }
+
+
+        }
         if (type != null) {
-            People(
-                draft = current,
-                type = type,
-                form = form,
-                query = query,
-                error = problems[FormField.CLIENTS],
-                onQuery = { query = it },
-                onClient = ::select,
-                onGroup = { group ->
-                    update { d ->
-                        if (d.groupId == group.id) {
-                            d.copy(groupId = null)
-                        } else {
-                            d.copy(groupId = group.id, clientIds = emptyList(), locationId = if (keepPlace) d.locationId else group.locationId)
+            val byId = form.clients.associateBy { it.id }
+            val who = form.groups.firstOrNull { it.id == current.groupId }?.name
+                ?: current.clientIds.mapNotNull { byId[it]?.label }.joinToString(", ").ifEmpty { null }
+            FormStep(++step, "С кем", who) {
+                People(
+                    draft = current,
+                    type = type,
+                    form = form,
+                    query = query,
+                    error = problems[FormField.CLIENTS],
+                    onQuery = { query = it },
+                    onClient = ::select,
+                    onGroup = { group ->
+                        update { d ->
+                            if (d.groupId == group.id) {
+                                d.copy(groupId = null)
+                            } else {
+                                d.copy(groupId = group.id, clientIds = emptyList(), locationId = if (keepPlace) d.locationId else group.locationId)
+                            }
                         }
-                    }
-                },
-                onNewClient = { name ->
-                    // Похожих ищем среди всех, и в архиве, — не только среди тех, кого предлагает форма (шаг 3.9о).
-                    val text = query
-                    scope.launch {
-                        val similar = clients.similar(name)
-                        if (similar != null) panel = Panels.similar(similar.id, text) else createClient(name)
-                    }
-                },
-            )
-        }
-
-        SectionLabel("Место")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            form.places.forEach { place ->
-                ChoiceChip(
-                    text = place.shortName,
-                    selected = place.id == current.locationId,
-                    onClick = {
-                        keepPlace = true
-                        update { it.copy(locationId = place.id) }
                     },
-                    modifier = Modifier.testTag(formPlaceTag(place.id)),
+                    onNewClient = { name ->
+                        // Похожих ищем среди всех, и в архиве, — не только среди тех, кого предлагает форма (шаг 3.9о).
+                        val text = query
+                        scope.launch {
+                            val similar = clients.similar(name)
+                            if (similar != null) panel = Panels.similar(similar.id, text) else createClient(name)
+                        }
+                    },
                 )
+
             }
         }
-        problems[FormField.PLACE]?.let { ErrorText(it) }
+        FormStep(++step, "Когда", TrainingFormat.date(current.start.date) + " · " + TrainingFormat.timeRange(current.start, TrainingTime.end(current.start, current.durationMin))) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                PickBox(
+                    text = if (series != null) TrainingFormat.fromDate(current.start.date) else TrainingFormat.date(current.start.date),
+                    icon = PIcons.CalendarMonth,
+                    onClick = { panel = Panels.DATE },
+                    modifier = Modifier.weight(1f).testTag(FORM_DATE_TAG),
+                    error = problems[FormField.DATE],
+                )
+                PickBox(
+                    text = TrainingFormat.timeRange(current.start, TrainingTime.end(current.start, current.durationMin)),
+                    icon = PIcons.Schedule,
+                    onClick = { panel = Panels.TIME },
+                    modifier = Modifier.weight(1f).testTag(FORM_TIME_TAG),
+                    error = problems[FormField.TIME],
+                )
+            }
+            problems[FormField.DATE]?.let { ErrorText(it) }
+            problems[FormField.TIME]?.let { ErrorText(it) }
 
-        SectionLabel("Когда")
-        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            PickBox(
-                text = if (series != null) TrainingFormat.fromDate(current.start.date) else TrainingFormat.date(current.start.date),
-                icon = PIcons.CalendarMonth,
-                onClick = { panel = Panels.DATE },
-                modifier = Modifier.weight(1f).testTag(FORM_DATE_TAG),
-                error = problems[FormField.DATE],
-            )
-            PickBox(
-                text = TrainingFormat.timeRange(current.start, TrainingTime.end(current.start, current.durationMin)),
-                icon = PIcons.Schedule,
-                onClick = { panel = Panels.TIME },
-                modifier = Modifier.weight(1f).testTag(FORM_TIME_TAG),
-                error = problems[FormField.TIME],
-            )
-        }
-        problems[FormField.DATE]?.let { ErrorText(it) }
-        problems[FormField.TIME]?.let { ErrorText(it) }
 
-        SectionLabel("Длительность, мин")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            ReferenceRules.DURATION_CHIPS.forEach { minutes ->
+            StepLabel("Длительность, мин")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                ReferenceRules.DURATION_CHIPS.forEach { minutes ->
+                    ChoiceChip(
+                        text = minutes.toString(),
+                        selected = !ownDuration && current.durationMin == minutes,
+                        onClick = {
+                            ownDuration = false
+                            keepDuration = true
+                            update { it.copy(durationMin = minutes) }
+                        },
+                    )
+                }
                 ChoiceChip(
-                    text = minutes.toString(),
-                    selected = !ownDuration && current.durationMin == minutes,
+                    text = TrainingFormat.OWN_DURATION,
+                    selected = ownDuration || current.durationMin !in ReferenceRules.DURATION_CHIPS,
                     onClick = {
-                        ownDuration = false
+                        ownDuration = true
                         keepDuration = true
-                        update { it.copy(durationMin = minutes) }
+                        ownText = current.durationMin.toString()
                     },
                 )
             }
-            ChoiceChip(
-                text = TrainingFormat.OWN_DURATION,
-                selected = ownDuration || current.durationMin !in ReferenceRules.DURATION_CHIPS,
-                onClick = {
-                    ownDuration = true
-                    keepDuration = true
-                    ownText = current.durationMin.toString()
-                },
-            )
-        }
-        if (ownDuration) {
-            Field(
-                label = "Своя длительность, мин",
-                value = ownText,
-                onValueChange = { text ->
-                    ownText = text.filter { it.isDigit() }.take(3)
-                    ownText.toIntOrNull()?.let { minutes -> update { it.copy(durationMin = minutes) } }
-                },
-                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2),
-                error = problems[FormField.DURATION],
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                tag = FORM_OWN_DURATION_TAG,
-            )
-        } else {
-            problems[FormField.DURATION]?.let { ErrorText(it) }
-        }
+            if (ownDuration) {
+                Field(
+                    label = "Своя длительность, мин",
+                    value = ownText,
+                    onValueChange = { text ->
+                        ownText = text.filter { it.isDigit() }.take(3)
+                        ownText.toIntOrNull()?.let { minutes -> update { it.copy(durationMin = minutes) } }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = Dimens.space2),
+                    error = problems[FormField.DURATION],
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    tag = FORM_OWN_DURATION_TAG,
+                )
+            } else {
+                problems[FormField.DURATION]?.let { ErrorText(it) }
+            }
 
-        SectionLabel("Повтор")
-        val seriesRepeat = stored?.seriesRepeat
-        val weekdays = current.repeat?.weekdays
-        if (series != null && weekdays != null) {
-            WeekdayRow(weekdays, problems[FormField.WEEKDAYS]) { days -> update { it.copy(repeat = it.repeat?.copy(weekdays = days)) } }
-            return@FormFrame
-        }
-        if (seriesRepeat != null) {
-            // Повтор серии меняет «Эту и следующие» и «Изменить с даты» (4.4), а не это поле.
-            Text(
-                TrainingFormat.seriesRepeat(seriesRepeat.weekdays, seriesRepeat.until),
-                style = MaterialTheme.typography.bodyLarge.tabular(),
-                color = colors.text,
-            )
-        } else {
-            RepeatChoice(
-                draft = current,
-                weekdaysError = problems[FormField.WEEKDAYS],
-                untilError = problems[FormField.UNTIL],
-                onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
-                onUntil = { panel = Panels.UNTIL },
-                // «В разные дни разное время» (шаг 5.3с) — только у новой тренировки или разовой, ставшей постоянной.
-                onDayTime = { day -> panel = if (day == current.start.date.dayOfWeek) Panels.TIME else Panels.dayTime(day) },
-            )
-        }
 
-        Field(
-            label = "План",
-            value = current.plan,
-            onValueChange = { text -> update { it.copy(plan = text) } },
-            modifier = Modifier.fillMaxWidth().padding(top = Dimens.space5),
-            tag = FORM_PLAN_TAG,
-            placeholder = "Необязательно",
-            singleLine = false,
-        )
+        }
+        FormStep(++step, if (seriesWeekdays) "Дни недели" else "Повтор и план", if (repeatNow == null) "один раз" else "каждую неделю") {
+            val seriesRepeat = stored?.seriesRepeat
+            val weekdays = current.repeat?.weekdays
+            if (series != null && weekdays != null) {
+                WeekdayRow(weekdays, problems[FormField.WEEKDAYS]) { days -> update { it.copy(repeat = it.repeat?.copy(weekdays = days)) } }
+            } else if (seriesRepeat != null) {
+                // Повтор серии меняет «Эту и следующие» и «Изменить с даты» (4.4), а не это поле.
+                Text(
+                    TrainingFormat.seriesRepeat(seriesRepeat.weekdays, seriesRepeat.until),
+                    style = MaterialTheme.typography.bodyLarge.tabular(),
+                    color = colors.text,
+                )
+            } else {
+                RepeatChoice(
+                    draft = current,
+                    weekdaysError = problems[FormField.WEEKDAYS],
+                    untilError = problems[FormField.UNTIL],
+                    onRepeat = { repeat -> update { it.copy(repeat = repeat) } },
+                    onUntil = { panel = Panels.UNTIL },
+                    // «В разные дни разное время» (шаг 5.3с) — только у новой тренировки или разовой, ставшей постоянной.
+                    onDayTime = { day -> panel = if (day == current.start.date.dayOfWeek) Panels.TIME else Panels.dayTime(day) },
+                )
+            }
+
+            if (series == null || weekdays == null) Field(
+                label = "План",
+                value = current.plan,
+                onValueChange = { text -> update { it.copy(plan = text) } },
+                modifier = Modifier.fillMaxWidth().padding(top = Dimens.space4),
+                tag = FORM_PLAN_TAG,
+                placeholder = "Необязательно",
+                singleLine = false,
+            )
+
+        }
     }
 }
 
@@ -851,7 +874,7 @@ private fun People(
     val byId = form.clients.associateBy { it.id }
     val group = type.kind == TrainingKind.GROUP
     if (group) {
-        SectionLabel("Группа")
+        StepLabel("Группа")
         // Группы этого типа и недавние — первыми.
         val groups = form.groups.sortedWith(
             compareBy<FormGroup>(
@@ -870,7 +893,7 @@ private fun People(
         }
     }
     val limit = TrainingFormRules.clientLimit(type)
-    SectionLabel(
+    StepLabel(
         when {
             group -> if (form.groups.isEmpty()) "Дети" else "Или дети на раз"
             limit == 1 -> "Клиент"

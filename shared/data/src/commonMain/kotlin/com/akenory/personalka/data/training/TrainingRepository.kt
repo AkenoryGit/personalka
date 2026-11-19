@@ -79,7 +79,7 @@ data class ClientLast(val typeId: String, val locationId: String)
 data class FormGroup(val id: String, val name: String, val typeId: String, val locationId: String)
 
 /** Место в форме: «ББ» на чипе и цвет места — точки типов показывают его оттенками (шаг 1.13в). */
-data class FormPlace(val id: String, val shortName: String, val name: String, val color: String = ReferenceRules.FALLBACK_COLOR)
+data class FormPlace(val id: String, val shortName: String, val name: String, val color: String = ReferenceRules.FALLBACK_COLOR, val color2: String = "")
 
 /**
  * Всё, что показывает форма тренировки (5.5): типы без дежурств (последний использованный первым), места,
@@ -180,7 +180,7 @@ class TrainingRepository internal constructor(
             Lists(
                 types = types.filter { !it.archived && it.kind != TrainingKind.DUTY }.map { it.toForm() },
                 duty = types.firstOrNull { !it.archived && it.kind == TrainingKind.DUTY }?.toForm(),
-                places = places.filter { !it.archived }.map { FormPlace(it.id, it.shortName, it.name, it.color) },
+                places = places.filter { !it.archived }.map { FormPlace(it.id, it.shortName, it.name, it.color, it.color2) },
                 clients = people.map { FormClient(it.id, ClientName(it.lastName, it.firstName, it.middleName)) }.sortedBy { ClientRules.sortKey(it.name) },
                 groups = groups.map { FormGroup(it.id, it.name, it.typeId, it.locationId) }.sortedBy { it.name },
                 relatives = relations.flatMap { listOf(it.clientAId to it.clientBId, it.clientBId to it.clientAId) }
