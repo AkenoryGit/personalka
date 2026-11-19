@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -31,6 +33,7 @@ import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.theme.tabular
 
 /**
  * Общие элементы нового оформления (шаг 5.11а, `docs/mockups/redesign`): цвет — у карточек, а не только у меток.
@@ -94,6 +97,7 @@ fun RowScope.Tile(
     modifier: Modifier = Modifier,
     tone: Tone = PersonalkaTheme.colors.neutralTone(),
     suffix: String? = null,
+    note: String? = null,
     selected: Boolean? = null,
     onClick: (() -> Unit)? = null,
     tag: String? = null,
@@ -103,6 +107,7 @@ fun RowScope.Tile(
     Column(
         modifier
             .weight(1f)
+            .fillMaxHeight()
             .clip(shape)
             .background(tone.fill)
             .then(if (selected == true) Modifier.border(2.dp, colors.primary, shape) else Modifier)
@@ -124,13 +129,17 @@ fun RowScope.Tile(
             }
         }
         Text(label, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp), color = tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        // Третья строка — «сегодня …» (шаг 5.11д): цифрами, цветом текста, чтобы читалась отдельно от подписи.
+        if (note != null) {
+            Text(note, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelMedium.tabular(), color = tone.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
-/** Ряд плиток с зазором 8. */
+/** Ряд плиток с зазором 8; все плитки ряда — одной высоты, по самой высокой (просьба Дмитрия 19.11.2026). */
 @Composable
 fun TileRow(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.space2), content = content)
+    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Dimens.space2), content = content)
 }
 
 /**

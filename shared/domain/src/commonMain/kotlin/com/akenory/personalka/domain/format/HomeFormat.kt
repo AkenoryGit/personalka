@@ -236,18 +236,28 @@ object HomeFormat {
 
     // --- Плитки под «Деньгами» (шаг 5.11б, новое оформление) ---
 
-    /** Плитка ПТ: «94» и « / 149» мельче, если по расписанию будет больше; подпись «ПТ проведено». */
+    /** Плитка ПТ: «94» и « / 149» мельче, если по расписанию будет больше; подпись «ПТ за месяц». */
     fun ptTileSuffix(done: Int, total: Int): String? = if (total > done) " / " + RuText.digits(total.toLong()) else null
-    const val PT_TILE = "ПТ проведено"
+    const val PT_TILE = "ПТ за месяц"
+
+    /** Третья строка плитки ПТ (просьба Дмитрия 19.11.2026): «сегодня 0 / 4», всё проведено — «сегодня 3», ПТ нет — «сегодня без ПТ». */
+    fun ptTodayNote(done: Int, total: Int): String = "сегодня " + when {
+        total <= 0 && done == 0 -> "без ПТ"
+        total <= done -> RuText.digits(done.toLong())
+        else -> RuText.digits(done.toLong()) + " / " + RuText.digits(total.toLong())
+    }
+
+    /** Третья строка плитки отмен: «сегодня 1», отмен сегодня нет — «сегодня 0». */
+    fun cancelTodayNote(n: Int): String = "сегодня " + RuText.digits(n.coerceAtLeast(0).toLong())
 
     /** Прогноз у суммы месяца: «127 %». */
     fun forecastBadge(percent: Int): String = "$percent$NBSP%"
 
-    /** Плитка отмен за месяц: «21» и подпись «отмена» / «отмены» / «отмен». */
-    fun cancelTile(n: Int): String = RuText.plural(n, "отмена", "отмены", "отмен")
+    /** Плитка отмен: «21» и подпись «отмена за месяц» / «отмены за месяц» / «отмен за месяц». */
+    fun cancelTile(n: Int): String = RuText.plural(n, "отмена", "отмены", "отмен") + " за месяц"
 
-    /** Плитка дня: сумма за сегодня и подпись «сегодня · будет ≈ 5 440 ₽» (или «сегодня · всё проведено»). */
-    fun todayTile(earned: Long, forecast: Long): String = "сегодня" + DOT + willBe(earned, forecast)
+    /** Плитка дня: сумма за сегодня, подпись «заработано сегодня», третья строка — [willBe]. */
+    const val TODAY_TILE = "заработано сегодня"
 
     /** Зарплата не настроена (5.18): вместо суммы — приглашение и кнопка. */
     const val SALARY_NOT_SET = "Зарплата ещё не настроена"

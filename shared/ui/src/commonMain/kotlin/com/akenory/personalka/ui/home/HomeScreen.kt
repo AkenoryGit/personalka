@@ -905,18 +905,21 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                     value = RuText.digits(view.pay.ptCount.toLong()),
                     suffix = HomeFormat.ptTileSuffix(view.pay.ptCount, view.shown.likelyPtCount),
                     label = HomeFormat.PT_TILE,
+                    note = HomeFormat.ptTodayNote(view.todayPt ?: 0, (view.todayPt ?: 0) + (view.todayPtAhead ?: 0)),
                     onClick = onSalary,
                     tag = MONEY_PT_TAG,
                 )
                 Tile(
                     value = RuText.digits(view.monthCancelled.toLong()),
                     label = HomeFormat.cancelTile(view.monthCancelled),
+                    note = HomeFormat.cancelTodayNote(view.todayCancelled ?: 0),
                     onClick = onSalary,
                     tag = MONEY_CANCEL_TAG,
                 )
                 Tile(
                     value = MoneyFormat.rub(earnedToday),
-                    label = HomeFormat.todayTile(earnedToday, earnedToday + (view.todayAhead ?: 0)),
+                    label = HomeFormat.TODAY_TILE,
+                    note = HomeFormat.willBe(earnedToday, earnedToday + (view.todayAhead ?: 0)),
                     onClick = onSalary,
                     tag = MONEY_TODAY_TAG,
                 )
