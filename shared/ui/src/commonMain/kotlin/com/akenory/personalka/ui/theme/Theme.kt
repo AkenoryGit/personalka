@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.sp
 private const val TNUM = "tnum"
 
 /**
- * Шрифт системный. title 24, subtitle 17, body 15, caption 13, label-small 12; number 28 и number-large 40
+ * Шрифт системный. title 24, subtitle 17, body 15, caption 13, label-small 11; number 28 и number-large 40
  * (сумма месяца на «Главной» и в «Зарплате»). Шаг 5.11а: заголовки и цифры — полужирные (600), чтобы на экране
  * было главное и второстепенное, а не всё одного веса.
  */
@@ -31,7 +31,7 @@ val PersonalkaTypography = Typography(
     labelLarge = TextStyle(fontSize = 15.sp, lineHeight = 22.sp, fontWeight = FontWeight.Medium),         // body-strong, кнопки
     bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal),          // caption
     labelMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),        // caption-strong
-    labelSmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal),         // подпись плитки
+    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),         // суммы в клетках календаря
     titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold,
         fontFeatureSettings = TNUM),                                                                    // цифра плитки
     displaySmall = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold,

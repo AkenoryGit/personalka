@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.components.cardTone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -746,8 +748,18 @@ private fun ColumnScope.CardBody(
     // Имя в шапке ведёт в карточку: у одного клиента — его, у группы — группы; у сплита — строки клиентов.
     val single = card.clients.singleOrNull()?.takeIf { !isGroup && !it.erased }
     val titleLink: (() -> Unit)? = single?.let { c -> { onClient(c.id) } } ?: card.groupId?.let { g -> { onGroup(g) } }
+    // Шаг 5.11в: шапка — имя, время, тип и статус — на фоне цвета места, как карточка «Сейчас» на «Главной».
+    val tone = PlaceColor.of(card.placeColor).cardTone(colors)
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
-        Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+      Column(
+          Modifier
+              .padding(top = Dimens.space2)
+              .fillMaxWidth()
+              .clip(MaterialTheme.shapes.extraLarge)
+              .background(tone.fill)
+              .padding(start = Dimens.space4, end = Dimens.space1, bottom = Dimens.space3),
+      ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (wide) {
                 IconButton(onClick = onClose) { Icon(PIcons.Close, contentDescription = "Закрыть", tint = colors.text) }
             }
@@ -762,11 +774,11 @@ private fun ColumnScope.CardBody(
                     card.title,
                     modifier = Modifier.weight(1f, fill = false).semantics { heading() },
                     style = MaterialTheme.typography.headlineSmall,
-                    color = colors.text,
+                    color = tone.strong,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (titleLink != null) Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
+                if (titleLink != null) Icon(PIcons.ChevronRight, contentDescription = null, tint = tone.content)
             }
             // «Поделиться» пришедшими на группу (шаг 5.3п): значок, не кнопка — лимит трёх кнопок не меняется (10.7).
             if (GroupShareFormat.canShare(state)) {
@@ -785,8 +797,8 @@ private fun ColumnScope.CardBody(
             CardMenuButton(buttons.menu, onMenu)
         }
         val end = state.end
-        Text(TrainingCardFormat.whenLine(state.start, end, state.durationMin), style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.textMuted)
-        Text(TrainingCardFormat.typeLine(card.typeShort, card.placeShort, card.seriesWeekdays), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted)
+        Text(TrainingCardFormat.whenLine(state.start, end, state.durationMin), style = MaterialTheme.typography.titleMedium.tabular(), color = tone.strong)
+        Text(TrainingCardFormat.typeLine(card.typeShort, card.placeShort, card.seriesWeekdays), style = MaterialTheme.typography.bodyMedium, color = tone.content)
 
         val came = if (isGroup) state.participants.count { it.came } else null
         Box(Modifier.tourTarget(TourTarget.STATUS)) {
@@ -796,6 +808,7 @@ private fun ColumnScope.CardBody(
                 note = TrainingCardFormat.statusNote(card.outcome, phase, now, state.start, end, came, TrainingCardRules.groupTotal(state), state.doneAt),
             )
         }
+      }
         card.warnings.forEach { WarningLine(it) }
         // Шаг 3.9р: именинник среди клиентов — строкой с тортом, как на блоке календаря.
         card.birthdays.forEach { BirthdayLine(it) }

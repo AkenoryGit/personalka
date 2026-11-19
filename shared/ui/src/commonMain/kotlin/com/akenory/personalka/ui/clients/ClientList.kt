@@ -60,7 +60,11 @@ import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.model.ClientStatus
 import com.akenory.personalka.ui.components.rememberHeldText
 import com.akenory.personalka.ui.components.Avatar
-import com.akenory.personalka.ui.components.ChoiceChip
+import com.akenory.personalka.domain.format.RuText
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.components.chargedTone
+import com.akenory.personalka.ui.components.TileRow
+import com.akenory.personalka.ui.components.Tile
 import com.akenory.personalka.ui.components.EmptyState
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
@@ -129,30 +133,37 @@ fun ClientList(
             placeholder = "Фамилия или имя",
             modifier = Modifier.padding(horizontal = Dimens.space4).testTag(CLIENT_SEARCH_TAG),
         )
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.space4, vertical = Dimens.space1),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
-        ) {
-            if (state.age != AgeFilter.ALL) RemovableChip(state.age.label, onRemove = { state.age = AgeFilter.ALL })
-            ChoiceChip(
-                text = "Активные · $active",
+        // Шаг 5.11г: фильтры — плитки с числами (выбранная обведена), без повтора «Активные» чипом и плиткой.
+        // «Без записи» янтарная, только когда там кто-то есть; архив — плиткой, если он не пуст.
+        TileRow(Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space1)) {
+            Tile(
+                value = RuText.digits(active.toLong()),
+                label = ClientFormat.ACTIVE_TILE,
                 selected = state.filter == ClientFilter.ACTIVE,
                 onClick = { state.filter = ClientFilter.ACTIVE },
-                modifier = Modifier.testTag(filterChipTag(ClientFilter.ACTIVE)),
+                tag = filterChipTag(ClientFilter.ACTIVE),
             )
-            ChoiceChip(
-                text = FollowupFormat.chip(noBookingCount),
+            Tile(
+                value = RuText.digits(noBookingCount.toLong()),
+                label = ClientFormat.NO_BOOKING_TILE,
+                tone = if (noBookingCount > 0) colors.chargedTone() else colors.neutralTone(),
                 selected = state.filter == ClientFilter.NO_BOOKING,
                 onClick = { state.filter = ClientFilter.NO_BOOKING },
-                modifier = Modifier.testTag(filterChipTag(ClientFilter.NO_BOOKING)),
+                tag = filterChipTag(ClientFilter.NO_BOOKING),
             )
             if (archived > 0) {
-                ChoiceChip(
-                    text = "Архив",
+                Tile(
+                    value = RuText.digits(archived.toLong()),
+                    label = ClientFormat.ARCHIVE_TILE,
                     selected = state.filter == ClientFilter.ARCHIVE,
                     onClick = { state.filter = ClientFilter.ARCHIVE },
-                    modifier = Modifier.testTag(filterChipTag(ClientFilter.ARCHIVE)),
+                    tag = filterChipTag(ClientFilter.ARCHIVE),
                 )
+            }
+        }
+        if (state.age != AgeFilter.ALL) {
+            Row(Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space1)) {
+                RemovableChip(state.age.label, onRemove = { state.age = AgeFilter.ALL })
             }
         }
         if (state.filter == ClientFilter.NO_BOOKING) {

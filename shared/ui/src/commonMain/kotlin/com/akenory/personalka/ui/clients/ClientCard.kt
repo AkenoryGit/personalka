@@ -1,6 +1,11 @@
 package com.akenory.personalka.ui.clients
 
 import com.akenory.personalka.ui.components.SegmentTabs
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.components.chargedTone
+import com.akenory.personalka.ui.components.TileRow
+import com.akenory.personalka.ui.components.Tile
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -583,28 +588,15 @@ private fun ReliabilityRow(clientId: String, r: Reliability) {
     }
 }
 
-/** Счётчики: проведено · отменено · со списанием · в месяц. */
+/** Счётчики плитками (шаг 5.11г): «проведено» зелёная, «со списанием» янтарная, если были, остальные нейтральные. */
 @Composable
 private fun StatsRow(stats: ClientStats) {
     val colors = PersonalkaTheme.colors
-    Row(
-        Modifier
-            .padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space3)
-            .fillMaxWidth()
-            .background(colors.surface, MaterialTheme.shapes.medium)
-            .padding(vertical = Dimens.space3),
-    ) {
-        listOf(
-            RuText.digits(stats.done.toLong()) to "проведено",
-            RuText.digits(stats.cancelled.toLong()) to "отменено",
-            RuText.digits(stats.charged.toLong()) to "со списанием",
-            ClientFormat.tenths(stats.perMonthTenths) to "в месяц",
-        ).forEach { (value, label) ->
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(value, style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text)
-                Text(label, style = MaterialTheme.typography.bodySmall, color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
+    TileRow(Modifier.padding(start = Dimens.space4, end = Dimens.space4, top = Dimens.space3)) {
+        Tile(RuText.digits(stats.done.toLong()), "проведено", tone = if (stats.done > 0) colors.doneTone() else colors.neutralTone())
+        Tile(RuText.digits(stats.cancelled.toLong()), "отменено")
+        Tile(RuText.digits(stats.charged.toLong()), "со списанием", tone = if (stats.charged > 0) colors.chargedTone() else colors.neutralTone())
+        Tile(ClientFormat.tenths(stats.perMonthTenths), "в месяц")
     }
 }
 

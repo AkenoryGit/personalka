@@ -666,7 +666,16 @@ private fun WeekStrip(day: LocalDate, today: LocalDate, onSelect: (LocalDate) ->
 private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelect: (LocalDate) -> Unit, moneyOf: ((LocalDate) -> DayMoney?)? = null) {
     val colors = PersonalkaTheme.colors
     // С деньгами строка выше на строку суммы (макет «День: суммы в строке недели»).
-    Row(Modifier.fillMaxWidth().height(if (moneyOf != null) Dimens.row + WEEK_MONEY_ROW else Dimens.row).padding(horizontal = Dimens.space2)) {
+    // Шаг 5.11в: неделя — отдельной карточкой на surface, как на холсте нового оформления.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.space3, vertical = 2.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(colors.surface)
+            .height(if (moneyOf != null) Dimens.row + WEEK_MONEY_ROW else Dimens.row)
+            .padding(horizontal = 2.dp),
+    ) {
         repeat(7) { i ->
             val date = monday.plus(i, DateTimeUnit.DAY)
             val isSelected = date == day

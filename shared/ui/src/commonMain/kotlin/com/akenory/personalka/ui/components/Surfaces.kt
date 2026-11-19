@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaColors
 import com.akenory.personalka.ui.theme.PersonalkaTheme
@@ -122,7 +123,7 @@ fun RowScope.Tile(
                 Text(suffix, style = MaterialTheme.typography.bodySmall, color = tone.muted, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
             }
         }
-        Text(label, style = MaterialTheme.typography.labelSmall, color = tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(label, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp), color = tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 

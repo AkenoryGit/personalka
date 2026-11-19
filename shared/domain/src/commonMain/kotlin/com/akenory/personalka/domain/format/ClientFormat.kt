@@ -12,6 +12,11 @@ import kotlinx.datetime.LocalTime
 
 /** Строки о клиентах: список, карточка, форма (5.8, 5.9). */
 object ClientFormat {
+    /** Плитки-фильтры списка клиентов (шаг 5.11г): число крупно, подпись под ним. */
+    const val ACTIVE_TILE = "активные"
+    const val NO_BOOKING_TILE = "без записи"
+    const val ARCHIVE_TILE = "в архиве"
+
     private const val DOT = " · "
 
     /** «9 лет», «1 год», до года — «8 мес». */

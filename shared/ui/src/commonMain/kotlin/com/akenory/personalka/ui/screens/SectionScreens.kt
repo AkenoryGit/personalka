@@ -1,5 +1,11 @@
 package com.akenory.personalka.ui.screens
 
+import com.akenory.personalka.ui.theme.PlaceColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -385,6 +391,18 @@ enum class MoreItem(
 
 internal fun moreRowTag(item: MoreItem) = item.tag
 
+/** Цвет квадратика значка в «Ещё» (шаг 5.11г): работа — цветами, настройки и данные — нейтральные. */
+private val MoreItem.place: PlaceColor?
+    get() = when (this) {
+        MoreItem.GROUPS, MoreItem.RATES -> PlaceColor.GREEN
+        MoreItem.SLOTS, MoreItem.PLACES -> PlaceColor.BLUE
+        MoreItem.RECONCILE -> PlaceColor.BROWN
+        MoreItem.REPORTS -> PlaceColor.PINK
+        MoreItem.VACATION -> PlaceColor.AMBER
+        MoreItem.CALENDAR, MoreItem.REMINDERS -> PlaceColor.INDIGO
+        else -> null
+    }
+
 /**
  * «Ещё»: на узком экране — список, пункт открывается поверх с «Назад»; на широком — список слева
  * и открытый пункт справа (ТЗ 5.1). У пункта бывают вложенные экраны («Места и типы» → тип,
@@ -448,33 +466,41 @@ private fun MoreList(
     val colors = PersonalkaTheme.colors
     Column(modifier.verticalScroll(scroll)) {
         TopBar(MoreFormat.TITLE)
+        // Шаг 5.11г: пункты группы — одной карточкой, значок в цветном квадратике, без пояснений под названием
+        // (пояснение осталось подписью для экранного диктора).
         items.groupBy { it.group }.forEach { (group, rows) ->
             Text(
                 text = group.title,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                style = MaterialTheme.typography.labelMedium,
                 color = colors.textMuted,
             )
-            rows.forEach { item ->
-                val isSelected = item == selected
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .background(if (isSelected) colors.surfaceAlt else Color.Transparent)
-                        .clickable(role = Role.Button) { onOpen(item) }
-                        .semantics { this.selected = isSelected }
-                        .testTag(moreRowTag(item))
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(item.icon, contentDescription = null, tint = colors.textMuted)
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(item.title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
-                        Text(item.note, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+            Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(MaterialTheme.shapes.medium).background(colors.surface)) {
+                rows.forEachIndexed { i, item ->
+                    val isSelected = item == selected
+                    if (i > 0) HorizontalDivider(Modifier.padding(start = 66.dp), thickness = 1.dp, color = colors.divider)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .background(if (isSelected) colors.surfaceAlt else Color.Transparent)
+                            .clickable(role = Role.Button) { onOpen(item) }
+                            .semantics { this.selected = isSelected; contentDescription = item.title + ". " + item.note }
+                            .testTag(moreRowTag(item))
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val tint = item.place?.tone(colors.isDark)
+                        Box(
+                            Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(tint?.block(2) ?: colors.surfaceAlt),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(item.icon, contentDescription = null, tint = tint?.text ?: colors.text, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Text(item.title, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = colors.text)
+                        Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
                     }
-                    Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
                 }
             }
         }

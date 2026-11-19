@@ -1,6 +1,9 @@
 package com.akenory.personalka.ui.salary
 
 import com.akenory.personalka.ui.components.SegmentTabs
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.ToneCard
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -619,13 +622,19 @@ private fun ClosedMark(view: SalaryMonth) {
 @Composable
 private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Unit)? = null) {
     val colors = PersonalkaTheme.colors
-    SalaryCard {
+    // Шаг 5.11г: месяц идёт в план — карточка зелёная, как «Деньги» на «Главной»; отстаёт или плана нет — нейтральная.
+    val inPlan = (view.shownPercent ?: view.percent ?: 0) >= 100 && view.plan != null
+    val tone = if (inPlan) colors.doneTone() else colors.neutralTone()
+    @Composable
+    fun Muted(text: String, modifier: Modifier = Modifier) =
+        Text(text, modifier, style = MaterialTheme.typography.bodySmall.tabular(), color = tone.muted)
+    ToneCard(tone) {
         Muted(SalaryFormat.EARNED)
         Text(
             MoneyFormat.rub(view.pay.earned),
             modifier = Modifier.testTag(SALARY_EARNED_TAG),
-            style = MaterialTheme.typography.displaySmall,
-            color = colors.text,
+            style = MaterialTheme.typography.displayMedium,
+            color = tone.strong,
         )
         SalaryFormat.today(view.today, view.todayAhead)?.let { Muted(it) }
         view.work?.let { Muted(SalaryFormat.work(it), Modifier.testTag(SALARY_WORK_TAG)) }
@@ -638,9 +647,9 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Un
             Text(
                 if (plan == null) SalaryFormat.NO_PLAN else "${SalaryFormat.PLAN}  ${MoneyFormat.rub(plan)}",
                 style = MaterialTheme.typography.bodyLarge,
-                color = colors.text,
+                color = tone.content,
             )
-            Icon(PIcons.Edit, contentDescription = SalaryFormat.PLAN_TITLE, tint = colors.textMuted, modifier = Modifier.padding(start = Dimens.space2).size(18.dp))
+            Icon(PIcons.Edit, contentDescription = SalaryFormat.PLAN_TITLE, tint = tone.muted, modifier = Modifier.padding(start = Dimens.space2).size(18.dp))
             Spacer(Modifier.weight(1f))
             view.percent?.let { Muted(SalaryFormat.done(it)) }
         }
@@ -648,7 +657,7 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Un
         if (plan != null && plan > 0) {
             val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
             val forecast = if (view.hasForecast) (view.shown.forecast.toFloat() / plan).coerceIn(done, 1f) else done
-            TwoPartBar(done, forecast)
+            TwoPartBar(done, forecast, onTone = inPlan)
         }
         if (view.hasForecast) {
             Row(Modifier.fillMaxWidth()) {
@@ -671,11 +680,15 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Un
 
 /** Полоса из двух частей: проведено — графит, прогноз — серый; конец полосы — план (макет PayMonth). */
 @Composable
-internal fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp) {
+internal fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp, onTone: Boolean = false) {
     val colors = PersonalkaTheme.colors
-    Box(Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(height / 2)).background(colors.surfaceAlt)) {
-        if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(colors.outline))
-        if (done > 0f) Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(colors.primary))
+    // На зелёной карточке (шаг 5.11г) — дорожка и прогноз тоном её текста, проведено — зелёным «проведено».
+    val track = if (onTone) colors.onDoneContainer.copy(alpha = 0.14f) else colors.surfaceAlt
+    val ahead = if (onTone) colors.onDoneContainer.copy(alpha = 0.32f) else colors.outline
+    val doneColor = if (onTone) colors.done else colors.primary
+    Box(Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(height / 2)).background(track)) {
+        if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(ahead))
+        if (done > 0f) Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(doneColor))
     }
 }
 
