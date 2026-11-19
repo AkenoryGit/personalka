@@ -1,5 +1,15 @@
 package com.akenory.personalka.ui.salary
 
+import androidx.compose.foundation.layout.RowScope
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.AuroraBrush
+import com.akenory.personalka.ui.components.chargedTone
+import com.akenory.personalka.ui.components.insetWell
+import com.akenory.personalka.ui.components.TileRow
+import com.akenory.personalka.ui.components.Tile
+import com.akenory.personalka.ui.components.RaisedIconButton
 import com.akenory.personalka.ui.components.SegmentTabs
 import com.akenory.personalka.ui.components.neutralTone
 import com.akenory.personalka.ui.components.doneTone
@@ -386,15 +396,10 @@ private fun MonthBar(title: String, year: Boolean, onPrev: () -> Unit, onNext: (
             color = colors.text,
             maxLines = 1,
         )
-        IconButton(onClick = onPrev, modifier = Modifier.testTag(SALARY_PREV_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = if (year) "Прошлый год" else "Прошлый месяц", tint = colors.text, modifier = Modifier.rotate(180f))
-        }
-        IconButton(onClick = onNext, modifier = Modifier.testTag(SALARY_NEXT_TAG)) {
-            Icon(PIcons.ChevronRight, contentDescription = if (year) "Следующий год" else "Следующий месяц", tint = colors.text)
-        }
-        IconButton(onClick = onRates, modifier = Modifier.testTag(SALARY_RATES_TAG)) {
-            Icon(PIcons.Tune, contentDescription = RateFormat.TITLE, tint = colors.text)
-        }
+        // Шаг 5.14в: кнопки шапки — выпуклые.
+        RaisedIconButton(PIcons.ChevronRight, if (year) "Прошлый год" else "Прошлый месяц", onPrev, Modifier.testTag(SALARY_PREV_TAG), iconRotation = 180f)
+        RaisedIconButton(PIcons.ChevronRight, if (year) "Следующий год" else "Следующий месяц", onNext, Modifier.testTag(SALARY_NEXT_TAG))
+        RaisedIconButton(PIcons.Tune, RateFormat.TITLE, onRates, Modifier.testTag(SALARY_RATES_TAG))
     }
 }
 
@@ -403,13 +408,13 @@ private fun SalaryTabs(tabs: List<SalaryTab>, selected: SalaryTab, onSelect: (Sa
     SegmentTabs(tabs, selected, { it.title }, onSelect, Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space2), tag = { salaryTabTag(it) })
 }
 
-/** Карточка на surface со скруглением 12 и отступами 16. */
+/** Карточка на ровном уровне (`surface`), скругление 20, отступы 16 (шаг 5.14в). */
 @Composable
 internal fun SalaryCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
+            .clip(MaterialTheme.shapes.extraLarge)
             .background(PersonalkaTheme.colors.surface)
             .padding(Dimens.space4),
         verticalArrangement = Arrangement.spacedBy(Dimens.space2),
@@ -627,54 +632,73 @@ private fun ClosedMark(view: SalaryMonth) {
     }
 }
 
+/**
+ * «Заработано» (шаг 5.14в, вариант А по холсту «Сияние», ряд Г): сверху объёмная карточка «Сиянием» — сумма, план
+ * и полоса; под ней вдавленные плитки по две в ряд — «сегодня», прогноз, «за час», «обычно отменяется» (что есть).
+ */
 @Composable
 private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Unit)? = null) {
     val colors = PersonalkaTheme.colors
-    // Шаг 5.11г: месяц идёт в план — карточка зелёная, как «Деньги» на «Главной»; отстаёт или плана нет — нейтральная.
-    val inPlan = (view.shownPercent ?: view.percent ?: 0) >= 100 && view.plan != null
-    val tone = if (inPlan) colors.doneTone() else colors.neutralTone()
-    @Composable
-    fun Muted(text: String, modifier: Modifier = Modifier) =
-        Text(text, modifier, style = MaterialTheme.typography.bodySmall.tabular(), color = tone.muted)
-    ToneCard(tone) {
-        Muted(SalaryFormat.EARNED)
-        Text(
-            MoneyFormat.rub(view.pay.earned),
-            modifier = Modifier.testTag(SALARY_EARNED_TAG),
-            style = MaterialTheme.typography.displayMedium,
-            color = tone.strong,
-        )
-        SalaryFormat.today(view.today, view.todayAhead)?.let { Muted(it) }
-        view.work?.let { Muted(SalaryFormat.work(it), Modifier.testTag(SALARY_WORK_TAG)) }
-        Spacer(Modifier.height(Dimens.space2))
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = Dimens.touch).clickable(onClick = onPlan).testTag(SALARY_PLAN_TAG),
-            verticalAlignment = Alignment.CenterVertically,
+    val shape = MaterialTheme.shapes.extraLarge
+    val muted = OnAurora.copy(alpha = 0.86f)
+    Column(verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+        Column(
+            Modifier.fillMaxWidth().raised(shape, colors, elevation = 10).background(AuroraBrush).padding(Dimens.space4),
+            verticalArrangement = Arrangement.spacedBy(Dimens.space1),
         ) {
-            val plan = view.plan
+            Text(SalaryFormat.EARNED, style = MaterialTheme.typography.bodySmall, color = muted)
             Text(
-                if (plan == null) SalaryFormat.NO_PLAN else "${SalaryFormat.PLAN}  ${MoneyFormat.rub(plan)}",
-                style = MaterialTheme.typography.bodyLarge,
-                color = tone.content,
+                MoneyFormat.rub(view.pay.earned),
+                modifier = Modifier.testTag(SALARY_EARNED_TAG),
+                style = MaterialTheme.typography.displayMedium,
+                color = OnAurora,
             )
-            Icon(PIcons.Edit, contentDescription = SalaryFormat.PLAN_TITLE, tint = tone.muted, modifier = Modifier.padding(start = Dimens.space2).size(18.dp))
-            Spacer(Modifier.weight(1f))
-            view.percent?.let { Muted(SalaryFormat.done(it)) }
-        }
-        val plan = view.plan
-        if (plan != null && plan > 0) {
-            val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
-            val forecast = if (view.hasForecast) (view.shown.forecast.toFloat() / plan).coerceIn(done, 1f) else done
-            TwoPartBar(done, forecast, onTone = inPlan)
-        }
-        if (view.hasForecast) {
-            Row(Modifier.fillMaxWidth()) {
-                Muted(SalaryFormat.forecast(view.shown.forecast), Modifier.weight(1f))
-                view.shownPercent?.let { Muted(SalaryFormat.ofPlan(it)) }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = Dimens.touch).clickable(onClick = onPlan).testTag(SALARY_PLAN_TAG),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val plan = view.plan
+                Text(
+                    if (plan == null) SalaryFormat.NO_PLAN else "${SalaryFormat.PLAN}  ${MoneyFormat.rub(plan)}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = OnAurora,
+                )
+                Icon(PIcons.Edit, contentDescription = SalaryFormat.PLAN_TITLE, tint = muted, modifier = Modifier.padding(start = Dimens.space2).size(18.dp))
+                Spacer(Modifier.weight(1f))
+                view.percent?.let { Text(SalaryFormat.done(it), style = MaterialTheme.typography.labelLarge.tabular(), color = OnAurora) }
             }
-            SalaryFormat.scheduled(view.shown)?.let { Muted(it, Modifier.testTag(SALARY_SCHEDULED_TAG)) }
+            val plan = view.plan
+            if (plan != null && plan > 0) {
+                val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
+                val forecast = if (view.hasForecast) (view.shown.forecast.toFloat() / plan).coerceIn(done, 1f) else done
+                AuroraBar(done, forecast)
+            }
+            if (view.plan != null && !view.planOwn) Text(SalaryFormat.PLAN_CARRIED, style = MaterialTheme.typography.bodySmall, color = muted)
         }
-        if (view.plan != null && !view.planOwn) Muted(SalaryFormat.PLAN_CARRIED)
+        val tiles = buildList<@Composable RowScope.() -> Unit> {
+            SalaryFormat.todayTile(view.today, view.todayAhead)?.let { (value, label, note) ->
+                add { Tile(value, label, tone = colors.doneTone(), note = note, compact = true) }
+            }
+            if (view.hasForecast) {
+                val (value, label) = SalaryFormat.forecastTile(view.shown.forecast, view.shownPercent)
+                add { Tile(value, label, compact = true) }
+            }
+            view.work?.let { w ->
+                val (value, label) = SalaryFormat.workTile(w)
+                add { Tile(value, label, compact = true, tag = SALARY_WORK_TAG) }
+            }
+            if (view.hasForecast) {
+                SalaryFormat.cancelsTile(view.shown)?.let { (value, label, note) ->
+                    add { Tile(value, label, tone = colors.chargedTone(), note = note, compact = true, tag = SALARY_SCHEDULED_TAG) }
+                }
+            }
+        }
+        tiles.chunked(2).forEach { pair ->
+            TileRow {
+                pair.forEach { it() }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
         view.shortfall?.let { Note(SalaryFormat.shortfall(it)) }
         // «Найти свободные слоты» (макет PayMonth, 5.13): куда поставить недостающие ПТ.
         if (view.shortfall != null && onSlots != null) {
@@ -686,6 +710,18 @@ private fun EarnedCard(view: SalaryMonth, onPlan: () -> Unit, onSlots: (() -> Un
     }
 }
 
+/** Полоса плана на «Сиянии»: вдавленная дорожка, проведено — белым, прогноз — белым на 40 %. */
+@Composable
+private fun AuroraBar(done: Float, forecast: Float) {
+    Box(
+        Modifier.fillMaxWidth().height(10.dp)
+            .insetWell(RoundedCornerShape(5.dp), fill = Color.Black.copy(alpha = 0.28f)),
+    ) {
+        if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().clip(RoundedCornerShape(5.dp)).background(OnAurora.copy(alpha = 0.40f)))
+        if (done > 0f) Box(Modifier.fillMaxWidth(done).fillMaxHeight().clip(RoundedCornerShape(5.dp)).background(OnAurora))
+    }
+}
+
 /** Полоса из двух частей: проведено — графит, прогноз — серый; конец полосы — план (макет PayMonth). */
 @Composable
 internal fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp, onTone: Boolean = false) {
@@ -694,7 +730,8 @@ internal fun TwoPartBar(done: Float, forecast: Float, height: Dp = 8.dp, onTone:
     val track = if (onTone) colors.onDoneContainer.copy(alpha = 0.14f) else colors.surfaceAlt
     val ahead = if (onTone) colors.onDoneContainer.copy(alpha = 0.32f) else colors.outline
     val doneColor = if (onTone) colors.done else colors.primary
-    Box(Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(height / 2)).background(track)) {
+    // Шаг 5.14в: дорожка — вдавленная.
+    Box(Modifier.fillMaxWidth().height(height).then(if (onTone) Modifier.clip(RoundedCornerShape(height / 2)).background(track) else Modifier.insetLevel(RoundedCornerShape(height / 2), colors))) {
         if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(ahead))
         if (done > 0f) Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(doneColor))
     }

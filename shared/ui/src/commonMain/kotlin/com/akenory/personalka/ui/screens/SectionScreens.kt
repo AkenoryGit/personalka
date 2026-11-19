@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.screens
 
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.PlaceColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material3.HorizontalDivider
@@ -475,7 +477,8 @@ private fun MoreList(
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.textMuted,
             )
-            Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(MaterialTheme.shapes.medium).background(colors.surface)) {
+            // Шаг 5.14: группы «Ещё» — на уровне «сверху».
+            Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().raised(MaterialTheme.shapes.large, colors, elevation = 4).background(colors.surface)) {
                 rows.forEachIndexed { i, item ->
                     val isSelected = item == selected
                     if (i > 0) HorizontalDivider(Modifier.padding(start = 66.dp), thickness = 1.dp, color = colors.divider)
@@ -492,7 +495,7 @@ private fun MoreList(
                     ) {
                         val tint = item.place?.tone(colors.isDark)
                         Box(
-                            Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(tint?.block(2) ?: colors.surfaceAlt),
+                            Modifier.size(36.dp).then(if (tint != null) Modifier.raised(RoundedCornerShape(10.dp), colors, elevation = 2).background(tint.block(2)) else Modifier.insetLevel(RoundedCornerShape(10.dp), colors)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(item.icon, contentDescription = null, tint = tint?.text ?: colors.text, modifier = Modifier.size(20.dp))

@@ -75,6 +75,8 @@ data class CoachSettingsEntity(
     val personalEnabled: Boolean = false,
     /** Цвет личных дел — ключ `PlaceColor`. */
     val personalColor: String = "mustard",
+    /** Второй цвет перехода личных дел (версия 23, шаг 5.14е): пусто — подобранный к первому, как у мест. */
+    val personalColor2: String = "",
 )
 
 /** Категория тренера, версия с даты. */

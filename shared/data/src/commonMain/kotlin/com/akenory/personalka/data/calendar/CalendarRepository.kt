@@ -177,6 +177,8 @@ data class CalendarZone(
     val reason: String = "",
     /** Личное дело, на которое можно ставить тренировки (шаг 5.10е): рисуется бледнее, время не занято. */
     val free: Boolean = false,
+    /** Второй цвет перехода личного дела (шаг 5.14е): заливка — переливом от [color]. */
+    val color2: String = "",
 ) {
     /** Запрет на все места (шаг 5.3ю): виден при любом фильтре места. */
     val allPlaces: Boolean get() = kind == ZoneKind.RESTRICTION && placeId == Restriction.ALL_PLACES
@@ -198,7 +200,7 @@ data class CalendarZone(
          * Личное дело в его день (шаг 5.10е): [color] — цвет личных дел из настроек. Дорога — отдельные зоны
          * [ZoneKind.TRAVEL] до и после ([travel]), если дело занимает время.
          */
-        fun personal(hit: RestrictionHit, color: String): List<CalendarZone> {
+        fun personal(hit: RestrictionHit, color: String, color2: String = ""): List<CalendarZone> {
             val r = hit.restriction
             val repeat = if (r.monthly) null else ZoneFormat.repeat(r.weekdays, r.validTo)
             if (r.kind == BlockKind.REMINDER) {
@@ -215,7 +217,7 @@ data class CalendarZone(
             }
             val main = CalendarZone(
                 id = r.id, kind = ZoneKind.PERSONAL, date = hit.date, start = r.startMinute, end = r.endMinute,
-                placeId = Restriction.ALL_PLACES, placeShort = "", color = color,
+                placeId = Restriction.ALL_PLACES, placeShort = "", color = color, color2 = color2,
                 title = PersonalFormat.EDIT_TASK_TITLE,
                 text = PersonalFormat.taskText(r.reason, r.startMinute, r.endMinute, if (r.blocksTrainings) r.travelMinutes else 0),
                 label = if (r.blocksTrainings) r.reason else PersonalFormat.freeLabel(r.reason),
@@ -493,9 +495,10 @@ class CalendarRepository(
                 emptyList()
             }
             val personalColor = settings?.personalColor ?: PersonalRules.COLOR_DEFAULT
+            val personalColor2 = settings?.personalColor2.orEmpty()
             val own = blocks.filter { it.scope == Scope.COACH }.map { it.id }.toSet()
             val days = generateSequence(from) { it.plus(1, DateTimeUnit.DAY) }.takeWhile { it < to }.toList()
-            val mine = days.flatMap { date -> RestrictionRules.on(personal, date) }.flatMap { CalendarZone.personal(it, personalColor) }
+            val mine = days.flatMap { date -> RestrictionRules.on(personal, date) }.flatMap { CalendarZone.personal(it, personalColor, personalColor2) }
             val hatched = days.asSequence()
                 .flatMap { date -> RestrictionRules.on(restrictions, date) }
                 .map { hit ->

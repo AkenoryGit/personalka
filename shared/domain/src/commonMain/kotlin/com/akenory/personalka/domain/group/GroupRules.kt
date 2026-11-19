@@ -75,6 +75,19 @@ object GroupRules {
         return date < from
     }
 
+    /** Сколько последних тренировок показывают точками в составе группы (шаг 5.14а). */
+    const val LAST_VISITS = 5
+
+    /**
+     * Посещаемость ребёнка в группе (шаг 5.14а, состав «вариант Б»): [came] — по проведённым тренировкам, где ребёнка
+     * ждали, по порядку от старой к новой, пришёл ли он. Процент — от всех таких тренировок, округлённый; последние
+     * [LAST_VISITS] — для точек. Тренировок ещё не было — процента нет.
+     */
+    fun attendance(came: List<Boolean>): MemberAttendance = MemberAttendance(
+        percent = if (came.isEmpty()) null else kotlin.math.round(came.count { it } * 100.0 / came.size).toInt(),
+        last = came.takeLast(LAST_VISITS),
+    )
+
     /** Средняя посещаемость (5.10): сколько детей пришло на проведённую тренировку, в среднем, в десятых: 83 — «8,3». */
     fun averageTenths(attended: List<Int>): Int =
         if (attended.isEmpty()) 0 else kotlin.math.round(attended.sum() * 10.0 / attended.size).toInt()
@@ -103,3 +116,6 @@ sealed interface MemberChange {
     /** Записи не нужно: ребёнок в группу так и не пришёл. */
     data class Remove(override val member: GroupMember) : MemberChange
 }
+
+/** Посещаемость ребёнка в группе (шаг 5.14а): процент (`null` — тренировок не было) и последние посещения по порядку. */
+data class MemberAttendance(val percent: Int?, val last: List<Boolean>)

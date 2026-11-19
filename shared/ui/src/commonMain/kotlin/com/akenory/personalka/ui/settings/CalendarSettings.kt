@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.settings
 
+import com.akenory.personalka.ui.setup.secondColorTag
+import com.akenory.personalka.ui.setup.SINGLE_COLOR
+import com.akenory.personalka.ui.setup.GradientPresets
+import com.akenory.personalka.domain.reference.ReferenceRules
 import com.akenory.personalka.ui.components.SettingsGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -211,8 +215,18 @@ internal fun CalendarSettingsScreen(
                     )
                 }
                 if (loaded.personal) {
+                    // Шаг 5.14е: цвет личных дел — переходом, как у мест: готовые, «Один цвет» и свой второй цвет.
+                    val pair = ReferenceRules.gradient(loaded.personalColor, loaded.personalColor2)
                     SectionLabel(PersonalFormat.COLOR)
                     ColorPalette(loaded.personalColor) { key -> scope.launch { settings.savePersonalColor(key) } }
+                    SectionLabel("Переход цвета")
+                    GradientPresets(
+                        color = pair.first,
+                        selected = if (pair.first == pair.second) SINGLE_COLOR else ReferenceRules.presetOf(pair)?.name,
+                        onPick = { from, to -> scope.launch { settings.savePersonalGradient(from, to) } },
+                    )
+                    SectionLabel("Свой переход: второй цвет")
+                    ColorPalette(pair.second, tag = ::secondColorTag) { key -> scope.launch { settings.savePersonalColor2(key) } }
                 }
 
                 SectionLabel(CalendarSettingsFormat.DRAG_STEP)

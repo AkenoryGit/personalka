@@ -159,6 +159,8 @@ data class TrainingCard(
     val groupName: String = "",
     /** Ключ цвета места (`Location.color`): шапка карточки этим цветом (шаг 5.11в). */
     val placeColor: String? = null,
+    /** Второй цвет перехода места (шаг 5.14г): шапка — переливом, как блок в календаре. */
+    val placeColor2: String = "",
 ) {
     /** Итог для метки статуса: у одного клиента — его итог («Отмена со списанием»), иначе — тренировки. */
     val outcome: ClientOutcome
@@ -331,6 +333,7 @@ class TrainingCardRepository internal constructor(
                 typeShort = type?.shortName.orEmpty(),
                 placeShort = placeShort,
                 placeColor = placeById[t.locationId]?.color,
+                placeColor2 = placeById[t.locationId]?.color2.orEmpty(),
                 groupName = group?.name ?: type?.name.orEmpty(),
                 groupId = t.groupId,
                 seriesWeekdays = series?.weekdays,

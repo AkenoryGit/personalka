@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.components
 
+import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,10 +77,10 @@ fun PlaceColor.cardTone(colors: PersonalkaColors): Tone {
 
 /**
  * Цветная карточка: скругление 20, отступы 16. Сумма месяца, «Сейчас», шапка карточки тренировки.
- * С [raised] — уровень «сверху» (шаг 5.13а): «Сейчас» на «Главной».
+ * Уровень «сверху» по умолчанию (шаги 5.13а, 5.14): цветные карточки «Сверок», «Отчётов», «Выплат» — объёмные.
  */
 @Composable
-fun ToneCard(tone: Tone, modifier: Modifier = Modifier, raised: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+fun ToneCard(tone: Tone, modifier: Modifier = Modifier, raised: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val shape = MaterialTheme.shapes.extraLarge
     Column(
         modifier
@@ -108,7 +109,7 @@ fun SurfaceCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.
 
 /**
  * Плитка с цифрой: «94 / 149» крупно (20 sp, 600), «ПТ проведено» подписью 12 sp. Три-четыре плитки
- * в ряд — [TileRow]. С [onClick] плитка нажимается; с [selected] она ещё и фильтр (клиенты): выбранная обведена рамкой `primary`.
+ * в ряд — [TileRow]. С [onClick] плитка нажимается; с [selected] она ещё и фильтр (клиенты): выбранная — «Сияние» (шаг 5.14).
  * Нейтральная плитка — вдавленная (уровень −1, шаг 5.13а), цветная — заливкой своего тона.
  */
 @Composable
@@ -126,12 +127,18 @@ fun RowScope.Tile(
 ) {
     val colors = PersonalkaTheme.colors
     val shape = MaterialTheme.shapes.medium
+    val onAurora = selected == true
     Column(
         modifier
             .weight(1f)
             .fillMaxHeight()
-            .then(if (tone.fill == colors.surface) Modifier.insetLevel(shape, colors) else Modifier.clip(shape).background(tone.fill))
-            .then(if (selected == true) Modifier.border(2.dp, colors.primary, shape) else Modifier)
+            // Шаг 5.14: плитка — вдавленная (цветная — вдавленная своим тоном); выбранный фильтр — «Сияние» сверху.
+            .then(
+                when {
+                    selected == true -> Modifier.raised(shape, colors, elevation = 4).background(AuroraBrush)
+                    else -> Modifier.insetLevel(shape, colors, fill = if (tone.fill == colors.surface) colors.inset else tone.fill)
+                },
+            )
             .then(
                 when {
                     onClick == null -> Modifier
@@ -148,18 +155,18 @@ fun RowScope.Tile(
             Text(
                 value,
                 style = if (compact) MaterialTheme.typography.titleMedium.tabular() else MaterialTheme.typography.titleLarge,
-                color = tone.strong,
+                color = if (onAurora) OnAurora else tone.strong,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (suffix != null) {
-                Text(suffix, style = MaterialTheme.typography.bodySmall, color = tone.muted, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
+                Text(suffix, style = MaterialTheme.typography.bodySmall, color = if (onAurora) OnAurora else tone.muted, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
             }
         }
-        Text(label, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp), color = tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(label, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp), color = if (onAurora) OnAurora.copy(alpha = 0.88f) else tone.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         // Третья строка — «сегодня …» (шаг 5.11д): цифрами, цветом текста, чтобы читалась отдельно от подписи.
         if (note != null) {
-            Text(note, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelMedium.tabular(), color = tone.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(note, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelMedium.tabular(), color = if (onAurora) OnAurora else tone.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -238,7 +245,7 @@ fun PlaceBadge(place: PlaceColor?, modifier: Modifier = Modifier, text: String? 
     val colors = PersonalkaTheme.colors
     val tint = place?.tone(colors.isDark)
     Box(
-        modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(tint?.block(2) ?: colors.surfaceAlt),
+        modifier.size(36.dp).then(if (tint != null) Modifier.raised(RoundedCornerShape(10.dp), colors, elevation = 2).background(tint.block(2)) else Modifier.insetLevel(RoundedCornerShape(10.dp), colors)),
         contentAlignment = Alignment.Center,
     ) {
         val content = tint?.text ?: colors.text
@@ -317,7 +324,8 @@ fun SettingsGroup(modifier: Modifier = Modifier, content: @Composable ColumnScop
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
+            // Шаг 5.14: группа настроек — на уровне «сверху», как карточки-списки и пункты «Ещё».
+            .raised(MaterialTheme.shapes.large, PersonalkaTheme.colors, elevation = 4)
             .background(PersonalkaTheme.colors.surface)
             .padding(horizontal = Dimens.space4, vertical = Dimens.space1),
         content = content,
@@ -333,3 +341,32 @@ fun Modifier.insetWell(shape: androidx.compose.ui.graphics.Shape, fill: Color = 
         drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.34f), Color.Transparent), startY = 0f, endY = 6.dp.toPx()))
         drawRect(Color.White.copy(alpha = 0.12f), topLeft = Offset(0f, size.height - 1.dp.toPx()), size = Size(size.width, 1.dp.toPx()))
     }
+
+/**
+ * Кнопка-значок шапки на уровне «сверху» (шаг 5.14): 44 dp, скругление 14, зона нажатия 48. [aurora] — главное
+ * действие экрана «Сиянием» («Новый клиент»); остальные — светлой выпуклой плашкой.
+ */
+@Composable
+fun RaisedIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    aurora: Boolean = false,
+    iconRotation: Float = 0f,
+) {
+    val colors = PersonalkaTheme.colors
+    val shape = MaterialTheme.shapes.medium
+    Box(Modifier.size(Dimens.touch), contentAlignment = Alignment.Center) {
+        Box(
+            modifier
+                .size(44.dp)
+                .raised(shape, colors, elevation = 4)
+                .then(if (aurora) Modifier.background(AuroraBrush) else Modifier.background(colors.nav))
+                .clickable(role = Role.Button, onClickLabel = contentDescription, onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = contentDescription, tint = if (aurora) OnAurora else colors.text, modifier = Modifier.size(22.dp).rotate(iconRotation))
+        }
+    }
+}

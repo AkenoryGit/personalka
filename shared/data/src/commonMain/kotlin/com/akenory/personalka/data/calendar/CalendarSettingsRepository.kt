@@ -57,6 +57,8 @@ data class CalendarPrefs(
     /** Личные дела и напоминания (шаг 5.10е) и их цвет. */
     val personal: Boolean = false,
     val personalColor: String = PersonalRules.COLOR_DEFAULT,
+    /** Второй цвет перехода личных дел (шаг 5.14е). */
+    val personalColor2: String = "",
 )
 
 /**
@@ -125,7 +127,7 @@ class CalendarSettingsRepository internal constructor(
         } else {
             CalendarPrefs(
                 s.workDayStart, s.workDayEnd, s.dragStepMinutes, s.seriesHorizonWeeks, s.cancelNoticeMinutes,
-                WorkSchedule.decode(s.workSchedule), s.personalEnabled, s.personalColor,
+                WorkSchedule.decode(s.workSchedule), s.personalEnabled, s.personalColor, s.personalColor2,
             )
         }
     }
@@ -157,6 +159,12 @@ class CalendarSettingsRepository internal constructor(
 
     /** Цвет личных дел — ключ `PlaceColor` (шаг 5.10е). */
     suspend fun savePersonalColor(color: String) = update { it.copy(personalColor = color) }
+
+    /** Переход цвета личных дел (шаг 5.14е): «с» и «в»; `to` = `from` — один цвет. */
+    suspend fun savePersonalGradient(from: String, to: String) = update { it.copy(personalColor = from, personalColor2 = to) }
+
+    /** Свой второй цвет личных дел. */
+    suspend fun savePersonalColor2(color: String) = update { it.copy(personalColor2 = color) }
 
     /** Часы работы; возвращает ошибку и ничего не пишет, если конец не позже начала. */
     suspend fun saveWorkHours(start: LocalTime, end: LocalTime): String? {

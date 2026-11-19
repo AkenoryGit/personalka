@@ -7,6 +7,9 @@ import com.akenory.personalka.domain.model.Sex
 
 /** Строки о группах: список, карточка, состав (5.10). */
 object GroupFormat {
+    /** Посещаемость ребёнка для диктора (шаг 5.14а): «Ходит 71 %, из последних 5 пришёл на 4». */
+    fun visits(percent: Int, last: Int, came: Int): String = "Ходит $percent\u00A0%, из последних $last пришёл на $came"
+
     private const val DOT = " · "
 
     /** «1 группа», «2 группы», «5 групп». */

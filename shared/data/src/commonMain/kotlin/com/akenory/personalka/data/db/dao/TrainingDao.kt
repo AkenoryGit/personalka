@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDateTime
 
 /** Ближайшая тренировка клиента — для строки списка (5.8). */
-data class NextTraining(val clientId: String, val start: LocalDateTime)
+data class NextTraining(val clientId: String, val start: LocalDateTime, val locationId: String? = null)
 
 /** Тренировка клиента с видом её типа — для «Без записи» (4.15): посещения и запись дальше. */
 data class ClientVisit(
@@ -259,12 +259,13 @@ interface TrainingDao {
     suspend fun eraseTraining(id: String)
 
     /**
-     * Ближайшая тренировка каждого клиента: начинается не раньше [from], не отменена, клиента ждут.
+     * Ближайшая тренировка каждого клиента: начинается не раньше [from], не отменена, клиента ждут. Место — той же
+     * строки, что и MIN (так работает SQLite): плашка ближайшей в списке клиентов цветом места (шаг 5.14б).
      * Статусы передаются параметрами: Room хранит перечисления именами.
      */
     @Query(
         """
-        SELECT p.clientId AS clientId, MIN(t.start) AS start FROM participation AS p
+        SELECT p.clientId AS clientId, MIN(t.start) AS start, t.locationId AS locationId FROM participation AS p
         JOIN training AS t ON t.id = p.trainingId
         WHERE t.start >= :from AND t.status = :planned AND p.status = :expected
           AND p.deletedAt IS NULL AND t.deletedAt IS NULL

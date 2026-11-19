@@ -109,4 +109,14 @@ class GroupRulesTest {
         assertFalse(hidden("tue", 6, ParticipationStatus.EXPECTED, started = false), "Будущие видны")
         assertFalse(hidden(null, 3, ParticipationStatus.CANCELLED), "У ПТ ничего не меняется")
     }
+
+    @Test
+    fun memberAttendanceGivesPercentAndLastFive() {
+        // Шаг 5.14а: 7 тренировок, пришёл на 5 — 71 %; точки — последние пять по порядку.
+        val a = GroupRules.attendance(listOf(true, false, true, true, false, true, true))
+        assertEquals(71, a.percent)
+        assertEquals(listOf(true, true, false, true, true), a.last)
+        assertEquals(null, GroupRules.attendance(emptyList()).percent, "Тренировок не было — процента нет")
+        assertEquals(listOf(true), GroupRules.attendance(listOf(true)).last)
+    }
 }

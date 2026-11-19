@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.calendar
 
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import com.akenory.personalka.ui.theme.PlaceGradient
@@ -858,7 +859,8 @@ private suspend fun PointerInputScope.pinch(
 private fun TimeColumn(hours: GridHours, hourDp: Float, scrollPx: () -> Float) {
     val colors = PersonalkaTheme.colors
     val measurer = rememberTextMeasurer()
-    val style = MaterialTheme.typography.bodySmall.tabular()
+    // Шаг 5.14д: часы «выдавлены» в сетку — полужирные, со светлой чертой снизу и тенью сверху (цвет — textMuted, 4,5 : 1).
+    val style = MaterialTheme.typography.bodySmall.tabular().copy(fontWeight = FontWeight.Bold)
     val labels = remember(hours, style, measurer) {
         (hours.startHour..hours.endHour).map { measurer.measure(DateFormat.minuteOfDay(it * 60), style) }
     }
@@ -879,7 +881,11 @@ private fun TimeColumn(hours: GridHours, hourDp: Float, scrollPx: () -> Float) {
                     labels.lastIndex -> line - label.size.height - edge
                     else -> line - label.size.height / 2f
                 }
-                drawText(label, color = colors.textMuted, topLeft = Offset(size.width - 6.dp.toPx() - label.size.width, top))
+                val at = Offset(size.width - 6.dp.toPx() - label.size.width, top)
+                val px = 1.dp.toPx()
+                drawText(label, color = Color.White.copy(alpha = if (colors.isDark) 0.08f else 0.95f), topLeft = at + Offset(0f, px))
+                drawText(label, color = (if (colors.isDark) Color.Black else Color(0xFF15171A)).copy(alpha = if (colors.isDark) 0.8f else 0.12f), topLeft = at - Offset(0f, px))
+                drawText(label, color = colors.textMuted, topLeft = at)
             }
         }
     }
@@ -1394,11 +1400,20 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
                 hatch(area, fill, Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
             }
             // Личное дело (шаг 5.10е): заливка цвета личных дел; «можно ставить» — вдвое бледнее.
+            // Шаг 5.14д: личное дело и дорога — вдавленные, как запреты; заливка дела — переливом его цветов (5.14е).
             ZoneKind.PERSONAL -> {
-                val free = byId[zone.kind to zone.id]?.free == true
-                drawRect(lerp(colors.surface, place(zone).tone(colors.isDark).stripe, if (free) PERSONAL_FREE else PERSONAL_FILL), area.topLeft, area.size)
+                val info = byId[zone.kind to zone.id]
+                val free = info?.free == true
+                drawInset(area, colors)
+                val g = PlaceGradient.of(info?.color, info?.color2)
+                val a = if (free) PERSONAL_FREE else PERSONAL_FILL
+                val ends = listOf(g.from, g.to).map { lerp(colors.inset, it.tone(colors.isDark).stripe, a) }
+                drawRect(Brush.linearGradient(ends, start = area.topLeft, end = Offset(area.right, area.top + area.width * 0.47f)), area.topLeft, area.size)
             }
-            ZoneKind.TRAVEL -> hatch(area, lerp(colors.surface, place(zone).tone(colors.isDark).stripe, HATCH_PLACE), Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
+            ZoneKind.TRAVEL -> {
+                drawInset(area, colors)
+                hatch(area, lerp(colors.inset, place(zone).tone(colors.isDark).stripe, HATCH_PLACE), Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
+            }
             // Напоминание (шаг 5.10ж): черта во всю ширину в его время.
             ZoneKind.REMINDER -> drawLine(place(zone).tone(colors.isDark).stripe, area.topLeft, Offset(area.right, area.top), REMINDER_LINE.toPx())
         }

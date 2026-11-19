@@ -1,5 +1,10 @@
 package com.akenory.personalka.ui.training
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.PlaceGradient
 import com.akenory.personalka.ui.theme.screenBackground
 import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.components.cardTone
@@ -750,14 +755,18 @@ private fun ColumnScope.CardBody(
     val single = card.clients.singleOrNull()?.takeIf { !isGroup && !it.erased }
     val titleLink: (() -> Unit)? = single?.let { c -> { onClient(c.id) } } ?: card.groupId?.let { g -> { onGroup(g) } }
     // Шаг 5.11в: шапка — имя, время, тип и статус — на фоне цвета места, как карточка «Сейчас» на «Главной».
-    val tone = PlaceColor.of(card.placeColor).cardTone(colors)
+    // Шаг 5.14г: шапка — переливом цветов места, объёмная (уровень «сверху»), текст — тон, читаемый на обоих концах.
+    val gradient = PlaceGradient.of(card.placeColor, card.placeColor2)
+    val (headFrom, headTo) = gradient.ends(colors.isDark, 1)
+    val ink = gradient.ink(colors.isDark, 1)
+    val tone = PlaceColor.of(card.placeColor).cardTone(colors).copy(fill = headFrom, content = ink, strong = ink, muted = ink)
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.space4)) {
       Column(
           Modifier
               .padding(top = Dimens.space2)
               .fillMaxWidth()
-              .clip(MaterialTheme.shapes.extraLarge)
-              .background(tone.fill)
+              .raised(MaterialTheme.shapes.extraLarge, colors, elevation = 8)
+              .background(Brush.linearGradient(listOf(headFrom, headTo)))
               .padding(start = Dimens.space4, end = Dimens.space1, bottom = Dimens.space3),
       ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1141,11 +1150,7 @@ private fun GroupMembers(
             color = colors.textMuted,
         )
         if (TrainingCardRules.canAddGuest(state)) {
-            TextButton(onClick = onAddGuest, modifier = Modifier.heightIn(min = Dimens.touch).testTag(ADD_GUEST_TAG)) {
-                Icon(PIcons.PersonAdd, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(Dimens.space2))
-                Text(TrainingCardFormat.ADD_GUEST, style = MaterialTheme.typography.labelLarge, color = colors.text)
-            }
+            SecondaryButton(TrainingCardFormat.ADD_GUEST, onAddGuest, Modifier.testTag(ADD_GUEST_TAG), icon = PIcons.PersonAdd)
         }
     }
     if (toggle && state.status == TrainingStatus.PLANNED) {
@@ -1161,17 +1166,22 @@ private fun GroupMembers(
         TrainingCardFormat.noShowSection(noShow.size) to noShow,
         TrainingCardFormat.cancelledSection(cancelled.size) to cancelled,
     )
+    // Шаг 5.14г (вариант А одним столбиком): каждый ребёнок — своей карточкой по алфавиту; пришёл — карточка сверху
+    // с зелёной галочкой, остальные — вдавленные, имя приглушено.
     sections.filter { it.second.isNotEmpty() }.forEach { (label, list) ->
-        Text(label, modifier = Modifier.padding(top = Dimens.space3), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
+        Text(label, modifier = Modifier.padding(top = Dimens.space3, bottom = Dimens.space1), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
         list.forEachIndexed { i, c ->
-            if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
+            val kidShape = MaterialTheme.shapes.medium
             Row(
                 Modifier
+                    .padding(top = if (i > 0) 6.dp else 0.dp)
                     .fillMaxWidth()
+                    .then(if (c.state.came) Modifier.raised(kidShape, colors, elevation = 4).background(colors.surface) else Modifier.insetLevel(kidShape, colors))
                     .heightIn(min = Dimens.touch)
                     .clickable(role = Role.Checkbox) { if (toggle) onToggle(c.id) else if (!c.erased) onClient(c.id) }
                     .semantics { selected = c.state.came }
-                    .testTag(cardClientTag(c.id)),
+                    .testTag(cardClientTag(c.id))
+                    .padding(start = Dimens.space3),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (c.state.came) {
@@ -1180,7 +1190,7 @@ private fun GroupMembers(
                     Box(Modifier.size(22.dp).padding(2.dp).border(2.dp, colors.outline, CircleShape))
                 }
                 Spacer(Modifier.width(Dimens.space3))
-                Text(c.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(c.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (c.state.came) FontWeight.Medium else FontWeight.Normal), color = if (c.state.came) colors.text else colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 card.reliability[c.id]?.let { ReliabilityChip(it, ReliabilityFormat.value(it), c.id, Modifier.padding(start = Dimens.space2)) }
                 // Ребёнок коллеги в группе «Каждый своих» (шаг 5.3м): подпись — имя коллеги.
                 val kidCoach = card.eachOwnColleague?.takeIf { c.colleagueKid }
@@ -1209,29 +1219,25 @@ private fun GroupMembers(
 @Composable
 private fun CardButtonsRow(actions: List<CardAction>, diaryFirst: Boolean, onAction: (CardAction) -> Unit) {
     val colors = PersonalkaTheme.colors
+    // Шаг 5.14г: главная — «Сиянием», остальные — одинаковые выпуклые; в ряду из трёх — без значков (подписи
+    // не переносятся: «Дневни / к» на Fold).
+    val few = actions.size < 3
     Column(Modifier.fillMaxWidth()) {
-        HorizontalDivider(thickness = 1.dp, color = colors.divider)
         Row(Modifier.fillMaxWidth().padding(Dimens.space4), horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
             actions.forEachIndexed { i, action ->
                 val text = TrainingCardFormat.action(action)
-                val modifier = Modifier.weight(1f)
+                val modifier = Modifier.weight(if (i == 0 && !few) 1.2f else 1f)
                 when (action) {
                     CardAction.DONE, CardAction.ALL_CAME, CardAction.RETURN -> PrimaryButton(text, { onAction(action) }, modifier)
                     CardAction.DIARY ->
                         if (diaryFirst && i == 0) {
                             PrimaryButton(text, { onAction(action) }, modifier)
                         } else {
-                            SecondaryButton(text, { onAction(action) }, modifier, icon = PIcons.EditNote.takeIf { actions.size < 3 || i == 0 })
+                            SecondaryButton(text, { onAction(action) }, modifier, icon = PIcons.EditNote.takeIf { few })
                         }
-                    CardAction.EDIT -> OutlineButton(text, { onAction(action) }, modifier, icon = PIcons.Edit.takeIf { actions.size < 3 })
+                    CardAction.EDIT -> SecondaryButton(text, { onAction(action) }, modifier, icon = PIcons.Edit.takeIf { few })
                     CardAction.CANCEL ->
-                        if (i == 0) {
-                            SecondaryButton(text, { onAction(action) }, modifier.tourTarget(TourTarget.CANCEL), icon = PIcons.EventBusy)
-                        } else {
-                            TextButton(onClick = { onAction(action) }, modifier = modifier.tourTarget(TourTarget.CANCEL).heightIn(min = Dimens.button)) {
-                                Text(text, style = MaterialTheme.typography.labelLarge, color = colors.text)
-                            }
-                        }
+                        SecondaryButton(text, { onAction(action) }, modifier.tourTarget(TourTarget.CANCEL), icon = PIcons.EventBusy.takeIf { few })
                 }
             }
         }

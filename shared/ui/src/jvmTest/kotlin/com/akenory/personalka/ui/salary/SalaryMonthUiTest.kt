@@ -103,7 +103,7 @@ class SalaryMonthUiTest {
         start()
         onNodeWithText(SalaryFormat.month(october)).assertExists()
         onNodeWithTag(SALARY_EARNED_TAG).assertTextContains(MoneyFormat.rub(rub(1840)))
-        onNodeWithText(SalaryFormat.forecast(rub(2760))).assertExists()
+        onNodeWithText(MoneyFormat.approxRub(rub(2760))).assertExists()
 
         onNodeWithTag(SALARY_ADD_ADJUST_TAG).performScrollTo().performClick()
         onNodeWithTag(ADJUST_AMOUNT_TAG).performTextReplacement("1200")
@@ -141,10 +141,13 @@ class SalaryMonthUiTest {
         }
         start()
         // По расписанию 12 × 920 = 11 040 ₽; запланированная ПТ — с отменами: 11 × 920 + 920 × 11 / 14.
-        onNodeWithText(SalaryFormat.forecast(rub(10_120) + 72_286)).assertExists()
-        onNodeWithTag(SALARY_SCHEDULED_TAG).assertTextContains("по расписанию ${MoneyFormat.approxRub(rub(11_040))}, обычно отменяется 21", substring = true)
+        // Шаг 5.14в: прогноз, отмены и час работы — плитками под «Сиянием».
+        onNodeWithText(MoneyFormat.approxRub(rub(10_120) + 72_286)).assertExists()
+        onNodeWithTag(SALARY_SCHEDULED_TAG).assertTextContains("по расписанию ${MoneyFormat.approxRub(rub(11_040))}", substring = true)
+        onNodeWithTag(SALARY_SCHEDULED_TAG).assertTextContains("21\u00A0%")
+        onNodeWithTag(SALARY_SCHEDULED_TAG).assertTextContains("обычно отменяется")
         // 11 проведённых по 50 минут за 20 дней — 3 ч в неделю, 10 120 ₽ за 550 минут — ≈ 1 100 ₽ за час.
-        onNodeWithTag(SALARY_WORK_TAG).assertTextContains("Работа: 3", substring = true)
+        onNodeWithTag(SALARY_WORK_TAG).assertTextContains("за час · 3\u00A0ч в неделю")
         onNodeWithTag(SALARY_WORK_TAG).assertTextContains(MoneyFormat.approxRub(rub(1_104)), substring = true)
     }
 

@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.components
 
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -77,45 +78,42 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
             .padding(horizontal = Dimens.space6, vertical = Dimens.space2),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) OnAurora else colors.textMuted)
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) OnAurora else colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** Вторая кнопка: заливка surface-alt, значок слева — «+ Место», «+ Новый тип». */
+/**
+ * Вторая кнопка (шаг 5.14): выпуклая светлая плашка на уровне «сверху», значок слева — «+ Место», «+ Новый тип».
+ * Подпись — в одну строку, длинная обрезается многоточием, а не переносится.
+ */
 @Composable
-fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
-    val colors = PersonalkaTheme.colors
-    Button(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = Dimens.button),
-        shape = MaterialTheme.shapes.medium,
-        colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceAlt, contentColor = colors.text),
-        elevation = null,
-    ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(Dimens.space2))
-        }
-        Text(text, style = MaterialTheme.typography.labelLarge)
-    }
-}
+fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) =
+    RaisedButton(text, onClick, modifier, icon)
 
-/** Контурная кнопка для редкого действия рядом с главной: «Убрать в архив», «+ Серия». */
+/** Кнопка для редкого действия рядом с главной: «Убрать в архив», «+ Серия». С шага 5.14 — та же выпуклая, что и вторая. */
 @Composable
-fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) =
+    RaisedButton(text, onClick, modifier, icon)
+
+@Composable
+private fun RaisedButton(text: String, onClick: () -> Unit, modifier: Modifier, icon: ImageVector?) {
     val colors = PersonalkaTheme.colors
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = Dimens.button),
-        shape = MaterialTheme.shapes.medium,
-        border = androidx.compose.foundation.BorderStroke(1.dp, colors.outline),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.text),
+    val shape = MaterialTheme.shapes.medium
+    Row(
+        modifier = modifier
+            .heightIn(min = Dimens.button)
+            .raised(shape, colors, elevation = 4)
+            .background(colors.nav)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = Dimens.space4, vertical = Dimens.space2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(Dimens.space2))
         }
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Text(text, style = MaterialTheme.typography.labelLarge, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -411,14 +409,14 @@ fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect:
     }
 }
 
-/** Пояснение на подложке surface-alt со значком «i»: что будет и где это поправить. */
+/** Пояснение во вдавленной плашке (шаг 5.14) со значком «i»: что будет и где это поправить. */
 @Composable
 fun Note(text: String, modifier: Modifier = Modifier) {
     val colors = PersonalkaTheme.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(colors.surfaceAlt, MaterialTheme.shapes.medium)
+            .insetLevel(MaterialTheme.shapes.medium, colors)
             .padding(Dimens.space3),
         horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
     ) {
@@ -427,14 +425,18 @@ fun Note(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Карточка-список на surface со скруглением 12: строки разделены тонкой линией. */
+/**
+ * Карточка-список (шаг 5.14): строки разделены тонкой линией; сама карточка — на уровне «сверху», скругление 16,
+ * как пункты «Ещё», — так все подменю настроек в одном стиле.
+ */
 @Composable
 fun ListCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val colors = PersonalkaTheme.colors
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(PersonalkaTheme.colors.surface),
+            .raised(MaterialTheme.shapes.large, colors, elevation = 4)
+            .background(colors.surface),
     ) { content() }
 }
 

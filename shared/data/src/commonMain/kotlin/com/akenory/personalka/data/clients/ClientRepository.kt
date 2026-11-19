@@ -61,7 +61,13 @@ import kotlinx.datetime.minus
 class ArchiveUndo internal constructor(val clientId: String, val memberships: List<GroupMemberEntity>, internal val series: Undo?)
 
 /** Строка списка клиентов (5.8): клиент, постоянное расписание и ближайшая тренировка. */
-data class ClientRow(val client: ClientEntity, val schedule: List<ScheduleLine>, val next: LocalDateTime?)
+data class ClientRow(
+    val client: ClientEntity,
+    val schedule: List<ScheduleLine>,
+    val next: LocalDateTime?,
+    /** Место ближайшей тренировки (шаг 5.14б): плашка в списке — переливом его цветов. */
+    val nextPlace: LocationEntity? = null,
+)
 
 /**
  * Родственник в карточке (4.17): связь с этой стороны, сам родственник и его расписание. [clientLabel] — у «Другое»
@@ -122,9 +128,11 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
         clients.observeAllClients(),
         schedules(now.date),
         trainings.observeNextTrainings(now, TrainingStatus.PLANNED, ParticipationStatus.EXPECTED),
-    ) { all, lines, next ->
-        val nextOf = next.associate { it.clientId to it.start }
-        all.map { ClientRow(it, lines[it.id].orEmpty(), nextOf[it.id]) }
+        reference.observeLocations(),
+    ) { all, lines, next, places ->
+        val nextOf = next.associateBy { it.clientId }
+        val placeById = places.associateBy { it.id }
+        all.map { ClientRow(it, lines[it.id].orEmpty(), nextOf[it.id]?.start, nextOf[it.id]?.locationId?.let(placeById::get)) }
     }
 
     /**

@@ -103,6 +103,31 @@ object SalaryFormat {
     /** «Работа: 40 ч в неделю, ≈ 1 100 ₽ за час» (шаг 3.9щ). */
     fun work(w: WorkHours): String = "Работа: ${w.perWeek}${NBSP}ч в неделю, ${MoneyFormat.approxRub(w.perHour)} за час"
 
+    /*
+     * Плитки под «Заработано» (шаг 5.14в, вариант А): цифра крупно, подпись и третья строка мелко.
+     */
+
+    /** Плитка «сегодня»: «+6 780 ₽»; заработка сегодня нет, но впереди есть — «≈ 5 820 ₽» с подписью «впереди сегодня». */
+    fun todayTile(earned: Long?, ahead: Long?): Triple<String, String, String?>? = when {
+        earned != null && earned != 0L -> Triple(MoneyFormat.signedRub(earned), "сегодня", ahead?.takeIf { it != 0L }?.let { "впереди ${MoneyFormat.approxRub(it)}" })
+        ahead != null && ahead != 0L -> Triple(MoneyFormat.approxRub(ahead), "впереди сегодня", null)
+        else -> null
+    }
+
+    /** Плитка прогноза: «≈ 203 490 ₽», «прогноз · 126 % плана». */
+    fun forecastTile(amount: Long, percent: Int?): Pair<String, String> =
+        MoneyFormat.approxRub(amount) to (if (percent != null) "прогноз$DOT$percent$NBSP% плана" else "прогноз")
+
+    /** Плитка часа работы: «≈ 1 100 ₽», «за час · 40 ч в неделю». */
+    fun workTile(w: WorkHours): Pair<String, String> = MoneyFormat.approxRub(w.perHour) to "за час$DOT${w.perWeek}${NBSP}ч в неделю"
+
+    /** Плитка отмен: «20 %», «обычно отменяется», «по расписанию ≈ 204 780 ₽»; как у [scheduled] — `null`, если не нужна. */
+    fun cancelsTile(pay: MonthPay): Triple<String, String, String>? {
+        val cancels = pay.cancels ?: return null
+        if (pay.scheduled == pay.forecast) return null
+        return Triple("${cancels.percent}$NBSP%", "обычно отменяется", "по расписанию ${MoneyFormat.approxRub(pay.scheduled)}")
+    }
+
     /** «97 % плана». */
     fun ofPlan(percent: Int): String = "$percent$NBSP% плана"
 

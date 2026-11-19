@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.ui.components.RaisedIconButton
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.akenory.personalka.ui.theme.raised
 import com.akenory.personalka.ui.theme.OnAurora
 import com.akenory.personalka.ui.theme.AuroraBrush
@@ -182,9 +184,7 @@ internal fun CalendarHeader(
                 places.forEach { p -> ChoiceChip(p.shortName, place?.id == p.id, onClick = { onPlace(p) }) }
             }
         }
-        IconButton(onClick = onToday) {
-            Icon(PIcons.Today, contentDescription = TODAY_LABEL, tint = colors.text)
-        }
+        RaisedIconButton(PIcons.Today, TODAY_LABEL, onToday)
         HeaderMenu(CalendarFormat.view(view), CALENDAR_VIEW_TAG) { close ->
             views.forEach { option ->
                 MenuChoice(CalendarFormat.view(option), option == view) {
@@ -244,7 +244,8 @@ private fun HeaderMenu(text: String, tag: String, items: @Composable ColumnScope
         Row(
             modifier = Modifier
                 .height(Dimens.chip)
-                .raised(MaterialTheme.shapes.small, colors, elevation = 3)
+                // Шаг 5.14д: заметно выпуклые — тень сильнее, скругление 12.
+                .raised(RoundedCornerShape(12.dp), colors, elevation = 7)
                 .background(colors.nav)
                 .clickable(role = Role.DropdownList) { open = true }
                 .testTag(tag)

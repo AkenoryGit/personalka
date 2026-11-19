@@ -1,5 +1,11 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.components.RaisedIconButton
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.PlaceGradient
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.raised
 import com.akenory.personalka.ui.theme.OnAurora
 import com.akenory.personalka.ui.theme.AuroraBrush
 import androidx.compose.foundation.background
@@ -198,17 +204,12 @@ fun ClientList(
             modifier = Modifier.weight(1f).fillMaxWidth().testTag(CLIENT_LIST_TAG),
             contentPadding = PaddingValues(start = Dimens.space4, end = Dimens.space4, bottom = Dimens.space6),
         ) {
+            // Шаг 5.14б (вариант А): каждый клиент — отдельной карточкой с тенью, ближайшая — плашкой цвета места.
             itemsIndexed(visible, key = { _, row -> row.client.id }) { index, row ->
                 val next = row.next
-                val shape = when {
-                    visible.size == 1 -> MaterialTheme.shapes.medium
-                    index == 0 -> RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-                    index == visible.lastIndex -> RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
-                    else -> RoundedCornerShape(0.dp)
-                }
-                Column(Modifier.then(if (index == 0) Modifier.tourTarget(TourTarget.CLIENT) else Modifier).clip(shape).background(colors.surface)) {
-                    if (index > 0) HorizontalDivider(Modifier.padding(start = Dimens.space4), thickness = 1.dp, color = colors.divider)
+                Column(Modifier.then(if (index == 0) Modifier.tourTarget(TourTarget.CLIENT) else Modifier).padding(vertical = 4.dp)) {
                     PersonRow(
+                        card = true,
                         title = row.client.let { "${it.lastName} ${it.firstName}" },
                         subtitle = row.subtitle(today),
                         selected = row.client.id == selectedId,
@@ -216,13 +217,7 @@ fun ClientList(
                         modifier = Modifier.testTag(clientRowTag("${row.client.lastName} ${row.client.firstName}")),
                         avatar = { Avatar(row.client.avatar(today), row.client.id, 40.dp) },
                         trailing = if (next != null) {
-                            {
-                                Text(
-                                    ClientFormat.next(next, today),
-                                    style = MaterialTheme.typography.bodySmall.tabular(),
-                                    color = colors.text,
-                                )
-                            }
+                            { NextPlaque(ClientFormat.next(next, today), row.nextPlace?.color, row.nextPlace?.color2) }
                         } else {
                             null
                         },
@@ -231,6 +226,33 @@ fun ClientList(
             }
         }
     }
+}
+
+/**
+ * Плашка ближайшей тренировки в строке клиента (шаг 5.14б): дата на переливе цветов места, уровень «сверху»;
+ * места нет — вдавленная нейтральная.
+ */
+@Composable
+private fun NextPlaque(text: String, color: String?, color2: String?) {
+    val colors = PersonalkaTheme.colors
+    val shape = RoundedCornerShape(10.dp)
+    val gradient = color?.let { PlaceGradient.of(it, color2) }
+    Text(
+        text,
+        modifier = Modifier
+            .then(
+                if (gradient != null) {
+                    val (a, b) = gradient.ends(colors.isDark, 1)
+                    Modifier.raised(shape, colors, elevation = 3).background(Brush.linearGradient(listOf(a, b)))
+                } else {
+                    Modifier.insetLevel(shape, colors)
+                },
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        style = MaterialTheme.typography.labelMedium.tabular().copy(fontWeight = FontWeight.SemiBold),
+        color = gradient?.ink(colors.isDark, 1) ?: colors.text,
+        maxLines = 1,
+    )
 }
 
 /** Шапка списка: заголовок, «Сортировка и фильтры» с меню и «Новый клиент». */
@@ -250,9 +272,7 @@ private fun ListHeader(state: ClientListState, showMenu: Boolean, onNew: () -> U
         )
         if (showMenu) {
             Box {
-                IconButton(onClick = { menu = true }, modifier = Modifier.testTag(CLIENT_SORT_TAG)) {
-                    Icon(PIcons.Tune, contentDescription = "Сортировка и фильтры", tint = colors.text)
-                }
+                RaisedIconButton(PIcons.Tune, "Сортировка и фильтры", { menu = true }, Modifier.testTag(CLIENT_SORT_TAG))
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = colors.surface) {
                     MenuLabel("Сортировка")
                     ClientSort.entries.forEach { sort ->
@@ -272,9 +292,7 @@ private fun ListHeader(state: ClientListState, showMenu: Boolean, onNew: () -> U
                 }
             }
         }
-        IconButton(onClick = onNew, modifier = Modifier.testTag(CLIENT_ADD_TAG)) {
-            Icon(PIcons.PersonAdd, contentDescription = "Новый клиент", tint = colors.text)
-        }
+        RaisedIconButton(PIcons.PersonAdd, "Новый клиент", onNew, Modifier.testTag(CLIENT_ADD_TAG), aurora = true)
     }
 }
 
@@ -391,12 +409,15 @@ internal fun PersonRow(
     leading: ImageVector? = null,
     trailing: (@Composable () -> Unit)? = null,
     avatar: (@Composable () -> Unit)? = null,
+    card: Boolean = false,
 ) {
     val colors = PersonalkaTheme.colors
     val bar = colors.primary
     Row(
         modifier
             .fillMaxWidth()
+            // Шаг 5.14б: [card] — строка отдельной карточкой на уровне «сверху» (список клиентов, состав группы).
+            .then(if (card) Modifier.raised(MaterialTheme.shapes.large, colors, elevation = 4) else Modifier)
             .heightIn(min = Dimens.row)
             .background(if (selected) colors.surfaceAlt else colors.surface)
             .drawBehind { if (selected) drawRect(bar, size = Size(3.dp.toPx(), size.height)) }

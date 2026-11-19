@@ -1,5 +1,18 @@
 package com.akenory.personalka.ui.groups
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import com.akenory.personalka.data.clients.avatar
+import com.akenory.personalka.ui.components.Avatar
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.domain.group.MemberAttendance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -115,6 +128,7 @@ const val NEW_MEMBER_TAG = "member-new"
 const val NEW_MEMBER_LAST_TAG = "member-new-last"
 const val NEW_MEMBER_FIRST_TAG = "member-new-first"
 fun memberRowTag(name: String) = "member-$name"
+fun memberVisitsTag(name: String) = "member-visits-$name"
 fun memberPickTag(name: String) = "member-pick-$name"
 fun absentRowTag(name: String) = "absent-$name"
 const val MEMBER_SPLIT_TAG = "member-split"
@@ -261,7 +275,12 @@ fun GroupCard(
                             color = colors.text,
                         )
                     }
-                    MemberList(current, byId, today, eachOwn) { leaving = it.clientId }
+                    // Шаг 5.14а: посещаемость каждого — по проведённым тренировкам, где его ждали, от старой к новой.
+                    val visits = remember(done) {
+                        done.sortedBy { it.training.start }.flatMap { t -> t.participations.map { it.clientId to (it.status == ParticipationStatus.ATTENDED) } }
+                            .groupBy({ it.first }, { it.second }).mapValues { GroupRules.attendance(it.value) }
+                    }
+                    MemberList(current, byId, today, eachOwn, visits) { leaving = it.clientId }
                 }
 
                 val upcoming = trainings.filter { it.training.status == TrainingStatus.PLANNED && it.training.start >= now }
@@ -375,13 +394,16 @@ private fun MemberList(
     byId: Map<String, ClientRow>,
     today: LocalDate,
     eachOwn: String?,
+    visits: Map<String, MemberAttendance>,
     onOpen: (GroupMemberEntity) -> Unit,
 ) {
     val colors = PersonalkaTheme.colors
-    ListCard {
-        list.forEachIndexed { index, m ->
-            if (index > 0) RowDivider()
+    // Шаг 5.14а (вариант Б): каждый ребёнок — отдельной карточкой одной строкой; справа — точки последних пяти
+    // тренировок во вдавленной плашке и процент посещений (зелёный от 75 %, янтарный ниже 60 %).
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        list.forEach { m ->
             val kid = byId[m.clientId]
+            val visit = visits[m.clientId]
             val name = kid.nameOrGone()
             val archived = if (kid?.client?.status == ClientStatus.ARCHIVED) "в архиве" else null
             PersonRow(
@@ -392,18 +414,62 @@ private fun MemberList(
                 ).joinToString(" · "),
                 onClick = { onOpen(m) },
                 modifier = Modifier.testTag(memberRowTag(name)),
-                trailing = eachOwn?.let { colleague ->
-                    {
-                        Text(
-                            if (m.coach == Owner.COLLEAGUE) colleague else CoCoachingFormat.MY_KID_SHORT,
-                            Modifier.testTag(memberCoachLabelTag(name)),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.textMuted,
-                        )
+                card = true,
+                avatar = kid?.let { k -> { Avatar(k.client.avatar(today), k.client.id, 36.dp) } },
+                trailing = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
+                        if (eachOwn != null) {
+                            Text(
+                                if (m.coach == Owner.COLLEAGUE) eachOwn else CoCoachingFormat.MY_KID_SHORT,
+                                Modifier.testTag(memberCoachLabelTag(name)),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.textMuted,
+                            )
+                        }
+                        if (visit != null && visit.last.isNotEmpty()) VisitDots(visit, Modifier.testTag(memberVisitsTag(name)))
                     }
                 },
             )
         }
+    }
+}
+
+/**
+ * Точки последних тренировок во вдавленной плашке (зелёная — пришёл, пустая — нет) и процент посещений (шаг 5.14а).
+ * Для диктора — «Ходит 71 %, из последних 5 пришёл на 4».
+ */
+@Composable
+private fun VisitDots(visit: MemberAttendance, modifier: Modifier = Modifier) {
+    val colors = PersonalkaTheme.colors
+    val percent = visit.percent ?: 0
+    Row(
+        modifier.clearAndSetSemantics { contentDescription = GroupFormat.visits(percent, visit.last.size, visit.last.count { it }) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+    ) {
+        Row(
+            Modifier.insetLevel(RoundedCornerShape(10.dp), colors).padding(horizontal = 8.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            visit.last.forEach { came ->
+                Box(
+                    Modifier.size(8.dp).clip(CircleShape)
+                        .then(if (came) Modifier.background(colors.done) else Modifier.border(1.dp, colors.outline, CircleShape)),
+                )
+            }
+        }
+        Text(
+            "$percent\u00A0%",
+            Modifier.widthIn(min = 40.dp),
+            style = MaterialTheme.typography.labelLarge.tabular().copy(fontWeight = FontWeight.SemiBold),
+            color = when {
+                percent >= 75 -> colors.done
+                percent < 60 -> colors.charged
+                else -> colors.text
+            },
+            textAlign = TextAlign.End,
+            maxLines = 1,
+        )
     }
 }
 

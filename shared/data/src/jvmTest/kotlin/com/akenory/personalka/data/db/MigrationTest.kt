@@ -728,8 +728,39 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion22() {
-        assertEquals(22, PersonalkaDatabase.VERSION)
+    fun version22PersonalColorGetsAutoGradient(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v22", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шага 5.13: у личных дел один цвет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 22)
+                raw.exec(
+                    "INSERT INTO coach_settings (id, cancelNoticeMinutes, diaryEnabled, digestEnabled, digestTime, instantDiary, instantGroup, " +
+                        "followupEnabled, followupDays, cabinetsEnabled, cabinetGroupDiary, coCoachingEnabled, reliabilityEnabled, workDayStart, " +
+                        "workDayEnd, dragStepMinutes, seriesHorizonWeeks, upcomingInCard, autoDonePersonal, weekViewDays, backupFolderUri, " +
+                        "backupFrequency, workSchedule, personalEnabled, personalColor, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('s1', 60, 0, 0, '21:00', 0, 0, 0, 30, 0, 0, 0, 1, '07:00', '23:00', 15, 8, 1, 1, 3, NULL, 'DAILY', NULL, 1, 'pink', " +
+                        "'c1', 1, 1, 1, NULL)",
+                )
+            }
+            val db = personalkaDatabase(path)
+            try {
+                val settings = db.coachDao().settings("c1")!!
+                assertEquals("pink", settings.personalColor, "Цвет личных дел не тронут")
+                assertEquals("", settings.personalColor2, "Второго цвета нет — переход подбирается")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion23() {
+        assertEquals(23, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }

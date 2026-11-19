@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20, Migration20To21, Migration21To22)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20, Migration20To21, Migration21To22, Migration22To23)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -322,6 +322,13 @@ internal object Migration20To21 : Migration(20, 21) {
 internal object Migration21To22 : Migration(21, 22) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `location` ADD COLUMN `color2` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+/** 22 → 23 (шаг 5.14е): второй цвет перехода личных дел. Пусто — переход подобран по прежнему цвету, как у мест. */
+internal object Migration22To23 : Migration(22, 23) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec("ALTER TABLE `coach_settings` ADD COLUMN `personalColor2` TEXT NOT NULL DEFAULT ''")
     }
 }
 
