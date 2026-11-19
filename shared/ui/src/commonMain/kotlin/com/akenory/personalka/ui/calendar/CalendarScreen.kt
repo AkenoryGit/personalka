@@ -667,10 +667,11 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
     val colors = PersonalkaTheme.colors
     // С деньгами строка выше на строку суммы (макет «День: суммы в строке недели»).
     // Шаг 5.11в: неделя — отдельной карточкой на surface, как на холсте нового оформления.
+    // Шаг 5.12е (просьба Дмитрия): снизу зазор 8 dp — карточка недели не прилипает к сетке часов.
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = Dimens.space3)
+            .padding(start = Dimens.space3, end = Dimens.space3, bottom = Dimens.space2)
             .clip(MaterialTheme.shapes.medium)
             .background(colors.surface)
             .height(if (moneyOf != null) Dimens.row + WEEK_MONEY_ROW else Dimens.row)
