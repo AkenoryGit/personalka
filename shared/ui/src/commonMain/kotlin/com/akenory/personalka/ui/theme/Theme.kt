@@ -19,27 +19,36 @@ import androidx.compose.ui.unit.sp
 
 private const val TNUM = "tnum"
 
-/** Шрифт системный. title 22, subtitle 17, body 15, caption 13, number 28 (только сумма на «Деньгах»). */
+/**
+ * Шрифт системный. title 24, subtitle 17, body 15, caption 13, label-small 12; number 28 и number-large 40
+ * (сумма месяца на «Главной» и в «Зарплате»). Шаг 5.11а: заголовки и цифры — полужирные (600), чтобы на экране
+ * было главное и второстепенное, а не всё одного веса.
+ */
 val PersonalkaTypography = Typography(
-    headlineSmall = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Medium),      // title
-    titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),        // subtitle
+    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold),    // title
+    titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),      // subtitle
     bodyLarge = TextStyle(fontSize = 15.sp, lineHeight = 22.sp, fontWeight = FontWeight.Normal),          // body
     labelLarge = TextStyle(fontSize = 15.sp, lineHeight = 22.sp, fontWeight = FontWeight.Medium),         // body-strong, кнопки
     bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal),          // caption
     labelMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),        // caption-strong
-    displaySmall = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Medium,
+    labelSmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal),         // подпись плитки
+    titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold,
+        fontFeatureSettings = TNUM),                                                                    // цифра плитки
+    displaySmall = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.01).em, fontFeatureSettings = TNUM),                                        // number
+    displayMedium = TextStyle(fontSize = 40.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold,
+        letterSpacing = (-0.02).em, fontFeatureSettings = TNUM),                                        // number-large
 )
 
 /** Для времени, сумм и счётчиков: моноширинные цифры. */
 fun TextStyle.tabular(): TextStyle = copy(fontFeatureSettings = TNUM)
 
 val PersonalkaShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),   // блок календаря
+    extraSmall = RoundedCornerShape(8.dp),   // блок календаря (шаг 5.11а: было 6)
     small = RoundedCornerShape(8.dp),        // чип, метка статуса
-    medium = RoundedCornerShape(12.dp),      // карточка, кнопка, поле, сообщение
+    medium = RoundedCornerShape(14.dp),      // карточка, плитка, кнопка, поле, сообщение (было 12)
     large = RoundedCornerShape(16.dp),       // кнопка «+»
-    extraLarge = RoundedCornerShape(20.dp),  // нижняя панель, диалог
+    extraLarge = RoundedCornerShape(20.dp),  // цветная карточка, нижняя панель, диалог
 )
 
 object Dimens {

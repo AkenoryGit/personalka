@@ -234,6 +234,21 @@ object HomeFormat {
         PlanPace.BEHIND -> if (pts != null) "Поднажать: до плана ещё " + RuText.digits(pts.toLong()) + NBSP + "ПТ" else "Поднажать: прогноз $forecastPercent$NBSP% плана"
     }
 
+    // --- Плитки под «Деньгами» (шаг 5.11б, новое оформление) ---
+
+    /** Плитка ПТ: «94» и « / 149» мельче, если по расписанию будет больше; подпись «ПТ проведено». */
+    fun ptTileSuffix(done: Int, total: Int): String? = if (total > done) " / " + RuText.digits(total.toLong()) else null
+    const val PT_TILE = "ПТ проведено"
+
+    /** Прогноз у суммы месяца: «127 %». */
+    fun forecastBadge(percent: Int): String = "$percent$NBSP%"
+
+    /** Плитка отмен за месяц: «21» и подпись «отмена» / «отмены» / «отмен». */
+    fun cancelTile(n: Int): String = RuText.plural(n, "отмена", "отмены", "отмен")
+
+    /** Плитка дня: сумма за сегодня и подпись «сегодня · будет ≈ 5 440 ₽» (или «сегодня · всё проведено»). */
+    fun todayTile(earned: Long, forecast: Long): String = "сегодня" + DOT + willBe(earned, forecast)
+
     /** Зарплата не настроена (5.18): вместо суммы — приглашение и кнопка. */
     const val SALARY_NOT_SET = "Зарплата ещё не настроена"
     const val SALARY_NOT_SET_NOTE = "Посчитаю заработок, ступень и выплаты по вашим тренировкам."

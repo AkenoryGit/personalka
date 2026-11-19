@@ -80,7 +80,7 @@ val LightColors = PersonalkaColors(
 
 val DarkColors = PersonalkaColors(
     bg = Color(0xFF15171A),
-    surface = Color(0xFF1E2124),
+    surface = Color(0xFF212428),
     surfaceAlt = Color(0xFF2A2D31),
     divider = Color(0xFF34373B),
     outline = Color(0xFF72767C),

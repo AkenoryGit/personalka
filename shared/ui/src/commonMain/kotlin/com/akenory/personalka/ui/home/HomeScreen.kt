@@ -76,6 +76,7 @@ import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.FollowupFormat
 import com.akenory.personalka.domain.format.GroupFormat
 import com.akenory.personalka.domain.format.HomeFormat
+import com.akenory.personalka.domain.format.RuText
 import com.akenory.personalka.domain.format.MoneyFormat
 import com.akenory.personalka.domain.format.ReconcileFormat
 import com.akenory.personalka.domain.format.ReliabilityFormat
@@ -101,6 +102,13 @@ import com.akenory.personalka.domain.training.StatusRules
 import com.akenory.personalka.domain.training.TrainingTime
 import com.akenory.personalka.ui.calendar.COPIED
 import com.akenory.personalka.ui.calendar.EntryRow
+import com.akenory.personalka.ui.components.Tile
+import com.akenory.personalka.ui.components.TileRow
+import com.akenory.personalka.ui.components.Tone
+import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.cardTone
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.neutralTone
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.Note
 import com.akenory.personalka.ui.components.PrimaryButton
@@ -541,8 +549,8 @@ private fun NearestBlock(
 ) {
     val colors = PersonalkaTheme.colors
     val today = now.date
-    Block(Modifier.testTag(NEAREST_TAG)) {
-        if (nearest == null || nearest.start.date != today) {
+    if (nearest == null || nearest.start.date != today) {
+        Block(Modifier.testTag(NEAREST_TAG)) {
             Padded {
                 Text(HomeFormat.NEAREST, style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
                 Text(HomeFormat.todayDone(nearest?.start, today), style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text)
@@ -554,12 +562,14 @@ private fun NearestBlock(
                     onClick = { onDay(nearest.start.date) },
                 )
             }
-            return@Block
         }
-        Padded { NearestBody(nearest, card, now, onOpen, onDone, onDiary) }
-        if (later.isNotEmpty()) {
-            BlockRow(text = HomeFormat.laterToday(later.size, later.last().start), tag = LATER_TAG, onClick = { onDay(today) })
-        }
+        return
+    }
+    // Шаг 5.11б: ближайшая — карточка цвета своего места, как блок в календаре.
+    val tone = PlaceColor.of(nearest.color).cardTone(colors)
+    ToneCard(tone, Modifier.testTag(NEAREST_TAG)) { NearestBody(nearest, card, now, tone, onOpen, onDone, onDiary) }
+    if (later.isNotEmpty()) {
+        Block { BlockRow(text = HomeFormat.laterToday(later.size, later.last().start), tag = LATER_TAG, onClick = { onDay(today) }, divider = false) }
     }
 }
 
@@ -568,6 +578,7 @@ private fun NearestBody(
     nearest: CalendarTraining,
     card: TrainingCard?,
     now: LocalDateTime,
+    tone: Tone,
     onOpen: (String) -> Unit,
     onDone: (String) -> Unit,
     onDiary: (String) -> Unit,
@@ -579,9 +590,9 @@ private fun NearestBody(
             HomeFormat.nearest(nearest.start, end, now),
             Modifier.weight(1f),
             style = MaterialTheme.typography.labelMedium.tabular(),
-            color = colors.textMuted,
+            color = tone.content,
         )
-        Text(HomeFormat.startsIn(now, nearest.start, end), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
+        Text(HomeFormat.startsIn(now, nearest.start, end), style = MaterialTheme.typography.bodySmall.tabular(), color = tone.content)
     }
     Row(
         modifier = Modifier
@@ -592,27 +603,25 @@ private fun NearestBody(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(
-            Modifier.width(Dimens.blockStripe).height(44.dp).clip(RoundedCornerShape(2.dp))
-                .background(PlaceColor.of(nearest.color).tone(colors.isDark).stripe),
-        )
         Column(Modifier.weight(1f)) {
-            Text(nearest.title, style = MaterialTheme.typography.titleMedium, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(typeLine(nearest, card), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(nearest.title, style = MaterialTheme.typography.titleLarge, color = tone.strong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(typeLine(nearest, card), style = MaterialTheme.typography.bodySmall.tabular(), color = tone.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+        Icon(PIcons.ChevronRight, contentDescription = null, tint = tone.content, modifier = Modifier.size(20.dp))
     }
     card?.plan?.takeIf { it.isNotBlank() }?.let { plan ->
         Text(
             buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = MaterialTheme.typography.labelMedium.fontSize, fontWeight = MaterialTheme.typography.labelMedium.fontWeight, color = colors.textMuted)) {
+                withStyle(SpanStyle(fontSize = MaterialTheme.typography.labelMedium.fontSize, fontWeight = MaterialTheme.typography.labelMedium.fontWeight, color = tone.muted)) {
                     append(TrainingCardFormat.PLAN)
                 }
                 append(" ")
                 append(plan)
             },
             style = MaterialTheme.typography.bodyLarge,
-            color = colors.text,
+            color = tone.content,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
         )
     }
     if (card != null && StatusRules.canMarkDone(card.state, now)) {
@@ -646,10 +655,10 @@ private fun typeLine(training: CalendarTraining, card: TrainingCard?): String {
 
 /** Нижняя строка блока во всю ширину, над ней — линия: «Ещё сегодня: 3, последняя в 19:00 ›». */
 @Composable
-private fun BlockRow(text: String, tag: String, onClick: () -> Unit) {
+private fun BlockRow(text: String, tag: String, onClick: () -> Unit, divider: Boolean = true) {
     val colors = PersonalkaTheme.colors
     Column {
-        HorizontalDivider(thickness = 1.dp, color = colors.divider)
+        if (divider) HorizontalDivider(thickness = 1.dp, color = colors.divider)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -809,66 +818,104 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
         is HomeMoney.Month -> {
             val view = money.view
             val tier = view.tiers?.tier ?: 1
-            // Пояснение к прогнозу месяца (шаг 5.3щ): ⓘ у «За месяц» раскрывает его под колонками, повторно — прячет.
+            // Пояснение к прогнозу месяца (шаг 5.3щ): ⓘ у «будет» раскрывает его под суммой, повторно — прячет.
             var note by rememberSaveable { mutableStateOf(false) }
-            Block(Modifier.tourTarget(TourTarget.MONEY).clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
-                Padded {
-                    Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(HomeFormat.moneyTitle(today), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
-                        HomeFormat.tierChip(view.tiers)?.let { TierChip(it, tier) }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.space4)) {
-                        val earnedToday = view.today ?: 0
-                        val donePt = view.todayPt ?: 0
-                        MoneyColumn(
-                            title = HomeFormat.TODAY,
-                            earned = earnedToday,
-                            forecast = earnedToday + (view.todayAhead ?: 0),
-                            pt = HomeFormat.ptLine(donePt, donePt + (view.todayPtAhead ?: 0)),
-                            cancelled = HomeFormat.cancelledLine(view.todayCancelled ?: 0),
-                            modifier = Modifier.weight(1f).testTag(MONEY_TODAY_TAG),
+            val plan = view.plan
+            val pace = SalaryPlan.pace(view.pay.earned, view.pay.forecast, plan)
+            // Шаг 5.11б: карточка зелёная, пока месяц идёт в план; отстаёт или плана нет — нейтральная, цвет не обманывает.
+            val tone = if (pace != null && pace != PlanPace.BEHIND) colors.doneTone() else colors.neutralTone()
+            ToneCard(tone, Modifier.tourTarget(TourTarget.MONEY).clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
+                Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(HomeFormat.moneyTitle(today), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = tone.muted)
+                    HomeFormat.tierChip(view.tiers)?.let { TierChip(it, tier) }
+                }
+                Column(Modifier.testTag(MONEY_MONTH_TAG)) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            MoneyFormat.rub(view.pay.earned),
+                            Modifier.weight(1f),
+                            style = MaterialTheme.typography.displayMedium,
+                            color = tone.strong,
+                            maxLines = 1,
                         )
-                        MoneyColumn(
-                            title = HomeFormat.MONTH,
-                            earned = view.pay.earned,
-                            forecast = view.shown.forecast,
-                            pt = HomeFormat.ptLine(view.pay.ptCount, view.shown.likelyPtCount),
-                            cancelled = HomeFormat.cancelledLine(view.monthCancelled),
-                            modifier = Modifier.weight(1f).testTag(MONEY_MONTH_TAG),
-                            onInfo = if (view.period == MonthPeriod.CURRENT) ({ note = !note }) else null,
-                        )
-                    }
-                    if (note && view.period == MonthPeriod.CURRENT) {
-                        Note(
-                            HomeFormat.forecastNote(
-                                view.shown.cancels, view.shown.likelyPtCount, view.shown.forecastPtCount, view.shown.forecast, view.shown.scheduled,
-                                hides = view.shown !== view.pay,
-                            ),
-                            Modifier.padding(top = Dimens.space1).testTag(MONEY_NOTE_TAG),
-                        )
-                    }
-                    val plan = view.plan
-                    val pace = SalaryPlan.pace(view.pay.earned, view.pay.forecast, plan)
-                    if (plan != null && pace != null) {
-                        val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
-                        val forecast = (view.pay.forecast.toFloat() / plan).coerceIn(done, 1f)
-                        ChargedBar(done, forecast, tier)
-                        Row(
-                            Modifier.padding(top = Dimens.space1),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
-                        ) {
-                            Box(Modifier.size(8.dp).background(if (pace == PlanPace.BEHIND) colors.charged else colors.done, CircleShape))
+                        val badge = view.forecastPercent?.takeIf { plan != null }
+                        if (badge != null) {
                             Text(
-                                HomeFormat.pace(pace, view.percent ?: 0, view.forecastPercent ?: 0, view.shortfall?.pts),
-                                style = MaterialTheme.typography.labelLarge.tabular(),
-                                color = colors.text,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                HomeFormat.forecastBadge(badge),
+                                Modifier.padding(bottom = 6.dp),
+                                style = MaterialTheme.typography.titleMedium.tabular(),
+                                color = tone.content,
                             )
                         }
                     }
+                    Row(
+                        Modifier
+                            .heightIn(min = 24.dp)
+                            .then(
+                                if (view.period == MonthPeriod.CURRENT) {
+                                    Modifier.clickable(role = Role.Button, onClickLabel = HomeFormat.FORECAST_INFO) { note = !note }.testTag(MONEY_INFO_TAG)
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.space1),
+                    ) {
+                        Text(HomeFormat.willBe(view.pay.earned, view.shown.forecast), style = MaterialTheme.typography.bodySmall.tabular(), color = tone.muted, maxLines = 1)
+                        if (view.period == MonthPeriod.CURRENT) {
+                            Icon(PIcons.Info, contentDescription = HomeFormat.FORECAST_INFO, tint = tone.muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
+                if (note && view.period == MonthPeriod.CURRENT) {
+                    Note(
+                        HomeFormat.forecastNote(
+                            view.shown.cancels, view.shown.likelyPtCount, view.shown.forecastPtCount, view.shown.forecast, view.shown.scheduled,
+                            hides = view.shown !== view.pay,
+                        ),
+                        Modifier.padding(top = Dimens.space1).testTag(MONEY_NOTE_TAG),
+                    )
+                }
+                if (plan != null && pace != null) {
+                    val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
+                    val forecast = (view.pay.forecast.toFloat() / plan).coerceIn(done, 1f)
+                    ChargedBar(done, forecast, tier, onTone = tone.fill != colors.surface)
+                    Row(
+                        Modifier.padding(top = Dimens.space1),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+                    ) {
+                        Box(Modifier.size(8.dp).background(if (pace == PlanPace.BEHIND) colors.charged else colors.done, CircleShape))
+                        Text(
+                            HomeFormat.pace(pace, view.percent ?: 0, view.forecastPercent ?: 0, view.shortfall?.pts),
+                            style = MaterialTheme.typography.labelLarge.tabular(),
+                            color = tone.content,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            // Три плитки отдельно от цветной карточки (просьба Дмитрия 19.11.2026): ПТ, отмены, сегодня.
+            val earnedToday = view.today ?: 0
+            TileRow {
+                Tile(
+                    value = RuText.digits(view.pay.ptCount.toLong()),
+                    suffix = HomeFormat.ptTileSuffix(view.pay.ptCount, view.shown.likelyPtCount),
+                    label = HomeFormat.PT_TILE,
+                    onClick = onSalary,
+                )
+                Tile(
+                    value = RuText.digits(view.monthCancelled.toLong()),
+                    label = HomeFormat.cancelTile(view.monthCancelled),
+                    onClick = onSalary,
+                )
+                Tile(
+                    value = MoneyFormat.rub(earnedToday),
+                    label = HomeFormat.todayTile(earnedToday, earnedToday + (view.todayAhead ?: 0)),
+                    onClick = onSalary,
+                    tag = MONEY_TODAY_TAG,
+                )
             }
         }
     }
@@ -894,10 +941,13 @@ private fun TierChip(text: String, tier: Int) {
 
 /** Полоса плана, «заряженная» ступенью: проведено — основным цветом, со ступени 2 — зелёным, на ступени 3 — со штрихами. */
 @Composable
-private fun ChargedBar(done: Float, forecast: Float, tier: Int) {
+private fun ChargedBar(done: Float, forecast: Float, tier: Int, onTone: Boolean = false) {
     val colors = PersonalkaTheme.colors
-    Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(colors.surfaceAlt)) {
-        if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(colors.outline))
+    // На зелёной карточке (шаг 5.11б) дорожка и прогноз — тоном текста карточки, иначе серые полосы на зелёном спорят.
+    val track = if (onTone) colors.onDoneContainer.copy(alpha = 0.14f) else colors.surfaceAlt
+    val ahead = if (onTone) colors.onDoneContainer.copy(alpha = 0.32f) else colors.outline
+    Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(track)) {
+        if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(ahead))
         if (done > 0f) {
             Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(if (tier > 1) colors.done else colors.primary)) {
                 if (tier >= 3) Sparks()
@@ -917,45 +967,6 @@ private fun Sparks() {
             drawLine(stroke, Offset(x, size.height), Offset(x + size.height, 0f), strokeWidth = 1.dp.toPx())
             x += step
         }
-    }
-}
-
-/** Колонка «Денег»: заголовок, заработано, «будет ≈ …», строка ПТ и отмены, если они есть. */
-@Composable
-private fun MoneyColumn(
-    title: String,
-    earned: Long,
-    forecast: Long,
-    pt: String,
-    cancelled: String?,
-    modifier: Modifier = Modifier,
-    onInfo: (() -> Unit)? = null,
-) {
-    val colors = PersonalkaTheme.colors
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(Dimens.space1)) {
-        // Заголовок высотой 24 dp в обеих колонках, чтобы суммы стояли на одной линии; с ⓘ — нажимается целиком.
-        Row(
-            Modifier
-                .heightIn(min = 24.dp)
-                .then(
-                    if (onInfo != null) {
-                        Modifier.clickable(role = Role.Button, onClickLabel = HomeFormat.FORECAST_INFO, onClick = onInfo).testTag(MONEY_INFO_TAG)
-                    } else {
-                        Modifier
-                    },
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.space1),
-        ) {
-            Text(title, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-            if (onInfo != null) {
-                Icon(PIcons.Info, contentDescription = HomeFormat.FORECAST_INFO, tint = colors.textMuted, modifier = Modifier.size(16.dp))
-            }
-        }
-        Text(MoneyFormat.rub(earned), style = MaterialTheme.typography.titleLarge.tabular(), color = colors.text, maxLines = 1)
-        Text(HomeFormat.willBe(earned, forecast), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1)
-        Text(pt, style = MaterialTheme.typography.bodyMedium.tabular(), color = colors.text, maxLines = 1)
-        cancelled?.let { Text(it, style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted, maxLines = 1) }
     }
 }
 

@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.salary
 
+import com.akenory.personalka.ui.components.SegmentTabs
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -394,28 +395,7 @@ private fun MonthBar(title: String, year: Boolean, onPrev: () -> Unit, onNext: (
 
 @Composable
 private fun SalaryTabs(tabs: List<SalaryTab>, selected: SalaryTab, onSelect: (SalaryTab) -> Unit) {
-    val colors = PersonalkaTheme.colors
-    Column {
-        Row(Modifier.fillMaxWidth()) {
-            tabs.forEach { tab ->
-                val isSelected = tab == selected
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .height(Dimens.touch)
-                        .selectable(selected = isSelected, role = Role.Tab) { onSelect(tab) }
-                        .testTag(salaryTabTag(tab)),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Spacer(Modifier.weight(1f))
-                    Text(tab.title, style = MaterialTheme.typography.labelLarge, color = if (isSelected) colors.text else colors.textMuted)
-                    Spacer(Modifier.weight(1f))
-                    Box(Modifier.width(64.dp).height(3.dp).background(if (isSelected) colors.primary else Color.Transparent))
-                }
-            }
-        }
-        HorizontalDivider(thickness = 1.dp, color = colors.divider)
-    }
+    SegmentTabs(tabs, selected, { it.title }, onSelect, Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space2), tag = { salaryTabTag(it) })
 }
 
 /** Карточка на surface со скруглением 12 и отступами 16. */

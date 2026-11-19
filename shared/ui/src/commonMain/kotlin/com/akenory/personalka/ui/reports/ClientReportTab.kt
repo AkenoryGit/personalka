@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.reports
 
+import com.akenory.personalka.ui.components.SegmentTabs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,28 +56,7 @@ internal enum class ReportTab(val title: String) {
 
 @Composable
 internal fun ReportTabs(selected: ReportTab, onSelect: (ReportTab) -> Unit) {
-    val colors = PersonalkaTheme.colors
-    Column {
-        Row(Modifier.fillMaxWidth()) {
-            ReportTab.entries.forEach { tab ->
-                val isSelected = tab == selected
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .height(Dimens.touch)
-                        .selectable(selected = isSelected, role = Role.Tab) { onSelect(tab) }
-                        .testTag(reportTabTag(tab)),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Spacer(Modifier.weight(1f))
-                    Text(tab.title, style = MaterialTheme.typography.labelLarge, color = if (isSelected) colors.text else colors.textMuted)
-                    Spacer(Modifier.weight(1f))
-                    Box(Modifier.width(64.dp).height(3.dp).background(if (isSelected) colors.primary else Color.Transparent))
-                }
-            }
-        }
-        HorizontalDivider(thickness = 1.dp, color = colors.divider)
-    }
+    SegmentTabs(ReportTab.entries, selected, { it.title }, onSelect, Modifier.padding(horizontal = Dimens.space4, vertical = Dimens.space2), tag = { reportTabTag(it) })
 }
 
 /**

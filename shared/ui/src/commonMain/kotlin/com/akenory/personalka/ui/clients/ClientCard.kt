@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.components.SegmentTabs
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -609,32 +610,7 @@ private fun StatsRow(stats: ClientStats) {
 
 @Composable
 private fun Tabs(tabs: List<CardTab>, selected: CardTab, onSelect: (CardTab) -> Unit) {
-    val colors = PersonalkaTheme.colors
-    Column(Modifier.padding(top = Dimens.space3)) {
-        Row(Modifier.fillMaxWidth()) {
-            tabs.forEach { tab ->
-                val isSelected = tab == selected
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .heightIn(min = Dimens.touch)
-                        .selectable(selected = isSelected, role = Role.Tab) { onSelect(tab) }
-                        .testTag(cardTabTag(tab)),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        tab.title,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (isSelected) colors.text else colors.textMuted,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Box(Modifier.width(64.dp).height(3.dp).background(if (isSelected) colors.primary else Color.Transparent))
-                }
-            }
-        }
-        HorizontalDivider(thickness = 1.dp, color = colors.divider)
-    }
+    SegmentTabs(tabs, selected, { it.title }, onSelect, Modifier.padding(top = Dimens.space3), tag = { cardTabTag(it) })
 }
 
 // --- Тренировки ---
