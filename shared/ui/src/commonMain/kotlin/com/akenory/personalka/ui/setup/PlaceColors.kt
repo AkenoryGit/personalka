@@ -55,7 +55,7 @@ internal const val SINGLE_COLOR = "Один цвет"
  * метка кружка для тестов: у второго цвета перехода своя ([secondColorTag]).
  */
 @Composable
-internal fun ColorPalette(selected: String, onSelect: (String) -> Unit, tag: (String) -> String = ::colorTag) {
+internal fun ColorPalette(selected: String, tag: (String) -> String = ::colorTag, onSelect: (String) -> Unit) {
     val colors = PersonalkaTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         PlaceColor.entries.chunked(8).forEach { row ->
