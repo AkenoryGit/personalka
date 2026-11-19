@@ -272,6 +272,7 @@ data class CalendarZone(
             color: String,
             coverFor: String? = null,
             done: Boolean = false,
+            color2: String = "",
         ): CalendarZone {
             val from = ClubTime.minuteOfDay(start)
             val to = minOf(from + minutes, ClubTime.MINUTES_PER_DAY)
@@ -290,6 +291,7 @@ data class CalendarZone(
                 repeat = null,
                 coverFor = coverFor,
                 done = done,
+                color2 = color2,
             )
         }
     }
@@ -482,9 +484,11 @@ class CalendarRepository(
                 val place = placeById[t.locationId]
                 // Свой цвет дежурства (шаг 3.9е) — чтобы заливка не сливалась с тренировками того же места.
                 val color = type.dutyColor ?: place?.color.orEmpty()
+                // Шаг 5.16: заливка — переходом: своего цвета дежурства или цветов места.
+                val color2 = if (type.dutyColor != null) type.dutyColor2 else place?.color2.orEmpty()
                 CalendarZone.duty(
                     t.id, t.start, t.durationMin, type.name, t.locationId, place?.shortName.orEmpty(), color, t.coverFor,
-                    done = t.status == TrainingStatus.DONE,
+                    done = t.status == TrainingStatus.DONE, color2 = color2,
                 )
             }
             val restrictions = blocks.filter { it.kind == BlockKind.RESTRICTION }.map { it.toRestriction() }

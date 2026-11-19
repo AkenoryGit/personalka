@@ -1,5 +1,8 @@
 package com.akenory.personalka.ui.setup
 
+import androidx.compose.ui.graphics.Brush
+import com.akenory.personalka.ui.theme.AuroraSolid
+import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.PlaceGradient
 import com.akenory.personalka.ui.components.SettingsGroup
 import androidx.compose.foundation.background
@@ -200,6 +203,18 @@ fun TypeEditor(
                 }
                 Spacer(Modifier.height(Dimens.space2))
                 ColorPalette(selected = draft.dutyColor.orEmpty(), onSelect = { draft = draft.copy(dutyColor = it) })
+                // Шаг 5.16: свой цвет дежурства — тоже переходом: готовые, «Один цвет» и свой второй цвет.
+                draft.dutyColor?.let { own ->
+                    val pair = ReferenceRules.gradient(own, draft.dutyColor2)
+                    SectionLabel("Переход цвета")
+                    GradientPresets(
+                        color = pair.first,
+                        selected = if (pair.first == pair.second) SINGLE_COLOR else ReferenceRules.presetOf(pair)?.name,
+                        onPick = { from, to -> draft = draft.copy(dutyColor = from, dutyColor2 = to) },
+                    )
+                    SectionLabel("Свой переход: второй цвет")
+                    ColorPalette(pair.second, tag = ::secondColorTag) { draft = draft.copy(dutyColor2 = it) }
+                }
                 SectionLabel("Так будет в календаре")
                 DutyPreview(draft, places)
             }
@@ -355,7 +370,8 @@ private fun KindRow(kind: TrainingKind, selected: Boolean, onSelect: () -> Unit)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (selected) colors.surfaceAlt else Color.Transparent)
+            // Шаг 5.16: выбранная строка — вдавленная, а не плоская серая.
+            .then(if (selected) Modifier.insetLevel(MaterialTheme.shapes.medium, colors) else Modifier)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .testTag(kindTag(kind))
             .heightIn(min = 56.dp)
@@ -365,7 +381,7 @@ private fun KindRow(kind: TrainingKind, selected: Boolean, onSelect: () -> Unit)
         RadioButton(
             selected = selected,
             onClick = null,
-            colors = RadioButtonDefaults.colors(selectedColor = colors.primary, unselectedColor = colors.outline),
+            colors = RadioButtonDefaults.colors(selectedColor = AuroraSolid, unselectedColor = colors.outline),
         )
         Spacer(Modifier.width(Dimens.space3))
         Column {
@@ -407,14 +423,14 @@ private fun DutyPreview(draft: TypeDraft, places: List<PlaceDraft>) {
     val shown = places.take(MAX_SAMPLES).ifEmpty { listOf(null) }
     SampleCard {
         shown.forEach { place ->
-            val placeColor = PlaceColor.of(place?.color)
-            val duty = draft.dutyColor?.let { PlaceColor.of(it) } ?: placeColor
+            val dutyGradient = if (draft.dutyColor != null) PlaceGradient.of(draft.dutyColor, draft.dutyColor2) else PlaceGradient.of(place?.color, place?.color2)
+            val duty = dutyGradient.from
             Row(
                 Modifier
                     .fillMaxWidth()
                     .height(72.dp)
                     .clip(MaterialTheme.shapes.extraSmall)
-                    .background(dutyFill(duty, colors)),
+                    .background(Brush.linearGradient(listOf(dutyFill(dutyGradient.from, colors), dutyFill(dutyGradient.to, colors)))),
             ) {
                 Box(Modifier.width(Dimens.zoneStrip).fillMaxHeight().background(duty.tone(colors.isDark).stripe))
                 Column(Modifier.weight(1f).padding(start = Dimens.space1, top = Dimens.space1, end = Dimens.space2)) {
@@ -425,7 +441,7 @@ private fun DutyPreview(draft: TypeDraft, places: List<PlaceDraft>) {
                         color = colors.text,
                         maxLines = 1,
                     )
-                    BlockSample(placeColor, ReferenceRules.SHADE_LIGHT, "Тренировка", listOfNotNull("12:00", "ПТ", place?.shortName).joinToString(" · "), Modifier.fillMaxWidth().padding(top = 2.dp).height(40.dp))
+                    BlockSample(PlaceGradient.of(place?.color, place?.color2), ReferenceRules.SHADE_LIGHT, "Тренировка", listOfNotNull("12:00", "ПТ", place?.shortName).joinToString(" · "), Modifier.fillMaxWidth().padding(top = 2.dp).height(40.dp))
                 }
             }
         }
@@ -439,7 +455,7 @@ private const val FIELD = "\u001F"
 
 internal fun encodeType(t: TypeDraft): String = listOf(
     t.name, t.shortName, t.kind.name, t.shade, t.durationMin, t.maxClients ?: "", t.payUnit.name,
-    t.countsTowardPt, t.tierDependent, t.diaryPlan, t.diaryFact, t.diaryBehavior, t.dutyColor.orEmpty(), t.paidDirect,
+    t.countsTowardPt, t.tierDependent, t.diaryPlan, t.diaryFact, t.diaryBehavior, t.dutyColor.orEmpty(), t.paidDirect, t.dutyColor2,
 ).joinToString(FIELD)
 
 internal fun decodeType(s: String): TypeDraft {
@@ -459,5 +475,6 @@ internal fun decodeType(s: String): TypeDraft {
         diaryBehavior = p[11].toBoolean(),
         dutyColor = p.getOrNull(12)?.ifEmpty { null },
         paidDirect = p.getOrNull(13)?.toBoolean() ?: false,
+        dutyColor2 = p.getOrNull(14).orEmpty(),
     )
 }

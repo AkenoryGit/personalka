@@ -214,7 +214,8 @@ private fun MonthRow(month: YearMonth, money: CalendarMoney?, top: Long, isCurre
             .fillMaxWidth()
             .heightIn(min = Dimens.touch)
             .clip(MaterialTheme.shapes.small)
-            .background(if (isCurrent) colors.surfaceAlt else Color.Transparent)
+            // Шаг 5.16: выбранная строка — вдавленная, а не плоская серая.
+            .then(if (isCurrent) Modifier.insetLevel(MaterialTheme.shapes.medium, colors) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .testTag(monthsRowTag(month))
             .clearAndSetSemantics {

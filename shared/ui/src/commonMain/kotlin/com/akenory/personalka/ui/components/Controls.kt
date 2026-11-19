@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.components
 
+import com.akenory.personalka.ui.theme.AuroraSolid
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -311,12 +312,12 @@ fun CheckBox(checked: Boolean, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(20.dp)
             .then(
-                if (checked) Modifier.background(colors.primary, shape)
+                if (checked) Modifier.background(AuroraSolid, shape)
                 else Modifier.border(2.dp, colors.outline, shape),
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (checked) Icon(PIcons.Check, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(16.dp))
+        if (checked) Icon(PIcons.Check, contentDescription = null, tint = OnAurora, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -355,9 +356,10 @@ fun SwitchRow(title: String, checked: Boolean, onToggle: (Boolean) -> Unit, modi
             checked = checked,
             onCheckedChange = null,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = colors.onPrimary,
-                checkedTrackColor = colors.primary,
-                checkedBorderColor = colors.primary,
+                // Шаг 5.16: включённый — «Сиянием» с белым кружком.
+                checkedThumbColor = OnAurora,
+                checkedTrackColor = AuroraSolid,
+                checkedBorderColor = AuroraSolid,
                 uncheckedThumbColor = colors.outline,
                 uncheckedTrackColor = colors.surfaceAlt,
                 uncheckedBorderColor = colors.outline,

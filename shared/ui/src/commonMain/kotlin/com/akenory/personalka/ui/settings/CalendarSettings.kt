@@ -1,5 +1,15 @@
 package com.akenory.personalka.ui.settings
 
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import com.akenory.personalka.ui.theme.raised
+import com.akenory.personalka.ui.theme.insetLevel
+import com.akenory.personalka.ui.theme.OnAurora
+import com.akenory.personalka.ui.theme.AuroraBrush
 import com.akenory.personalka.ui.setup.secondColorTag
 import com.akenory.personalka.ui.setup.SINGLE_COLOR
 import com.akenory.personalka.ui.setup.GradientPresets
@@ -190,15 +200,14 @@ internal fun CalendarSettingsScreen(
                         subtitle = PersonalFormat.SCHEDULE_NOTE,
                     )
                 }
+                // Шаг 5.16: дни недели — отдельной карточкой ниже выключателя, одним столбиком компактных строк:
+                // день «Сиянием» (рабочий) или во вдавленном кружке (выходной), часы — во вдавленной плашке.
                 loaded.schedule?.let { schedule ->
+                    Spacer(Modifier.height(Dimens.space3))
                     ListCard {
                         DateFormat.WEEK.forEachIndexed { index, day ->
-                            if (index > 0) RowDivider()
-                            InfoRow(
-                                DateFormat.weekdayShort(day),
-                                PersonalFormat.day(schedule.on(day)),
-                                Modifier.clickable { dayEdit = day.name }.testTag(scheduleDayTag(day)),
-                            )
+                            if (index > 0) RowDivider(start = 64.dp)
+                            ScheduleDayRow(day, schedule.on(day) != null, PersonalFormat.day(schedule.on(day)), Modifier.clickable { dayEdit = day.name }.testTag(scheduleDayTag(day)))
                         }
                     }
                 }
@@ -433,3 +442,30 @@ internal fun InfoRow(title: String, subtitle: String, modifier: Modifier = Modif
 
 private const val START_TITLE = "Начало"
 private const val END_TITLE = "Конец"
+
+/** День рабочего графика (шаг 5.16): «пн» в кружке («Сиянием» — рабочий, вдавленный — выходной) и часы справа. */
+@Composable
+private fun ScheduleDayRow(day: DayOfWeek, working: Boolean, hours: String, modifier: Modifier = Modifier) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = Dimens.space4, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(36.dp).then(
+                if (working) Modifier.raised(CircleShape, colors, elevation = 3).background(AuroraBrush) else Modifier.insetLevel(CircleShape, colors),
+            ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(DateFormat.weekdayShort(day), style = MaterialTheme.typography.labelLarge, color = if (working) OnAurora else colors.textMuted)
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            hours,
+            modifier = if (working) Modifier.insetLevel(RoundedCornerShape(10.dp), colors).padding(horizontal = 12.dp, vertical = 6.dp) else Modifier,
+            style = MaterialTheme.typography.labelLarge.tabular(),
+            color = if (working) colors.text else colors.textMuted,
+        )
+        Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.padding(start = Dimens.space2).size(20.dp))
+    }
+}

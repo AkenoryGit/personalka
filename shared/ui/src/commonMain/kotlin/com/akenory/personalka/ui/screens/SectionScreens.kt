@@ -486,7 +486,8 @@ private fun MoreList(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 56.dp)
-                            .background(if (isSelected) colors.surfaceAlt else Color.Transparent)
+                            // Шаг 5.16: выбранная строка — вдавленная, а не плоская серая.
+                            .then(if (isSelected) Modifier.insetLevel(MaterialTheme.shapes.medium, colors) else Modifier)
                             .clickable(role = Role.Button) { onOpen(item) }
                             .semantics { this.selected = isSelected; contentDescription = item.title + ". " + item.note }
                             .testTag(moreRowTag(item))

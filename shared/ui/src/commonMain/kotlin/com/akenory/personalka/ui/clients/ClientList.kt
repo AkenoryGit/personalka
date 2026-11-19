@@ -419,7 +419,7 @@ internal fun PersonRow(
             // Шаг 5.14б: [card] — строка отдельной карточкой на уровне «сверху» (список клиентов, состав группы).
             .then(if (card) Modifier.raised(MaterialTheme.shapes.large, colors, elevation = 4) else Modifier)
             .heightIn(min = Dimens.row)
-            .background(if (selected) colors.surfaceAlt else colors.surface)
+            .then(if (selected) Modifier.insetLevel(MaterialTheme.shapes.large, colors) else Modifier.background(colors.surface))
             .drawBehind { if (selected) drawRect(bar, size = Size(3.dp.toPx(), size.height)) }
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .semantics { this.selected = selected }

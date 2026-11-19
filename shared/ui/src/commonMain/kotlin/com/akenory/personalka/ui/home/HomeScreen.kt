@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.home
 
+import com.akenory.personalka.ui.theme.PlaceGradient
 import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.AuroraColors
 import com.akenory.personalka.ui.theme.raised
@@ -535,10 +536,11 @@ fun HomeScreen(
 /** Карточка блока: surface, скругление 12 (макеты 0.6). Отступы внутри — у содержимого: нижние строки идут во всю ширину. */
 @Composable
 private fun Block(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    // Шаг 5.16: блоки «Главной» («Сегодня всё», «Нужно сделать», дни рождения) — на уровне «сверху».
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
+            .raised(MaterialTheme.shapes.large, PersonalkaTheme.colors, elevation = 6)
             .background(PersonalkaTheme.colors.surface),
     ) { content() }
 }
@@ -574,10 +576,12 @@ private fun NearestBlock(
                 Text(HomeFormat.todayDone(nearest?.start, today), style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text)
             }
             if (nearest != null) {
+                // Шаг 5.16: следующая тренировка — плашкой переливом цветов своего места, как блок в календаре.
                 BlockRow(
                     text = HomeFormat.nextLine(nearest.start, nearest.title, nearest.typeShort, nearest.placeShort),
                     tag = NEXT_TAG,
                     onClick = { onDay(nearest.start.date) },
+                    place = PlaceGradient.of(nearest.color, nearest.color2),
                 )
             }
         }
@@ -728,21 +732,32 @@ private fun typeLine(training: CalendarTraining, card: TrainingCard?): String {
 
 /** Нижняя строка блока во всю ширину, над ней — линия: «Ещё сегодня: 3, последняя в 19:00 ›». */
 @Composable
-private fun BlockRow(text: String, tag: String, onClick: () -> Unit, divider: Boolean = true) {
+private fun BlockRow(text: String, tag: String, onClick: () -> Unit, divider: Boolean = true, place: PlaceGradient? = null) {
     val colors = PersonalkaTheme.colors
+    val ends = place?.ends(colors.isDark, 1)
+    val ink = place?.ink(colors.isDark, 1) ?: colors.text
     Column {
-        if (divider) HorizontalDivider(thickness = 1.dp, color = colors.divider)
+        if (divider && place == null) HorizontalDivider(thickness = 1.dp, color = colors.divider)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(
+                    if (ends != null) {
+                        Modifier.padding(start = Dimens.space3, end = Dimens.space3, bottom = Dimens.space3)
+                            .raised(MaterialTheme.shapes.medium, colors, elevation = 4)
+                            .background(Brush.linearGradient(listOf(ends.first, ends.second)))
+                    } else {
+                        Modifier
+                    },
+                )
                 .heightIn(min = Dimens.touch)
                 .clickable(role = Role.Button, onClick = onClick)
                 .testTag(tag)
                 .padding(start = Dimens.space4, end = Dimens.space3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.tabular(), color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+            Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.tabular(), color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(PIcons.ChevronRight, contentDescription = null, tint = if (place != null) ink else colors.textMuted, modifier = Modifier.size(20.dp))
         }
     }
 }

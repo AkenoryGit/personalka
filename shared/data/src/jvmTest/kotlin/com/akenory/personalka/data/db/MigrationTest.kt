@@ -759,8 +759,36 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion23() {
-        assertEquals(23, PersonalkaDatabase.VERSION)
+    fun version23DutyTypesGetAutoGradient(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v23", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шага 5.14: у своего цвета дежурства один цвет.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 23)
+                raw.exec(
+                    "INSERT INTO training_type (id, name, shortName, kind, shade, defaultDurationMin, maxClients, payUnit, countsTowardPt, " +
+                        "tierDependent, diaryPlan, diaryFact, diaryBehavior, splitFallbackTypeId, archived, dutyColor, paidDirect, inForecast, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('t1', 'Дежурство', 'Деж', 'DUTY', 1, 60, NULL, 'PER_HOUR', 0, 0, 0, 0, 0, NULL, 0, 'green', 0, 1, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+            val db = personalkaDatabase(path)
+            try {
+                val type = db.referenceDao().trainingType("t1")!!
+                assertEquals("green", type.dutyColor, "Свой цвет дежурства не тронут")
+                assertEquals("", type.dutyColor2, "Второго цвета нет — переход подбирается")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion24() {
+        assertEquals(24, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }

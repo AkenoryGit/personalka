@@ -244,6 +244,7 @@ fun TrainingTypeEntity.draft(): TypeDraft = TypeDraft(
     diaryFact = diaryFact,
     diaryBehavior = diaryBehavior,
     dutyColor = dutyColor,
+    dutyColor2 = dutyColor2,
     paidDirect = paidDirect,
 )
 
@@ -265,6 +266,7 @@ private fun TypeDraft.toEntity(id: String, sync: SyncFields, fallback: String?) 
     diaryBehavior = diaryBehavior,
     splitFallbackTypeId = fallback,
     dutyColor = dutyColor?.takeIf { kind == TrainingKind.DUTY },
+    dutyColor2 = if (kind == TrainingKind.DUTY && dutyColor != null) dutyColor2 else "",
     // Оплата напрямую — без счёта ПТ и ступеней (шаг 5.3с); у дежурства её нет.
     paidDirect = paidDirect && kind != TrainingKind.DUTY,
     countsTowardPt = countsTowardPt && !(paidDirect && kind != TrainingKind.DUTY),

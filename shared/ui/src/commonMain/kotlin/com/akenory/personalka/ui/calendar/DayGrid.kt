@@ -1391,7 +1391,16 @@ private fun DrawScope.drawZones(zones: List<ZoneInfo>, byId: Map<Pair<ZoneKind, 
     zones.forEach { zone ->
         val area = rect(zone, 0f, size.width)
         when (zone.kind) {
-            ZoneKind.DUTY -> drawRect(dutyFill(place(zone), colors), area.topLeft, area.size)
+            // Шаг 5.16: дежурство — переливом своих цветов (свой цвет дежурства или цвета места) на 20 %.
+            ZoneKind.DUTY -> {
+                val info = byId[zone.kind to zone.id]
+                val g = PlaceGradient.of(info?.color, info?.color2)
+                if (g.single) {
+                    drawRect(dutyFill(g.from, colors), area.topLeft, area.size)
+                } else {
+                    drawRect(Brush.linearGradient(listOf(dutyFill(g.from, colors), dutyFill(g.to, colors)), start = area.topLeft, end = Offset(area.right, area.top + area.width * 0.47f)), area.topLeft, area.size)
+                }
+            }
             // Шаг 5.13б: запрет — вдавленный (уровень −1): углубление с тенью сверху, штриховка — на его дне.
             ZoneKind.RESTRICTION -> {
                 val info = byId[zone.kind to zone.id]
