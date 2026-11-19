@@ -375,8 +375,8 @@ class CalendarUiTest {
         onNodeWithText("Лаптева Алина").assertIsDisplayed()
         onNodeWithText("Егорова Лиза").performClick()
         onNodeWithTag(PANEL_TAG).assertDoesNotExist()
-        awaitNode(hasTestTag(TRAINING_CARD_TAG))
-        onNodeWithText(s("Егорова_Л.")).assertIsDisplayed()
+        // Рамка карточки — сразу, имя — когда тренировка прочитается из базы: ждём само имя (однажды не успело в main).
+        awaitNode(hasText(s("Егорова_Л.")) and hasAnyAncestor(hasTestTag(TRAINING_CARD_TAG)))
     }
 
     @Test
