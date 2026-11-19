@@ -1,5 +1,15 @@
 package com.akenory.personalka.ui.salary
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.PlaceDot
+import com.akenory.personalka.ui.components.PlaceBadge
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -74,13 +84,22 @@ private fun ColleagueCard(
     val view = data.view
     val name = data.colleagues[row.colleagueId] ?: SalaryFormat.COLLEAGUE
     SalaryCard(Modifier.testTag(colleagueTag(row.colleagueId))) {
-        Column {
-            Text(name, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = colors.text)
-            SettlementFormat.scheme(data.colleagueSchemes[row.colleagueId], view.scheme?.kind)?.let { Muted(it) }
+        // Шаг 5.12б: коллега — квадратиком с первой буквой; итог — на подложке, зелёной, когда рассчитались.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PlaceBadge(null, text = name.take(1))
+            Spacer(Modifier.width(Dimens.space3))
+            Column(Modifier.weight(1f)) {
+                Text(name, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = colors.text)
+                SettlementFormat.scheme(data.colleagueSchemes[row.colleagueId], view.scheme?.kind)?.let { Muted(it) }
+            }
         }
-        Column(Modifier.padding(top = Dimens.space2)) {
-            Muted(SettlementFormat.totalTitle(view.month))
-            Text(SettlementFormat.total(name, row.total), style = MaterialTheme.typography.headlineSmall, color = colors.text)
+        val tone = if (row.isSettled) colors.doneTone() else colors.neutralTone().copy(fill = colors.surfaceAlt)
+        Column(
+            Modifier.padding(top = Dimens.space2).fillMaxWidth().clip(MaterialTheme.shapes.small).background(tone.fill)
+                .padding(horizontal = Dimens.space3, vertical = Dimens.space2),
+        ) {
+            Text(SettlementFormat.totalTitle(view.month), style = MaterialTheme.typography.bodySmall, color = tone.muted)
+            Text(SettlementFormat.total(name, row.total), style = MaterialTheme.typography.displaySmall.copy(fontSize = 22.sp, lineHeight = 28.sp), color = tone.strong)
         }
         row.cases.forEach { c ->
             HorizontalDivider(thickness = 1.dp, color = colors.divider)
@@ -117,6 +136,10 @@ private fun CaseRow(data: SalaryMonthData, c: SettlementCase, name: String, open
             .testTag(caseTag(c.key)),
         verticalAlignment = Alignment.Top,
     ) {
+        data.places[c.locationId]?.let {
+            PlaceDot(PlaceColor.of(it.color), Modifier.padding(top = 6.dp))
+            Spacer(Modifier.width(Dimens.space3))
+        }
         Column(Modifier.weight(1f).padding(end = Dimens.space3)) {
             Text(SettlementFormat.caseTitle(c.case), style = MaterialTheme.typography.bodyLarge, color = colors.text, fontWeight = FontWeight.SemiBold)
             Muted(SettlementFormat.caseNote(c, groupName(data, c)))

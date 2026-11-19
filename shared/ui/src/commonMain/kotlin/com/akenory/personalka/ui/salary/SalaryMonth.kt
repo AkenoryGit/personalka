@@ -4,6 +4,7 @@ import com.akenory.personalka.ui.components.SegmentTabs
 import com.akenory.personalka.ui.components.neutralTone
 import com.akenory.personalka.ui.components.doneTone
 import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.StatusLabel
 import com.akenory.personalka.ui.components.PlaceDot
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -785,7 +786,7 @@ internal fun BreakdownRow(line: BreakdownLine, data: SalaryMonthData) {
     val place = data.places[line.locationId]
     val title = SalaryFormat.lineTitle(line, type?.name.orEmpty(), place?.shortName?.ifBlank { place.name } ?: "")
     val note = SalaryFormat.lineNote(line, line.colleagueId?.let { data.colleagues[it] })
-    MoneyRow(title, MoneyFormat.rub(line.amount), note = note)
+    MoneyRow(title, MoneyFormat.rub(line.amount), note = note, place = place?.let { PlaceColor.of(it.color) })
 }
 
 // --- Выплаты ---
@@ -795,9 +796,23 @@ private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () ->
     val view = data.view
     val payout = view.payout
     val colors = PersonalkaTheme.colors
+    // Шаг 5.12б: главная цифра вкладки — «На руки» в зелёной карточке; расчёт — нейтральной карточкой ниже.
+    val hand = colors.doneTone()
+    ToneCard(hand) {
+        Text(SalaryFormat.ON_HAND, style = MaterialTheme.typography.labelMedium, color = hand.muted)
+        Text(
+            MoneyFormat.rub(view.totals.onHand),
+            Modifier.testTag(SALARY_ON_HAND_TAG),
+            style = MaterialTheme.typography.displayMedium,
+            color = hand.strong,
+        )
+        if (view.hasForecast && view.forecastOnHand != view.totals.onHand) {
+            Text(SalaryFormat.ifScheduled(view.forecastOnHand), style = MaterialTheme.typography.bodySmall.tabular(), color = hand.muted)
+        }
+    }
     SalaryCard {
         Muted(SalaryFormat.ACCRUED)
-        Text(MoneyFormat.rub(payout.accrued), style = MaterialTheme.typography.headlineSmall, color = colors.text)
+        Text(MoneyFormat.rub(payout.accrued), style = MaterialTheme.typography.displaySmall, color = colors.text)
         // Без видов оплаты — без названия схемы (27.10.2026).
         if (data.payTypes) Muted(SalaryFormat.accruedNote(view.period, today, payout.kind)) else SalaryFormat.accruedNote(view.period, today)?.let { Muted(it) }
         val scheme = view.scheme
@@ -838,8 +853,7 @@ private fun PayoutsTab(data: SalaryMonthData, today: LocalDate, onAdvance: () ->
             )
         }
         HorizontalDivider(thickness = 2.dp, color = colors.text)
-        MoneyRow(SalaryFormat.ON_HAND, MoneyFormat.rub(view.totals.onHand), Modifier.testTag(SALARY_ON_HAND_TAG), bold = true)
-        if (view.hasForecast && view.forecastOnHand != view.totals.onHand) Muted(SalaryFormat.ifScheduled(view.forecastOnHand))
+        MoneyRow(SalaryFormat.ON_HAND, MoneyFormat.rub(view.totals.onHand), bold = true)
     }
     data.direct?.let { DirectCard(it, onHand = view.totals.onHand) }
 }
@@ -868,15 +882,11 @@ private fun DirectCard(direct: DirectMonth, onHand: Long? = null) {
 @Composable
 private fun AdvanceChip(received: Boolean) {
     val colors = PersonalkaTheme.colors
-    Text(
+    // Шаг 5.12б: пришёл — зелёная метка, ожидается — нейтральная.
+    StatusLabel(
         if (received) SalaryFormat.ADVANCE_RECEIVED else SalaryFormat.ADVANCE_EXPECTED,
-        modifier = Modifier
-            .padding(top = Dimens.space1)
-            .clip(RoundedCornerShape(8.dp))
-            .background(colors.surfaceAlt)
-            .padding(horizontal = Dimens.space2, vertical = 2.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = colors.text,
+        if (received) colors.doneTone() else colors.neutralTone().copy(fill = colors.surfaceAlt),
+        Modifier.padding(top = Dimens.space1),
     )
 }
 

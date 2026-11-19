@@ -1,5 +1,11 @@
 package com.akenory.personalka.ui.salary
 
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.StatusLabel
+import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.TileRow
+import com.akenory.personalka.ui.components.Tile
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -69,20 +75,25 @@ internal fun YearTab(year: SalaryYear, onMonth: (YearMonth) -> Unit) {
         SalaryCard { Muted(SalaryFormat.YEAR_EMPTY) }
         return
     }
-    SalaryCard {
-        Muted(SalaryFormat.yearTitle(year.year))
+    // Шаг 5.12б: итог года — цветной карточкой (зелёной, если план выполнен хотя бы в половине месяцев), под ней плитки.
+    val good = year.planMonths > 0 && year.planMetMonths * 2 >= year.planMonths
+    val tone = if (good) colors.doneTone() else colors.neutralTone()
+    ToneCard(tone) {
+        Text(SalaryFormat.yearTitle(year.year), style = MaterialTheme.typography.bodySmall, color = tone.muted)
         Text(
             MoneyFormat.rub(year.earned),
             modifier = Modifier.testTag(SALARY_YEAR_EARNED_TAG),
-            style = MaterialTheme.typography.displaySmall,
-            color = colors.text,
+            style = MaterialTheme.typography.displayMedium,
+            color = tone.strong,
         )
-        SalaryFormat.yearPlan(year)?.let { Muted(it) }
-        Row(Modifier.fillMaxWidth().padding(top = Dimens.space2), horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-            Tile(MoneyFormat.rub(year.onHand), SalaryFormat.YEAR_ON_HAND, Modifier.weight(1f))
-            Tile(MoneyFormat.rub(year.ndfl), SalaryFormat.YEAR_TAX, Modifier.weight(1f))
-            Tile(RuText.digits(year.ptCount.toLong()), SalaryFormat.YEAR_PT, Modifier.weight(1f))
-        }
+        SalaryFormat.yearPlan(year)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = tone.muted) }
+    }
+    TileRow {
+        Tile(MoneyFormat.rub(year.onHand), SalaryFormat.YEAR_ON_HAND, compact = true)
+        Tile(MoneyFormat.rub(year.ndfl), SalaryFormat.YEAR_TAX, compact = true)
+        Tile(RuText.digits(year.ptCount.toLong()), SalaryFormat.YEAR_PT)
+    }
+    SalaryCard {
         SalaryFormat.yearCounts(year)?.let { Muted(it) }
         YearChart(year)
     }
@@ -91,21 +102,6 @@ internal fun YearTab(year: SalaryYear, onMonth: (YearMonth) -> Unit) {
             if (i > 0) HorizontalDivider(thickness = 1.dp, color = colors.divider)
             YearRow(row) { onMonth(row.month) }
         }
-    }
-}
-
-@Composable
-private fun Tile(value: String, label: String, modifier: Modifier) {
-    val colors = PersonalkaTheme.colors
-    Column(
-        modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(colors.surfaceAlt)
-            .padding(horizontal = Dimens.space3, vertical = Dimens.space2)
-            .semantics(mergeDescendants = true) {},
-    ) {
-        Text(value, style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Muted(label)
     }
 }
 
@@ -192,16 +188,7 @@ private fun YearRow(row: YearMonthRow, onClick: () -> Unit) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(SalaryFormat.monthName(row.month), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = colors.text)
             if (row.period == MonthPeriod.CURRENT) {
-                Text(
-                    SalaryFormat.MONTH_GOING,
-                    modifier = Modifier
-                        .padding(end = Dimens.space2)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(colors.surfaceAlt)
-                        .padding(horizontal = Dimens.space2, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.text,
-                )
+                StatusLabel(SalaryFormat.MONTH_GOING, colors.neutralTone().copy(fill = colors.surfaceAlt), Modifier.padding(end = Dimens.space2))
             }
             Text(MoneyFormat.rub(row.earned), style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text, fontWeight = FontWeight.SemiBold)
             row.percent?.let {

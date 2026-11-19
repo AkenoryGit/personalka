@@ -109,6 +109,7 @@ fun RowScope.Tile(
     selected: Boolean? = null,
     onClick: (() -> Unit)? = null,
     tag: String? = null,
+    compact: Boolean = false,
 ) {
     val colors = PersonalkaTheme.colors
     val shape = MaterialTheme.shapes.medium
@@ -131,7 +132,14 @@ fun RowScope.Tile(
             .padding(horizontal = Dimens.space3, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, style = MaterialTheme.typography.titleLarge, color = tone.strong, maxLines = 1)
+            // [compact] — суммы в рублях (шаг 5.12б): 17 sp, чтобы «1 478 495 ₽» влезала в треть сложенного Fold.
+            Text(
+                value,
+                style = if (compact) MaterialTheme.typography.titleMedium.tabular() else MaterialTheme.typography.titleLarge,
+                color = tone.strong,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (suffix != null) {
                 Text(suffix, style = MaterialTheme.typography.bodySmall, color = tone.muted, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
             }

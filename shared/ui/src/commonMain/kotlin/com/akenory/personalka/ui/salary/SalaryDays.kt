@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.salary
 
+import com.akenory.personalka.ui.theme.PlaceColor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -77,7 +78,7 @@ internal fun DayDetails(data: SalaryMonthData, date: LocalDate) {
                         place?.shortName?.ifBlank { place.name }.orEmpty(),
                     )
                 }
-                MoneyRow(title, MoneyFormat.rub(item.amount), note = data.whom[item.trainingId]?.ifBlank { null })
+                MoneyRow(title, MoneyFormat.rub(item.amount), note = data.whom[item.trainingId]?.ifBlank { null }, place = place?.let { PlaceColor.of(it.color) })
             }
             DayItemKind.SPT -> MoneyRow(SalaryFormat.DAY_SPT, MoneyFormat.rub(item.amount))
             DayItemKind.ADJUSTMENT -> {

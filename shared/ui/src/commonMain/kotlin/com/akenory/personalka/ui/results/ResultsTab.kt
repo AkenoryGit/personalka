@@ -1,5 +1,8 @@
 package com.akenory.personalka.ui.results
 
+import com.akenory.personalka.domain.model.ResultKind
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.components.PlaceBadge
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -128,6 +131,9 @@ private fun ResultLine(item: ResultItem, line: String, today: LocalDate, tag: St
             .padding(horizontal = Dimens.space4, vertical = Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Шаг 5.12б: соревнования — флажок в зелёном квадратике, тренировки — в нейтральном.
+        PlaceBadge(if (item.kind == ResultKind.COMPETITION) PlaceColor.GREEN else null, icon = if (item.kind == ResultKind.COMPETITION) PIcons.Flag else PIcons.Schedule)
+        Spacer(Modifier.width(Dimens.space3))
         Column(Modifier.weight(1f)) {
             Text(ResultFormat.event(item.event), style = MaterialTheme.typography.bodyLarge, color = colors.text)
             Text(line, style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)

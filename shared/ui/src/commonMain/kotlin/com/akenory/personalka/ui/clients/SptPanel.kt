@@ -1,5 +1,9 @@
 package com.akenory.personalka.ui.clients
 
+import androidx.compose.foundation.background
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.components.chargedTone
+import com.akenory.personalka.ui.components.doneTone
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,9 +68,15 @@ internal fun SptBlock(view: SptCaseView, today: LocalDate, onClick: () -> Unit, 
                 style = MaterialTheme.typography.bodyLarge.tabular(),
                 color = colors.text,
             )
+            // Шаг 5.12б: статус — меткой на подложке: купил — зелёная, не купил в срок — янтарная.
+            val tone = when (view.status) {
+                SptCaseStatus.CLOSED -> colors.doneTone()
+                SptCaseStatus.NOT_CLOSED -> colors.chargedTone()
+                SptCaseStatus.OPEN -> colors.neutralTone().copy(fill = colors.surfaceAlt)
+            }
             Row(
                 Modifier
-                    .border(1.dp, colors.outline, MaterialTheme.shapes.small)
+                    .background(tone.fill, MaterialTheme.shapes.small)
                     .padding(horizontal = Dimens.space2, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -75,12 +85,12 @@ internal fun SptBlock(view: SptCaseView, today: LocalDate, onClick: () -> Unit, 
                     SptCaseStatus.CLOSED -> PIcons.CheckCircle
                     SptCaseStatus.NOT_CLOSED -> PIcons.EventBusy
                 }
-                Icon(icon, contentDescription = null, tint = colors.text, modifier = Modifier.size(16.dp))
+                Icon(icon, contentDescription = null, tint = tone.content, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(
                     SptFormat.status(view.status, view.case.windowUntil, view.case.purchaseDate, SptRules.isDeclined(view.case, today)),
                     style = MaterialTheme.typography.labelMedium.tabular(),
-                    color = colors.text,
+                    color = tone.content,
                 )
             }
             SecondaryButton(

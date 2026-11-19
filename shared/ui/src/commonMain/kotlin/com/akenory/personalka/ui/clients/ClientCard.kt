@@ -1,5 +1,8 @@
 package com.akenory.personalka.ui.clients
 
+import com.akenory.personalka.ui.components.PlaceBadge
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.components.PlaceDot
 import com.akenory.personalka.ui.components.SegmentTabs
 import com.akenory.personalka.ui.components.doneTone
 import com.akenory.personalka.ui.components.neutralTone
@@ -689,7 +692,14 @@ private fun TrainingItem(row: ClientTrainingRow, showPlan: Boolean, expanded: Bo
             Text(DateFormat.time(training.start.time), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(what, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            // Шаг 5.12б: точка цвета места перед «ПТ · ББ», как в календаре.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                row.place?.let {
+                    PlaceDot(PlaceColor.of(it.color))
+                    Spacer(Modifier.width(Dimens.space2))
+                }
+                Text(what, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            }
             if (row.noDiary) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(6.dp).background(colors.accentGraphic, CircleShape))
@@ -836,9 +846,9 @@ private fun InfoTab(
         val sex = client.sex
         if (birth != null || sex != null) {
             ListCard {
-                if (birth != null) InfoLine("Дата рождения", ClientFormat.birth(birth, today))
+                if (birth != null) InfoLine("Дата рождения", ClientFormat.birth(birth, today), icon = PIcons.Cake)
                 if (birth != null && sex != null) RowDivider()
-                if (sex != null) InfoLine("Пол", ClientFormat.sex(sex))
+                if (sex != null) InfoLine("Пол", ClientFormat.sex(sex), icon = PIcons.Person)
             }
         }
 
@@ -880,6 +890,7 @@ private fun InfoTab(
                 InfoLine(
                     label = listOfNotNull("Для связи", client.contactName).joinToString(" · "),
                     value = phone?.let { ClientFormat.phone(it) } ?: "Телефона нет",
+                    icon = PIcons.Call,
                     action = if (phone != null) {
                         {
                             val dial = phone.filter { it.isDigit() || it == '+' }
@@ -907,6 +918,7 @@ private fun InfoTab(
                 InfoLine(
                     label = "Фото и видео",
                     value = media.removePrefix("https://").removePrefix("http://"),
+                    icon = PIcons.FolderOpen,
                     // Родитель не дал согласия на фото (6.1): в кабинете ссылки нет.
                     warning = if (noPhoto) CabinetLinkFormat.NO_PHOTO else null,
                     tag = CLIENT_NO_PHOTO_TAG.takeIf { noPhoto },
@@ -921,6 +933,7 @@ private fun InfoTab(
                     label = "Фото и видео",
                     value = "Ссылки нет",
                     muted = true,
+                    icon = PIcons.FolderOpen,
                     action = {
                         TextButton(onClick = { nav.open(ClientRoute.edit(client.id)) }) {
                             Text("Добавить", style = MaterialTheme.typography.labelLarge, color = colors.text)
@@ -931,7 +944,7 @@ private fun InfoTab(
             val name1c = client.name1c
             if (name1c != null) {
                 RowDivider()
-                InfoLine("Имя в 1С", name1c)
+                InfoLine("Имя в 1С", name1c, icon = PIcons.FactCheck)
             }
             val note = client.privateNote
             if (note != null) {
@@ -977,6 +990,7 @@ private fun InfoLine(
     muted: Boolean = false,
     warning: String? = null,
     tag: String? = null,
+    icon: ImageVector? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     val colors = PersonalkaTheme.colors
@@ -984,6 +998,11 @@ private fun InfoLine(
         Modifier.fillMaxWidth().heightIn(min = Dimens.row).padding(start = Dimens.space4, end = 4.dp, top = Dimens.space2, bottom = Dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Шаг 5.12б: значок строки в нейтральном квадратике, как пункты «Ещё».
+        if (icon != null) {
+            PlaceBadge(null, icon = icon)
+            Spacer(Modifier.width(Dimens.space3))
+        }
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
             Text(
