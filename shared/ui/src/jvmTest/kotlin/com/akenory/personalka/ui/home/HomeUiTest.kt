@@ -22,6 +22,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.akenory.personalka.domain.format.HomeFormat
 import com.akenory.personalka.data.backup.BackupFolder
 import com.akenory.personalka.data.backup.BackupRepository
 import com.akenory.personalka.data.prefs.MemoryPrefs
@@ -130,7 +131,10 @@ class HomeUiTest {
         onNodeWithText("План Кроль на груди с доской").assertIsDisplayed()
         // До начала минус 15 минут кнопки нет — нажатие на блок открывает карточку.
         assertEquals(0, onAllNodes(hasTestTag(NEAREST_DONE_TAG)).fetchSemanticsNodes().size)
-        onNodeWithText(s("Ещё сегодня: 2, последняя в_19:00")).assertIsDisplayed()
+        // Шаг 5.12г: под ближайшей — список всех оставшихся тренировок дня.
+        onNodeWithText(HomeFormat.laterTitle(2)).assertIsDisplayed()
+        onNodeWithText(s("Петров_И.")).assertIsDisplayed()
+        onNodeWithText(s("Соколова_В.")).assertIsDisplayed()
         // Дел нет — блока «Нужно сделать» и счётчика нет.
         assertEquals(0, onAllNodes(hasTestTag(TODO_TAG)).fetchSemanticsNodes().size)
 
@@ -151,7 +155,8 @@ class HomeUiTest {
         onNodeWithText(s("до конца 10_мин")).assertIsDisplayed()
         onNodeWithText("План Брасс, 4 по 25").assertIsDisplayed()
         onNodeWithTag(NEAREST_DONE_TAG).assertIsDisplayed()
-        onNodeWithText(s("Ещё сегодня: 1, в_16:20")).assertIsDisplayed()
+        onNodeWithText(HomeFormat.laterTitle(1)).assertIsDisplayed()
+        onNodeWithText(s("Петров_И.")).assertIsDisplayed()
     }
 
     /** Прошедшая ПТ клиента [daysAgo] дней назад: пришёл или отменил («Не сможет»). */
@@ -270,6 +275,17 @@ class HomeUiTest {
 
     @Test
     fun laterTodayOpensCalendar() = runComposeUiTest {
+        training("16:20", client("Орлов", "Максим"))
+        training("18:00", client("Петров", "Игорь"))
+        openHome()
+        awaitNode(hasTestTag(LATER_TAG))
+        // Строка списка открывает карточку тренировки, подпись — день в календаре.
+        onNodeWithText(s("Петров_И.")).performClick()
+        awaitNode(inCard(s("Петров_И.")))
+    }
+
+    @Test
+    fun laterTitleOpensCalendar() = runComposeUiTest {
         training("16:20", client("Орлов", "Максим"))
         training("18:00", client("Петров", "Игорь"))
         openHome()

@@ -94,6 +94,7 @@ class HomeRulesTest {
         assertEquals("spt19", nearest?.id)
         assertEquals(emptyList(), HomeRules.laterToday(list, nearest!!, today))
         assertEquals(s("Ещё сегодня: 1, в_19:00"), HomeFormat.laterToday(1, at(19)))
+        assertEquals("Дальше сегодня · 4", HomeFormat.laterTitle(4))
     }
 
     @Test

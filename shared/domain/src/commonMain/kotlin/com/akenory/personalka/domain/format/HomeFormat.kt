@@ -47,6 +47,9 @@ object HomeFormat {
     }
 
     /** «Ещё сегодня: 3, последняя в 19:00»; одна — «Ещё сегодня: 1, в 19:00». */
+    /** Подпись над списком оставшихся тренировок дня на «Главной» (шаг 5.12г): «Дальше сегодня · 4». */
+    fun laterTitle(count: Int): String = "Дальше сегодня$DOT${RuText.digits(count.toLong())}"
+
     fun laterToday(count: Int, last: LocalDateTime): String =
         "Ещё сегодня: ${RuText.digits(count.toLong())}, " + (if (count == 1) "" else "последняя ") + "в$NBSP" + DateFormat.time(last.time)
 

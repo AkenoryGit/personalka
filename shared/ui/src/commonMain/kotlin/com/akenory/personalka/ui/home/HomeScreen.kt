@@ -46,6 +46,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -137,6 +138,7 @@ internal const val NEAREST_OPEN_TAG = "home-nearest-open"
 internal const val NEAREST_DONE_TAG = "home-nearest-done"
 internal const val NEAREST_DIARY_TAG = "home-nearest-diary"
 internal const val LATER_TAG = "home-later"
+internal fun laterRowTag(id: String) = "home-later-$id"
 internal const val NEXT_TAG = "home-next"
 internal const val TODO_TAG = "home-todo"
 internal const val PAST_TAG = "home-past"
@@ -413,7 +415,8 @@ fun HomeScreen(
         NearestBlock(
             nearest = nearest,
             card = nearestCard?.takeIf { it.id == nearest?.id },
-            later = nearestSlot?.takeIf { laterRow && !HomeRules.todayDone(it, today) }?.let { HomeRules.laterToday(slots, it, today) }.orEmpty(),
+            later = nearestSlot?.takeIf { laterRow && !HomeRules.todayDone(it, today) }?.let { HomeRules.laterToday(slots, it, today) }.orEmpty()
+                .mapNotNull { byId[it.id] },
             now = now,
             onOpen = open,
             onDone = done,
@@ -542,7 +545,7 @@ private fun Padded(content: @Composable () -> Unit) {
 private fun NearestBlock(
     nearest: CalendarTraining?,
     card: TrainingCard?,
-    later: List<HomeSlot>,
+    later: List<CalendarTraining>,
     now: LocalDateTime,
     onOpen: (String) -> Unit,
     onDone: (String) -> Unit,
@@ -570,8 +573,63 @@ private fun NearestBlock(
     // Шаг 5.11б: ближайшая — карточка цвета своего места, как блок в календаре.
     val tone = PlaceColor.of(nearest.color).cardTone(colors)
     ToneCard(tone, Modifier.testTag(NEAREST_TAG)) { NearestBody(nearest, card, now, tone, onOpen, onDone, onDiary) }
-    if (later.isNotEmpty()) {
-        Block { BlockRow(text = HomeFormat.laterToday(later.size, later.last().start), tag = LATER_TAG, onClick = { onDay(today) }, divider = false) }
+    if (later.isNotEmpty()) LaterList(later, onOpen = onOpen, onDay = { onDay(today) })
+}
+
+/**
+ * «Дальше сегодня · 4» (шаг 5.12г, просьба Дмитрия): все оставшиеся тренировки дня строками — время на плашке цвета места,
+ * имя, справа «ПТ · ББ». Строка открывает карточку тренировки, подпись — день в «Календаре».
+ */
+@Composable
+private fun LaterList(later: List<CalendarTraining>, onOpen: (String) -> Unit, onDay: () -> Unit) {
+    val colors = PersonalkaTheme.colors
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = Dimens.touch)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(role = Role.Button, onClick = onDay)
+                .testTag(LATER_TAG)
+                .padding(horizontal = Dimens.space1),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(HomeFormat.laterTitle(later.size), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium.tabular(), color = colors.textMuted)
+            Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).background(colors.surface)) {
+            later.forEachIndexed { i, t ->
+                if (i > 0) HorizontalDivider(Modifier.padding(start = 92.dp), thickness = 1.dp, color = colors.divider)
+                val tone = PlaceColor.of(t.color).tone(colors.isDark)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 60.dp)
+                        .clickable(role = Role.Button) { onOpen(t.id) }
+                        .semantics(mergeDescendants = true) {}
+                        .testTag(laterRowTag(t.id))
+                        .padding(horizontal = Dimens.space4, vertical = Dimens.space2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        DateFormat.time(t.start.time),
+                        Modifier.width(64.dp).clip(RoundedCornerShape(10.dp)).background(tone.block(1)).padding(vertical = 6.dp),
+                        style = MaterialTheme.typography.labelLarge.tabular().copy(fontWeight = FontWeight.SemiBold),
+                        color = tone.text,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.width(Dimens.space3))
+                    Text(t.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.width(Dimens.space2))
+                    Text(
+                        listOf(t.typeShort, t.placeShort).filter { it.isNotBlank() }.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textMuted,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
     }
 }
 
