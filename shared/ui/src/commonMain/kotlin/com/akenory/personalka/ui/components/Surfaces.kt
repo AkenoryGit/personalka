@@ -30,6 +30,10 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -310,3 +314,13 @@ fun SettingsGroup(modifier: Modifier = Modifier, content: @Composable ColumnScop
         content = content,
     )
 }
+
+/**
+ * Вдавленная плашка (шаг 5.12д): тёмное углубление в цветной карточке — заливка, тень по верхнему краю внутри
+ * и светлая черта снизу, будто окошко выбито в карточке. Ступень и пояснение ⓘ на «Деньгах».
+ */
+fun Modifier.insetWell(shape: androidx.compose.ui.graphics.Shape, fill: Color = Color.Black.copy(alpha = 0.24f)): Modifier =
+    this.clip(shape).background(fill).drawBehind {
+        drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.34f), Color.Transparent), startY = 0f, endY = 6.dp.toPx()))
+        drawRect(Color.White.copy(alpha = 0.12f), topLeft = Offset(0f, size.height - 1.dp.toPx()), size = Size(size.width, 1.dp.toPx()))
+    }

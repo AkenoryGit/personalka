@@ -19,6 +19,7 @@ import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.clients.CabinetTools
 import com.akenory.personalka.ui.clients.LocalMaxMessenger
+import com.akenory.personalka.ui.components.LocalTilt
 import com.akenory.personalka.ui.components.ProvideAvatarPhotos
 import com.akenory.personalka.ui.reminders.AppLink
 import com.akenory.personalka.ui.settings.BackupTools
@@ -27,6 +28,9 @@ import com.akenory.personalka.ui.settings.SyncTools
 import kotlinx.coroutines.flow.first
 
 class MainActivity : ComponentActivity() {
+    /** Наклон телефона для блика на «Деньгах» (шаг 5.12д). */
+    private val tilt by lazy { AndroidTilt(applicationContext, lifecycle) }
+
     /** Нажатое уведомление (шаг 2.5): приложение открывает нужный экран и сбрасывает ссылку. */
     private var link by mutableStateOf<AppLink?>(null)
 
@@ -89,7 +93,7 @@ class MainActivity : ComponentActivity() {
             notifications.askOnce()
         }
         ProvideAvatarPhotos(photos, app.clients.ids, app.cabinets.consents) {
-            CompositionLocalProvider(LocalMaxMessenger provides max) {
+            CompositionLocalProvider(LocalMaxMessenger provides max, LocalTilt provides tilt) {
                 App(
                     versionName = BuildConfig.VERSION_NAME,
                     settings = app.settings,

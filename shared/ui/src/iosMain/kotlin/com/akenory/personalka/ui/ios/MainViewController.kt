@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.ios
 
+import com.akenory.personalka.ui.components.LocalTilt
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +75,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
         }
     }
     ProvideAvatarPhotos(IosPhotos, app.clients.ids, app.cabinets.consents) {
+      CompositionLocalProvider(LocalTilt provides IosTilt) {
         App(
             versionName = app.versionName,
             settings = app.settings,
@@ -90,5 +93,6 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
             link = link,
             onLink = { link = null },
         )
+      }
     }
 }

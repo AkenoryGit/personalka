@@ -1,5 +1,15 @@
 package com.akenory.personalka.ui.home
 
+import androidx.compose.runtime.LaunchedEffect
+import com.akenory.personalka.ui.components.insetWell
+import com.akenory.personalka.ui.components.LocalTilt
+import kotlinx.coroutines.flow.conflate
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -882,9 +892,10 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
             var note by rememberSaveable { mutableStateOf(false) }
             val plan = view.plan
             val pace = SalaryPlan.pace(view.pay.earned, view.pay.forecast, plan)
-            // Шаг 5.11б: карточка зелёная, пока месяц идёт в план; отстаёт или плана нет — нейтральная, цвет не обманывает.
-            val tone = if (pace != null && pace != PlanPace.BEHIND) colors.doneTone() else colors.neutralTone()
-            ToneCard(tone, Modifier.tourTarget(TourTarget.MONEY).clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
+            // Шаг 5.12д (решение Дмитрия 19.11.2026): карточка всегда «Сияние» с бликом от наклона телефона;
+            // хорошо или плохо идёт месяц — говорят строка и точка внизу (мятная / янтарная), а не цвет карточки.
+            val tone = auroraTone()
+            AuroraCard(Modifier.tourTarget(TourTarget.MONEY).clickable(role = Role.Button, onClick = onSalary).testTag(MONEY_TAG)) {
                 Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(HomeFormat.moneyTitle(today), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = tone.muted)
                     HomeFormat.tierChip(view.tiers)?.let { TierChip(it, tier) }
@@ -928,24 +939,25 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                     }
                 }
                 if (note && view.period == MonthPeriod.CURRENT) {
-                    Note(
+                    InsetNote(
                         HomeFormat.forecastNote(
                             view.shown.cancels, view.shown.likelyPtCount, view.shown.forecastPtCount, view.shown.forecast, view.shown.scheduled,
                             hides = view.shown !== view.pay,
                         ),
+                        tone,
                         Modifier.padding(top = Dimens.space1).testTag(MONEY_NOTE_TAG),
                     )
                 }
                 if (plan != null && pace != null) {
                     val done = (view.pay.earned.toFloat() / plan).coerceIn(0f, 1f)
                     val forecast = (view.pay.forecast.toFloat() / plan).coerceIn(done, 1f)
-                    ChargedBar(done, forecast, tier, onTone = tone.fill != colors.surface)
+                    ChargedBar(done, forecast, tier, onTone = true)
                     Row(
                         Modifier.padding(top = Dimens.space1),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
                     ) {
-                        Box(Modifier.size(8.dp).background(if (pace == PlanPace.BEHIND) colors.charged else colors.done, CircleShape))
+                        Box(Modifier.size(8.dp).background(if (pace == PlanPace.BEHIND) AURORA_BEHIND else AURORA_GOOD, CircleShape))
                         Text(
                             HomeFormat.pace(pace, view.percent ?: 0, view.forecastPercent ?: 0, view.shortfall?.pts),
                             style = MaterialTheme.typography.labelLarge.tabular(),
@@ -986,22 +998,84 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
     }
 }
 
-/** Плашка ступени: на ступени 1 — серая; со ступени 2 — зелёная с молнией, на ступени 3 — с двумя. */
+/** Плашка ступени (шаг 5.12д): вдавленная в карточку; со ступени 2 — с мятной молнией, на ступени 3 — с двумя. */
 @Composable
 private fun TierChip(text: String, tier: Int) {
-    val colors = PersonalkaTheme.colors
-    val bonus = tier > 1
     Row(
         Modifier
-            .background(if (bonus) colors.doneContainer else colors.surfaceAlt, CircleShape)
-            .padding(start = if (bonus) 8.dp else 10.dp, end = 10.dp, top = 3.dp, bottom = 3.dp)
+            .insetWell(CircleShape)
+            .padding(start = if (tier > 1) 8.dp else 10.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
             .testTag(MONEY_TIER_TAG),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        repeat(tier - 1) { Icon(PIcons.Bolt, contentDescription = null, tint = colors.onDoneContainer, modifier = Modifier.size(14.dp)) }
-        Text(text, style = MaterialTheme.typography.labelMedium.tabular(), color = if (bonus) colors.onDoneContainer else colors.text, maxLines = 1)
+        repeat(tier - 1) { Icon(PIcons.Bolt, contentDescription = null, tint = AURORA_GOOD, modifier = Modifier.size(14.dp)) }
+        Text(text, style = MaterialTheme.typography.labelMedium.tabular(), color = Color.White, maxLines = 1)
     }
+}
+
+/** Пояснение ⓘ к прогнозу — вдавленным окошком в карточке, а не серой подложкой (шаг 5.12д). */
+@Composable
+private fun InsetNote(text: String, tone: Tone, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().insetWell(RoundedCornerShape(14.dp)).padding(Dimens.space3),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
+    ) {
+        Icon(PIcons.Info, contentDescription = null, tint = tone.muted, modifier = Modifier.size(18.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = tone.content)
+    }
+}
+
+/** «Сияние»: бирюза → индиго → фиолет; одинаково в обеих темах, текст белый (не ниже 5 : 1 и под бликом). */
+private val AURORA = listOf(Color(0xFF0E3A48), Color(0xFF145A66), Color(0xFF2E3F86), Color(0xFF4B2F8C))
+/** Точка «Хорошо идёте» и молния ступени — мятная; «Поднажать» — янтарная. На «Сиянии» обе читаются. */
+private val AURORA_GOOD = Color(0xFF9EF2E2)
+private val AURORA_BEHIND = Color(0xFFFFC970)
+
+private fun auroraTone() = Tone(fill = AURORA[1], content = Color.White.copy(alpha = 0.92f), strong = Color.White, muted = Color.White.copy(alpha = 0.86f))
+
+/**
+ * Карточка «Деньги» цветом «Сияние» (шаг 5.12д) с бликом: мягкое пятно света и косая полоса двигаются за наклоном
+ * телефона ([LocalTilt]). Нет датчика или включено «Уменьшить движение» — блик стоит на месте.
+ */
+@Composable
+private fun AuroraCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val source = LocalTilt.current
+    var target by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(source) {
+        if (source == null || source.reduceMotion()) return@LaunchedEffect
+        source.tilt().conflate().collect { target = it }
+    }
+    val x by animateFloatAsState(target.x, spring(stiffness = Spring.StiffnessVeryLow), label = "tiltX")
+    val y by animateFloatAsState(target.y, spring(stiffness = Spring.StiffnessVeryLow), label = "tiltY")
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(Brush.linearGradient(AURORA))
+            .drawBehind {
+                val w = size.width
+                val h = size.height
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.12f), Color.Transparent),
+                        center = Offset(w * (0.5f + x * 0.45f), h * (0.35f + y * 0.4f)),
+                        radius = w * 0.6f,
+                    ),
+                )
+                val cx = w * (0.5f + x * 0.6f)
+                drawRect(
+                    Brush.linearGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = 0.09f), Color.Transparent),
+                        start = Offset(cx - w * 0.22f, 0f),
+                        end = Offset(cx + w * 0.22f, h),
+                    ),
+                )
+            }
+            .padding(Dimens.space4),
+        verticalArrangement = Arrangement.spacedBy(Dimens.space2),
+        content = content,
+    )
 }
 
 /** Полоса плана, «заряженная» ступенью: проведено — основным цветом, со ступени 2 — зелёным, на ступени 3 — со штрихами. */
@@ -1009,12 +1083,19 @@ private fun TierChip(text: String, tier: Int) {
 private fun ChargedBar(done: Float, forecast: Float, tier: Int, onTone: Boolean = false) {
     val colors = PersonalkaTheme.colors
     // На зелёной карточке (шаг 5.11б) дорожка и прогноз — тоном текста карточки, иначе серые полосы на зелёном спорят.
-    val track = if (onTone) colors.onDoneContainer.copy(alpha = 0.14f) else colors.surfaceAlt
-    val ahead = if (onTone) colors.onDoneContainer.copy(alpha = 0.32f) else colors.outline
+    // На «Сиянии» (шаг 5.12д) — белым: дорожка, прогноз, проведено; со ступени 2 проведено мятное.
+    val track = if (onTone) Color.White.copy(alpha = 0.18f) else colors.surfaceAlt
+    val ahead = if (onTone) Color.White.copy(alpha = 0.38f) else colors.outline
+    val filled = when {
+        onTone && tier > 1 -> AURORA_GOOD
+        onTone -> Color.White
+        tier > 1 -> colors.done
+        else -> colors.primary
+    }
     Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(track)) {
         if (forecast > 0f) Box(Modifier.fillMaxWidth(forecast).fillMaxHeight().background(ahead))
         if (done > 0f) {
-            Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(if (tier > 1) colors.done else colors.primary)) {
+            Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(filled)) {
                 if (tier >= 3) Sparks()
             }
         }
