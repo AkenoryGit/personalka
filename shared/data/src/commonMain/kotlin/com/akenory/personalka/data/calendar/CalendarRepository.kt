@@ -292,7 +292,8 @@ data class CalendarZone(
 }
 
 /** Место в фильтре календаря (5.3): «ББ» на чипе, «Большой бассейн» в списке. */
-data class CalendarPlace(val id: String, val shortName: String, val name: String)
+/** [color] — ключ цвета места из палитры (шаг 5.12а: квадратики и время в «Свободных слотах»). */
+data class CalendarPlace(val id: String, val shortName: String, val name: String, val color: String? = null)
 
 /** Часы работы из настроек — часы сетки (3.2); по умолчанию — часы клуба 07:00–23:00. */
 data class WorkHours(val start: LocalTime = LocalTime(7, 0), val end: LocalTime = LocalTime(23, 0))
@@ -329,7 +330,7 @@ class CalendarRepository(
 
     /** Места для фильтра в шапке (5.3) — действующие, в порядке тренера; архивные не фильтруются отдельно. */
     val places: Flow<List<CalendarPlace>> = reference.observeLocations().map { list ->
-        list.filter { !it.archived }.map { CalendarPlace(it.id, it.shortName, it.name) }
+        list.filter { !it.archived }.map { CalendarPlace(it.id, it.shortName, it.name, it.color) }
     }
 
     private val copiedState = MutableStateFlow<TrainingCopy?>(null)

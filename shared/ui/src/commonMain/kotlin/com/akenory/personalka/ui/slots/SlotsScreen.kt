@@ -58,6 +58,9 @@ import com.akenory.personalka.ui.components.ChoiceChip
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.OutlineButton
 import com.akenory.personalka.ui.components.SwitchRow
+import com.akenory.personalka.ui.components.PlaceBadge
+import com.akenory.personalka.ui.components.SegmentTabs
+import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.shell.TopBar
@@ -146,6 +149,7 @@ internal fun SlotsScreen(
     val places by calendar.places.collectAsState(initial = emptyList())
     val query = params.query(now.date, hours.start, hours.end)
     val placeShort: (String) -> String = { id -> places.firstOrNull { it.id == id }?.shortName.orEmpty() }
+    val placeColor: (String) -> PlaceColor? = { id -> places.firstOrNull { it.id == id }?.color?.let { PlaceColor.of(it) } }
     val result by remember(query, now) { calendar.slots.observe(query, now) }.collectAsState(initial = null)
 
     val copy: () -> Unit = {
@@ -190,14 +194,14 @@ internal fun SlotsScreen(
                     }
                     VerticalDivider(thickness = 1.dp, color = PersonalkaTheme.colors.divider)
                     Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
-                        Results(result, placeShort, copy, share, open)
+                        Results(result, placeShort, placeColor, copy, share, open)
                     }
                 }
             } else {
                 Column(Modifier.fillMaxSize().verticalScroll(resultScroll).padding(Dimens.space4).padding(bottom = 56.dp)) {
                     Params(params, places, period, more, { more = it }, change)
                     HorizontalDivider(Modifier.padding(vertical = Dimens.space4), color = PersonalkaTheme.colors.divider)
-                    Results(result, placeShort, copy, share, open)
+                    Results(result, placeShort, placeColor, copy, share, open)
                 }
             }
         }
@@ -239,17 +243,15 @@ private fun ColumnScope.Params(
 ) {
     val colors = PersonalkaTheme.colors
     Label(SlotFormat.PERIOD)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
-        SlotFormat.PERIODS.forEach { days ->
-            ChoiceChip(
-                SlotFormat.period(days),
-                !period.custom && p.periodDays == days,
-                { onChange(p.copy(periodDays = days, fromDate = null, toDate = null)) },
-                Modifier.testTag(slotPeriodTag(days)),
-            )
-        }
-        ChoiceChip(SlotFormat.CUSTOM_PERIOD, period.custom, { period.onPick(PICK_FROM) }, Modifier.testTag(SLOTS_CUSTOM_TAG))
-    }
+    // Шаг 5.12а: период — переключатель вида сегментами; «Свои даты» открывает календарь.
+    val periods: List<Int?> = SlotFormat.PERIODS + null
+    SegmentTabs(
+        items = periods,
+        selected = if (period.custom) null else p.periodDays.takeIf { it in SlotFormat.PERIODS } ?: -1,
+        title = { days -> if (days == null) SlotFormat.CUSTOM_PERIOD else SlotFormat.period(days) },
+        onSelect = { days -> if (days == null) period.onPick(PICK_FROM) else onChange(p.copy(periodDays = days, fromDate = null, toDate = null)) },
+        tag = { days -> if (days == null) SLOTS_CUSTOM_TAG else slotPeriodTag(days) },
+    )
     // Даты периода видны всегда: «С 27.10.2026 по 09.11.2026», нажатие — календарь.
     Row(horizontalArrangement = Arrangement.spacedBy(Dimens.space2)) {
         DateChip(SlotFormat.FROM, period.from, Modifier.testTag(SLOTS_FROM_TAG)) { period.onPick(PICK_FROM) }
@@ -354,6 +356,7 @@ private fun Label(text: String) {
 private fun ColumnScope.Results(
     result: SlotResult?,
     placeShort: (String) -> String,
+    placeColor: (String) -> PlaceColor?,
     onCopy: () -> Unit,
     onShare: (() -> Unit)?,
     onOpen: (LocalDateTime, String?) -> Unit,
@@ -372,21 +375,28 @@ private fun ColumnScope.Results(
         if (onShare != null) OutlineButton(SlotFormat.SHARE, onShare, Modifier.testTag(SLOTS_SHARE_TAG), icon = PIcons.Share)
     }
     result.places.forEach { place ->
+        val tint = place.locationId?.let(placeColor)
         place.locationId?.let { id ->
-            Text(
-                placeShort(id) + ":",
-                Modifier.padding(top = Dimens.space5).semantics { heading() }.testTag(slotPlaceRowTag(id)),
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.text,
-            )
+            // Шаг 5.12а: помещение — квадратиком его цвета, как в «Ещё»; время — на светлом оттенке этого цвета.
+            Row(Modifier.padding(top = Dimens.space5), verticalAlignment = Alignment.CenterVertically) {
+                PlaceBadge(tint, text = placeShort(id))
+                Spacer(Modifier.width(Dimens.space3))
+                Text(
+                    placeShort(id) + ":",
+                    Modifier.semantics { heading() }.testTag(slotPlaceRowTag(id)),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.text,
+                )
+            }
         }
-        place.days.forEach { day -> Day(day, result.waiting[day].orEmpty(), onOpen) }
+        place.days.forEach { day -> Day(day, result.waiting[day].orEmpty(), tint, onOpen) }
     }
 }
 
 @Composable
-private fun Day(day: DayStarts, waiting: List<String>, onOpen: (LocalDateTime, String?) -> Unit) {
+private fun Day(day: DayStarts, waiting: List<String>, place: PlaceColor?, onOpen: (LocalDateTime, String?) -> Unit) {
     val colors = PersonalkaTheme.colors
+    val tone = place?.tone(colors.isDark)
     Text(
         SlotFormat.dayLong(day.date),
         Modifier.padding(top = Dimens.space3, bottom = Dimens.space2),
@@ -399,13 +409,13 @@ private fun Day(day: DayStarts, waiting: List<String>, onOpen: (LocalDateTime, S
                 Modifier
                     .heightIn(min = Dimens.touch)
                     .clip(MaterialTheme.shapes.small)
-                    .background(colors.surface)
+                    .background(tone?.block(1) ?: colors.surface)
                     .clickable(role = Role.Button) { onOpen(day.at(minute), day.locationId) }
                     .testTag(slotStartTag(day, minute))
                     .padding(horizontal = Dimens.space3),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(SlotFormat.start(minute), style = MaterialTheme.typography.labelLarge, color = colors.text)
+                Text(SlotFormat.start(minute), style = MaterialTheme.typography.labelLarge, color = tone?.text ?: colors.text)
             }
         }
     }

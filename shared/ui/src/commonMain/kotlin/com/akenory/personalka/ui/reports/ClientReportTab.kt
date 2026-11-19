@@ -36,6 +36,10 @@ import com.akenory.personalka.ui.salary.CardHeader
 import com.akenory.personalka.ui.salary.MoneyRow
 import com.akenory.personalka.ui.salary.Muted
 import com.akenory.personalka.ui.salary.SalaryCard
+import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 
@@ -126,12 +130,14 @@ internal fun ClientReportContent(
                 MoneyRow(
                     title,
                     row.counts.inSalary.toString(),
+                    place = names.placeColor(row.key.locationId)?.let { PlaceColor.of(it) },
                     modifier = Modifier.testTag(reportClientRowTag(title)),
                     note = ClientReportFormat.rowNote(row).ifEmpty { null },
                 )
             }
         }
-        SalaryCard {
+        // Шаг 5.12а: итог — цветной карточкой, как итог «Тренировок».
+        ToneCard(if (report.total.inSalary > 0) colors.doneTone() else colors.neutralTone()) {
             MoneyRow(
                 ClientReportFormat.salaryLine(report.total),
                 "",

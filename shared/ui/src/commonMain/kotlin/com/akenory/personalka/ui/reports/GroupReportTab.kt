@@ -34,6 +34,7 @@ import com.akenory.personalka.ui.components.PanelActions
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.salary.Muted
 import com.akenory.personalka.ui.salary.SalaryCard
+import com.akenory.personalka.ui.components.PlaceBadge
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
 import com.akenory.personalka.ui.theme.tabular
@@ -92,6 +93,9 @@ private fun GroupBlock(b: GroupReportBlock, onGroup: (String) -> Unit, onKid: (S
             Modifier.fillMaxWidth().heightIn(min = Dimens.touch).clickable(role = Role.Button) { onGroup(b.group.id) },
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Шаг 5.12а: значок группы в квадратике, как в списке «Групп».
+            PlaceBadge(null, icon = PIcons.Groups)
+            Spacer(Modifier.width(Dimens.space3))
             Text(b.group.name, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = colors.text)
             Icon(PIcons.ChevronRight, contentDescription = null, tint = colors.textMuted)
         }

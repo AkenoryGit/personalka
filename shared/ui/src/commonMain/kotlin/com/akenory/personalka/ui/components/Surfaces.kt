@@ -15,6 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -198,4 +206,83 @@ fun BlockTitle(text: String, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.labelMedium,
         color = PersonalkaTheme.colors.textMuted,
     )
+}
+
+/**
+ * Квадратик 36 dp цвета места слева у строки списка (шаг 5.12а), как значки в «Ещё»: внутри — короткое имя
+ * места («ББ», «Зал») или значок. [place] `null` — нейтральный квадратик `surfaceAlt`.
+ */
+@Composable
+fun PlaceBadge(place: PlaceColor?, modifier: Modifier = Modifier, text: String? = null, icon: ImageVector? = null) {
+    val colors = PersonalkaTheme.colors
+    val tint = place?.tone(colors.isDark)
+    Box(
+        modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(tint?.block(2) ?: colors.surfaceAlt),
+        contentAlignment = Alignment.Center,
+    ) {
+        val content = tint?.text ?: colors.text
+        when {
+            icon != null -> Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(20.dp))
+            text != null -> Text(text.take(4), style = MaterialTheme.typography.labelMedium, color = content, maxLines = 1)
+        }
+    }
+}
+
+/** Точка 10 dp цвета места: в строках, где квадратик лишний (разбивка, слоты, итоги по местам). */
+@Composable
+fun PlaceDot(place: PlaceColor, modifier: Modifier = Modifier) {
+    Box(modifier.size(10.dp).clip(CircleShape).background(place.tone(PersonalkaTheme.colors.isDark).stripe))
+}
+
+/** Метка статуса на подложке тона («Сверено», «Списание», «Не сверено») — вместо цветного текста (шаг 5.12а). */
+@Composable
+fun StatusLabel(text: String, tone: Tone, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(tone.fill)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        style = MaterialTheme.typography.labelMedium,
+        color = tone.content,
+        maxLines = 1,
+    )
+}
+
+/**
+ * Строка внутри карточки: необязательная точка цвета места, подпись и пояснение, справа число (`labelLarge`, 600 —
+ * шаг 5.12а). Разбивки зарплаты, итоги отчётов, строки сверок.
+ */
+@Composable
+fun ValueRow(
+    title: String,
+    value: String?,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    place: PlaceColor? = null,
+    valueColor: Color = PersonalkaTheme.colors.text,
+    onClick: (() -> Unit)? = null,
+) {
+    val colors = PersonalkaTheme.colors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .heightIn(min = 44.dp)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (place != null) {
+            PlaceDot(place)
+            Spacer(Modifier.width(Dimens.space3))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        }
+        if (value != null) {
+            Spacer(Modifier.width(Dimens.space3))
+            Text(value, style = MaterialTheme.typography.labelLarge.tabular().copy(fontWeight = FontWeight.SemiBold), color = valueColor, maxLines = 1)
+        }
+    }
 }

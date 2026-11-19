@@ -62,6 +62,9 @@ data class ReportNames(
 
     fun place(id: String): String = placeById[id]?.let { it.shortName.ifBlank { it.name } }.orEmpty()
 
+    /** Ключ цвета места (шаг 5.12а: точка у строки отчёта); места нет — `null`. */
+    fun placeColor(id: String): String? = placeById[id]?.color
+
     /** «ПТ · ББ», у групп с коллегой — со случаем. */
     fun row(key: ReportKey): String = ReportFormat.rowTitle(key, type(key.typeId), place(key.locationId))
 }

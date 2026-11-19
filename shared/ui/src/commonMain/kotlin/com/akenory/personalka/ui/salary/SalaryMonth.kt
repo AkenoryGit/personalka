@@ -4,6 +4,7 @@ import com.akenory.personalka.ui.components.SegmentTabs
 import com.akenory.personalka.ui.components.neutralTone
 import com.akenory.personalka.ui.components.doneTone
 import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.PlaceDot
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -97,6 +98,7 @@ import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.shell.LocalWide
 import com.akenory.personalka.ui.theme.Dimens
 import com.akenory.personalka.ui.theme.PersonalkaTheme
+import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.theme.tabular
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.flowOf
@@ -440,6 +442,7 @@ internal fun MoneyRow(
     bold: Boolean = false,
     onClick: (() -> Unit)? = null,
     extra: (@Composable () -> Unit)? = null,
+    place: PlaceColor? = null,
 ) {
     val colors = PersonalkaTheme.colors
     Row(
@@ -452,6 +455,11 @@ internal fun MoneyRow(
     ) {
         if (lead != null) {
             Text(lead, Modifier.width(64.dp), style = MaterialTheme.typography.labelMedium, color = colors.text)
+        }
+        // Шаг 5.12а: у строки места — точка его цвета, как квадратики в «Ещё».
+        if (place != null) {
+            PlaceDot(place, Modifier.padding(top = 6.dp))
+            Spacer(Modifier.width(Dimens.space3))
         }
         Column(Modifier.weight(1f).padding(end = Dimens.space3)) {
             Text(

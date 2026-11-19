@@ -73,6 +73,12 @@ import com.akenory.personalka.domain.model.ConductedBy
 import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.format.SalaryFormat
 import com.akenory.personalka.ui.components.ChoiceChip
+import com.akenory.personalka.ui.components.StatusLabel
+import com.akenory.personalka.ui.components.Tile
+import com.akenory.personalka.ui.components.TileRow
+import com.akenory.personalka.ui.components.chargedTone
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.neutralTone
 import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.TrainingStatus
 import com.akenory.personalka.ui.clients.FormLabel
@@ -220,20 +226,11 @@ fun GroupCard(
                 }
 
                 if (done.isNotEmpty()) {
-                    Row(
-                        Modifier.padding(top = Dimens.space3).fillMaxWidth().background(colors.surface, MaterialTheme.shapes.medium)
-                            .padding(vertical = Dimens.space3),
-                    ) {
-                        listOf(
-                            RuText.digits(done.size.toLong()) to "проведено",
-                            ClientFormat.tenths(GroupRules.averageTenths(attended)) to "в среднем пришли",
-                            RuText.digits(current.size.toLong()) to "в составе",
-                        ).forEach { (value, label) ->
-                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(value, style = MaterialTheme.typography.titleMedium.tabular(), color = colors.text)
-                                Text(label, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-                            }
-                        }
+                    // Шаг 5.12а: счётчики — плитками, «проведено» зелёная.
+                    TileRow(Modifier.padding(top = Dimens.space3)) {
+                        Tile(RuText.digits(done.size.toLong()), "проведено", tone = colors.doneTone())
+                        Tile(ClientFormat.tenths(GroupRules.averageTenths(attended)), "в среднем пришли")
+                        Tile(RuText.digits(current.size.toLong()), "в составе")
                     }
                 }
 
@@ -482,22 +479,27 @@ private fun TrainingList(list: List<GroupTrainingRow>, members: List<GroupMember
             val t = row.training
             val active = row.participations
             val guests = GroupRules.guests(active.map { it.clientId }, members, t.start.date).size
-            val status = when {
-                t.status == TrainingStatus.CANCELLED -> "Отменено"
-                t.status == TrainingStatus.DONE -> GroupFormat.attended(active.count { it.status == ParticipationStatus.ATTENDED }, active.size)
-                t.start < now -> "не отмечено"
-                else -> "ждём ${GroupFormat.children(active.count { it.status == ParticipationStatus.EXPECTED })}"
+            // Шаг 5.12а: статус — меткой на подложке: пришли — зелёная, не отмечено — янтарная.
+            val (status, tone) = when {
+                t.status == TrainingStatus.CANCELLED -> "Отменено" to colors.neutralTone().copy(fill = colors.surfaceAlt)
+                t.status == TrainingStatus.DONE -> GroupFormat.attended(active.count { it.status == ParticipationStatus.ATTENDED }, active.size) to colors.doneTone()
+                t.start < now -> "не отмечено" to colors.chargedTone()
+                else -> "ждём ${GroupFormat.children(active.count { it.status == ParticipationStatus.EXPECTED })}" to null
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = Dimens.space4, vertical = Dimens.space3)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = Dimens.space4, vertical = Dimens.space3), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.width(72.dp)) {
                     Text(DateFormat.short(t.start.date), style = MaterialTheme.typography.labelMedium.tabular(), color = colors.text)
                     Text(DateFormat.time(t.start.time), style = MaterialTheme.typography.bodySmall.tabular(), color = colors.textMuted)
                 }
-                Text(
-                    listOf(status).plus(if (guests > 0) listOf(GroupFormat.guests(guests)) else emptyList()).joinToString(" · "),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colors.text,
-                )
+                if (tone != null) {
+                    StatusLabel(status, tone)
+                } else {
+                    Text(status, style = MaterialTheme.typography.bodyLarge, color = colors.text)
+                }
+                if (guests > 0) {
+                    Spacer(Modifier.width(Dimens.space2))
+                    Text(GroupFormat.guests(guests), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+                }
             }
         }
     }

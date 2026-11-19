@@ -56,6 +56,11 @@ import com.akenory.personalka.domain.report.ReportTable
 import com.akenory.personalka.domain.report.ReportYear
 import com.akenory.personalka.ui.calendar.COPIED
 import com.akenory.personalka.ui.components.ChoiceChip
+import com.akenory.personalka.ui.components.SegmentTabs
+import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.icons.PIcons
@@ -295,22 +300,18 @@ internal fun ReportsScreen(
                         }
                     }
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = Dimens.space4),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.space2),
-                ) {
-                    ReportPeriod.entries.forEach { p ->
-                        ChoiceChip(
-                            ReportFormat.period(p),
-                            selected = p == period,
-                            onClick = {
-                                periodText = p.name
-                                openRow = null
-                            },
-                            modifier = Modifier.testTag(reportPeriodTag(p)),
-                        )
-                    }
-                }
+                // Шаг 5.12а: «Месяц / Год / Свой период» — переключатель вида сегментами.
+                SegmentTabs(
+                    items = ReportPeriod.entries,
+                    selected = period,
+                    title = { ReportFormat.period(it) },
+                    onSelect = {
+                        periodText = it.name
+                        openRow = null
+                    },
+                    modifier = Modifier.padding(horizontal = Dimens.space4),
+                    tag = { reportPeriodTag(it) },
+                )
                 when (period) {
                     ReportPeriod.MONTH -> StepRow(
                         title,
@@ -457,13 +458,15 @@ private fun TableContent(table: ReportTable, names: ReportNames, onRow: (ReportK
                 MoneyRow(
                     names.row(row.key),
                     ReportFormat.salaryValue(row),
+                    place = names.placeColor(row.key.locationId)?.let { PlaceColor.of(it) },
                     modifier = Modifier.testTag(reportRowTag(row.key)),
                     note = note.ifEmpty { null },
                     onClick = if (row.trainingIds.isNotEmpty()) ({ onRow(row.key) }) else null,
                 )
             }
         }
-        SalaryCard {
+        // Шаг 5.12а: итог отчёта — цветной карточкой, зелёной, когда есть тренировки в зарплату.
+        ToneCard(if (table.total.inSalary > 0) colors.doneTone() else colors.neutralTone()) {
             MoneyRow(
                 ReportFormat.TOTAL,
                 table.total.inSalary.toString(),
@@ -521,7 +524,7 @@ private fun YearContent(
             )
         }
     }
-    SalaryCard {
+    ToneCard(if (year.totalCounts(what).inSalary > 0) colors.doneTone() else colors.neutralTone()) {
         val t = year.totalCounts(what)
         MoneyRow(ReportFormat.YEAR_TOTAL, t.inSalary.toString(), modifier = Modifier.testTag(REPORTS_TOTAL_TAG), note = ReportFormat.countsLine(t), bold = true)
     }

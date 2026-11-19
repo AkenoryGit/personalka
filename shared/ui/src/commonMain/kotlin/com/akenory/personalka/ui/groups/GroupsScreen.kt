@@ -61,6 +61,8 @@ import com.akenory.personalka.ui.components.Field
 import com.akenory.personalka.ui.components.ListCard
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.Note
+import com.akenory.personalka.ui.components.PlaceBadge
+import com.akenory.personalka.ui.theme.PlaceColor
 import com.akenory.personalka.ui.components.RowDivider
 import com.akenory.personalka.ui.components.SecondaryButton
 import com.akenory.personalka.ui.icons.PIcons
@@ -246,6 +248,8 @@ private fun GroupList(rows: List<GroupRow>, today: LocalDate, colleagues: Map<St
                             ).joinToString(" · "),
                             onClick = { onOpen(row.group.id) },
                             modifier = Modifier.testTag(groupRowTag(row.group.name)),
+                            // Шаг 5.12а: квадратик цвета места с его коротким именем, как значки в «Ещё».
+                            avatar = { PlaceBadge(row.place?.let { PlaceColor.of(it.color) }, icon = PIcons.Groups) },
                         )
                     }
                 }

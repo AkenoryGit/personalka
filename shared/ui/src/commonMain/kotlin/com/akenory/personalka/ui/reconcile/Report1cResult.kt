@@ -26,6 +26,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.unit.sp
 import com.akenory.personalka.data.reconcile.Report1cItemView
 import com.akenory.personalka.data.reconcile.Report1cRepository
 import com.akenory.personalka.domain.ClubTime
@@ -39,6 +44,11 @@ import com.akenory.personalka.ui.components.Panel
 import com.akenory.personalka.ui.components.PrimaryButton
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.salary.CardHeader
+import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.chargedTone
+import com.akenory.personalka.ui.components.StatusLabel
+import com.akenory.personalka.ui.components.neutralTone
 import com.akenory.personalka.ui.salary.MoneyRow
 import com.akenory.personalka.ui.salary.Muted
 import com.akenory.personalka.ui.salary.SalaryCard
@@ -107,9 +117,10 @@ internal fun Report1cResultScreen(
             ) {
                 val r = rec?.takeIf { it.sync.deletedAt == null } ?: return@Column
                 if (views == null) return@Column
-                SalaryCard(Modifier.testTag(REPORT1C_SUMMARY_TAG)) {
+                // Шаг 5.12а: итог сверки — цветной карточкой, зелёной, когда расхождений нет.
+                ToneCard(if (open.isEmpty()) colors.doneTone() else colors.neutralTone(), Modifier.testTag(REPORT1C_SUMMARY_TAG)) {
                     CardHeader(ReconcileFormat.period(r.periodFrom, r.periodTo, r.generatedAt))
-                    Text(ReconcileFormat.summary(r.matched, open.size), style = MaterialTheme.typography.titleMedium, color = colors.text)
+                    Text(ReconcileFormat.summary(r.matched, open.size), style = MaterialTheme.typography.displaySmall.copy(fontSize = 22.sp, lineHeight = 28.sp), color = colors.text)
                     val reviewedAt = r.reviewedAt
                     when {
                         open.isEmpty() -> Muted(ReconcileFormat.NOTHING)
@@ -194,7 +205,11 @@ private fun adminLine(v: Report1cItemView): String? = ReconcileFormat.adminLine(
 private fun Section(title: String, items: List<Report1cItemView>, onOpen: (String) -> Unit) {
     if (items.isEmpty()) return
     SalaryCard {
-        CardHeader(title, items.size.toString())
+        // Шаг 5.12а: число пунктов — янтарной меткой: это расхождения, их надо разобрать.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = PersonalkaTheme.colors.text)
+            StatusLabel(items.size.toString(), PersonalkaTheme.colors.chargedTone())
+        }
         items.forEach { v ->
             val item = v.item
             MoneyRow(

@@ -1,6 +1,7 @@
 package com.akenory.personalka.ui.reconcile
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,12 @@ import com.akenory.personalka.domain.money.DutyCheck
 import com.akenory.personalka.domain.money.DutyCheckState
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.OutlineButton
+import com.akenory.personalka.ui.components.StatusLabel
+import com.akenory.personalka.ui.components.ToneCard
+import com.akenory.personalka.ui.components.doneTone
+import com.akenory.personalka.ui.components.neutralTone
+import com.akenory.personalka.ui.theme.PlaceColor
+import com.akenory.personalka.ui.theme.tabular
 import com.akenory.personalka.ui.icons.PIcons
 import com.akenory.personalka.ui.salary.CardHeader
 import com.akenory.personalka.ui.salary.MoneyRow
@@ -181,22 +188,36 @@ private fun MonthRow(month: YearMonth, onPrev: () -> Unit, onNext: () -> Unit) {
     }
 }
 
-/** «Зарплата за месяц»: заработано для сравнения с расчётом клуба и «Месяц сверен» / «Сверен» + «Снять сверку» (5.12, 4.1). */
+/**
+ * «Зарплата за месяц»: заработано для сравнения с расчётом клуба и «Месяц сверен» / «Сверен» + «Снять сверку» (5.12, 4.1).
+ * Шаг 5.12а: главная цифра экрана — в цветной карточке, зелёной у сверенного месяца; «Сверен» — меткой.
+ */
 @Composable
 private fun SalaryCheck(data: SalaryMonthData, onClosed: (Boolean) -> Unit) {
     val colors = PersonalkaTheme.colors
     val view = data.view
-    SalaryCard(Modifier.testTag(RECONCILE_SALARY_TAG)) {
-        CardHeader(ReconcileFormat.SALARY_TITLE)
-        Text(ReconcileFormat.earned(view.pay.earned), style = MaterialTheme.typography.bodyLarge, color = colors.text)
-        if (view.closed) {
-            Row(Modifier.testTag(RECONCILE_CLOSED_TAG), verticalAlignment = Alignment.CenterVertically) {
-                Icon(PIcons.CheckCircle, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
-                Text(SalaryFormat.MONTH_CLOSED, Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.titleMedium, color = colors.text)
+    val tone = if (view.closed) colors.doneTone() else colors.neutralTone()
+    ToneCard(tone, Modifier.testTag(RECONCILE_SALARY_TAG)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                ReconcileFormat.SALARY_TITLE,
+                Modifier.weight(1f).semantics { heading() },
+                style = MaterialTheme.typography.labelMedium,
+                color = tone.muted,
+            )
+            if (view.closed) {
+                StatusLabel(SalaryFormat.MONTH_CLOSED, colors.neutralTone().copy(fill = colors.surface), Modifier.testTag(RECONCILE_CLOSED_TAG))
             }
-            Muted(SalaryFormat.closedNote(view.month))
+        }
+        Text(
+            ReconcileFormat.earned(view.pay.earned),
+            style = MaterialTheme.typography.displaySmall,
+            color = tone.strong,
+        )
+        if (view.closed) {
+            Text(SalaryFormat.closedNote(view.month), style = MaterialTheme.typography.bodySmall, color = tone.muted)
             TextButton(onClick = { onClosed(false) }, modifier = Modifier.heightIn(min = Dimens.button).testTag(RECONCILE_CLOSE_TAG)) {
-                Text(SalaryFormat.REOPEN_MONTH, style = MaterialTheme.typography.labelLarge, color = colors.text)
+                Text(SalaryFormat.REOPEN_MONTH, style = MaterialTheme.typography.labelLarge, color = tone.content)
             }
         } else {
             Muted(ReconcileFormat.SALARY_NOTE)
@@ -218,17 +239,25 @@ private fun DutyCard(data: SalaryMonthData, onCheck: (Int?) -> Unit, onShare: ()
         CardHeader(ReconcileFormat.DUTY_TITLE)
         check.rows.forEach { row ->
             MoneyRow(
+                place = data.places[row.locationId]?.let { PlaceColor.of(it.color) },
                 title = ReconcileFormat.dutyTitle(row, data.places[row.locationId]?.shortName),
                 amount = SalaryFormat.hours(row.durationMin),
                 note = listOfNotNull(row.coverFor?.let { ReconcileFormat.coverFor(it) }, ReconcileFormat.DUTY_PLANNED.takeIf { !row.done })
                     .joinToString(" · ").ifEmpty { null },
             )
         }
+        // Шаг 5.12а: итог проведённых — на зелёной подложке, как «проведено» везде.
+        val done = colors.doneTone()
         Text(
             ReconcileFormat.doneTotal(check),
-            modifier = Modifier.testTag(RECONCILE_DUTY_TOTAL_TAG),
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.text,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(if (check.doneMinutes > 0) done.fill else colors.surfaceAlt)
+                .padding(horizontal = Dimens.space3, vertical = Dimens.space2)
+                .testTag(RECONCILE_DUTY_TOTAL_TAG),
+            style = MaterialTheme.typography.titleMedium.tabular(),
+            color = if (check.doneMinutes > 0) done.content else colors.text,
         )
         if (check.plannedMinutes > 0) Muted(ReconcileFormat.plannedTotal(check.plannedMinutes))
         if (check.doneMinutes > 0) {
@@ -241,10 +270,7 @@ private fun DutyCard(data: SalaryMonthData, onCheck: (Int?) -> Unit, onShare: ()
         if (!check.canCheck || (check.doneMinutes == 0 && check.checkedMinutes == null)) return@SalaryCard
         when (check.state) {
             DutyCheckState.CHECKED -> {
-                Row(Modifier.testTag(RECONCILE_DUTY_CHECKED_TAG), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(PIcons.CheckCircle, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
-                    Text(ReconcileFormat.DUTIES_CHECKED, Modifier.padding(start = Dimens.space2), style = MaterialTheme.typography.titleMedium, color = colors.text)
-                }
+                StatusLabel(ReconcileFormat.DUTIES_CHECKED, colors.doneTone(), Modifier.testTag(RECONCILE_DUTY_CHECKED_TAG))
                 TextButton(onClick = { onCheck(null) }, modifier = Modifier.heightIn(min = Dimens.button).testTag(RECONCILE_DUTY_CHECK_TAG)) {
                     Text(ReconcileFormat.UNCHECK, style = MaterialTheme.typography.labelLarge, color = colors.text)
                 }
