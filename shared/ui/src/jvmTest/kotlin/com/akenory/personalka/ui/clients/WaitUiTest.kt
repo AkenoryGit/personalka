@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
@@ -88,7 +89,7 @@ class WaitUiTest {
 
         awaitNode(hasTestTag(waitRowTag("Петров Кирилл")))
         onNodeWithText("постоянно · пн, ср · 07–12 · ПТ").assertIsDisplayed()
-        onNodeWithText(FollowupFormat.chip(1)).assertIsDisplayed()
+        onNodeWithTag(filterChipTag(ClientFilter.NO_BOOKING)).assertTextContains("1")
 
         // «Записать» — форма с ним, ПТ, «Каждую неделю» и подписью «Из листа ожидания».
         onNodeWithTag(waitBookTag("Петров Кирилл")).performClick()

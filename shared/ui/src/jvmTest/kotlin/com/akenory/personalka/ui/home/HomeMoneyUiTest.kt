@@ -104,10 +104,10 @@ class HomeMoneyUiTest {
         awaitNode(hasText(HomeFormat.moneyTitle(TestData.now.date)))
         // Месяц: проведено 2 ПТ, по расписанию будет 3; плана нет — полосы нет.
         awaitIn(MONEY_MONTH_TAG, HomeFormat.willBe(rub(1840), rub(2760)))
-        awaitIn(MONEY_MONTH_TAG, s("2_ПТ · будет 3"))
+        awaitIn(MONEY_PT_TAG, "2")
+        awaitIn(MONEY_PT_TAG, HomeFormat.ptTileSuffix(2, 3)!!)
         // 20.10 тренировок нет.
-        awaitIn(MONEY_TODAY_TAG, HomeFormat.willBe(0, 0))
-        awaitIn(MONEY_TODAY_TAG, "без ПТ")
+        awaitIn(MONEY_TODAY_TAG, HomeFormat.todayTile(0, 0))
         // Плашка ступени (шаг 3.9с): до 101-й ещё 99 ПТ; плана нет — ни полосы, ни оценки.
         awaitIn(MONEY_TIER_TAG, s("Ступень 1 · до бонуса 99_ПТ"))
         assertEquals(0, onAllNodes(hasTestTag(MONEY_TAG) and hasText("Поднажать", substring = true)).fetchSemanticsNodes().size)
@@ -147,13 +147,14 @@ class HomeMoneyUiTest {
         }
         openHome()
         awaitIn(MONEY_TODAY_TAG, MoneyFormat.rub(rub(920)))
-        awaitIn(MONEY_TODAY_TAG, HomeFormat.willBe(rub(920), rub(1840)))
-        awaitIn(MONEY_TODAY_TAG, s("1_ПТ · будет 2"))
+        awaitIn(MONEY_TODAY_TAG, HomeFormat.todayTile(rub(920), rub(1840)))
         awaitIn(MONEY_MONTH_TAG, MoneyFormat.rub(rub(2760)))
         awaitIn(MONEY_MONTH_TAG, HomeFormat.willBe(rub(2760), rub(4600)))
-        awaitIn(MONEY_MONTH_TAG, s("3_ПТ · будет 5"))
-        awaitIn(MONEY_TODAY_TAG, s("1_отмена"))
-        awaitIn(MONEY_MONTH_TAG, s("2_отмены"))
+        // Шаг 5.11б: ПТ и отмены месяца — плитками под карточкой; отмен за день на «Главной» больше нет.
+        awaitIn(MONEY_PT_TAG, "3")
+        awaitIn(MONEY_PT_TAG, HomeFormat.ptTileSuffix(3, 5)!!)
+        awaitIn(MONEY_CANCEL_TAG, "2")
+        awaitIn(MONEY_CANCEL_TAG, HomeFormat.cancelTile(2))
     }
 
     @Test

@@ -248,7 +248,7 @@ class ClientsUiTest {
         onNodeWithContentDescription("Назад").performClick()
         awaitNode(hasTestTag(filterChipTag(ClientFilter.ARCHIVE)))
         onNodeWithTag(clientRowTag("Захаров Никита")).assertDoesNotExist()
-        onNodeWithText("Активные · 1").assertIsDisplayed()
+        onNodeWithTag(filterChipTag(ClientFilter.ACTIVE)).assertTextContains("1")
         onNodeWithTag(filterChipTag(ClientFilter.ARCHIVE)).performClick()
         onNodeWithTag(clientRowTag("Захаров Никита")).assertIsDisplayed()
         onNodeWithTag(clientRowTag("Орлова Ксения")).assertDoesNotExist()

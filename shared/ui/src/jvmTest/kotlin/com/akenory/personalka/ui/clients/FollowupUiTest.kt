@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.clients
 
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
@@ -106,7 +107,7 @@ class FollowupUiTest {
         val zakharov = visited("Захаров", "Никита", LocalDateTime(2026, 10, 16, 8, 0), sex = Sex.MALE)
         openNoBooking()
         awaitNode(hasTestTag(followupRowTag("Захаров Никита")))
-        onNodeWithText(FollowupFormat.chip(1)).assertIsDisplayed()
+        onNodeWithTag(filterChipTag(ClientFilter.NO_BOOKING)).assertTextContains("1")
         onNodeWithText("был пт 16.10 · ПТ ББ").assertIsDisplayed()
 
         onNodeWithTag(followupBookTag("Захаров Никита")).performClick()
@@ -122,7 +123,7 @@ class FollowupUiTest {
         onNodeWithTag(TRAINING_FORM_TAG).assertDoesNotExist()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(followupRowTag("Захаров Никита"))).fetchSemanticsNodes().isEmpty() }
         onNodeWithText(FollowupFormat.EMPTY).assertIsDisplayed()
-        onNodeWithText(FollowupFormat.chip(0)).assertIsDisplayed()
+        onNodeWithTag(filterChipTag(ClientFilter.NO_BOOKING)).assertTextContains("0")
     }
 
     @Test

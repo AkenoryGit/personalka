@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.screens
 
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
@@ -38,7 +39,7 @@ class MoreMenuUiTest {
         awaitNode(hasTestTag(moreRowTag(MoreItem.GROUPS)))
 
         onNodeWithText(MoreFormat.WORK).assertIsDisplayed()
-        onNodeWithTag(moreRowTag(MoreItem.VACATION)).assertTextContains(MoreFormat.VACATION_NOTE, substring = true)
+        onNodeWithTag(moreRowTag(MoreItem.VACATION)).assertContentDescriptionContains(MoreFormat.VACATION_NOTE, substring = true)
         onNodeWithText(MoreFormat.SETUP).performScrollTo().assertIsDisplayed()
         onNodeWithTag(moreRowTag(MoreItem.REMINDERS)).performScrollTo().assertTextContains(MoreFormat.REMINDERS_NOTE, substring = true)
         // Без совместного ведения нет «Коллег», без сервера — «Кабинетов», без копий на платформе — «Данных» (10.7).

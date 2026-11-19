@@ -148,6 +148,8 @@ internal const val MONEY_SETUP_TAG = "home-money-setup"
 internal const val MONEY_TODAY_TAG = "home-money-today"
 internal const val MONEY_MONTH_TAG = "home-money-month"
 internal const val MONEY_INFO_TAG = "home-money-info"
+internal const val MONEY_PT_TAG = "home-money-pt"
+internal const val MONEY_CANCEL_TAG = "home-money-cancel"
 internal const val MONEY_NOTE_TAG = "home-money-note"
 internal const val MONEY_TIER_TAG = "home-money-tier"
 internal fun todoTag(kind: TodoKind) = "home-todo-${kind.name.lowercase()}"
@@ -904,11 +906,13 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                     suffix = HomeFormat.ptTileSuffix(view.pay.ptCount, view.shown.likelyPtCount),
                     label = HomeFormat.PT_TILE,
                     onClick = onSalary,
+                    tag = MONEY_PT_TAG,
                 )
                 Tile(
                     value = RuText.digits(view.monthCancelled.toLong()),
                     label = HomeFormat.cancelTile(view.monthCancelled),
                     onClick = onSalary,
+                    tag = MONEY_CANCEL_TAG,
                 )
                 Tile(
                     value = MoneyFormat.rub(earnedToday),

@@ -670,7 +670,7 @@ private fun WeekRow(monday: LocalDate, day: LocalDate, today: LocalDate, onSelec
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = Dimens.space3, vertical = 2.dp)
+            .padding(horizontal = Dimens.space3)
             .clip(MaterialTheme.shapes.medium)
             .background(colors.surface)
             .height(if (moneyOf != null) Dimens.row + WEEK_MONEY_ROW else Dimens.row)

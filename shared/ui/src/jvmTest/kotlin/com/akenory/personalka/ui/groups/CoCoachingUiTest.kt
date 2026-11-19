@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.groups
 
+import androidx.compose.ui.test.assertContentDescriptionContains
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.domain.format.MoreFormat
 import com.akenory.personalka.domain.format.SalarySetupFormat
@@ -97,7 +98,7 @@ class CoCoachingUiTest {
         onNodeWithTag(COLLEAGUES_ROW_TAG).assertDoesNotExist()
         runBlocking { settings.salary.saveCoCoaching(true) }
         awaitNode(hasTestTag(COLLEAGUES_ROW_TAG))
-        onNodeWithTag(COLLEAGUES_ROW_TAG).assertTextContains(MoreFormat.COLLEAGUES_NOTE, substring = true).performClick()
+        onNodeWithTag(COLLEAGUES_ROW_TAG).assertContentDescriptionContains(MoreFormat.COLLEAGUES_NOTE, substring = true).performClick()
 
         awaitNode(hasText(CoCoachingFormat.EMPTY))
         onNodeWithText(CoCoachingFormat.NEW).performClick()
