@@ -181,18 +181,40 @@ class GroupsUiTest {
         awaitNode(hasTestTag(MEMBER_ADD_TAG))
         onNodeWithTag(MEMBER_ADD_TAG).performClick()
 
-        // Архивной в списке нет — тренер набирает её заново; приложение находит её и в архиве (шаг 3.9о).
+        // Архивная видна в поиске бледной строкой (шаг 5.24); тренер всё равно заводит «Нового» — приложение находит
+        // её и в архиве (шаг 3.9о).
         onNodeWithTag(MEMBER_SEARCH_TAG).performTextInput("Смирнова Анна")
+        awaitNode(hasTestTag(memberPickTag("Смирнова Анна")))
         onNodeWithTag(NEW_MEMBER_TAG).performClick()
         onNodeWithText("Сохранить").performClick()
         awaitNode(hasText("Похожий клиент уже есть"))
-        onNodeWithText("в архиве", substring = true).assertIsDisplayed()
         onNodeWithText("Да, выбрать").performClick()
 
         awaitNode(hasTestTag(memberRowTag("Смирнова Анна")))
         val all = runBlocking { clients.rows(TestData.now).first().map { it.client } }
         assertEquals(listOf(anna), all.map { it.id }, "Дубля нет")
         assertEquals(ClientStatus.ACTIVE, all.single().status, "Вернулась из архива")
+    }
+
+    @Test
+    fun archivedPickedFromSearchReturns() = runComposeUiTest {
+        val anna = kid("Смирнова", "Анна")
+        runBlocking { clients.archive(anna) }
+        group()
+        openGroups()
+        awaitNode(hasTestTag(groupRowTag("Сб 9:00 ББ")))
+        onNodeWithTag(groupRowTag("Сб 9:00 ББ")).performClick()
+        awaitNode(hasTestTag(MEMBER_ADD_TAG))
+        onNodeWithTag(MEMBER_ADD_TAG).performClick()
+
+        // Шаг 5.24: архивную выбирают прямо в поиске — она возвращается из архива и встаёт в группу.
+        onNodeWithTag(MEMBER_SEARCH_TAG).performTextInput("Смирн")
+        awaitNode(hasTestTag(memberPickTag("Смирнова Анна")))
+        onNodeWithTag(memberPickTag("Смирнова Анна")).performClick()
+        onNodeWithText("Сохранить").performClick()
+
+        awaitNode(hasTestTag(memberRowTag("Смирнова Анна")))
+        waitUntil(timeoutMillis = 5_000) { runBlocking { clients.rows(TestData.now).first().single().client.status == ClientStatus.ACTIVE } }
     }
 
     @Test
