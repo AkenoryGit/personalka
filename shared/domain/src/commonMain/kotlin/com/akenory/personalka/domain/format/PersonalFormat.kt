@@ -72,6 +72,9 @@ object PersonalFormat {
     /** Подпись дороги на сетке: «дорога · 1 ч». */
     fun travelLabel(minutes: Int): String = "дорога$DOT${PersonalRules.travelText(minutes)}"
 
+    /** Пометка блока дела «можно ставить» в сетке (шаг 5.28). */
+    const val FREE_NOTE = "можно ставить"
+
     /** Подпись дела, на которое можно ставить тренировки: «Перекус · можно ставить». */
     fun freeLabel(title: String): String = "$title${DOT}можно ставить"
 
