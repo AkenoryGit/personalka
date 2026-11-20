@@ -114,7 +114,8 @@ data class CardClient(
  * Кого можно добавить «на раз» (5.4): действующий клиент, которого нет в тренировке. [name] — «Белов Артём»,
  * как в выборе «В состав» (5.10); [adult] — взрослых в списке без поиска не показывают.
  */
-data class GuestChoice(val id: String, val name: ClientName, val birthDate: LocalDate?, val adult: Boolean)
+/** Кого можно добавить «на раз»; [archived] — из архива (шаг 5.25): только в поиске, бледно, выбор возвращает. */
+data class GuestChoice(val id: String, val name: ClientName, val birthDate: LocalDate?, val adult: Boolean, val archived: Boolean = false)
 
 /**
  * Всё, что показывает карточка тренировки (ТЗ 5.4). [state] — для правил статусов и кнопок.
@@ -395,8 +396,8 @@ class TrainingCardRepository internal constructor(
     ) { people, all ->
         val inside = people.map { it.clientId }.toSet()
         val today = ClubTime.today(clock())
-        all.filter { it.status == ClientStatus.ACTIVE && it.id !in inside }
-            .map { GuestChoice(it.id, ClientName(it.lastName, it.firstName, it.middleName), it.birthDate, it.adultOn(today)) }
+        all.filter { (it.status == ClientStatus.ACTIVE || it.status == ClientStatus.ARCHIVED) && it.id !in inside }
+            .map { GuestChoice(it.id, ClientName(it.lastName, it.firstName, it.middleName), it.birthDate, it.adultOn(today), it.status == ClientStatus.ARCHIVED) }
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.training
 
+import com.akenory.personalka.domain.format.TrainingFormat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Brush
 import com.akenory.personalka.ui.theme.insetLevel
@@ -336,8 +337,13 @@ fun TrainingCardHost(
                     onWhose = { guestWhose = it.name },
                     onPick = { clientId ->
                         val whose = Owner.valueOf(guestWhose)
+                        val archived = guestChoices.any { it.id == clientId && it.archived }
                         closeGuest()
-                        guarded { scope.launch { done(cards.addGuest(shown.id, clientId, whose)) } }
+                        guarded {
+                            scope.launch {
+                                done(if (archived) cards.addSimilarGuest(shown.id, clientId, whose) else cards.addGuest(shown.id, clientId, whose))
+                            }
+                        }
                     },
                     onAddNew = {
                         val last = guestLast
@@ -1271,9 +1277,10 @@ private fun ColumnScope.GuestBody(
 ) {
     val colors = PersonalkaTheme.colors
     val shown = if (query.isBlank()) {
-        choices.sortedWith(compareBy<GuestChoice> { it.adult }.thenBy { ClientRules.sortKey(it.name) }).take(GUEST_SHORT_LIST)
+        choices.filter { !it.archived }.sortedWith(compareBy<GuestChoice> { it.adult }.thenBy { ClientRules.sortKey(it.name) }).take(GUEST_SHORT_LIST)
     } else {
-        choices.filter { ClientRules.matches(query, it.name) }.sortedBy { ClientRules.sortKey(it.name) }
+        // Шаг 5.25: в поиске и архивные — ниже действующих, бледно.
+        choices.filter { ClientRules.matches(query, it.name) }.sortedWith(compareBy<GuestChoice> { it.archived }.thenBy { ClientRules.sortKey(it.name) })
     }
     Column(
         Modifier
@@ -1307,8 +1314,9 @@ private fun ColumnScope.GuestBody(
             shown.forEach { c ->
                 PersonRow(
                     title = c.name.lastName + " " + c.name.firstName,
-                    subtitle = c.birthDate?.let { ClientFormat.age(it, today) },
+                    subtitle = if (c.archived) TrainingFormat.ARCHIVED_CLIENT else c.birthDate?.let { ClientFormat.age(it, today) },
                     onClick = { onPick(c.id) },
+                    muted = c.archived,
                     modifier = Modifier.testTag(guestPickTag(c.id)),
                 )
             }

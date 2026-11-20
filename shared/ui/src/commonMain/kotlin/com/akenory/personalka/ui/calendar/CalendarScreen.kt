@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.calendar
 
+import com.akenory.personalka.data.restrictions.RestrictionSaveResult
+import com.akenory.personalka.domain.restriction.RestrictionFormRules
 import com.akenory.personalka.ui.theme.insetLevel
 import com.akenory.personalka.ui.theme.OnAurora
 import com.akenory.personalka.ui.theme.AuroraBrush
@@ -356,6 +358,29 @@ fun CalendarScreen(
             }
         }
     }
+    /**
+     * Дело, напоминание или запрет перетащили (шаг 5.25): [blockId] из дня [from] на [start], длительность [minutes].
+     * У повторяющегося в тот же день — сначала вопрос «Только этот день / Этот и следующие» ([onlyThis] `null`);
+     * на другой день — только этот день. Сообщение с «Отменить», как у тренировки.
+     */
+    fun moveZone(blockId: String, from: LocalDate, start: LocalDateTime, minutes: Int, onlyThis: Boolean?) {
+        scope.launch {
+            val stored = calendar.restrictions.stored(blockId) ?: return@launch
+            val draft = RestrictionFormRules.movedTo(stored, from, start, minutes)
+            val repeating = stored.weekly || stored.monthly
+            val answer = if (repeating && start.date != from) true else onlyThis
+            if (repeating && answer == null) {
+                askKey = encodeAsk(ZONE_ASK + "$blockId$ZONE_ASK$minutes", start, from, ZoneFormat.scopeQuestion(draft.kind))
+                return@launch
+            }
+            val result = if (repeating) calendar.restrictions.saveScoped(blockId, draft, from, answer == true) else calendar.restrictions.save(blockId, draft)
+            if (result is RestrictionSaveResult.Saved) {
+                messages.showUndo(CalendarFormat.moved(start)) { scope.launch { calendar.restrictions.undo(result.undo) } }
+            } else {
+                messages.show(ZoneFormat.MOVE_FAILED)
+            }
+        }
+    }
     val zonesOf: (LocalDate) -> List<CalendarZone> = { date ->
         loadedZones[date].orEmpty().filter { it.shownIn(place?.id) }.joinRestrictionLabels()
     }
@@ -511,6 +536,7 @@ fun CalendarScreen(
                     onMenu = { training -> menuId = training.id },
                     onMove = { training, start -> moveStored(training.id, start, confirmed = false) },
                     onZoomEnd = { prefs.putFloat(DevicePrefs.CALENDAR_HOUR, grid.hourDp) },
+                    onZoneMove = { zone, start -> moveZone(zone.blockId, zone.date, start, zone.end - zone.start, onlyThis = null) },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     offHours = offHours,
                 )
@@ -580,11 +606,21 @@ fun CalendarScreen(
                     back = ZoneFormat.CONFLICT_CANCEL,
                     onOnlyThis = {
                         askKey = null
-                        moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.ONLY_THIS)
+                        if (ask.id.startsWith(ZONE_ASK)) {
+                            val (blockId, minutes) = ask.id.removePrefix(ZONE_ASK).split(ZONE_ASK)
+                            moveZone(blockId, ask.date, ask.start, minutes.toInt(), onlyThis = true)
+                        } else {
+                            moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.ONLY_THIS)
+                        }
                     },
                     onFollowing = {
                         askKey = null
-                        moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.FOLLOWING)
+                        if (ask.id.startsWith(ZONE_ASK)) {
+                            val (blockId, minutes) = ask.id.removePrefix(ZONE_ASK).split(ZONE_ASK)
+                            moveZone(blockId, ask.date, ask.start, minutes.toInt(), onlyThis = false)
+                        } else {
+                            moveStored(ask.id, ask.start, confirmed = false, answer = EditScope.FOLLOWING)
+                        }
                     },
                     onDismiss = { askKey = null },
                 )
@@ -621,6 +657,9 @@ private fun decodePending(text: String): PendingMove {
 
 /** Перенос тренировки серии, который ждёт ответа «Только эту / Эту и следующие». */
 private class AskMove(val id: String, val start: LocalDateTime, val date: LocalDate, val question: String)
+
+/** Вопрос о переносе дела или запрета, а не тренировки (шаг 5.25): «zone~id~минуты». */
+private const val ZONE_ASK = "zone~"
 
 private fun encodeAsk(id: String, start: LocalDateTime, date: LocalDate, question: String): String =
     listOf(id, start.toString(), date.toString(), question).joinToString(ID_SEPARATOR)

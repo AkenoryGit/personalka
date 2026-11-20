@@ -1,5 +1,6 @@
 package com.akenory.personalka.domain.restriction
 
+import kotlinx.datetime.DayOfWeek.FRIDAY
 import kotlinx.datetime.DayOfWeek.THURSDAY
 import kotlinx.datetime.DayOfWeek.TUESDAY
 import kotlinx.datetime.LocalDate
@@ -142,5 +143,22 @@ class RestrictionFormTest {
         assertEquals(LocalDate(2026, 10, 21), cut?.validTo)
         assertEquals(day, next.date)
         assertTrue(next.weekly)
+    }
+
+    @Test
+    fun dragTaskInCalendar() {
+        // Шаг 5.25: разовое дело 20.11 17:00–18:00 перетащили на 21.11 19:30 — день и время новые, час сохранён.
+        val once = RestrictionDraft(null, LocalTime(17, 0), LocalTime(18, 0), "Шиномонтаж", date = LocalDate(2026, 11, 20), kind = BlockKind.PERSONAL)
+        val moved = RestrictionFormRules.movedTo(once, LocalDate(2026, 11, 20), LocalDateTime(2026, 11, 21, 19, 30), 60)
+        assertEquals(Triple(LocalDate(2026, 11, 21), LocalTime(19, 30), LocalTime(20, 30)), Triple(moved.date, moved.start, moved.end))
+        // Повторяющееся по пятницам с 01.09: в тот же день — меняется только время; к полуночи конец упирается в 00:00.
+        val weekly = once.copy(weekly = true, weekdays = setOf(FRIDAY), date = LocalDate(2026, 9, 4))
+        val late = RestrictionFormRules.movedTo(weekly, LocalDate(2026, 11, 20), LocalDateTime(2026, 11, 20, 23, 30), 60)
+        assertEquals(Triple(LocalDate(2026, 9, 4), LocalTime(23, 30), LocalTime(0, 0)), Triple(late.date, late.start, late.end))
+        // На другой день — дата черновика новая: её возьмёт «Только этот день».
+        val other = RestrictionFormRules.movedTo(weekly, LocalDate(2026, 11, 20), LocalDateTime(2026, 11, 21, 10, 0), 60)
+        val (kept, one) = RestrictionFormRules.scoped(RestrictionFormRules.toRestriction("p", weekly), other, LocalDate(2026, 11, 20), onlyThis = true)
+        assertEquals(setOf(LocalDate(2026, 11, 20)), kept?.skipDates)
+        assertEquals(LocalDate(2026, 11, 21), one.date)
     }
 }

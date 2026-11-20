@@ -299,6 +299,7 @@ class DayGridState(top: Float, hourDp: Float) {
  * @param onCreate отпущен пунктирный блок новой тренировки: её день и начало.
  * @param onMenu длительное нажатие на тренировку без сдвига.
  * @param onMove тренировку перетащили на новое начало — день и время.
+ * @param onZoneMove личное дело, напоминание или запрет перетащили (шаг 5.25) — на новое начало.
  * @param onZoomEnd щипок закончен — масштаб пора запомнить.
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -322,6 +323,7 @@ internal fun DayGrid(
     onMenu: (CalendarTraining) -> Unit,
     onMove: (CalendarTraining, LocalDateTime) -> Unit,
     onZoomEnd: () -> Unit,
+    onZoneMove: (CalendarZone, LocalDateTime) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     offHours: (LocalDate) -> List<IntRange> = { emptyList() },
 ) {
@@ -360,6 +362,8 @@ internal fun DayGrid(
         val currentCreate by rememberUpdatedState(onCreate)
         val currentMenu by rememberUpdatedState(onMenu)
         val currentMove by rememberUpdatedState(onMove)
+        val currentZoneMove by rememberUpdatedState(onZoneMove)
+        val currentZoneTap by rememberUpdatedState(onZone)
 
         /**
          * Левый край колонки страницы [page], dp от левого края дней. Читает положение листания — вызывать при
@@ -406,6 +410,21 @@ internal fun DayGrid(
             }
             // На «+N» — ничего: место занято скрытыми тренировками.
             if (day.more.any { hit(it.x, it.y, it.width, it.height) }) return false
+            // Шаг 5.25: видимая часть личного дела, напоминания или запрета — их тоже тащат, как тренировку.
+            val strip = Dimens.zoneStrip.value
+            val lane = if (x < DayZoneRules.LANES * strip) (x / strip).toInt() else null
+            val minute = currentHours.startMinute + y * 60f / grid.hourDp
+            val zone = DayZoneRules.at(day.zones.map { it.place }, minute, lane)
+                ?.let { place -> currentZones(date).firstOrNull { it.kind == place.zone.kind && it.id == place.zone.id } }
+                ?.takeIf { it.editable && it.kind in MOVABLE_ZONES && it.end > it.start }
+            if (zone != null) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                val ghost = newTraining(LocalDateTime(date, LocalTime(zone.start / 60, zone.start % 60)), zone.end - zone.start)
+                    .copy(id = ZONE_DRAG_ID, title = zone.label.ifEmpty { zone.title }, color = zone.color)
+                val lifted = dayBlocks(listOf(ghost), emptyList(), currentWidth, currentHours, grid.hourDp).blocks.single()
+                drag.holdZone(zone, ghost, date, lifted, position, y - lifted.y)
+                return true
+            }
             // Пустое место — пунктирный блок новой тренировки: начало под пальцем вниз до шага, длительность как в форме.
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             val minute = CalendarDrag.createMinute(view.top + position.y / density / view.dpPerMinute, currentStep)
@@ -442,9 +461,17 @@ internal fun DayGrid(
             val moved = drag.moved
             val moving = drag.moving
             val creating = drag.creating
+            val zone = drag.zone
             drag.reset()
             if (training == null) return
             when {
+                zone != null -> when {
+                    !moved -> currentZoneTap(zone)
+                    to != null && to.start != training.start -> {
+                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                        currentZoneMove(zone, to.start)
+                    }
+                }
                 creating -> {
                     haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
                     currentCreate(to?.start ?: training.start)
@@ -605,6 +632,7 @@ private class DragState {
 
     fun hold(training: CalendarTraining, date: LocalDate, block: BlockInfo, down: Offset, grab: Float) {
         creating = false
+        zone = null
         this.training = training
         this.from = date
         this.block = block
@@ -615,6 +643,15 @@ private class DragState {
         edgeSide = 0
     }
 
+    /** Тащат личное дело, напоминание или запрет (шаг 5.25): [ghost] — его блок под пальцем. */
+    var zone: CalendarZone? = null
+        private set
+
+    fun holdZone(zone: CalendarZone, ghost: CalendarTraining, date: LocalDate, block: BlockInfo, down: Offset, grab: Float) {
+        hold(ghost, date, block, down, grab)
+        this.zone = zone
+    }
+
     fun follow(position: Offset, slopPx: Float) {
         pointer = position
         if (!moved && (position - down).getDistance() > slopPx) moved = true
@@ -622,6 +659,7 @@ private class DragState {
 
     fun reset() {
         training = null
+        zone = null
         creating = false
         moved = false
         block = null
@@ -817,6 +855,12 @@ private fun newTraining(start: LocalDateTime, durationMin: Int) = CalendarTraini
 )
 
 private const val NEW_BLOCK_ID = "new-training"
+
+/** Перетаскиваемое дело или запрет — блок под пальцем (шаг 5.25). */
+private const val ZONE_DRAG_ID = "zone-drag"
+
+/** Что можно перетащить из зон: своё личное, напоминание, запрет. Дежурство — тренировка, дорога идёт за делом. */
+private val MOVABLE_ZONES = setOf(ZoneKind.PERSONAL, ZoneKind.REMINDER, ZoneKind.RESTRICTION)
 
 /** Блок при перетаскивании приподнят (10.5): тень как у макета, 0 8 24. */
 private val DRAG_ELEVATION = 8.dp

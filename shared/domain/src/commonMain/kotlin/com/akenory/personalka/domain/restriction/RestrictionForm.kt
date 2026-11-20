@@ -223,6 +223,19 @@ object RestrictionFormRules {
         }
     }
 
+    /**
+     * Дело или запрет перетащили в календаре (шаг 5.25): из дня [from] на [to], длительность [minutes] прежняя,
+     * но не дальше полуночи. У разового меняется и день; у повторяющегося — только время (день — через [scoped]
+     * «Только этот день»: тогда [to] попадает в черновик как его дата).
+     */
+    fun movedTo(stored: RestrictionDraft, from: LocalDate, to: LocalDateTime, minutes: Int): RestrictionDraft {
+        val start = to.time.hour * 60 + to.time.minute
+        val end = minOf(start + minutes.coerceAtLeast(1), ClubTime.MINUTES_PER_DAY)
+        val repeating = stored.weekly || stored.monthly
+        val date = if (!repeating) to.date else if (to.date != from) to.date else stored.date
+        return stored.copy(start = to.time, end = time(end), date = date)
+    }
+
     /** Нужно ли спрашивать «только этот день или и следующие»: дело повторяется, день известен и что-то поменяли. */
     fun asksScope(stored: RestrictionDraft?, draft: RestrictionDraft, date: LocalDate?): Boolean =
         stored != null && date != null && (stored.weekly || stored.monthly) && stored != draft
