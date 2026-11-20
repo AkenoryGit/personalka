@@ -413,8 +413,8 @@ internal fun DayGrid(
             // Шаг 5.25: видимая часть личного дела, напоминания или запрета — их тоже тащат, как тренировку.
             val strip = Dimens.zoneStrip.value
             val lane = if (x < DayZoneRules.LANES * strip) (x / strip).toInt() else null
-            val minute = currentHours.startMinute + y * 60f / grid.hourDp
-            val zone = DayZoneRules.at(day.zones.map { it.place }, minute, lane)
+            val zoneMinute = currentHours.startMinute + y * 60f / grid.hourDp
+            val zone = DayZoneRules.at(day.zones.map { it.place }, zoneMinute, lane)
                 ?.let { place -> currentZones(date).firstOrNull { it.kind == place.zone.kind && it.id == place.zone.id } }
                 ?.takeIf { it.editable && it.kind in MOVABLE_ZONES && it.end > it.start }
             if (zone != null) {
