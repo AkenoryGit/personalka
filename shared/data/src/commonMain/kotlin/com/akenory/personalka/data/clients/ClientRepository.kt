@@ -1,5 +1,8 @@
 package com.akenory.personalka.data.clients
 
+import com.akenory.personalka.domain.model.Owner
+import com.akenory.personalka.domain.client.AutoArchiveRules
+import com.akenory.personalka.domain.client.ArchiveInput
 import androidx.room3.withWriteTransaction
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.SyncFields
@@ -291,6 +294,46 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
             series?.let { db.recordFreed(it, now) }
         }
         return undo
+    }
+
+    /**
+     * Архив сам собой (шаг 5.24, [AutoArchiveRules]): раз в день, при открытии приложения. Клиент не был 90 дней,
+     * никуда не записан и не в группе коллеги — уходит в архив, как кнопкой «В архив». Возвращает, сколько ушло.
+     */
+    suspend fun archiveStale(): Int {
+        val now = clock()
+        val today = ClubTime.today(now)
+        val active = clients.observeClients(ClientStatus.ACTIVE).first()
+        if (active.isEmpty()) return 0
+        val all = trainings.allTrainings().filter { it.sync.deletedAt == null }
+        val byId = all.associateBy { it.id }
+        val parts = trainings.allParticipations().filter { it.sync.deletedAt == null }
+        val lastVisit = parts.filter { it.status == ParticipationStatus.ATTENDED && byId[it.trainingId]?.status == TrainingStatus.DONE }
+            .groupBy({ it.clientId }, { byId.getValue(it.trainingId).start.date })
+            .mapValues { (_, days) -> days.max() }
+        val plannedAhead = parts.filter { p ->
+            val t = byId[p.trainingId] ?: return@filter false
+            p.status == ParticipationStatus.EXPECTED && t.groupId == null && t.status == TrainingStatus.PLANNED && t.start.date >= today
+        }.map { it.clientId }.toSet()
+        val liveSeries = schedule.seriesFrom(today).filter { it.groupId == null }.map { it.id }.toSet()
+        val inSeries = schedule.allSeriesClients().filter { it.seriesId in liveSeries }.map { it.clientId }.toSet()
+        val groups = clients.groups().associateBy { it.id }
+        val colleague = clients.observeAllMembers().first()
+            .filter { (it.toDate == null || it.toDate >= today) && it.fromDate <= today }
+            .filter { it.coach == Owner.COLLEAGUE || groups[it.groupId]?.owner == Owner.COLLEAGUE }
+            .map { it.clientId }.toSet()
+        val inputs = active.map { c ->
+            ArchiveInput(
+                clientId = c.id,
+                touchedOn = ClubTime.today(maxOf(c.sync.createdAt, c.sync.updatedAt)),
+                lastVisit = lastVisit[c.id],
+                planned = c.id in plannedAhead || c.id in inSeries,
+                colleagueGroup = c.id in colleague,
+            )
+        }
+        val stale = AutoArchiveRules.stale(inputs, today)
+        stale.forEach { archive(it) }
+        return stale.size
     }
 
     /** «Отменить» после «В архив»: клиент снова действующий, места в группах — как были. */

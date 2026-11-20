@@ -91,6 +91,8 @@ data class TrainingFormData(
     val types: List<FormType> = emptyList(),
     val places: List<FormPlace> = emptyList(),
     val clients: List<FormClient> = emptyList(),
+    /** Клиенты в архиве (шаг 5.24): в поиске формы — бледно, ниже действующих; выбор возвращает из архива. */
+    val archivedClients: List<FormClient> = emptyList(),
     val groups: List<FormGroup> = emptyList(),
     val recentClientIds: List<String> = emptyList(),
     val recentGroupIds: List<String> = emptyList(),
@@ -173,7 +175,7 @@ class TrainingRepository internal constructor(
         val lists = combine(
             reference.observeTrainingTypes(),
             reference.observeLocations(),
-            clients.observeClients(ClientStatus.ACTIVE),
+            clients.observeAllClients(),
             clients.observeGroups(),
             clients.observeRelations(),
         ) { types, places, people, groups, relations ->
@@ -181,7 +183,8 @@ class TrainingRepository internal constructor(
                 types = types.filter { !it.archived && it.kind != TrainingKind.DUTY }.map { it.toForm() },
                 duty = types.firstOrNull { !it.archived && it.kind == TrainingKind.DUTY }?.toForm(),
                 places = places.filter { !it.archived }.map { FormPlace(it.id, it.shortName, it.name, it.color, it.color2) },
-                clients = people.map { FormClient(it.id, ClientName(it.lastName, it.firstName, it.middleName)) }.sortedBy { ClientRules.sortKey(it.name) },
+                clients = people.filter { it.status == ClientStatus.ACTIVE }.map { FormClient(it.id, ClientName(it.lastName, it.firstName, it.middleName)) }.sortedBy { ClientRules.sortKey(it.name) },
+                archived = people.filter { it.status == ClientStatus.ARCHIVED }.map { FormClient(it.id, ClientName(it.lastName, it.firstName, it.middleName)) }.sortedBy { ClientRules.sortKey(it.name) },
                 groups = groups.map { FormGroup(it.id, it.name, it.typeId, it.locationId) }.sortedBy { it.name },
                 relatives = relations.flatMap { listOf(it.clientAId to it.clientBId, it.clientBId to it.clientAId) }
                     .groupBy({ it.first }, { it.second }),
@@ -200,6 +203,7 @@ class TrainingRepository internal constructor(
                 types = TrainingFormRules.typeOrder(l.types, last.firstOrNull { it.typeId in types }?.typeId),
                 places = l.places,
                 clients = l.clients,
+                archivedClients = l.archived,
                 groups = l.groups,
                 recentClientIds = parts.map { it.clientId }.distinct().filter { it in active },
                 recentGroupIds = last.mapNotNull { it.groupId }.distinct().filter { it in groupIds },
@@ -748,6 +752,7 @@ class TrainingRepository internal constructor(
         val types: List<FormType>,
         val places: List<FormPlace>,
         val clients: List<FormClient>,
+        val archived: List<FormClient>,
         val groups: List<FormGroup>,
         val relatives: Map<String, List<String>>,
         val duty: FormType?,

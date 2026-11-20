@@ -169,4 +169,10 @@ object TrainingFormat {
         } else {
             "$conflict — $count из ${RuText.digits(total.toLong())}$NBSP${RuText.plural(total, "тренировки", "тренировок", "тренировок")}, первая ${DateFormat.short(first)}"
         }
+
+    /** Подпись архивного клиента в поиске формы и группы (шаг 5.24). */
+    const val ARCHIVED_CLIENT = "в архиве — выберите, чтобы вернуть"
+
+    /** Сообщение, когда архивного выбрали в форме: «Ковалёв Артём снова в клиентах». */
+    fun unarchived(name: String): String = "$name снова в клиентах"
 }

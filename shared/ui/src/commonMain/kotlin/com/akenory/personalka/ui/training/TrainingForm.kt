@@ -142,6 +142,9 @@ fun formWeekdayTag(day: DayOfWeek) = "form-weekday-$day"
  * или на ближайший свободный час («+»), с клиентом из карточки; изменение тренировки или дежурства, изменение
  * своего запрета, «Изменить с даты…» серии клиента.
  */
+/** Архивный клиент в поиске формы (шаг 5.24). */
+internal fun formArchivedTag(id: String) = "form_archived_$id"
+
 object TrainingFormKey {
     private const val NEW = "new"
     private const val EDIT = "edit:"
@@ -737,6 +740,13 @@ private fun TrainingFields(
                     error = problems[FormField.CLIENTS],
                     onQuery = { query = it },
                     onClient = ::select,
+                    onArchived = { c ->
+                        scope.launch {
+                            clients.unarchive(c.id)
+                            select(c)
+                            messages.show(TrainingFormat.unarchived(c.name.full()))
+                        }
+                    },
                     onGroup = { group ->
                         update { d ->
                             if (d.groupId == group.id) {
@@ -875,6 +885,7 @@ private fun People(
     onClient: (FormClient) -> Unit,
     onGroup: (FormGroup) -> Unit,
     onNewClient: (ClientName) -> Unit,
+    onArchived: (FormClient) -> Unit = onClient,
 ) {
     val byId = form.clients.associateBy { it.id }
     val group = type.kind == TrainingKind.GROUP
@@ -937,6 +948,17 @@ private fun People(
         Column(Modifier.fillMaxWidth().padding(top = Dimens.space2).clip(MaterialTheme.shapes.medium)) {
             found.forEach { c ->
                 PersonRow(title = c.name.full(), subtitle = null, onClick = { onClient(c) })
+            }
+            // Шаг 5.24 (Дмитрий 20.11.2026): архивные — тоже, ниже и бледно; выбор возвращает клиента из архива,
+            // чтобы не заводить второго такого же.
+            form.archivedClients.filter { it.id !in draft.clientIds && ClientRules.matches(query, it.name) }.take(TrainingFormRules.FOUND_CLIENTS).forEach { c ->
+                PersonRow(
+                    title = c.name.full(),
+                    subtitle = TrainingFormat.ARCHIVED_CLIENT,
+                    onClick = { onArchived(c) },
+                    muted = true,
+                    modifier = Modifier.testTag(formArchivedTag(c.id)),
+                )
             }
             val name = newClientName(query)
             if (name != null) {

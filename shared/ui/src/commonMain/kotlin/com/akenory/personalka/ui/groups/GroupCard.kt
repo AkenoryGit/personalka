@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.groups
 
+import com.akenory.personalka.domain.format.TrainingFormat
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.layout.size
@@ -604,7 +605,9 @@ internal fun AddMemberForm(
     val shown = if (query.isBlank()) {
         candidates.sortedWith(compareBy<ClientRow> { it.client.adultOn(today) }.thenBy { ClientRules.sortKey(name(it)) }).take(8)
     } else {
-        candidates.filter { ClientRules.matches(query, name(it)) }.sortedBy { ClientRules.sortKey(name(it)) }
+        // Шаг 5.24: в поиске — и архивные, ниже и бледно; выбор вернёт клиента из архива.
+        candidates.filter { ClientRules.matches(query, name(it)) }.sortedBy { ClientRules.sortKey(name(it)) } +
+            kids.filter { it.client.status == ClientStatus.ARCHIVED && ClientRules.matches(query, name(it)) }.sortedBy { ClientRules.sortKey(name(it)) }
     }
     val from = today
     val who = pickedId != null || (creating && newLast.isNotBlank() && newFirst.isNotBlank())
@@ -617,7 +620,11 @@ internal fun AddMemberForm(
         }
         val picked = pickedId
         if (picked != null) {
-            scope.launch { groups.addMember(groupId, picked, date) }
+            val archived = kids.any { it.client.id == picked && it.client.status == ClientStatus.ARCHIVED }
+            scope.launch {
+                if (archived) clients.unarchive(picked)
+                groups.addMember(groupId, picked, date)
+            }
             close()
         } else if (!checking) {
             val last = newLast.trim()
@@ -674,9 +681,11 @@ internal fun AddMemberForm(
                 Column(Modifier.clip(MaterialTheme.shapes.medium)) {
                     shown.forEach { kid ->
                         val selected = kid.client.id == pickedId
+                        val archived = kid.client.status == ClientStatus.ARCHIVED
                         PersonRow(
                             title = "${kid.client.lastName} ${kid.client.firstName}",
-                            subtitle = kid.client.birthDate?.let { ClientFormat.age(it, today) },
+                            subtitle = if (archived) TrainingFormat.ARCHIVED_CLIENT else kid.client.birthDate?.let { ClientFormat.age(it, today) },
+                            muted = archived && !selected,
                             onClick = {
                                 pickedId = kid.client.id
                                 creating = false

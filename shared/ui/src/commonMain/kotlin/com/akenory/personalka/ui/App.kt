@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui
 
+import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -309,6 +310,12 @@ fun App(
         // Серии продлеваются до горизонта при открытии приложения и при смене дня (4.4).
         LaunchedEffect(calendar, hasCoach, now.date) {
             if (hasCoach == true) calendar.forms.extendSeries()
+        }
+        // Шаг 5.24: раз в день — в архив тех, кто не был 3 месяца и никуда не записан; сколько ушло — сообщением.
+        LaunchedEffect(clients, hasCoach, now.date) {
+            if (hasCoach != true) return@LaunchedEffect
+            val gone = clients.archiveStale()
+            if (gone > 0) messages.show(ClientFormat.autoArchived(gone))
         }
         // Запреты «на все места» старых версий — по одному на место — склеиваются в один (шаг 5.3ю).
         LaunchedEffect(calendar, hasCoach) {

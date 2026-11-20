@@ -191,4 +191,7 @@ object RuName {
             else -> word
         }
     }
+
+    /** Сообщение архива самого собой (шаг 5.24): «В архив: 3 клиента — не были 3 месяца». */
+    fun autoArchived(n: Int): String = "В архив: " + RuText.digits(n.toLong()) + NBSP + RuText.plural(n, "клиент", "клиента", "клиентов") + " — не были 3 месяца"
 }
