@@ -101,6 +101,7 @@ import androidx.compose.ui.unit.sp
 import com.akenory.personalka.data.calendar.CalendarTraining
 import com.akenory.personalka.data.calendar.CalendarZone
 import com.akenory.personalka.domain.ClubTime
+import com.akenory.personalka.domain.calendar.BlockPlace
 import com.akenory.personalka.domain.calendar.BlockRows
 import com.akenory.personalka.domain.calendar.CalendarBadge
 import com.akenory.personalka.domain.calendar.CalendarBadges
@@ -1313,11 +1314,15 @@ internal fun dayBlocks(
     val freeZones = asBlocks.filter { it.free }
     val laid = asBlocks.filter { !it.free }
     val zoneByLayout = laid.associateBy { zoneLayoutId(it.kind, it.id) }
-    val trainingSpans = items.map { it.span() }
+    // Шаг 5.29 (Дмитрий 20.11.2026, вариант А): отменённые колонок не занимают — раскладываются только живые,
+    // отменённая ложится под ними во всю ширину и рисуется первой.
+    val trainingSpans = items.filter { !it.cancelled }.map { it.span() }
+    val cancelledSpans = items.filter { it.cancelled }.map { it.span() }
     val spans = trainingSpans + laid.map { DaySpan(zoneLayoutId(it.kind, it.id), it.start, it.end) }
-    val spanOf = spans.associateBy { it.id }
+    val spanOf = (spans + cancelledSpans).associateBy { it.id }
     val byId = items.associateBy { it.id }
-    val layout = DayLayoutRules.layout(spans, DayLayoutRules.maxColumns(inner))
+    val live = DayLayoutRules.layout(spans, DayLayoutRules.maxColumns(inner))
+    val layout = live.copy(blocks = cancelledSpans.map { BlockPlace(it.id, column = 0, span = 1, columns = 1) } + live.blocks)
     fun y(minute: Int) = CalendarGrid.heightDp(minute - hours.startMinute, hourDp)
     val wideEnough = widthDp >= PEEK_MIN_WIDTH
     // Запреты — полосами слева (шаг 5.28): у каждого своё место в стопке, в одно время — рядом, до [MAX_PEEK].
