@@ -307,19 +307,6 @@ internal fun RestrictionFields(
         draft = draft?.let(change)
     }
 
-    fun save() {
-        val d = draft ?: return
-        showErrors = true
-        if (RestrictionFormRules.problems(d).isNotEmpty()) return
-        // Шаг 5.23: поменяли один день повторяющегося — сначала вопрос «только этот день или и следующие».
-        val day = TrainingFormKey.restrictionDate(key)
-        if (restrictionId != null && day != null && RestrictionFormRules.asksScope(stored, d, day)) {
-            panel = Panels.scope(day, ZoneFormat.scopeQuestion(d.kind))
-            return
-        }
-        saveWith(null)
-    }
-
     fun saveWith(onlyThis: Boolean?) {
         val d = draft ?: return
         val day = TrainingFormKey.restrictionDate(key)
@@ -337,6 +324,19 @@ internal fun RestrictionFields(
                 is RestrictionSaveResult.Invalid -> if (result.problems.isEmpty()) onClose()
             }
         }
+    }
+
+    fun save() {
+        val d = draft ?: return
+        showErrors = true
+        if (RestrictionFormRules.problems(d).isNotEmpty()) return
+        // Шаг 5.23: поменяли один день повторяющегося — сначала вопрос «только этот день или и следующие».
+        val day = TrainingFormKey.restrictionDate(key)
+        if (restrictionId != null && day != null && RestrictionFormRules.asksScope(stored, d, day)) {
+            panel = Panels.scope(day, ZoneFormat.scopeQuestion(d.kind))
+            return
+        }
+        saveWith(null)
     }
 
     fun delete(id: String) {
@@ -550,19 +550,6 @@ internal fun PersonalFields(
         draft = draft?.let(change)
     }
 
-    fun save() {
-        val d = draft ?: return
-        showErrors = true
-        if (RestrictionFormRules.problems(d).isNotEmpty()) return
-        // Шаг 5.23: поменяли один день повторяющегося — сначала вопрос «только этот день или и следующие».
-        val day = TrainingFormKey.restrictionDate(key)
-        if (restrictionId != null && day != null && RestrictionFormRules.asksScope(stored, d, day)) {
-            panel = Panels.scope(day, ZoneFormat.scopeQuestion(d.kind))
-            return
-        }
-        saveWith(null)
-    }
-
     fun saveWith(onlyThis: Boolean?) {
         val d = draft ?: return
         val day = TrainingFormKey.restrictionDate(key)
@@ -580,6 +567,19 @@ internal fun PersonalFields(
                 is RestrictionSaveResult.Invalid -> if (result.problems.isEmpty()) onClose()
             }
         }
+    }
+
+    fun save() {
+        val d = draft ?: return
+        showErrors = true
+        if (RestrictionFormRules.problems(d).isNotEmpty()) return
+        // Шаг 5.23: поменяли один день повторяющегося — сначала вопрос «только этот день или и следующие».
+        val day = TrainingFormKey.restrictionDate(key)
+        if (restrictionId != null && day != null && RestrictionFormRules.asksScope(stored, d, day)) {
+            panel = Panels.scope(day, ZoneFormat.scopeQuestion(d.kind))
+            return
+        }
+        saveWith(null)
     }
 
     fun delete(id: String, reminder: Boolean) {

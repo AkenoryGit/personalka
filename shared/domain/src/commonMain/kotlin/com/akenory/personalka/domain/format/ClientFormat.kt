@@ -149,6 +149,8 @@ object ClientFormat {
         if (!stored.startsWith("+7") || digits.length != 10 || !digits.all { it.isDigit() }) return stored
         return "+7 ${digits.substring(0, 3)} ${digits.substring(3, 6)}-${digits.substring(6, 8)}-${digits.substring(8)}"
     }
+    /** Сообщение архива самого собой (шаг 5.24): «В архив: 3 клиента — не были 3 месяца». */
+    fun autoArchived(n: Int): String = "В архив: " + RuText.digits(n.toLong()) + NBSP + RuText.plural(n, "клиент", "клиента", "клиентов") + " — не были 3 месяца"
 }
 
 /**
@@ -191,7 +193,4 @@ object RuName {
             else -> word
         }
     }
-
-    /** Сообщение архива самого собой (шаг 5.24): «В архив: 3 клиента — не были 3 месяца». */
-    fun autoArchived(n: Int): String = "В архив: " + RuText.digits(n.toLong()) + NBSP + RuText.plural(n, "клиент", "клиента", "клиентов") + " — не были 3 месяца"
 }
