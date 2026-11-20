@@ -1,5 +1,7 @@
 package com.akenory.personalka.ui.shell
 
+import androidx.compose.foundation.border
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -151,24 +153,31 @@ private fun NavItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
     ) {
-        Box(
-            modifier = Modifier
-                .size(width = 56.dp, height = 32.dp)
-                .then(if (selected) Modifier.insetLevel(CircleShape, colors) else Modifier),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = if (selected) section.selectedIcon else section.icon,
-                contentDescription = null,
-                tint = tint,
-            )
+        // Шаг 5.21 (просьба Дмитрия 20.11.2026): вдавлена только подложка выбранного раздела, счётчик дел лежит поверх
+        // неё на уровне «сверху» — с тенью и светлой каймой, и вдавление его не обрезает.
+        Box(Modifier.size(width = 56.dp, height = 32.dp)) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .then(if (selected) Modifier.insetLevel(CircleShape, colors) else Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (selected) section.selectedIcon else section.icon,
+                    contentDescription = null,
+                    tint = tint,
+                )
+            }
             if (badge > 0) {
                 val text = if (badge > 99) "99+" else badge.toString()
                 Text(
                     text = text,
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .offset(x = 32.dp, y = (-2).dp)
+                        .offset(x = 32.dp, y = (-8).dp)
+                        .zIndex(1f)
+                        .raised(CircleShape, colors, elevation = 4)
+                        .border(1.5.dp, colors.nav, CircleShape)
                         .heightIn(min = 20.dp)
                         .widthIn(min = 20.dp)
                         .background(colors.accent, CircleShape)
