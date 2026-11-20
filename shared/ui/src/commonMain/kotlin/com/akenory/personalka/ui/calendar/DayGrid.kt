@@ -417,6 +417,9 @@ internal fun DayGrid(
             val zone = DayZoneRules.at(day.zones.map { it.place }, zoneMinute, lane)
                 ?.let { place -> currentZones(date).firstOrNull { it.kind == place.zone.kind && it.id == place.zone.id } }
                 ?.takeIf { it.editable && it.kind in MOVABLE_ZONES && it.end > it.start }
+                // Запрет — только за левый край (полоса до блоков): по остальной ширине удержание ставит тренировку,
+                // и форма спросит про запрет. Личное и напоминание — за любое видимое место.
+                ?.takeIf { it.kind != ZoneKind.RESTRICTION || x < Dimens.blockInset.value + ZONE_PEEK.value }
             if (zone != null) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 val ghost = newTraining(LocalDateTime(date, LocalTime(zone.start / 60, zone.start % 60)), zone.end - zone.start)
