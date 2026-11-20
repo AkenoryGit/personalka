@@ -191,8 +191,10 @@ data class BlockInfo(
     /** Надёжность клиента запланированной ПТ или сплита (шаг 3.14а): «84 %» и её уровень; пусто — не видна. */
     val reliability: String = "",
     val reliabilityLevel: ReliabilityLevel? = null,
+    /** Что лежит под тренировкой (шаг 5.27): дела, запреты, дорога и напоминания в её время — значок и подпись. */
+    val under: List<Pair<ZoneKind, String>> = emptyList(),
 ) {
-    /** Блок словами — для TalkBack и тестов: имя, кто ведёт, время, «тип · место», надёжность. */
+    /** Блок словами — для TalkBack и тестов: имя, кто ведёт, время, «тип · место», надёжность, что под ней. */
     val lines: List<String>
         get() = listOfNotNull(
             name,
@@ -200,6 +202,7 @@ data class BlockInfo(
             time,
             listOf(type, place).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null },
             reliability.ifEmpty { null }?.let { ReliabilityFormat.TITLE + " " + it },
+            under.joinToString(" · ") { it.second }.ifEmpty { null }?.let { "под ней: $it" },
         )
 }
 
@@ -213,8 +216,8 @@ data class MoreInfo(val label: String, val ids: List<String>, val x: Float, val 
  */
 @Immutable
 /**
- * Зона в колонке дня. [stack] — место в «стопке» под тренировкой (шаг 5.26): 0, 1, 2 — выглядывает полосой
- * [ZONE_PEEK] шириной с подписью сверху вниз; −1 — тренировок над ней нет.
+ * Зона в колонке дня. [stack] — 0, если она выглядывает из-под тренировки полосой [ZONE_PEEK] (её можно нажать
+ * и тащить; шаги 5.22, 5.27); −1 — тренировок над ней нет.
  */
 data class ZoneInfo(val place: ZonePlace, val label: String, val y: Float, val height: Float, val labelRow: Int = 0, val stack: Int = -1) {
     val id: String get() = place.zone.id
@@ -865,13 +868,6 @@ private fun newTraining(start: LocalDateTime, durationMin: Int) = CalendarTraini
 
 private const val NEW_BLOCK_ID = "new-training"
 
-/** Подпись полосы стопки: мелкий жирный, поля сверху и снизу (шаг 5.26). */
-private val PEEK_TEXT = 11.sp
-private val PEEK_PAD = 4.dp
-
-/** Насыщенность полосы личного дела в стопке — ярче, чем его заливка под тренировками. */
-private const val PEEK_FILL = 0.55f
-
 /** Перетаскиваемое дело или запрет — блок под пальцем (шаг 5.25). */
 private const val ZONE_DRAG_ID = "zone-drag"
 
@@ -1041,11 +1037,6 @@ private fun DayColumn(
                 drawZoneLabel(zone, info, label, colors)
             }
             drawLines(hours, hourDp, colors, divider)
-            day.zones.filter { it.stack >= 0 }.forEach { zone ->
-                val info = zoneById[zone.kind to zone.id] ?: return@forEach
-                val text = labels.getOrPut("peek/${zone.kind}/${zone.id}/${zone.height}") { measurePeek(measurer, zone, info, styles.name) }
-                drawPeek(zone, info, text, colors)
-            }
             day.blocks.forEach { block ->
                 val training = byId[block.id] ?: return@forEach
                 if (block.id == ghostId) {
@@ -1053,7 +1044,7 @@ private fun DayColumn(
                     return@forEach
                 }
                 val lines = blockLines(block, measurer, styles)
-                val text = texts.getOrPut("${block.id}/$lines/${block.badges.size}") { measureBlock(measurer, block, lines, styles) }
+                val text = texts.getOrPut("${block.id}/$lines/${block.badges.size}/${block.under}/${block.width}") { measureBlock(measurer, block, lines, styles) }
                 drawBlock(block, training, text, icons, colors)
                 if (block.id == selectedId) drawSelected(block, colors)
             }
@@ -1104,7 +1095,29 @@ private fun blockStyles(): BlockStyles = BlockStyles(
 
 /** Значки блока (ТЗ 5.3): «₽», треугольник «поверх запрета», торт дня рождения, «слои» дежурства, галочка; точка дневника рисуется кругом. */
 @Stable
-private class BadgeIcons(val ruble: Painter, val warning: Painter, val cake: Painter, val layers: Painter, val check: Painter)
+private class BadgeIcons(
+    val ruble: Painter,
+    val warning: Painter,
+    val cake: Painter,
+    val layers: Painter,
+    val check: Painter,
+    val blocked: Painter,
+    val task: Painter,
+    val reminder: Painter,
+    val car: Painter,
+)
+
+/** Значок того, что под тренировкой (шаг 5.27): запрет — красный «нельзя», дело, напоминание, дорога. */
+private fun underIcon(kind: ZoneKind, icons: BadgeIcons, colors: PersonalkaColors): Pair<Painter, Color> = when (kind) {
+    ZoneKind.RESTRICTION -> icons.blocked to (if (colors.isDark) Color(0xFFFF6B6B) else Color(0xFFD32F2F))
+    ZoneKind.PERSONAL -> icons.task to (if (colors.isDark) Color(0xFFC9A7FF) else Color(0xFF6A3FB5))
+    ZoneKind.REMINDER -> icons.reminder to (if (colors.isDark) Color(0xFFFFC857) else Color(0xFFB26A00))
+    ZoneKind.TRAVEL, ZoneKind.DUTY -> icons.car to colors.textMuted
+}
+
+/** Значок под тренировкой и зазор до подписи. */
+private val UNDER_ICON = 14.dp
+private val UNDER_ICON_GAP = 4.dp
 
 @Composable
 private fun badgeIcons(): BadgeIcons = BadgeIcons(
@@ -1113,6 +1126,10 @@ private fun badgeIcons(): BadgeIcons = BadgeIcons(
     cake = rememberVectorPainter(PIcons.BadgeCake),
     layers = rememberVectorPainter(PIcons.BadgeLayers),
     check = rememberVectorPainter(PIcons.BadgeCheck),
+    blocked = rememberVectorPainter(PIcons.Block),
+    task = rememberVectorPainter(PIcons.EventAvailable),
+    reminder = rememberVectorPainter(PIcons.Notifications),
+    car = rememberVectorPainter(PIcons.Car),
 )
 
 /** Призрак перетаскиваемого блока и обводка блока под пальцем. */
@@ -1192,8 +1209,8 @@ private const val HATCH_ALL = 0.35f
 /** Насколько блок над личным делом, запретом или дорогой отступает вправо, чтобы зона выглядывала (шаг 5.22). */
 internal val ZONE_PEEK = 20.dp
 
-/** Сколько дел и запретов выглядывает из-под тренировки рядом, не больше (шаг 5.26). */
-private const val MAX_PEEK = 3
+/** Полос под тренировкой: одна (шаг 5.27 — стопку из 5.26 убрали, что под ней — вторая строка блока). */
+private const val MAX_PEEK = 1
 
 /** Что выглядывает из-под тренировок: личное, запрет, дорога. Дежурство — фон тренировок, напоминание — черта. */
 private val PEEK_KINDS = setOf(ZoneKind.PERSONAL, ZoneKind.RESTRICTION, ZoneKind.TRAVEL)
@@ -1224,8 +1241,8 @@ internal fun dayBlocks(
     val layout = DayLayoutRules.layout(spans, DayLayoutRules.maxColumns(inner))
     fun y(minute: Int) = CalendarGrid.heightDp(minute - hours.startMinute, hourDp)
     // Шаги 5.22, 5.26 (Дмитрий 20.11.2026): под тренировкой лежат личные дела, запреты или дорога — они выглядывают
-    // слева «стопкой»: каждое — полосой [ZONE_PEEK] со своей подписью сверху вниз, блок левой колонки отступает
-    // на столько полос, сколько под ним лежит одновременно (не больше [MAX_PEEK]).
+    // слева полосой [ZONE_PEEK] — её нажимают и тащат; что именно лежит, пишет вторая строка блока (шаг 5.27,
+    // стопку подписей из 5.26 убрали).
     val wideEnough = widthDp >= PEEK_MIN_WIDTH
     val left = layout.blocks.filter { it.column == 0 }.map { spanOf.getValue(it.id) } + layout.more.filter { it.column == 0 }.map { DaySpan("", it.start, it.end) }
     val covered = zones.map { it.span }
@@ -1244,6 +1261,18 @@ internal fun dayBlocks(
         val deepest = covered.filter { it.start < end && start < it.end }.maxOfOrNull { stackOf.getValue(it.kind to it.id) } ?: return 0f
         return (deepest + 1) * ZONE_PEEK.value
     }
+    // Шаг 5.27 (Дмитрий 20.11.2026): что лежит под тренировкой — второй строкой блока, значок и подпись.
+    fun under(span: DaySpan): List<Pair<ZoneKind, String>> = zones
+        .filter { z ->
+            when (z.kind) {
+                ZoneKind.REMINDER -> z.start >= span.start && z.start < span.end
+                ZoneKind.PERSONAL, ZoneKind.RESTRICTION, ZoneKind.TRAVEL -> z.start < span.end && span.start < z.end
+                ZoneKind.DUTY -> false
+            }
+        }
+        .sortedBy { it.start }
+        .map { z -> z.kind to (if (z.kind == ZoneKind.PERSONAL) z.reason.ifEmpty { z.label } else z.label).ifEmpty { z.title } }
+        .distinct()
     val blocks = layout.blocks.map { place ->
         val span = spanOf.getValue(place.id)
         val training = byId.getValue(place.id)
@@ -1269,6 +1298,7 @@ internal fun dayBlocks(
             whoKind = training.who?.kind,
             reliability = training.reliability?.let { ReliabilityFormat.value(it) }.orEmpty(),
             reliabilityLevel = training.reliability?.level,
+            under = under(span),
         )
     }
     val more = layout.more.map { m ->
@@ -1327,7 +1357,7 @@ private class MetaLine(val time: TextLayoutResult?, val tags: List<TextLayoutRes
 }
 
 /** Измеренный текст блока: строки имени и строки «время и плашки»; [inline] — всё в одной строке. */
-private class BlockText(val name: List<TextLayoutResult>, val meta: List<MetaLine>, val inline: Boolean)
+private class BlockText(val name: List<TextLayoutResult>, val meta: List<MetaLine>, val inline: Boolean, val under: List<Pair<ZoneKind, TextLayoutResult>> = emptyList())
 
 /** Сколько строк по 16 входит в блок по высоте, не меньше одной. */
 private fun DrawScope.blockLines(block: BlockInfo, measurer: TextMeasurer, styles: BlockStyles): Int {
@@ -1349,6 +1379,33 @@ private fun DrawScope.blockLines(block: BlockInfo, measurer: TextMeasurer, style
  * в одну — она за именем вместо времени и типа.
  */
 private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lines: Int, styles: BlockStyles): BlockText {
+    // Шаг 5.27: что под тренировкой — своей последней строкой, если у блока их две и больше; иначе — только значки.
+    if (block.under.isNotEmpty()) {
+        val main = measureMain(measurer, block, if (lines >= 2) lines - 1 else 1, styles)
+        if (lines < 2) return main
+        val width = (block.width.dp - BLOCK_GAP * 2 - TEXT_START - TEXT_END).toPx().coerceAtLeast(0f)
+        val icon = UNDER_ICON.toPx() + UNDER_ICON_GAP.toPx()
+        var free = width
+        val items = block.under.mapIndexedNotNull { i, (kind, text) ->
+            val room = free - icon
+            if (room <= icon) return@mapIndexedNotNull null
+            val label = measurer.measure(
+                text = text + if (i < block.under.lastIndex) "  " else "",
+                style = styles.meta.copy(fontWeight = FontWeight.Medium),
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                maxLines = 1,
+                constraints = Constraints(maxWidth = room.toInt()),
+            )
+            free -= icon + label.size.width
+            kind to label
+        }
+        return BlockText(main.name, main.meta, main.inline, items)
+    }
+    return measureMain(measurer, block, lines, styles)
+}
+
+private fun DrawScope.measureMain(measurer: TextMeasurer, block: BlockInfo, lines: Int, styles: BlockStyles): BlockText {
     val width = (block.width.dp - BLOCK_GAP * 2 - TEXT_START - TEXT_END).toPx().coerceAtLeast(0f)
     val room = BADGE_ROOM.toPx() * block.badges.size
     val decoration = if (block.cancelled) TextDecoration.LineThrough else null
@@ -1449,53 +1506,6 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
 }
 
 /** Подпись зоны в одну строку: у дежурства — справа, у запрета — слева, на плашке. */
-/** Подпись полосы стопки (шаг 5.26): коротко, сверху вниз, во всю высоту зоны без полей. */
-private fun DrawScope.measurePeek(measurer: TextMeasurer, zone: ZoneInfo, info: CalendarZone, style: TextStyle): TextLayoutResult =
-    measurer.measure(
-        // Запрет — с местом («ДБ · групповая»), дело — своим названием.
-        text = (if (zone.kind == ZoneKind.RESTRICTION) zone.label else info.reason.ifEmpty { zone.label }).ifEmpty { info.title },
-        style = style.copy(fontSize = PEEK_TEXT, fontWeight = FontWeight.SemiBold),
-        overflow = TextOverflow.Ellipsis,
-        softWrap = false,
-        maxLines = 1,
-        constraints = Constraints(maxWidth = (zone.height.dp - PEEK_PAD * 2).toPx().toInt().coerceAtLeast(0)),
-    )
-
-/**
- * Полоса стопки (шаг 5.26): дело, запрет или дорога под тренировкой — карточкой шириной [ZONE_PEEK] на своём
- * месте в стопке, ярче фона зоны, с тенью справа (лежит поверх следующей) и подписью сверху вниз.
- */
-private fun DrawScope.drawPeek(zone: ZoneInfo, info: CalendarZone, label: TextLayoutResult, colors: PersonalkaColors) {
-    val left = (Dimens.blockInset + ZONE_PEEK * zone.stack).toPx()
-    val area = Rect(left, zone.y.dp.toPx(), left + ZONE_PEEK.toPx(), (zone.y + zone.height).dp.toPx())
-    val radius = CornerRadius(4.dp.toPx())
-    val ink = when (zone.kind) {
-        ZoneKind.RESTRICTION -> restrictionText(info, colors)
-        else -> PlaceColor.of(info.color).tone(colors.isDark).text
-    }
-    // Тень справа: полоса лежит поверх следующей в стопке.
-    drawRoundRect(Color.Black.copy(alpha = if (colors.isDark) 0.45f else 0.14f), Offset(area.left + 2.dp.toPx(), area.top), area.size, radius)
-    when (zone.kind) {
-        ZoneKind.PERSONAL -> {
-            val g = PlaceGradient.of(info.color, info.color2)
-            val ends = listOf(g.from, g.to).map { lerp(colors.surface, it.tone(colors.isDark).stripe, PEEK_FILL) }
-            drawRoundRect(Brush.verticalGradient(ends, startY = area.top, endY = area.bottom), area.topLeft, area.size, radius)
-        }
-        else -> {
-            drawRoundRect(colors.surface, area.topLeft, area.size, radius)
-            val stripe = if (zone.kind == ZoneKind.RESTRICTION) restrictionInk(info, colors) else PlaceColor.of(info.color).tone(colors.isDark).stripe
-            hatch(area, lerp(colors.surface, stripe, HATCH_PLACE), Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
-        }
-    }
-    if (label.size.width == 0) return
-    val cx = area.center.x
-    val top = area.top + PEEK_PAD.toPx()
-    // Сверху вниз: текст повёрнут на 90° по часовой, начало — у верха зоны.
-    rotate(90f, pivot = Offset(cx, top)) {
-        drawText(label, color = ink, topLeft = Offset(cx, top - label.size.height / 2f))
-    }
-}
-
 private fun DrawScope.measureLabel(measurer: TextMeasurer, zone: ZoneInfo, style: TextStyle): TextLayoutResult {
     val room = when (zone.kind) {
         ZoneKind.DUTY, ZoneKind.PERSONAL, ZoneKind.TRAVEL -> Dimens.blockInset * 2 + LABEL_END
@@ -1745,6 +1755,30 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
             text.meta.forEach {
                 drawMeta(it, left, y, line, ink, whoTone, colors, block.reliabilityLevel)
                 y += line
+            }
+        }
+        // Шаг 5.27: под тренировкой — последней строкой: значок (запрет — красный «нельзя», дело, напоминание,
+        // дорога) и подпись; в блоке в одну строку — только значки, справа, перед значками блока.
+        if (block.under.isNotEmpty()) {
+            val size = UNDER_ICON.toPx()
+            if (text.under.isNotEmpty()) {
+                val rowTop = if (text.inline) rect.top + TEXT_TOP.toPx() + line else y
+                var x = left
+                text.under.forEach { (kind, label) ->
+                    val (painter, tint) = underIcon(kind, icons, colors)
+                    translate(x, rowTop + (line - size) / 2) { with(painter) { draw(Size(size, size), colorFilter = ColorFilter.tint(tint)) } }
+                    x += size + UNDER_ICON_GAP.toPx()
+                    drawText(label, color = ink, topLeft = Offset(x, rowTop + (line - label.size.height) / 2))
+                    x += label.size.width
+                }
+            } else {
+                val kinds = block.under.map { it.first }.distinct()
+                var x = rect.right - BADGE_EDGE.toPx() - block.badges.size * (Dimens.badge.toPx() + BADGE_GAP.toPx()) - kinds.size * (size + UNDER_ICON_GAP.toPx())
+                kinds.forEach { kind ->
+                    val (painter, tint) = underIcon(kind, icons, colors)
+                    translate(x, rect.top + TEXT_TOP.toPx() + (line - size) / 2) { with(painter) { draw(Size(size, size), colorFilter = ColorFilter.tint(tint)) } }
+                    x += size + UNDER_ICON_GAP.toPx()
+                }
             }
         }
         drawBadges(block.badges, rect, icons, colors)
