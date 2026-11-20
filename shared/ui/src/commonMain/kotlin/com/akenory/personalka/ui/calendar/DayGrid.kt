@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.calendar
 
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -211,7 +212,11 @@ data class MoreInfo(val label: String, val ids: List<String>, val x: Float, val 
  * в пределах сетки. Во всю ширину колонки, под тренировками.
  */
 @Immutable
-data class ZoneInfo(val place: ZonePlace, val label: String, val y: Float, val height: Float, val labelRow: Int = 0) {
+/**
+ * Зона в колонке дня. [stack] — место в «стопке» под тренировкой (шаг 5.26): 0, 1, 2 — выглядывает полосой
+ * [ZONE_PEEK] шириной с подписью сверху вниз; −1 — тренировок над ней нет.
+ */
+data class ZoneInfo(val place: ZonePlace, val label: String, val y: Float, val height: Float, val labelRow: Int = 0, val stack: Int = -1) {
     val id: String get() = place.zone.id
     val kind: ZoneKind get() = place.zone.kind
     val lane: Int get() = place.lane
@@ -414,12 +419,13 @@ internal fun DayGrid(
             val strip = Dimens.zoneStrip.value
             val lane = if (x < DayZoneRules.LANES * strip) (x / strip).toInt() else null
             val zoneMinute = currentHours.startMinute + y * 60f / grid.hourDp
-            val zone = DayZoneRules.at(day.zones.map { it.place }, zoneMinute, lane)
+            val stacked = peekColumnAt(x)?.let { k -> day.zones.lastOrNull { it.stack == k && zoneMinute >= it.place.zone.start && zoneMinute < it.place.zone.end } }
+            val zone = (stacked?.place ?: DayZoneRules.at(day.zones.map { it.place }, zoneMinute, lane))
                 ?.let { place -> currentZones(date).firstOrNull { it.kind == place.zone.kind && it.id == place.zone.id } }
                 ?.takeIf { it.editable && it.kind in MOVABLE_ZONES && it.end > it.start }
                 // Запрет — только за левый край (полоса до блоков): по остальной ширине удержание ставит тренировку,
                 // и форма спросит про запрет. Личное и напоминание — за любое видимое место.
-                ?.takeIf { it.kind != ZoneKind.RESTRICTION || x < Dimens.blockInset.value + ZONE_PEEK.value }
+                ?.takeIf { it.kind != ZoneKind.RESTRICTION || stacked != null }
             if (zone != null) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 val ghost = newTraining(LocalDateTime(date, LocalTime(zone.start / 60, zone.start % 60)), zone.end - zone.start)
@@ -859,6 +865,13 @@ private fun newTraining(start: LocalDateTime, durationMin: Int) = CalendarTraini
 
 private const val NEW_BLOCK_ID = "new-training"
 
+/** Подпись полосы стопки: мелкий жирный, поля сверху и снизу (шаг 5.26). */
+private val PEEK_TEXT = 11.sp
+private val PEEK_PAD = 4.dp
+
+/** Насыщенность полосы личного дела в стопке — ярче, чем его заливка под тренировками. */
+private const val PEEK_FILL = 0.55f
+
 /** Перетаскиваемое дело или запрет — блок под пальцем (шаг 5.25). */
 private const val ZONE_DRAG_ID = "zone-drag"
 
@@ -1002,7 +1015,9 @@ private fun DayColumn(
                                 val strip = Dimens.zoneStrip.value
                                 val lane = if (x < DayZoneRules.LANES * strip) (x / strip).toInt() else null
                                 val minute = currentHours.startMinute + y * 60f / currentHourDp
-                                DayZoneRules.at(currentDay.zones.map { it.place }, minute, lane)
+                                // Шаг 5.26: на полосе стопки — то дело, чья это полоса.
+                                val stacked = peekColumnAt(x)?.let { k -> currentDay.zones.lastOrNull { it.stack == k && minute >= it.place.zone.start && minute < it.place.zone.end } }
+                                (stacked?.place ?: DayZoneRules.at(currentDay.zones.map { it.place }, minute, lane))
                                     ?.let { currentZones[it.zone.kind to it.zone.id] }
                                     ?.let(currentZone)
                             }
@@ -1026,6 +1041,11 @@ private fun DayColumn(
                 drawZoneLabel(zone, info, label, colors)
             }
             drawLines(hours, hourDp, colors, divider)
+            day.zones.filter { it.stack >= 0 }.forEach { zone ->
+                val info = zoneById[zone.kind to zone.id] ?: return@forEach
+                val text = labels.getOrPut("peek/${zone.kind}/${zone.id}/${zone.height}") { measurePeek(measurer, zone, info, styles.name) }
+                drawPeek(zone, info, text, colors)
+            }
             day.blocks.forEach { block ->
                 val training = byId[block.id] ?: return@forEach
                 if (block.id == ghostId) {
@@ -1172,6 +1192,20 @@ private const val HATCH_ALL = 0.35f
 /** Насколько блок над личным делом, запретом или дорогой отступает вправо, чтобы зона выглядывала (шаг 5.22). */
 internal val ZONE_PEEK = 20.dp
 
+/** Сколько дел и запретов выглядывает из-под тренировки рядом, не больше (шаг 5.26). */
+private const val MAX_PEEK = 3
+
+/** Что выглядывает из-под тренировок: личное, запрет, дорога. Дежурство — фон тренировок, напоминание — черта. */
+private val PEEK_KINDS = setOf(ZoneKind.PERSONAL, ZoneKind.RESTRICTION, ZoneKind.TRAVEL)
+
+/** Полоса стопки под точкой [x] (dp от края колонки): номер или `null` — не на стопке. */
+internal fun peekColumnAt(x: Float): Int? {
+    val from = Dimens.blockInset.value
+    if (x < from) return null
+    val k = ((x - from) / ZONE_PEEK.value).toInt()
+    return k.takeIf { it < MAX_PEEK }
+}
+
 /** В узких колонках недели отступа нет — блоку и так тесно. */
 private const val PEEK_MIN_WIDTH = 200f
 
@@ -1189,11 +1223,27 @@ internal fun dayBlocks(
     val byId = items.associateBy { it.id }
     val layout = DayLayoutRules.layout(spans, DayLayoutRules.maxColumns(inner))
     fun y(minute: Int) = CalendarGrid.heightDp(minute - hours.startMinute, hourDp)
-    // Шаг 5.22 (Дмитрий 20.11.2026): под тренировкой лежит личное дело, запрет или дорога — блок левой колонки
-    // отступает ещё на [ZONE_PEEK], и зона выглядывает полосой, которую видно и можно нажать.
-    val covers = zones.filter { it.span.kind != ZoneKind.DUTY && it.span.kind != ZoneKind.REMINDER }.map { it.span }
-    fun peek(column: Int, start: Int, end: Int): Float =
-        if (column == 0 && widthDp >= PEEK_MIN_WIDTH && covers.any { it.start < end && start < it.end }) ZONE_PEEK.value else 0f
+    // Шаги 5.22, 5.26 (Дмитрий 20.11.2026): под тренировкой лежат личные дела, запреты или дорога — они выглядывают
+    // слева «стопкой»: каждое — полосой [ZONE_PEEK] со своей подписью сверху вниз, блок левой колонки отступает
+    // на столько полос, сколько под ним лежит одновременно (не больше [MAX_PEEK]).
+    val wideEnough = widthDp >= PEEK_MIN_WIDTH
+    val left = layout.blocks.filter { it.column == 0 }.map { spanOf.getValue(it.id) } + layout.more.filter { it.column == 0 }.map { DaySpan("", it.start, it.end) }
+    val covered = zones.map { it.span }
+        .filter { z -> wideEnough && z.kind in PEEK_KINDS && left.any { it.start < z.end && z.start < it.end } }
+        .sortedWith(compareBy({ it.start }, { it.end }))
+    val stackOf = HashMap<Pair<ZoneKind, String>, Int>()
+    val stackEnds = mutableListOf<Int>()
+    covered.forEach { z ->
+        val free = stackEnds.indexOfFirst { it <= z.start }
+        val k = if (free >= 0) free else if (stackEnds.size < MAX_PEEK) stackEnds.size.also { stackEnds.add(0) } else MAX_PEEK - 1
+        stackEnds[k] = maxOf(stackEnds[k], z.end)
+        stackOf[z.kind to z.id] = k
+    }
+    fun peek(column: Int, start: Int, end: Int): Float {
+        if (column != 0) return 0f
+        val deepest = covered.filter { it.start < end && start < it.end }.maxOfOrNull { stackOf.getValue(it.kind to it.id) } ?: return 0f
+        return (deepest + 1) * ZONE_PEEK.value
+    }
     val blocks = layout.blocks.map { place ->
         val span = spanOf.getValue(place.id)
         val training = byId.getValue(place.id)
@@ -1237,7 +1287,7 @@ internal fun dayBlocks(
         val from = maxOf(place.zone.start, hours.startMinute)
         val to = minOf(place.zone.end, hours.endMinute)
         if (to <= from) return@mapNotNull null
-        ZoneInfo(place, labelOf[place.zone.kind to place.zone.id].orEmpty(), y(from), CalendarGrid.heightDp(to - from, hourDp))
+        ZoneInfo(place, labelOf[place.zone.kind to place.zone.id].orEmpty(), y(from), CalendarGrid.heightDp(to - from, hourDp), stack = stackOf[place.zone.kind to place.zone.id] ?: -1)
     }
     return DayBlocks(blocks, more, stackRestrictionLabels(placed))
 }
@@ -1399,6 +1449,53 @@ private fun DrawScope.measureBlock(measurer: TextMeasurer, block: BlockInfo, lin
 }
 
 /** Подпись зоны в одну строку: у дежурства — справа, у запрета — слева, на плашке. */
+/** Подпись полосы стопки (шаг 5.26): коротко, сверху вниз, во всю высоту зоны без полей. */
+private fun DrawScope.measurePeek(measurer: TextMeasurer, zone: ZoneInfo, info: CalendarZone, style: TextStyle): TextLayoutResult =
+    measurer.measure(
+        // Запрет — с местом («ДБ · групповая»), дело — своим названием.
+        text = (if (zone.kind == ZoneKind.RESTRICTION) zone.label else info.reason.ifEmpty { zone.label }).ifEmpty { info.title },
+        style = style.copy(fontSize = PEEK_TEXT, fontWeight = FontWeight.SemiBold),
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
+        maxLines = 1,
+        constraints = Constraints(maxWidth = (zone.height.dp - PEEK_PAD * 2).toPx().toInt().coerceAtLeast(0)),
+    )
+
+/**
+ * Полоса стопки (шаг 5.26): дело, запрет или дорога под тренировкой — карточкой шириной [ZONE_PEEK] на своём
+ * месте в стопке, ярче фона зоны, с тенью справа (лежит поверх следующей) и подписью сверху вниз.
+ */
+private fun DrawScope.drawPeek(zone: ZoneInfo, info: CalendarZone, label: TextLayoutResult, colors: PersonalkaColors) {
+    val left = (Dimens.blockInset + ZONE_PEEK * zone.stack).toPx()
+    val area = Rect(left, zone.y.dp.toPx(), left + ZONE_PEEK.toPx(), (zone.y + zone.height).dp.toPx())
+    val radius = CornerRadius(4.dp.toPx())
+    val ink = when (zone.kind) {
+        ZoneKind.RESTRICTION -> restrictionText(info, colors)
+        else -> PlaceColor.of(info.color).tone(colors.isDark).text
+    }
+    // Тень справа: полоса лежит поверх следующей в стопке.
+    drawRoundRect(Color.Black.copy(alpha = if (colors.isDark) 0.45f else 0.14f), Offset(area.left + 2.dp.toPx(), area.top), area.size, radius)
+    when (zone.kind) {
+        ZoneKind.PERSONAL -> {
+            val g = PlaceGradient.of(info.color, info.color2)
+            val ends = listOf(g.from, g.to).map { lerp(colors.surface, it.tone(colors.isDark).stripe, PEEK_FILL) }
+            drawRoundRect(Brush.verticalGradient(ends, startY = area.top, endY = area.bottom), area.topLeft, area.size, radius)
+        }
+        else -> {
+            drawRoundRect(colors.surface, area.topLeft, area.size, radius)
+            val stripe = if (zone.kind == ZoneKind.RESTRICTION) restrictionInk(info, colors) else PlaceColor.of(info.color).tone(colors.isDark).stripe
+            hatch(area, lerp(colors.surface, stripe, HATCH_PLACE), Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
+        }
+    }
+    if (label.size.width == 0) return
+    val cx = area.center.x
+    val top = area.top + PEEK_PAD.toPx()
+    // Сверху вниз: текст повёрнут на 90° по часовой, начало — у верха зоны.
+    rotate(90f, pivot = Offset(cx, top)) {
+        drawText(label, color = ink, topLeft = Offset(cx, top - label.size.height / 2f))
+    }
+}
+
 private fun DrawScope.measureLabel(measurer: TextMeasurer, zone: ZoneInfo, style: TextStyle): TextLayoutResult {
     val room = when (zone.kind) {
         ZoneKind.DUTY, ZoneKind.PERSONAL, ZoneKind.TRAVEL -> Dimens.blockInset * 2 + LABEL_END
