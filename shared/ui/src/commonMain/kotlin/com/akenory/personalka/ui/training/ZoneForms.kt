@@ -357,7 +357,7 @@ internal fun RestrictionFields(
                         title = START_TITLE,
                         onPick = { time ->
                             panel = null
-                            update { it.copy(start = time) }
+                            update { RestrictionFormRules.withStart(it, time) }
                         },
                         onDismiss = { panel = null },
                     )
@@ -366,7 +366,7 @@ internal fun RestrictionFields(
                         title = END_TITLE,
                         onPick = { time ->
                             panel = null
-                            update { it.copy(end = time) }
+                            update { RestrictionFormRules.withEnd(it, time) }
                         },
                         onDismiss = { panel = null },
                     )
@@ -571,7 +571,7 @@ internal fun PersonalFields(
                         title = START_TITLE,
                         onPick = { time ->
                             panel = null
-                            update { d -> d.copy(start = time).let { if (it.kind == BlockKind.REMINDER) RestrictionFormRules.reminderEnd(it) else it } }
+                            update { d -> if (d.kind == BlockKind.REMINDER) RestrictionFormRules.reminderEnd(d.copy(start = time)) else RestrictionFormRules.withStart(d, time) }
                         },
                         onDismiss = { panel = null },
                     )
@@ -580,7 +580,7 @@ internal fun PersonalFields(
                         title = END_TITLE,
                         onPick = { time ->
                             panel = null
-                            update { it.copy(end = time) }
+                            update { RestrictionFormRules.withEnd(it, time) }
                         },
                         onDismiss = { panel = null },
                     )

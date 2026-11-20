@@ -1122,6 +1122,12 @@ private const val HATCH_ALL = 0.35f
  * зон — правила `shared/domain`. Тренировки начинаются в 8 dp от края — там полоски зон — и кончаются в 8 dp
  * от правого. Зоны обрезаются по часам сетки.
  */
+/** Насколько блок над личным делом, запретом или дорогой отступает вправо, чтобы зона выглядывала (шаг 5.22). */
+internal val ZONE_PEEK = 20.dp
+
+/** В узких колонках недели отступа нет — блоку и так тесно. */
+private const val PEEK_MIN_WIDTH = 200f
+
 internal fun dayBlocks(
     items: List<CalendarTraining>,
     zones: List<CalendarZone>,
@@ -1136,6 +1142,11 @@ internal fun dayBlocks(
     val byId = items.associateBy { it.id }
     val layout = DayLayoutRules.layout(spans, DayLayoutRules.maxColumns(inner))
     fun y(minute: Int) = CalendarGrid.heightDp(minute - hours.startMinute, hourDp)
+    // Шаг 5.22 (Дмитрий 20.11.2026): под тренировкой лежит личное дело, запрет или дорога — блок левой колонки
+    // отступает ещё на [ZONE_PEEK], и зона выглядывает полосой, которую видно и можно нажать.
+    val covers = zones.filter { it.span.kind != ZoneKind.DUTY && it.span.kind != ZoneKind.REMINDER }.map { it.span }
+    fun peek(column: Int, start: Int, end: Int): Float =
+        if (column == 0 && widthDp >= PEEK_MIN_WIDTH && covers.any { it.start < end && start < it.end }) ZONE_PEEK.value else 0f
     val blocks = layout.blocks.map { place ->
         val span = spanOf.getValue(place.id)
         val training = byId.getValue(place.id)
@@ -1150,9 +1161,9 @@ internal fun dayBlocks(
             type = training.typeShort,
             place = training.placeShort,
             rows = rows,
-            x = inset + place.column * column,
+            x = inset + place.column * column + peek(place.column, span.start, span.end),
             y = y(span.start),
-            width = place.span * column,
+            width = place.span * column - peek(place.column, span.start, span.end),
             height = height,
             cancelled = training.cancelled,
             badges = CalendarBadges.visible(training.badges, rows),
@@ -1168,9 +1179,9 @@ internal fun dayBlocks(
         MoreInfo(
             label = CalendarFormat.more(m.ids.size),
             ids = m.ids,
-            x = inset + m.column * column,
+            x = inset + m.column * column + peek(m.column, m.start, m.end),
             y = y(m.start),
-            width = column,
+            width = column - peek(m.column, m.start, m.end),
             height = CalendarGrid.heightDp(m.end - m.start, hourDp),
         )
     }

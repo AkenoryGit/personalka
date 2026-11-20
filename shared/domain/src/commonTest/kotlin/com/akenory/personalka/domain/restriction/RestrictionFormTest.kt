@@ -104,4 +104,20 @@ class RestrictionFormTest {
         assertEquals("db", RestrictionFormRules.pickPlace(stored, "db").locationId)
         assertTrue(RestrictionFormRules.pickPlace(stored.copy(locationId = "db"), Restriction.ALL_PLACES).allPlaces)
     }
+
+    @Test
+    fun endNeverBeforeStart() {
+        // Шаг 5.22: дело 17:00–18:00. Начало 19:30 — конец следом, 20:30; начало 23:30 — конец 00:00 (конец дня).
+        val d = RestrictionDraft(null, LocalTime(17, 0), LocalTime(18, 0), date = tuesday)
+        assertEquals(LocalTime(20, 30), RestrictionFormRules.withStart(d, LocalTime(19, 30)).end)
+        assertEquals(LocalTime(0, 0), RestrictionFormRules.withStart(d, LocalTime(23, 30)).end)
+        // Конец 16:00 раньше начала — начало уходит на час назад, 15:00; конец позже — просто конец.
+        val back = RestrictionFormRules.withEnd(d, LocalTime(16, 0))
+        assertEquals(LocalTime(15, 0) to LocalTime(16, 0), back.start to back.end)
+        assertEquals(LocalTime(17, 0), RestrictionFormRules.withEnd(d, LocalTime(19, 0)).start)
+        // Конец 00:30 при начале 00:00 и длительности час — начало 00:00, ошибки «конец раньше начала» нет.
+        val early = RestrictionFormRules.withEnd(d.copy(start = LocalTime(0, 0), end = LocalTime(1, 0)), LocalTime(0, 30))
+        assertEquals(LocalTime(0, 0) to LocalTime(0, 30), early.start to early.end)
+        assertTrue(RestrictionFormRules.problems(back.copy(locationId = "db")).isEmpty())
+    }
 }

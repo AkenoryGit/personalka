@@ -93,6 +93,39 @@ object RestrictionFormRules {
         }
     }
 
+    /** Минута конца: 00:00 — конец дня (1440). */
+    private fun endMinute(t: LocalTime): Int = (t.hour * 60 + t.minute).let { if (it == 0) ClubTime.MINUTES_PER_DAY else it }
+
+    /** Длительность черновика в минутах; конец раньше начала — час по умолчанию. */
+    private fun duration(draft: RestrictionDraft): Int {
+        val d = endMinute(draft.end) - (draft.start.hour * 60 + draft.start.minute)
+        return if (d > 0) d else DEFAULT_MINUTES
+    }
+
+    private fun time(minute: Int): LocalTime = (minute % ClubTime.MINUTES_PER_DAY).let { LocalTime(it / 60, it % 60) }
+
+    /**
+     * Новое начало дела или запрета (шаг 5.22): длительность сохраняется, конец сдвигается за началом — но не дальше
+     * полуночи. Так конец не может оказаться раньше начала.
+     */
+    fun withStart(draft: RestrictionDraft, start: LocalTime): RestrictionDraft {
+        val from = start.hour * 60 + start.minute
+        val to = minOf(from + duration(draft), ClubTime.MINUTES_PER_DAY)
+        return draft.copy(start = start, end = time(to))
+    }
+
+    /**
+     * Новый конец (шаг 5.22): если он не позже начала, начало уходит назад на прежнюю длительность (не раньше 00:00),
+     * как в календаре телефона; конец 00:00 — конец дня.
+     */
+    fun withEnd(draft: RestrictionDraft, end: LocalTime): RestrictionDraft {
+        val to = endMinute(end)
+        val from = draft.start.hour * 60 + draft.start.minute
+        if (to > from) return draft.copy(end = end)
+        val newFrom = (to - duration(draft)).coerceAtLeast(0)
+        return if (newFrom < to) draft.copy(start = time(newFrom), end = end) else draft.copy(end = end)
+    }
+
     /** Конец напоминания: только чтобы его было видно и можно было нажать — 15 минут, не дальше полуночи. */
     fun reminderEnd(draft: RestrictionDraft): RestrictionDraft {
         val from = draft.start.hour * 60 + draft.start.minute

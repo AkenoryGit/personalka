@@ -927,10 +927,11 @@ private fun MoneyBlock(money: HomeMoney, today: LocalDate, onSalary: () -> Unit)
                             color = tone.strong,
                             maxLines = 1,
                         )
-                        val badge = view.forecastPercent?.takeIf { plan != null }
+                        // Шаг 5.22 (Дмитрий 20.11.2026): у суммы — сколько плана сделано сейчас; прогноз — в строке внизу.
+                        val badge = view.percent?.takeIf { plan != null }
                         if (badge != null) {
                             Text(
-                                HomeFormat.forecastBadge(badge),
+                                HomeFormat.planBadge(badge),
                                 Modifier.padding(bottom = 6.dp),
                                 style = MaterialTheme.typography.titleMedium.tabular(),
                                 color = tone.content,

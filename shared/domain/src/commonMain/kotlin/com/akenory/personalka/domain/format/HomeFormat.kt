@@ -253,8 +253,8 @@ object HomeFormat {
     /** Третья строка плитки отмен: «сегодня 1», отмен сегодня нет — «сегодня 0». */
     fun cancelTodayNote(n: Int): String = "сегодня " + RuText.digits(n.coerceAtLeast(0).toLong())
 
-    /** Прогноз у суммы месяца: «127 %». */
-    fun forecastBadge(percent: Int): String = "$percent$NBSP%"
+    /** Сделано плана у суммы месяца (шаг 5.22 — факт, не прогноз): «90 %». */
+    fun planBadge(percent: Int): String = "$percent$NBSP%"
 
     /** Плитка отмен: «21» и подпись «отмена за месяц» / «отмены за месяц» / «отмен за месяц». */
     fun cancelTile(n: Int): String = RuText.plural(n, "отмена", "отмены", "отмен") + " за месяц"
