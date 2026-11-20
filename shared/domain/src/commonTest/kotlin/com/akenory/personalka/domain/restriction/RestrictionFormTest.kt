@@ -120,4 +120,27 @@ class RestrictionFormTest {
         assertEquals(LocalTime(0, 0) to LocalTime(0, 30), early.start to early.end)
         assertTrue(RestrictionFormRules.problems(back.copy(locationId = "db")).isEmpty())
     }
+
+    @Test
+    fun oneDayOfRepeatingTask() {
+        // Шаг 5.23: дело «Бассейн с сыном» по вт и чт 17:00–18:00 с 01.09.2026; в чт 22.10 его сдвинули на 19:00–20:00.
+        val stored = RestrictionDraft(null, LocalTime(17, 0), LocalTime(18, 0), "Бассейн с сыном", weekly = true, weekdays = setOf(TUESDAY, THURSDAY), date = LocalDate(2026, 9, 1), kind = BlockKind.PERSONAL)
+        val before = RestrictionFormRules.toRestriction("p1", stored)
+        val moved = stored.copy(start = LocalTime(19, 0), end = LocalTime(20, 0))
+        val day = LocalDate(2026, 10, 22)
+        assertTrue(RestrictionFormRules.asksScope(stored, moved, day))
+        assertTrue(!RestrictionFormRules.asksScope(stored, stored, day))
+        assertTrue(!RestrictionFormRules.asksScope(stored, moved, null))
+        // Только этот день: у прежнего 22.10 пропущен, новое — разовое 22.10 в 19:00.
+        val (kept, one) = RestrictionFormRules.scoped(before, moved, day, onlyThis = true)
+        assertEquals(setOf(day), kept?.skipDates)
+        assertEquals(day, one.date)
+        assertTrue(!one.weekly)
+        assertEquals(LocalTime(19, 0), one.start)
+        // Этот и следующие: прежний — до 21.10, новое повторяется с 22.10.
+        val (cut, next) = RestrictionFormRules.scoped(before, moved, day, onlyThis = false)
+        assertEquals(LocalDate(2026, 10, 21), cut?.validTo)
+        assertEquals(day, next.date)
+        assertTrue(next.weekly)
+    }
 }

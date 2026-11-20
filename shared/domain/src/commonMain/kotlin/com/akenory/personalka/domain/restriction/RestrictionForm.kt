@@ -206,6 +206,27 @@ object RestrictionFormRules {
         notifyMinutes = if (draft.personal) draft.notifyMinutes else null,
     )
 
+    /**
+     * Изменение одного дня повторяющегося дела или запрета (шаг 5.23). [date] — день, который открыли в календаре.
+     * «Только этот день» ([onlyThis]): у прежнего этот день пропущен, новый — разовый в этот день (или в дату,
+     * которую выбрали в форме). «Этот и следующие»: прежний кончается накануне ([RestrictionRules.endBefore];
+     * `null` — до [date] не действовал ни разу и удаляется), новый повторяется с [date].
+     * Возвращает прежний после правки (`null` — удалить) и черновик нового.
+     */
+    fun scoped(before: Restriction, draft: RestrictionDraft, date: LocalDate, onlyThis: Boolean): Pair<Restriction?, RestrictionDraft> {
+        val dateChanged = draft.date != draftOf(before).date
+        return if (onlyThis) {
+            before.copy(skipDates = before.skipDates + date) to
+                draft.copy(weekly = false, monthly = false, weekdays = emptySet(), validTo = null, date = if (dateChanged) draft.date else date)
+        } else {
+            RestrictionRules.endBefore(before, date) to draft.copy(date = if (dateChanged) maxOf(draft.date, date) else date)
+        }
+    }
+
+    /** Нужно ли спрашивать «только этот день или и следующие»: дело повторяется, день известен и что-то поменяли. */
+    fun asksScope(stored: RestrictionDraft?, draft: RestrictionDraft, date: LocalDate?): Boolean =
+        stored != null && date != null && (stored.weekly || stored.monthly) && stored != draft
+
     /** Сохранённый запрет в форме изменения. */
     fun draftOf(restriction: Restriction): RestrictionDraft = RestrictionDraft(
         locationId = restriction.locationId,

@@ -182,11 +182,16 @@ object TrainingFormKey {
     fun edit(id: String): String = EDIT + id
 
     /** Свой запрет — «Изменить» в окне зоны (5.3). */
-    fun restriction(id: String): String = RESTRICTION + id
+    /** Изменение запрета или личного; [date] — день, открытый в календаре (шаг 5.23): у повторяющегося спросят, какие дни менять. */
+    fun restriction(id: String, date: LocalDate? = null): String = RESTRICTION + id + (date?.let { "$START$it" }.orEmpty())
+
+    /** День повторяющегося запрета или дела, открытый в календаре; `null` — открыли из списка. */
+    fun restrictionDate(key: String): LocalDate? =
+        key.takeIf { it.startsWith(RESTRICTION) }?.substringAfter(START, "")?.takeIf { it.isNotEmpty() }?.let(LocalDate::parse)
 
     fun editId(key: String): String? = key.takeIf { it.startsWith(EDIT) }?.removePrefix(EDIT)
 
-    fun restrictionId(key: String): String? = key.takeIf { it.startsWith(RESTRICTION) }?.removePrefix(RESTRICTION)
+    fun restrictionId(key: String): String? = key.takeIf { it.startsWith(RESTRICTION) }?.removePrefix(RESTRICTION)?.substringBefore(START)
 
     /** «Изменить с даты…» серии клиента (5.9). */
     fun series(id: String): String = SERIES + id

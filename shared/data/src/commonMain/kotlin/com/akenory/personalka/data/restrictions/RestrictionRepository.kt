@@ -100,6 +100,60 @@ class RestrictionRepository internal constructor(private val db: PersonalkaDatab
         return result
     }
 
+    /**
+     * Изменение одного дня повторяющегося ([RestrictionFormRules.scoped], шаг 5.23): прежний — с пропуском дня или
+     * кончается накануне [date], новый — разовый или повторяется с [date]. Одно «Отменить» на обе записи.
+     */
+    suspend fun saveScoped(id: String, draft: RestrictionDraft, date: LocalDate, onlyThis: Boolean): RestrictionSaveResult {
+        val problems = RestrictionFormRules.problems(draft)
+        if (problems.isNotEmpty()) return RestrictionSaveResult.Invalid(problems)
+        val now = clock()
+        var result: RestrictionSaveResult = RestrictionSaveResult.Invalid(emptyMap())
+        db.withWriteTransaction {
+            val coach = coaches.currentCoach() ?: return@withWriteTransaction
+            val before = own(id) ?: return@withWriteTransaction
+            val (kept, next) = RestrictionFormRules.scoped(before.toRestriction(), draft, date, onlyThis)
+            schedule.upsertBlock(
+                if (kept == null) {
+                    before.copy(sync = before.sync.deleted(now))
+                } else {
+                    before.copy(validTo = kept.validTo, skipDates = kept.skipDates.sorted(), sync = before.sync.touched(now))
+                },
+            )
+            val newId = Ids.newId(now)
+            val r = RestrictionFormRules.toRestriction(newId, next)
+            schedule.upsertBlock(
+                ScheduleBlockEntity(
+                    id = newId,
+                    sync = SyncFields.new(coach.id, now),
+                    scope = Scope.COACH,
+                    locationId = r.locationId,
+                    reason = r.reason,
+                    weekdays = r.weekdays,
+                    date = r.date,
+                    startTime = r.startTime,
+                    endTime = r.endTime,
+                    validFrom = r.validFrom,
+                    validTo = r.validTo,
+                    skipDates = emptyList(),
+                    kind = r.kind,
+                    travelMinutes = r.travelMinutes,
+                    blocksTrainings = r.blocksTrainings,
+                    monthly = r.monthly,
+                    notifyMinutes = r.notifyMinutes,
+                ),
+            )
+            db.recalcRestrictionFlags(now)
+            val message = when (draft.kind) {
+                BlockKind.PERSONAL -> PersonalFormat.TASK_SAVED
+                BlockKind.REMINDER -> PersonalFormat.REMINDER_SAVED
+                else -> TrainingFormat.RESTRICTION_SAVED
+            }
+            result = RestrictionSaveResult.Saved(message, RestrictionUndo(mapOf(id to before, newId to null)))
+        }
+        return result
+    }
+
     /** «Удалить запрет»: мягкое удаление своего; `null` — его уже нет. */
     suspend fun delete(id: String): RestrictionUndo? {
         val now = clock()

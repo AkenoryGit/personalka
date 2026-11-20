@@ -283,7 +283,7 @@ fun SectionScreen(
                 },
                 onCreate = { start -> onForm(TrainingFormKey.new(start)) },
                 onEditZone = { zone ->
-                    onForm(if (zone.kind == ZoneKind.DUTY) TrainingFormKey.edit(zone.id) else TrainingFormKey.restriction(zone.blockId))
+                    onForm(if (zone.kind == ZoneKind.DUTY) TrainingFormKey.edit(zone.id) else TrainingFormKey.restriction(zone.blockId, zone.date))
                 },
                 goTo = calendarDay,
                 onWent = { onCalendarDay(null) },

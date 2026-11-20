@@ -155,4 +155,11 @@ object ZoneFormat {
 
     private fun withReason(head: String, reason: String): String =
         if (reason.isBlank()) head else "$head — ${inPhrase(reason)}"
+
+    /** Вопрос при изменении одного дня повторяющегося (шаг 5.23): «Дело повторяется. Что изменить?». */
+    fun scopeQuestion(kind: com.akenory.personalka.domain.restriction.BlockKind): String = when (kind) {
+        com.akenory.personalka.domain.restriction.BlockKind.PERSONAL -> "Дело повторяется. Что изменить?"
+        com.akenory.personalka.domain.restriction.BlockKind.REMINDER -> "Напоминание повторяется. Что изменить?"
+        else -> "Запрет повторяется. Что изменить?"
+    }
 }

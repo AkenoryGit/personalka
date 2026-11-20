@@ -311,8 +311,25 @@ internal fun RestrictionFields(
         val d = draft ?: return
         showErrors = true
         if (RestrictionFormRules.problems(d).isNotEmpty()) return
+        // Шаг 5.23: поменяли один день повторяющегося — сначала вопрос «только этот день или и следующие».
+        val day = TrainingFormKey.restrictionDate(key)
+        if (restrictionId != null && day != null && RestrictionFormRules.asksScope(stored, d, day)) {
+            panel = Panels.scope(day, ZoneFormat.scopeQuestion(d.kind))
+            return
+        }
+        saveWith(null)
+    }
+
+    fun saveWith(onlyThis: Boolean?) {
+        val d = draft ?: return
+        val day = TrainingFormKey.restrictionDate(key)
         scope.launch {
-            when (val result = restrictions.save(restrictionId, d)) {
+            val saved = if (onlyThis != null && restrictionId != null && day != null) {
+                restrictions.saveScoped(restrictionId, d, day, onlyThis)
+            } else {
+                restrictions.save(restrictionId, d)
+            }
+            when (val result = saved) {
                 is RestrictionSaveResult.Saved -> {
                     onClose()
                     messages.showUndo(result.message) { scope.launch { restrictions.undo(result.undo) } }
@@ -382,6 +399,23 @@ internal fun RestrictionFields(
                             update { it.copy(validTo = null) }
                         },
                     )
+                    else -> if (Panels.isScope(open)) {
+                        ScopePanel(
+                            title = TrainingFormat.SCOPE_EDIT_TITLE,
+                            question = Panels.scopeQuestion(open),
+                            date = Panels.scopeDate(open),
+                            back = TrainingFormat.BACK_TO_EDIT,
+                            onOnlyThis = {
+                                panel = null
+                                saveWith(true)
+                            },
+                            onFollowing = {
+                                panel = null
+                                saveWith(false)
+                            },
+                            onDismiss = { panel = null },
+                        )
+                    }
                 }
             }
         },
@@ -520,8 +554,25 @@ internal fun PersonalFields(
         val d = draft ?: return
         showErrors = true
         if (RestrictionFormRules.problems(d).isNotEmpty()) return
+        // Шаг 5.23: поменяли один день повторяющегося — сначала вопрос «только этот день или и следующие».
+        val day = TrainingFormKey.restrictionDate(key)
+        if (restrictionId != null && day != null && RestrictionFormRules.asksScope(stored, d, day)) {
+            panel = Panels.scope(day, ZoneFormat.scopeQuestion(d.kind))
+            return
+        }
+        saveWith(null)
+    }
+
+    fun saveWith(onlyThis: Boolean?) {
+        val d = draft ?: return
+        val day = TrainingFormKey.restrictionDate(key)
         scope.launch {
-            when (val result = restrictions.save(restrictionId, d)) {
+            val saved = if (onlyThis != null && restrictionId != null && day != null) {
+                restrictions.saveScoped(restrictionId, d, day, onlyThis)
+            } else {
+                restrictions.save(restrictionId, d)
+            }
+            when (val result = saved) {
                 is RestrictionSaveResult.Saved -> {
                     onClose()
                     messages.showUndo(result.message) { scope.launch { restrictions.undo(result.undo) } }
@@ -596,6 +647,23 @@ internal fun PersonalFields(
                             update { it.copy(validTo = null) }
                         },
                     )
+                    else -> if (Panels.isScope(open)) {
+                        ScopePanel(
+                            title = TrainingFormat.SCOPE_EDIT_TITLE,
+                            question = Panels.scopeQuestion(open),
+                            date = Panels.scopeDate(open),
+                            back = TrainingFormat.BACK_TO_EDIT,
+                            onOnlyThis = {
+                                panel = null
+                                saveWith(true)
+                            },
+                            onFollowing = {
+                                panel = null
+                                saveWith(false)
+                            },
+                            onDismiss = { panel = null },
+                        )
+                    }
                 }
             }
         },
