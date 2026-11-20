@@ -1,5 +1,6 @@
 package com.akenory.personalka.ui.shell
 
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.foundation.border
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
@@ -170,8 +171,8 @@ private fun NavItem(
             }
             if (badge > 0) {
                 val text = if (badge > 99) "99+" else badge.toString()
-                Text(
-                    text = text,
+                // Шаг 5.21а: цифра — по центру кружка (Box центрует, у текста без запаса строки сверху и снизу).
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(x = 32.dp, y = (-8).dp)
@@ -183,10 +184,17 @@ private fun NavItem(
                         .background(colors.accent, CircleShape)
                         .padding(horizontal = 5.dp)
                         .clearAndSetSemantics { contentDescription = "Нужно сделать: $badge" },
-                    style = MaterialTheme.typography.labelMedium.tabular(),
-                    color = colors.onAccent,
-                    textAlign = TextAlign.Center,
-                )
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.labelMedium.tabular().copy(
+                            lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+                        ),
+                        color = colors.onAccent,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
         Text(
