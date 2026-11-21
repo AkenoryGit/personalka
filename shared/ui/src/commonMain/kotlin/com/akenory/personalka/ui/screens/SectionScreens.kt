@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -98,9 +99,12 @@ import com.akenory.personalka.ui.shell.Section
 import com.akenory.personalka.ui.shell.ShellState
 import com.akenory.personalka.ui.shell.TopBar
 import com.akenory.personalka.ui.slots.SlotsRoute
+import com.akenory.personalka.ui.about.AboutScreen
+import com.akenory.personalka.ui.about.AboutTools
+import com.akenory.personalka.domain.about.AppTheme
+import com.akenory.personalka.domain.format.AboutFormat
 import com.akenory.personalka.ui.slots.SlotsScreen
 import com.akenory.personalka.ui.theme.PersonalkaTheme
-import com.akenory.personalka.ui.theme.tabular
 import com.akenory.personalka.ui.training.TrainingFormKey
 import com.akenory.personalka.ui.training.VoiceInput
 import com.akenory.personalka.ui.watch.WatchTools
@@ -176,6 +180,9 @@ fun SectionScreen(
     advanceAsk: Boolean = false,
     onAdvanceAsk: (Boolean) -> Unit = {},
     onTour: () -> Unit = {},
+    theme: AppTheme = AppTheme.SYSTEM,
+    onTheme: (AppTheme) -> Unit = {},
+    about: AboutTools? = null,
 ) {
     // «Кабинет» в карточке — только при включённых кабинетах (5.9); раздел «Кабинеты» в настройках — чтобы их включить.
     val cabinetsOn by remember(settings) { settings.cabinetsEnabled }.collectAsState(initial = false)
@@ -315,8 +322,9 @@ fun SectionScreen(
                     else -> true
                 }
             }
-            MoreScreen(shell, versionName, items, onTour) { route, onBack ->
+            MoreScreen(shell, items, onTour) { route, onBack ->
             when {
+                route == MoreItem.ABOUT.route -> AboutScreen(versionName, theme, onTheme, about, shareText, messages, scope, onBack)
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null, watch)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
                 route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText, backup?.files) { id ->
@@ -389,6 +397,8 @@ enum class MoreItem(
     EXPORTS(SettingsRoute.EXPORTS, MoreFormat.EXPORTS, MoreFormat.EXPORTS_NOTE, PIcons.Download, MoreGroup.DATA, EXPORTS_ROW_TAG),
     // Знакомство с приложением (5.18, шаг 5.3б): своего экрана нет — пункт запускает знакомство заново.
     TOUR("tour", TourFormat.MORE_ITEM, TourFormat.MORE_NOTE, PIcons.Info, MoreGroup.HELP),
+    // «О приложении» (5.16, шаг 5.33): тема, версия, обновление, журнал ошибок.
+    ABOUT("about", AboutFormat.TITLE, AboutFormat.NOTE, PIcons.Settings, MoreGroup.HELP),
 }
 
 internal fun moreRowTag(item: MoreItem) = item.tag
@@ -417,7 +427,6 @@ private val MoreItem.place: PlaceColor?
 @Composable
 private fun MoreScreen(
     shell: ShellState,
-    versionName: String,
     items: List<MoreItem>,
     onTour: () -> Unit,
     detail: @Composable (route: String, onBack: (() -> Unit)?) -> Unit,
@@ -435,7 +444,6 @@ private fun MoreScreen(
                 items = items,
                 selected = root,
                 scroll = listScroll,
-                versionName = versionName,
                 onOpen = {
                     when {
                         it == MoreItem.TOUR -> onTour()
@@ -461,7 +469,6 @@ private fun MoreList(
     items: List<MoreItem>,
     selected: MoreItem?,
     scroll: ScrollState,
-    versionName: String,
     onOpen: (MoreItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -508,11 +515,7 @@ private fun MoreList(
                 }
             }
         }
-        Text(
-            text = MoreFormat.version(versionName),
-            modifier = Modifier.padding(16.dp),
-            style = MaterialTheme.typography.bodySmall.tabular(),
-            color = colors.textMuted,
-        )
+        // Версия — в «О приложении» (шаг 5.33); снизу — только отступ над плавающей панелью.
+        Spacer(Modifier.height(16.dp))
     }
 }

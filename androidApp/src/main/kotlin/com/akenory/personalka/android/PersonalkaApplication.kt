@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
+import com.akenory.personalka.domain.about.CrashLogRules
 
 /**
  * Приложение: одна база на всё время жизни процесса. Окно пересоздаётся при смене темы, база — нет.
@@ -95,6 +96,14 @@ class PersonalkaApplication : Application() {
     val widgets: WidgetBridge by lazy { WidgetBridge(this, this, prefs) }
 
     val crashFile: File get() = File(filesDir, "last-crash.txt")
+
+    /** Журнал ошибок для «О приложении» (шаг 5.33): последние ошибки, которые тренер уже видел в окне при запуске. */
+    val crashLogFile: File get() = File(filesDir, "crash-log.txt")
+
+    /** Ошибку из окна при запуске — в журнал ([CrashLogRules]: последние пять). */
+    fun keepCrash(report: String) {
+        runCatching { crashLogFile.writeText(CrashLogRules.add(crashLogFile.takeIf { it.exists() }?.readText(), report)) }
+    }
 
     /** Сбой фоновой работы (обмен, будильник) записывается и не роняет приложение — иначе оно падало бы при каждом запуске. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> saveCrash(e) })

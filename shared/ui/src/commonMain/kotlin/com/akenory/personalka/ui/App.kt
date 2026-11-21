@@ -27,6 +27,9 @@ import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.prefs.MemoryPrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.ui.clients.CabinetTools
+import com.akenory.personalka.ui.about.AboutTools
+import com.akenory.personalka.domain.about.AppTheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.MessageState
@@ -105,6 +108,8 @@ import kotlinx.datetime.yearMonth
  *   из activity-compose): общий код не зависит от Android. Пока есть куда вернуться внутри приложения,
  *   «Назад» закрывает открытый экран, иначе ведёт на «Главную»; с «Главной» приложение сворачивается.
  * @param watch часы Galaxy Watch (шаг 5.3т, только Android): счётчик дел и переключатель «Имена клиентов на часах».
+ * @param about обновление и журнал ошибок для «О приложении» (шаг 5.33, только Android); `null` — там тема и версия.
+ * @param onTheme выбранная тема и тёмная ли она сейчас (шаг 5.33): платформа красит под неё строку состояния.
  * @param clock часы телефона, миллисекунды UTC; тесты подставляют свои.
  */
 @Composable
@@ -127,9 +132,15 @@ fun App(
     onLink: () -> Unit = {},
     backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     watch: WatchTools? = null,
+    about: AboutTools? = null,
+    onTheme: (theme: AppTheme, dark: Boolean) -> Unit = { _, _ -> },
     clock: () -> Long = ::systemMillis,
 ) {
-    PersonalkaTheme {
+    // Тема (шаг 5.33): выбор хранится в настройках этого телефона, по умолчанию — как в телефоне.
+    var theme by remember(prefs) { mutableStateOf(AppTheme.of(prefs.string(DevicePrefs.APP_THEME))) }
+    val dark = theme.isDark(isSystemInDarkTheme())
+    LaunchedEffect(theme, dark) { onTheme(theme, dark) }
+    PersonalkaTheme(dark = dark) {
         val shell = rememberShellState()
         val messages = remember { MessageState() }
         val now = rememberClubNow(clock)
@@ -497,6 +508,12 @@ fun App(
                             advanceAsk = advanceAsk,
                             onAdvanceAsk = { advanceAsk = it },
                             onTour = { tourGo(TourStop.CALENDAR) },
+                            theme = theme,
+                            onTheme = {
+                                theme = it
+                                prefs.putString(DevicePrefs.APP_THEME, it.code)
+                            },
+                            about = about,
                         )
                     }
                     form?.let { key ->

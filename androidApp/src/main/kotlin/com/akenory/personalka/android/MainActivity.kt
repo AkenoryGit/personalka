@@ -3,11 +3,14 @@ package com.akenory.personalka.android
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -15,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.akenory.personalka.BuildConfig
+import com.akenory.personalka.data.prefs.DevicePrefs
+import com.akenory.personalka.domain.about.AppTheme
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.ui.App
 import com.akenory.personalka.ui.clients.CabinetTools
@@ -61,16 +66,22 @@ class MainActivity : ComponentActivity() {
         val notifications = AndroidNotifications(this, app.prefs, app::remindersChanged)
         // Пересоздание окна при смене темы не открывает уведомление второй раз.
         if (savedInstanceState == null) link = linkOf(intent)
+        val about = AndroidAbout(applicationContext, app.crashLogFile)
         crash = runCatching { app.crashFile.takeIf { it.exists() }?.readText() }.getOrNull()
         setContent {
             val report = crash
             if (report != null) {
-                CrashReport(report, ::copy) {
+                // Окно ошибки — в теме, выбранной в «О приложении» (шаг 5.33).
+                val theme = AppTheme.of(app.prefs.string(DevicePrefs.APP_THEME))
+                val dark = theme.isDark(isSystemInDarkTheme())
+                LaunchedEffect(dark) { systemBars(dark) }
+                CrashReport(report, ::copy, dark) {
+                    app.keepCrash(report)
                     app.crashFile.delete()
                     crash = null
                 }
             } else {
-                Main(app, backup, sync, cabinets, voice, photos, max, notifications)
+                Main(app, backup, sync, cabinets, voice, photos, max, notifications, about)
             }
         }
     }
@@ -86,6 +97,7 @@ class MainActivity : ComponentActivity() {
         photos: AndroidPhotos,
         max: AndroidMax,
         notifications: AndroidNotifications,
+        about: AndroidAbout,
     ) {
         // Разрешение на уведомления (Android 13+) — один раз, когда первый запуск пройден: сводка включена сразу.
         LaunchedEffect(Unit) {
@@ -113,9 +125,22 @@ class MainActivity : ComponentActivity() {
                     onLink = { link = null },
                     backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
                     watch = app.watch,
+                    about = about,
+                    onTheme = { _, dark -> systemBars(dark) },
                 )
             }
         }
+    }
+
+    /**
+     * Значки строки состояния и навигации — под тему приложения, а не телефона (шаг 5.33): тёмная тема в светлом
+     * телефоне — светлые значки. Подложка кнопок навигации — та же, что у `enableEdgeToEdge()` по умолчанию.
+     */
+    private fun systemBars(dark: Boolean) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+            navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark },
+        )
     }
 
     override fun onStart() {
@@ -139,6 +164,12 @@ class MainActivity : ComponentActivity() {
     private fun copy(text: String) {
         val clipboard = getSystemService(ClipboardManager::class.java) ?: return
         clipboard.setPrimaryClip(ClipData.newPlainText(CabinetLinkFormat.BUTTON, text))
+    }
+
+    private companion object {
+        /** Подложка кнопок навигации, как в `androidx.activity.EdgeToEdge`. */
+        val LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+        val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
     }
 
     /** Уведомление — его экран; присланный PDF — «Сверки» с загрузкой отчёта. */

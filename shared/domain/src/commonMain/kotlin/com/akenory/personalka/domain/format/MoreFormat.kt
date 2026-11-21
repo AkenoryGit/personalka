@@ -41,6 +41,4 @@ object MoreFormat {
     const val BACKUP_NOTE = "Файл со всеми данными в папке телефона, восстановление"
     const val EXPORTS = "Выгрузки"
     const val EXPORTS_NOTE = "Excel и календарь, чтобы поделиться или посмотреть"
-
-    fun version(name: String): String = "Версия $name"
 }

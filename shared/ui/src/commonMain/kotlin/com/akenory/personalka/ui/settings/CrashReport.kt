@@ -2,6 +2,7 @@ package com.akenory.personalka.ui.settings
 
 import com.akenory.personalka.ui.theme.screenBackground
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,11 +28,12 @@ import com.akenory.personalka.ui.theme.PersonalkaTheme
 
 /**
  * Прошлый запуск закончился ошибкой: её текст до того, как открыть приложение. Если ошибка повторяется на старте,
- * тренер всё равно увидит текст и сможет его прислать. Базы этот экран не касается.
+ * тренер всё равно увидит текст и сможет его прислать. Базы этот экран не касается. После «Продолжить» текст остаётся
+ * в журнале ошибок «О приложении» (шаг 5.33). [dark] — выбранная в приложении тема.
  */
 @Composable
-fun CrashReport(text: String, onCopy: (String) -> Unit, onContinue: () -> Unit) {
-    PersonalkaTheme {
+fun CrashReport(text: String, onCopy: (String) -> Unit, dark: Boolean = isSystemInDarkTheme(), onContinue: () -> Unit) {
+    PersonalkaTheme(dark = dark) {
         val colors = PersonalkaTheme.colors
         var copied by remember { mutableStateOf(false) }
         Column(

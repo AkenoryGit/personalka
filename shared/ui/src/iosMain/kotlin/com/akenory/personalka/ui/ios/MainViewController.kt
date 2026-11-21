@@ -92,6 +92,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
             notifications = IosNotifications,
             link = link,
             onLink = { link = null },
+            onTheme = { theme, _ -> setWindowTheme(theme) },
         )
       }
     }

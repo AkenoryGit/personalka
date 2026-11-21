@@ -31,6 +31,9 @@ interface DevicePrefs {
 
         /** Деньги по дням в календаре (шаг 5.10г); по умолчанию — да. */
         const val CALENDAR_SHOW_MONEY = "calendar.showMoney"
+
+        /** Тема приложения (`AppTheme.code`, шаг 5.33); нет — как в телефоне. */
+        const val APP_THEME = "app.theme"
     }
 }
 
