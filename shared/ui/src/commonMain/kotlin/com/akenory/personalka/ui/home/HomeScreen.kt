@@ -823,7 +823,7 @@ private fun TodoBlock(todos: List<HomeTodo>, onClick: (HomeTodo) -> Unit) {
         Column(Modifier.padding(bottom = Dimens.space1)) {
             todos.forEachIndexed { i, todo ->
                 if (i > 0) HorizontalDivider(Modifier.padding(start = 68.dp), thickness = 1.dp, color = colors.divider)
-                TodoRow(todo, icon = iconOf(todo.kind), dot = todo.kind == TodoKind.NO_DIARY, onClick = { onClick(todo) })
+                TodoRow(todo, icon = iconOf(todo.kind), onClick = { onClick(todo) })
             }
         }
     }
@@ -848,7 +848,7 @@ private fun iconOf(kind: TodoKind): ImageVector = when (kind) {
 
 /** Строка дела: значок в круге (у «без дневника» — оранжевая точка), текст, подпись, число и стрелка. */
 @Composable
-private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: () -> Unit) {
+private fun TodoRow(todo: HomeTodo, icon: ImageVector, onClick: () -> Unit) {
     val colors = PersonalkaTheme.colors
     Row(
         modifier = Modifier
@@ -862,13 +862,9 @@ private fun TodoRow(todo: HomeTodo, icon: ImageVector, dot: Boolean, onClick: ()
         horizontalArrangement = Arrangement.spacedBy(Dimens.space3),
     ) {
         Box(Modifier.size(40.dp).insetLevel(CircleShape, colors), contentAlignment = Alignment.Center) {
+            // Шаг 5.31 (Дмитрий 21.11.2026): коралловую точку на значке убрали — её обрезало вдавление, а число
+            // и так стоит справа в строке и в шапке «Нужно сделать».
             Icon(icon, contentDescription = null, tint = colors.text, modifier = Modifier.size(20.dp))
-            if (dot) {
-                Box(
-                    Modifier.align(Alignment.TopEnd).offset(x = (-2).dp, y = 2.dp).size(8.dp)
-                        .background(colors.accentGraphic, CircleShape),
-                )
-            }
         }
         Column(Modifier.weight(1f)) {
             Text(todo.title, style = MaterialTheme.typography.labelLarge.tabular(), color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
