@@ -692,13 +692,9 @@ class CalendarUiTest {
         // Справа от блока, между линиями сетки, — хоть одна точка штриховки на фоне.
         val margin = (357..363).flatMap { x -> (zone.y.toInt() + 4..zone.y.toInt() + 28).map { y -> pixel(x.toFloat(), y.toFloat()) } }
         assertTrue(margin.any { !close(LightColors.surface, it) }, "Штриховки справа от блока нет")
-        // Низ блока без текста — перелив блока, штриховка под ним. ПТ в ДБ — светлый оттенок перехода розовый → фиолетовый
-        // (шаги 1.13в, 5.13в): каждая точка — между цветами концов перелива.
-        val (from, to) = PlaceGradient.of("pink", "").ends(dark = false, shade = 1)
-        fun between(c: Color) = listOf(c.red to (from.red to to.red), c.green to (from.green to to.green), c.blue to (from.blue to to.blue))
-            .all { (v, ends) -> v >= minOf(ends.first, ends.second) - 0.03f && v <= maxOf(ends.first, ends.second) + 0.03f }
+        // Низ блока без текста — белая заливка блока (шаги 5.30, 5.30а), штриховка под ним не просвечивает.
         val inside = (150..330 step 10).flatMap { x -> listOf(pixel(x.toFloat(), block.y + block.height - 6f), pixel(x.toFloat(), block.y + block.height - 4f)) }
-        assertTrue(inside.all { between(it) }, "Штриховка поверх блока: ${inside.firstOrNull { !between(it) }}")
+        assertTrue(inside.all { close(Color.White, it) }, "Штриховка поверх блока: ${inside.firstOrNull { !close(Color.White, it) }}")
     }
 
     @Test
