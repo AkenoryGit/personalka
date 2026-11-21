@@ -909,10 +909,6 @@ private const val NEW_BLOCK_ID = "new-training"
 private val PEEK_TEXT = 11.sp
 private val PEEK_PAD = 4.dp
 
-/** Насыщенность блока личного дела; у «можно ставить» — бледнее (шаг 5.28). */
-private const val ZONE_BLOCK_FILL = 0.6f
-private const val ZONE_BLOCK_FREE = 0.35f
-
 /** Дела и дорога рисуются блоками, а не фоном (шаг 5.28). */
 private const val BLOCKS_INSTEAD = true
 
@@ -1631,11 +1627,10 @@ private fun DrawScope.drawPeek(zone: ZoneInfo, info: CalendarZone, label: TextLa
     }
 }
 
-/**
- * Личное дело или дорога блоком (шаг 5.28): уровень «сверху», как тренировка, но цветом дела и с пунктирной
- * рамкой; «● Максим плавание», ниже — время, у «можно ставить» — эта пометка. Дорога — бледная со штриховкой.
- */
+/** Личное дело или дорога блоком (шаги 5.28, 5.30). */
 private fun DrawScope.drawZoneBlock(zb: ZoneBlockInfo, info: CalendarZone, measurer: TextMeasurer, styles: BlockStyles, colors: PersonalkaColors) {
+    // Шаг 5.30 («Минимум цвета»): дело — плоское (без тени и рамки), серое, цвет дела — полоса слева; дорога —
+    // то же бледнее; у «можно ставить» — пометка во второй строке.
     val gap = BLOCK_GAP.toPx()
     val rect = Rect(zb.x.dp.toPx() + gap, zb.y.dp.toPx() + gap, (zb.x + zb.width).dp.toPx() - gap, (zb.y + zb.height).dp.toPx() - gap)
     if (rect.width <= 0f || rect.height <= 0f) return
@@ -1643,36 +1638,34 @@ private fun DrawScope.drawZoneBlock(zb: ZoneBlockInfo, info: CalendarZone, measu
     val g = PlaceGradient.of(info.color, info.color2)
     val tone = g.from.tone(colors.isDark)
     val travel = zb.kind == ZoneKind.TRAVEL
+    val alpha = if (travel) TRAVEL_ALPHA else 1f
     val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = corner)) }
-    if (!travel) drawBlockShadow(rect, corner, colors)
     clipPath(shape) {
-        if (travel) {
-            drawRect(colors.inset, rect.topLeft, rect.size)
-            hatch(rect, lerp(colors.inset, tone.stripe, HATCH_PLACE), Dimens.hatchStroke.toPx(), Dimens.hatchStep.toPx())
-        } else {
-            val ends = listOf(g.from, g.to).map { lerp(colors.surface, it.tone(colors.isDark).stripe, if (zb.free) ZONE_BLOCK_FREE else ZONE_BLOCK_FILL) }
-            drawRect(Brush.linearGradient(ends, start = rect.topLeft, end = Offset(rect.right, rect.top + rect.width * 0.47f)), rect.topLeft, rect.size)
-        }
+        drawRect(colors.surfaceAlt.copy(alpha = alpha), rect.topLeft, rect.size)
+        drawRect(
+            Brush.verticalGradient(listOf(g.from.tone(colors.isDark).stripe, g.to.tone(colors.isDark).stripe).map { it.copy(alpha = alpha) }, startY = rect.top, endY = rect.bottom),
+            rect.topLeft,
+            Size(PLACE_STRIPE.toPx(), rect.height),
+        )
     }
-    val stroke = 1.5.dp.toPx()
-    drawRoundRect(
-        color = tone.text.copy(alpha = 0.7f),
-        topLeft = Offset(rect.left + stroke / 2, rect.top + stroke / 2),
-        size = Size(rect.width - stroke, rect.height - stroke),
-        cornerRadius = CornerRadius(corner.x - stroke / 2),
-        style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
-    )
     val ink = if (travel) colors.textMuted else tone.text
     val width = (rect.width - TEXT_START.toPx() - TEXT_END.toPx()).toInt().coerceAtLeast(0)
-    val title = measurer.measure((if (travel) "" else "● ") + zb.name, styles.name, overflow = TextOverflow.Ellipsis, softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = width))
+    val title = measurer.measure(zb.name, if (travel) styles.meta else styles.name, overflow = TextOverflow.Ellipsis, softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = width))
     var y = rect.top + TEXT_TOP.toPx()
     if (y + title.size.height > rect.bottom) return
     drawText(title, color = ink, topLeft = Offset(rect.left + TEXT_START.toPx(), y))
+    if (travel) return
     y += title.size.height
     val note = (if (info.free) PersonalFormat.FREE_NOTE + " · " else "") + zb.note
     val meta = measurer.measure(note, styles.meta, overflow = TextOverflow.Ellipsis, softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = width))
-    if (y + meta.size.height <= rect.bottom) drawText(meta, color = ink.copy(alpha = 0.85f), topLeft = Offset(rect.left + TEXT_START.toPx(), y))
+    if (y + meta.size.height <= rect.bottom) drawText(meta, color = colors.textMuted, topLeft = Offset(rect.left + TEXT_START.toPx(), y))
 }
+
+/** Полоса цвета места или дела слева у блока (шаг 5.30). */
+private val PLACE_STRIPE = 5.dp
+
+/** Дорога — бледнее дела (шаг 5.30). */
+private const val TRAVEL_ALPHA = 0.55f
 
 private fun DrawScope.measureLabel(measurer: TextMeasurer, zone: ZoneInfo, style: TextStyle): TextLayoutResult {
     val room = when (zone.kind) {
@@ -1874,9 +1867,8 @@ private fun DrawScope.drawLines(hours: GridHours, hourDp: Float, colors: Persona
 }
 
 /**
- * Блок (ТЗ 5.3, стиль «Сияние» — шаг 5.13б): уровень «сверху» — мягкая тень под блоком и светлая черта по верху;
- * фон — перелив цветов места ([PlaceGradient], шаг 5.13в) оттенком типа (ПТ светлая, группа ярче), текст —
- * тот тон, что читается на обоих концах перелива. Отменённая — вдавленная (шаг 5.20), с пунктирной рамкой и зачёркнутая.
+ * Блок (ТЗ 5.3; шаг 5.30 «Минимум цвета»): уровень «сверху» — поверхность с мягкой тенью, цвет места — полоса
+ * слева переливом ([PlaceGradient]), текст обычный. Отменённая — пустой пунктирный контур, зачёркнутая.
  */
 private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, text: BlockText, icons: BadgeIcons, colors: PersonalkaColors) {
     val gap = BLOCK_GAP.toPx()
@@ -1888,19 +1880,17 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
     )
     if (rect.width <= 0f || rect.height <= 0f) return
     val gradient = PlaceGradient.of(training.color, training.color2)
-    val (fromFill, toFill) = gradient.ends(colors.isDark, training.shade)
-    val ink = if (training.cancelled) colors.textMuted else gradient.ink(colors.isDark, training.shade)
+    // Шаг 5.30 (решение Дмитрия 21.11.2026, «Минимум цвета»): блок — поверхность «сверху», цвет места — только
+    // полоса слева (перелив сверху вниз); текст — обычный. Отменённая — пустой пунктирный контур на заднем плане.
+    val stripeFrom = gradient.from.tone(colors.isDark).stripe
+    val stripeTo = gradient.to.tone(colors.isDark).stripe
+    val ink = if (training.cancelled) colors.textMuted else colors.text
     val whoTone = block.whoKind?.let { whoTone(it, colors.isDark) }
     val corner = CornerRadius(BLOCK_RADIUS.toPx())
     if (!training.cancelled) drawBlockShadow(rect, corner, colors)
     val shape = Path().apply { addRoundRect(RoundRect(rect, cornerRadius = corner)) }
     clipPath(shape) {
         if (training.cancelled) {
-            // Шаг 5.20 (просьба Дмитрия 19.11.2026: ночью отмены почти не отличить): отменённая — «вдавлена» (уровень −1,
-            // как дно [insetLevel]): тёмное дно, тень сверху внутрь, пунктирная рамка вместо полосы; живые — «сверху».
-            val shade = if (colors.isDark) Color.Black.copy(alpha = 0.6f) else Color(0xFF15171A).copy(alpha = 0.16f)
-            drawRect(colors.inset, rect.topLeft, rect.size)
-            drawRect(Brush.verticalGradient(listOf(shade, Color.Transparent), startY = rect.top, endY = rect.top + 6.dp.toPx()), rect.topLeft, rect.size)
             val w = 1.dp.toPx()
             drawRoundRect(
                 color = colors.outline,
@@ -1910,8 +1900,8 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
                 style = Stroke(width = w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
             )
         } else {
-            drawRect(Brush.linearGradient(listOf(fromFill, toFill), start = rect.topLeft, end = Offset(rect.right, rect.top + rect.width * 0.47f)), rect.topLeft, rect.size)
-            drawRect(Color.White.copy(alpha = if (colors.isDark) 0.16f else 0.55f), rect.topLeft, Size(rect.width, 1.dp.toPx()))
+            drawRect(colors.surface, rect.topLeft, rect.size)
+            drawRect(Brush.verticalGradient(listOf(stripeFrom, stripeTo), startY = rect.top, endY = rect.bottom), rect.topLeft, Size(PLACE_STRIPE.toPx(), rect.height))
         }
         val left = rect.left + TEXT_START.toPx()
         var y = rect.top + TEXT_TOP.toPx()
