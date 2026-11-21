@@ -178,11 +178,15 @@ object TrainingCardKey {
 
     fun card(id: String): String = id
 
-    fun cancel(id: String): String = id + CANCEL
+    /** Панель отмены; [clientId] — отменить только его (шаг 5.32: «Не придёт» у мини-группы и сплита), `null` — всю. */
+    fun cancel(id: String, clientId: String? = null): String = id + CANCEL + clientId.orEmpty()
 
-    fun id(key: String): String = key.removeSuffix(CANCEL)
+    fun id(key: String): String = key.substringBefore(CANCEL)
 
-    fun opensCancel(key: String): Boolean = key.endsWith(CANCEL)
+    fun opensCancel(key: String): Boolean = key.contains(CANCEL)
+
+    /** Кого отменять сразу: клиент или [WHOLE] — вся тренировка. */
+    internal fun cancelWho(key: String): String = key.substringAfter(CANCEL, "")
 }
 
 /** Кого отменяем — строкой: «Всю тренировку» или клиенты через запятую. */
@@ -221,7 +225,7 @@ fun TrainingCardHost(
 ) {
     val id = key?.let(TrainingCardKey::id)
     // Панель отмены: null — карточка; WHOLE — «Всю тренировку»; иначе id выбранных клиентов через запятую.
-    var cancelWho by rememberSaveable(key) { mutableStateOf(if (key != null && TrainingCardKey.opensCancel(key)) WHOLE else null) }
+    var cancelWho by rememberSaveable(key) { mutableStateOf(if (key != null && TrainingCardKey.opensCancel(key)) TrainingCardKey.cancelWho(key) else null) }
     var reason by rememberSaveable(key) { mutableStateOf<String?>(CancelReasons.CANNOT_COME) }
     var ownReason by rememberSaveable(key) { mutableStateOf("") }
     var notifiedAt by rememberSaveable(key) { mutableStateOf<String?>(null) }

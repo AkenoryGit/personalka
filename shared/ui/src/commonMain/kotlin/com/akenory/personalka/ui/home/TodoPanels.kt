@@ -252,7 +252,8 @@ private fun BorderedList(content: @Composable () -> Unit) {
 
 /**
  * «Уточнить, придёт ли»: время, тип и место, надёжность; «Придёт» — клиент уходит из списка до начала этой
- * тренировки (с «Отменить»), «Не придёт» — окно отмены тренировки, звонок — набор номера.
+ * тренировки (с «Отменить»), «Не придёт» — окно отмены только этого клиента (шаг 5.32: в мини-группе и сплите
+ * остальные остаются), звонок — набор номера.
  */
 @Composable
 private fun ConfirmList(
@@ -282,7 +283,7 @@ private fun ConfirmList(
                             messages.showUndo(TodoListFormat.comingMessage(v.name)) { scope.launch { clients.undoConfirm(before) } }
                         }
                     }, Modifier.testTag(confirmComingTag(v.clientId)))
-                    OutlineButton(TodoListFormat.NOT_COMING, { onCard(TrainingCardKey.cancel(v.trainingId)) }, Modifier.testTag(confirmNotComingTag(v.clientId)))
+                    OutlineButton(TodoListFormat.NOT_COMING, { onCard(TrainingCardKey.cancel(v.trainingId, v.clientId)) }, Modifier.testTag(confirmNotComingTag(v.clientId)))
                     Spacer(Modifier.weight(1f))
                     v.phone?.let { CallButton(it) { messages.show(FollowupFormat.PHONE_COPIED) } }
                 }
