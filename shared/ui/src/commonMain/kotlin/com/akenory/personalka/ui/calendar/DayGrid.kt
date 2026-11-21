@@ -1661,8 +1661,11 @@ private fun DrawScope.drawZoneBlock(zb: ZoneBlockInfo, info: CalendarZone, measu
     if (y + meta.size.height <= rect.bottom) drawText(meta, color = colors.textMuted, topLeft = Offset(rect.left + TEXT_START.toPx(), y))
 }
 
+/** Заливка блока тренировки: светлее сетки (шаг 5.30а) — днём белая, ночью поверхность на 9 % к белому. */
+private fun blockFill(colors: PersonalkaColors): Color = if (colors.isDark) lerp(colors.surface, Color.White, 0.09f) else Color.White
+
 /** Полоса цвета места или дела слева у блока (шаг 5.30). */
-private val PLACE_STRIPE = 5.dp
+private val PLACE_STRIPE = 6.dp
 
 /** Дорога — бледнее дела (шаг 5.30). */
 private const val TRAVEL_ALPHA = 0.55f
@@ -1900,7 +1903,9 @@ private fun DrawScope.drawBlock(block: BlockInfo, training: CalendarTraining, te
                 style = Stroke(width = w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
             )
         } else {
-            drawRect(colors.surface, rect.topLeft, rect.size)
+            // Шаг 5.30а (Дмитрий 21.11.2026: «блоки того же цвета, что фон, сливаются»): блок светлее сетки —
+            // днём белый, ночью поверхность на ступень светлее.
+            drawRect(blockFill(colors), rect.topLeft, rect.size)
             drawRect(Brush.verticalGradient(listOf(stripeFrom, stripeTo), startY = rect.top, endY = rect.bottom), rect.topLeft, Size(PLACE_STRIPE.toPx(), rect.height))
         }
         val left = rect.left + TEXT_START.toPx()
@@ -2104,7 +2109,7 @@ private fun DrawScope.drawMore(more: MoreInfo, measurer: TextMeasurer, style: Te
  */
 private fun DrawScope.drawBlockShadow(rect: Rect, corner: CornerRadius, colors: PersonalkaColors) {
     val base = if (colors.isDark) Color.Black else Color(0xFF15171A)
-    val alphas = if (colors.isDark) floatArrayOf(0.28f, 0.16f, 0.08f) else floatArrayOf(0.10f, 0.06f, 0.03f)
+    val alphas = if (colors.isDark) floatArrayOf(0.28f, 0.16f, 0.08f) else floatArrayOf(0.14f, 0.08f, 0.04f)
     alphas.forEachIndexed { i, a ->
         val d = (i + 1).dp.toPx()
         drawRoundRect(
