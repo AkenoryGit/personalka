@@ -3,7 +3,9 @@ package com.akenory.personalka.domain.money
 import com.akenory.personalka.domain.format.CalendarMoneyFormat
 import com.akenory.personalka.domain.format.RuText.NBSP
 import com.akenory.personalka.domain.format.RuText.THIN
+import com.akenory.personalka.domain.model.ParticipationStatus
 import com.akenory.personalka.domain.model.ParticipationStatus.ATTENDED
+import com.akenory.personalka.domain.model.ParticipationStatus.CANCELLED
 import com.akenory.personalka.domain.model.ParticipationStatus.EXPECTED
 import com.akenory.personalka.domain.model.PaySchemeKind
 import com.akenory.personalka.domain.model.PayUnit
@@ -67,10 +69,13 @@ class CalendarMoneyTest {
         assertTrue(now.forecast)
         assertEquals(v.today!! + v.todayAhead!!, now.amount)
         assertEquals(v.today, money.today)
-        // Будущие — доля прогноза; вместе с прошлым и сегодня — ровно «будет» месяца.
+        // Будущие — «если все придут»: по расписанию, по ступени всего расписания (115 ПТ — вторая, 960 ₽).
         assertTrue(money.days.getValue(22).forecast)
-        assertEquals(v.shown.forecast, money.days.values.sumOf { it.amount })
+        assertEquals(rub(10 * 960), money.days.getValue(22).amount)
+        assertEquals(rub(5 * 960), money.days.getValue(23).amount)
+        // «Будет» месяца — как в «Зарплате» (там вторая ступень и у проведённых), а не сумма дней.
         assertEquals(v.shown.forecast, money.forecast)
+        assertEquals(rub(98 * 920 + 2 * 920 + 15 * 960), money.days.values.sumOf { it.amount })
         assertEquals(v.pay.earned, money.earned)
         assertEquals(rub(150_000), money.plan)
         // Воскресенье без тренировок — денег нет, клетка пустая.
@@ -78,6 +83,48 @@ class CalendarMoneyTest {
         // 22-го 10 ПТ — вдвое больше обычного дня: сильный; обычный день — 5 ПТ.
         assertEquals(DayTone.STRONG, money.days.getValue(22).tone)
         assertEquals(DayTone.NORMAL, money.days.getValue(1).tone)
+    }
+
+    /**
+     * Шаг 5.34 (решение Дмитрия 22.11.2026): будущий день — «если все придут». Доля отмен 22 % снижает только «будет»
+     * месяца; отменённая в будущем дне не считается; неотмеченные прошлых дней не переезжают в будущие; группа —
+     * средним пришедших, а снятая в «Что считать в „будет“» — не считается.
+     */
+    @Test
+    fun futureDaysIfEveryoneComes() {
+        val group = PayType("group", TrainingKind.GROUP, PayUnit.PER_CLIENT, countsTowardPt = false, tierDependent = false)
+        val groupRate = PayRate("group", null, jan, rub(400))
+        fun groupOn(day: Int, status: TrainingStatus, clients: List<ParticipationStatus>) = PayTraining(
+            "g${seq++}", "group", "bb", LocalDateTime(2026, 10, day, 18, 0), 45, status, clients, groupId = "g",
+        )
+        val cancelled = PayTraining("c${seq++}", "pt", "bb", LocalDateTime(2026, 10, 22, 21, 0), 50, TrainingStatus.CANCELLED, listOf(CANCELLED))
+        val trainings = october() + pts(2, 19, TrainingStatus.PLANNED) + cancelled +
+            groupOn(6, TrainingStatus.DONE, List(3) { ATTENDED }) + groupOn(13, TrainingStatus.DONE, List(3) { ATTENDED }) +
+            groupOn(27, TrainingStatus.PLANNED, List(5) { EXPECTED })
+        fun money(groupInForecast: Boolean): Pair<SalaryMonth, CalendarMoney> {
+            val inp = MonthInput(
+                october, trainings, listOf(pt, group.copy(inForecast = groupInForecast)), rates + groupRate, tiers,
+                cancels = CancelShare(11, 50),
+            )
+            val v = view(inp)
+            return v to CalendarMoneyRules.month(v, inp, today)
+        }
+        val (v, m) = money(groupInForecast = true)
+        // 10 ПТ на 22-е — все десять по 960 ₽, без скидки на 22 % отмен; отменённая — не в счёт.
+        assertEquals(rub(10 * 960), m.days.getValue(22).amount)
+        // 19-е — только заработанное: две неотмеченные не в нём и не в будущих днях.
+        assertEquals(rub(5 * 920), m.days.getValue(19).amount)
+        assertEquals(rub(5 * 960), m.days.getValue(23).amount)
+        // Группа 27-го — средним пришедших: 3 ребёнка по 400 ₽.
+        assertEquals(rub(3 * 400), m.days.getValue(27).amount)
+        // «Будет» месяца — со средними, как в «Зарплате»: с долей отмен, ниже «по расписанию».
+        assertEquals(v.shown.forecast, m.forecast)
+        assertTrue(v.shown.forecast < v.shown.scheduled)
+
+        // Группа снята из «будет» — её дня нет, ПТ те же.
+        val (_, off) = money(groupInForecast = false)
+        assertNull(off.days[27])
+        assertEquals(rub(10 * 960), off.days.getValue(22).amount)
     }
 
     @Test

@@ -6,7 +6,8 @@ import kotlinx.datetime.YearMonth
 
 // Деньги в календаре (ТЗ 5.3, шаг 5.10г, решение Дмитрия 18.11.2026): сумма каждого дня в «Месяце» и в строке недели,
 // строка месяца над сеткой и «Деньги по месяцам». Считается из того же расчёта месяца, что «Зарплата» и «Главная»:
-// здесь только раскладка по дням и фильтр места.
+// здесь только раскладка по дням и фильтр места. Будущий день — «если все придут» (шаг 5.34, решение Дмитрия
+// 22.11.2026), «будет» месяца — со средними: обычной долей отмен и посещаемостью групп.
 
 /**
  * Деньги дня: [amount] — копейки. [forecast] — сегодня и дальше («будет» по расписанию), иначе — заработано.
@@ -54,11 +55,14 @@ object CalendarMoneyRules {
      *
      * - Прошедший день — заработано (та же раскладка, что у графика «По дням», 3.7в).
      * - Сегодня — заработано + «будет» остатка дня, тем же расчётом, что «Сегодня» на «Главной» (`todayAhead`).
-     * - Будущий день — его доля прогноза: «будет» месяца минус заработано и остаток сегодня делится между будущими
-     *   запланированными тренировками пропорционально их деньгам по расписанию (как пунктир графика), поэтому
-     *   ступень по прогнозу, доля отмен и ожидаемые дети групп ложатся туда, где тренировки. Неотмеченные
-     *   тренировки прошедших дней в сумму дня не входят — они в «Нужно сделать».
-     * - Прогноз — по показываемому «будет» (`shown`, шаг 5.10в).
+     * - Будущий день — «если все придут» (шаг 5.34): его запланированные тренировки по расписанию, по ступени
+     *   «если всё пройдёт по расписанию» (`forecastTrainings`), без доли отмен; отменённые не входят, группы —
+     *   средним пришедших, а тип, снятый в «Что считать в „будет“», — только отмеченными (как `shown`).
+     *   Неотмеченные тренировки прошедших дней не входят ни в свой день, ни в будущие — они в «Нужно сделать».
+     * - «Будет» месяца — показываемый прогноз со средними (`shown.forecast`, шаги 3.9щ, 5.10в), а не сумма дней: в днях
+     *   нет доли отмен (и ступени, на которую месяц переведёт проведённые). С фильтром места — заработано и остаток
+     *   сегодня этого места плюс его доля прогноза сверх них: по запланированным тренировкам (и неотмеченным прошлых
+     *   дней) пропорционально их деньгам по расписанию.
      */
     fun month(view: SalaryMonth, input: MonthInput, today: LocalDate, placeIds: Set<String>? = null): CalendarMoney {
         val month = view.month
@@ -96,25 +100,18 @@ object CalendarMoneyRules {
                 } else {
                     aheadAll = 0
                 }
-                // Будущие дни: доля «будет» месяца сверх заработанного и остатка сегодня.
-                val rest = (shown.forecast - view.pay.earned - aheadAll).coerceAtLeast(0)
-                val weights = ofMonth.zip(shown.forecastTrainings)
-                    .filter { (t, _) -> t.status == TrainingStatus.PLANNED && t.start.date.day > (if (current) today.day else 0) }
-                val total = weights.sumOf { it.second.earned }
-                if (total > 0) {
-                    // Нарастающим итогом: сумма долей всех мест ровно равна остатку, без потерь на округлении.
-                    var acc = 0L
-                    var given = 0L
-                    weights.sortedBy { it.first.start }.forEach { (t, p) ->
-                        acc += p.earned
-                        val upTo = rest * acc / total
-                        val share = upTo - given
-                        given = upTo
-                        if (counts(t.id)) sums[t.start.date.day] += share
-                    }
+                val scheduled = ofMonth.zip(shown.forecastTrainings).filter { (t, _) -> t.status == TrainingStatus.PLANNED }
+                // Будущие дни — «если все придут»: деньги их запланированных тренировок по расписанию.
+                scheduled.forEach { (t, p) ->
+                    if (t.start.date.day > (if (current) today.day else 0) && counts(t.id)) sums[t.start.date.day] += p.earned
                 }
-                // Без фильтра — ровно «будет» месяца, как на «Главной» и в «Зарплате»; с фильтром — сумма дней места.
-                forecast = if (placeIds == null) shown.forecast else sums.sum()
+                // «Будет» месяца — со средними, ровно как на «Главной» и в «Зарплате»; с фильтром — часть места.
+                forecast = if (placeIds == null) {
+                    shown.forecast
+                } else {
+                    val rest = (shown.forecast - view.pay.earned - aheadAll).coerceAtLeast(0)
+                    earned + (todayAhead ?: 0) + placeShare(rest, scheduled.filter { (t, _) -> !current || t.start.date != today }, ::counts)
+                }
             }
         }
         val positive = (1..month.lastDay.day).map { sums[it] }.filter { it > 0 }
@@ -133,6 +130,26 @@ object CalendarMoneyRules {
             today = todayEarned,
             todayAhead = todayAhead,
         )
+    }
+
+    /**
+     * Доля места в [rest] — «будет» месяца сверх заработанного и остатка сегодня: [rest] делится между тренировками
+     * [weights] пропорционально их деньгам по расписанию нарастающим итогом (доли всех мест вместе — ровно [rest]),
+     * место берёт доли тренировок, которые [counts].
+     */
+    private fun placeShare(rest: Long, weights: List<Pair<PayTraining, TrainingPay>>, counts: (String?) -> Boolean): Long {
+        val total = weights.sumOf { it.second.earned }
+        if (total <= 0) return 0
+        var acc = 0L
+        var given = 0L
+        var mine = 0L
+        weights.sortedBy { it.first.start }.forEach { (t, p) ->
+            acc += p.earned
+            val upTo = rest * acc / total
+            if (counts(t.id)) mine += upTo - given
+            given = upTo
+        }
+        return mine
     }
 
     /** День против среднего [average]: ниже 80 % — слабый, выше 120 % — сильный. */
