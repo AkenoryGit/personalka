@@ -3,8 +3,11 @@ package com.akenory.personalka.server
 import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.account.FeatureGrant
+import com.akenory.personalka.domain.cabinet.CabinetUse
+import com.akenory.personalka.domain.cabinet.CabinetVisitRules
 import com.akenory.personalka.domain.format.AccountFormat
 import com.akenory.personalka.domain.format.AdminFormat
+import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.ClubFormat
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -20,6 +23,7 @@ import kotlinx.html.div
 import kotlinx.html.form
 import kotlinx.html.h1
 import kotlinx.html.h2
+import kotlinx.html.h3
 import kotlinx.html.head
 import kotlinx.html.header
 import kotlinx.html.id
@@ -42,6 +46,9 @@ import kotlinx.html.ul
  */
 object AdminHtml {
     const val CSS_PATH = "/admin.css"
+
+    /** Якорь раздела «Кабинеты клиентов» на странице тренера. */
+    const val CABINETS_ID = "cab"
 
     /** Вход: почта и пароль; [error] — что не так. */
     fun login(html: HTML, error: String?) = html.shell(narrow = true) {
@@ -102,6 +109,9 @@ object AdminHtml {
                                 +ClubFormat.status(s.coach.confirmed, s.coach.suspended, s.syncedAt?.club()?.date, s.cabinets, today)
                             }
                             span("mut") { +openLine(page.grants[s.coach.id].orEmpty(), today) }
+                            page.usage[s.coach.id]?.let(AdminFormat::usage)?.let { line ->
+                                a(href = "/admin/coaches/${s.coach.id}#$CABINETS_ID", classes = "mut adm-use") { +line }
+                            }
                         }
                         if (!s.coach.admin) {
                             val suspend = !s.coach.suspended
@@ -186,6 +196,42 @@ object AdminHtml {
             button(type = ButtonType.submit, classes = "btn") { +AdminFormat.SAVE }
             p("mut") { +AdminFormat.APPLIES }
         }
+        cabinets(page.cabinets)
+    }
+
+    /**
+     * «Кабинеты клиентов» на странице тренера (шаг 5.35): итог, у своих клиентов — списки «Заходят», «Давно не
+     * заходили», «Ни разу не открывали» с именами; у коллег — только итог, имён нет (5.17).
+     */
+    private fun FlowContent.cabinets(cab: AdminCabinets) = section("sec") {
+        id = CABINETS_ID
+        h2 { +AdminFormat.CABINETS }
+        val usage = AdminFormat.usage(CabinetVisitRules.usage(cab.list, cab.today))
+        if (usage == null) {
+            p("mut") { +AdminFormat.CABINETS_NONE }
+            return@section
+        }
+        p("num") { +usage }
+        if (!cab.own) {
+            p("mut") { +AdminFormat.CABINETS_COLLEAGUE }
+            return@section
+        }
+        for ((use, lines) in CabinetVisitRules.lines(cab.list, cab.today)) {
+            h3 { +AdminFormat.useTitle(use, lines.size) }
+            ul("card lst") {
+                for (line in lines) {
+                    val v = line.visits
+                    li("it") {
+                        span("b") { +(v.name ?: AdminFormat.NO_NAME) }
+                        span("mut num") { +CabinetLinkFormat.lastOpened(v.lastOpened, cab.today) }
+                        AdminFormat.visits(line)?.let { span("mut num") { +it } }
+                        if (use == CabinetUse.NEVER) span("mut num") { +AdminFormat.issued(v.issued, cab.today) }
+                        if (v.closed) span("mut") { +AdminFormat.CABINET_CLOSED }
+                    }
+                }
+            }
+        }
+        p("mut") { +AdminFormat.visitsNote(cab.since) }
     }
 
     /** «Открыто: Копия на сервере — до 31.12.2026» (как в «Аккаунте» тренера) или «Ничего не открыто». */

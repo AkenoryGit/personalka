@@ -691,4 +691,84 @@ class CabinetTest {
     }
 
     private fun JsonObject.withTime(at: Long) = JsonObject(this + ("updated_at" to kotlinx.serialization.json.JsonPrimitive(at)))
+
+    // --- Посещения для админки (шаг 5.35) ---
+
+    private suspend fun visits(db: Database): List<Pair<String, Int>> = db.tx { c ->
+        c.query("SELECT day, visits FROM cabinet_visit ORDER BY day") { it.getString(1) to it.getInt(2) }
+    }
+
+    /** Cookie админки без пароля и кода (их проверяет AdminSiteTest): сессия — прямо в базе. */
+    private suspend fun adminCookie(db: Database, coachId: String): String {
+        val session = "admin-session-for-cabinet-visits-test-000001"
+        db.tx { c ->
+            c.update(
+                "INSERT INTO admin_session (token_hash, coach_id, csrf, expires_at) VALUES (?, ?, 'csrf', now() + interval '1 hour')",
+                Accounts.tokenHash(session), coachId,
+            )
+        }
+        return "${AdminSessions.COOKIE}=$session"
+    }
+
+    @Test
+    fun visitsAreCountedByHalfHourAndDay() = withServer { db ->
+        val (token, link) = setUp(db)
+        client.get("/c/$link").html()
+        clock += 29 * 60_000L
+        client.get("/c/$link?d=50-freestyle-25").html()
+        assertEquals(listOf("2026-10-20" to 1), visits(db), "листают график — то же посещение")
+        clock += 30 * 60_000L
+        client.get("/c/$link").html()
+        client.get("/p/${client.previewToken(token)}").html()
+        assertEquals(listOf("2026-10-20" to 2), visits(db), "через полчаса — новое; предпросмотр не в счёт")
+        clock += 24 * 60 * 60_000L
+        client.get("/c/$link").html()
+        assertEquals(listOf("2026-10-20" to 2, "2026-10-21" to 1), visits(db))
+        // Новая ссылка историю клиента не сбрасывает.
+        val fresh = client.issue(token, childId(0))
+        clock += 60_000L
+        client.get("/c/$fresh").html()
+        assertEquals(listOf("2026-10-20" to 2, "2026-10-21" to 2), visits(db))
+    }
+
+    @Test
+    fun adminSeesOwnClientsByNameAndColleaguesOnlyAsNumbers() = withServer { db ->
+        val (token, link) = setUp(db)
+        client.get("/c/$link").html()
+        clock += 24 * 60 * 60_000L
+        client.get("/c/$link").html()
+        client.issue(token, childId(1))
+        val adminId = db.tx { c -> c.queryOne("SELECT id FROM coach WHERE email = ?", admin) { it.getString(1) }!! }
+
+        // Коллега: свой клиент, ссылка, одно открытие.
+        val (lena, lenaId) = signUp(db, "lena@example.ru", features = listOf("server_copy", "cabinets"))
+        client.push(
+            lena,
+            listOf(
+                row("coach_settings", "settings-lena") { put("coachId", lenaId); put("cabinetsEnabled", 1) },
+                row("client", "client-lena") { put("lastName", "Колесова"); put("firstName", "Вера"); put("cabinetEnabled", 1); put("status", "ACTIVE") },
+            ),
+        )
+        val lenaLink = client.issue(lena, "client-lena")
+        assertEquals(HttpStatusCode.SeeOther, consent(lenaLink, name = "Колесов Пётр").status)
+        client.get("/c/$lenaLink").html()
+
+        val cookie = adminCookie(db, adminId)
+        val main = client.get("/admin") { header(HttpHeaders.Cookie, cookie) }.html()
+        assertTrue("Кабинеты: 1 из 2 открывали за 30${RuText.NBSP}дней, 1${RuText.NBSP}— ни разу" in main, main)
+        assertTrue("Кабинеты: 1 из 1 открывали за 30${RuText.NBSP}дней" in main, "строка коллеги — только числа")
+        assertFalse("Данилова" in main || "Колесова" in main, "на главной имён нет")
+
+        val own = client.get("/admin/coaches/$adminId") { header(HttpHeaders.Cookie, cookie) }.html()
+        listOf(
+            "Кабинеты клиентов", "Заходят · 1", "Данилова Ева", "Последний раз открывали: сегодня, 15:41",
+            "2${RuText.NBSP}дня из 30 · 2${RuText.NBSP}посещения", "Ни разу не открывали · 1", "Беляев Тимофей", "Ссылка выдана 21.10",
+        ).forEach { assertTrue(it in own, it) }
+        assertFalse("Колесова" in own)
+
+        val colleague = client.get("/admin/coaches/$lenaId") { header(HttpHeaders.Cookie, cookie) }.html()
+        assertTrue("Кабинеты: 1 из 1 открывали за 30${RuText.NBSP}дней" in colleague, colleague)
+        assertTrue("Имена клиентов коллеги здесь не видны" in colleague)
+        listOf("Колесова", "Вера", "Колесов Пётр", "Заходят").forEach { assertFalse(it in colleague, "у коллеги не должно быть «$it»") }
+    }
 }

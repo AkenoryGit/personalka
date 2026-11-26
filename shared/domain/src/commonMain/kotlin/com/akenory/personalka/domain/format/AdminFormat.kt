@@ -2,6 +2,10 @@ package com.akenory.personalka.domain.format
 
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.Feature
+import com.akenory.personalka.domain.cabinet.CabinetUsage
+import com.akenory.personalka.domain.cabinet.CabinetUse
+import com.akenory.personalka.domain.cabinet.CabinetUseLine
+import com.akenory.personalka.domain.cabinet.CabinetVisitRules
 import com.akenory.personalka.domain.format.RuText.NBSP
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -143,6 +147,64 @@ object AdminFormat {
     }
 
     private const val GB = 1024L * 1024 * 1024
+
+    // --- Кабинеты клиентов (шаг 5.35) ---
+
+    const val CABINETS = "Кабинеты клиентов"
+    const val CABINETS_NONE = "Ссылок на кабинеты пока нет"
+    const val CABINETS_COLLEAGUE =
+        "Имена клиентов коллеги здесь не видны — только числа. Когда открывали кабинет каждого клиента, " +
+            "тренер видит в приложении: окно «Кабинет» в карточке клиента."
+    const val CABINET_CLOSED = "Кабинет закрыт — ссылка не открывается"
+    const val NO_NAME = "Клиент без имени"
+
+    /** Заголовок группы: «Заходят · 7», «Давно не заходили · 2», «Ни разу не открывали · 3». */
+    fun useTitle(use: CabinetUse, count: Int): String = when (use) {
+        CabinetUse.ACTIVE -> "Заходят"
+        CabinetUse.IDLE -> "Давно не заходили"
+        CabinetUse.NEVER -> "Ни разу не открывали"
+    } + DOT + count
+
+    /**
+     * Строка под тренером и над списком кабинетов: «Кабинеты: 7 из 12 открывали за 30 дней, 2 — давно, 3 — ни разу»;
+     * нулевые части не пишутся; кабинетов нет — null.
+     */
+    fun usage(u: CabinetUsage): String? {
+        if (u.total == 0) return null
+        val parts = listOfNotNull(
+            "Кабинеты: ${u.active} из ${u.total} открывали за ${CabinetVisitRules.RECENT_DAYS}${NBSP}дней",
+            u.idle.takeIf { it > 0 }?.let { "$it${NBSP}— давно" },
+            u.never.takeIf { it > 0 }?.let { "$it${NBSP}— ни разу" },
+        )
+        return parts.joinToString(", ")
+    }
+
+    /**
+     * Как часто заходят: «4 дня из 30 · 5 посещений · всего 23» (всего — когда больше, чем за 30 дней); за 30 дней
+     * не заходили — «За 30 дней не заходили · всего 23 посещения»; посещений ещё не считали — null.
+     */
+    fun visits(line: CabinetUseLine): String? {
+        if (line.total == 0) return null
+        val window = CabinetVisitRules.RECENT_DAYS
+        if (line.recent == 0) return "За $window${NBSP}дней не заходили" + DOT + "всего " + visitCount(line.total)
+        val parts = listOfNotNull(
+            RuText.count(line.recentDays, "день", "дня", "дней") + " из $window",
+            visitCount(line.recent),
+            line.total.takeIf { it > line.recent }?.let { "всего $it" },
+        )
+        return parts.joinToString(DOT)
+    }
+
+    /** «Ссылка выдана 03.11»; прошлый год — «Ссылка выдана 22.10.2025». */
+    fun issued(date: LocalDate, today: LocalDate): String =
+        "Ссылка выдана " + if (date.year == today.year) DateFormat.dayMonth(date) else DateFormat.full(date)
+
+    /** Пояснение под списком: что считается посещением и с какого дня их считают ([since] — null, если неизвестно). */
+    fun visitsNote(since: LocalDate?): String =
+        "Посещение — открытие кабинета по ссылке; открытия в течение ${CabinetVisitRules.NEW_VISIT_MINUTES}${NBSP}минут — " +
+            "одно посещение, «Как видит родитель» не в счёт." + (since?.let { " Посещения считаются с ${DateFormat.full(it)}." } ?: "")
+
+    private fun visitCount(n: Int): String = RuText.count(n, "посещение", "посещения", "посещений")
 }
 
 /** Что показывает строка «Сервер» в админке: [backup] — последняя ночная копия базы из `backup-status` (ТЗ 7.5). */

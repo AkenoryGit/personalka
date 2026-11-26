@@ -5,6 +5,8 @@ import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.cabinet.CabinetInput
 import com.akenory.personalka.domain.cabinet.CabinetTraining
+import com.akenory.personalka.domain.cabinet.CabinetVisitRules
+import com.akenory.personalka.domain.cabinet.CabinetVisits
 import com.akenory.personalka.domain.cabinet.ConsentRules
 import com.akenory.personalka.domain.cabinet.ConsentScreen
 import com.akenory.personalka.domain.cabinet.ConsentSubmit
@@ -246,9 +248,69 @@ class Cabinets(
         return PinCheck.Wrong(PIN_ATTEMPTS - failed)
     }
 
-    /** Родитель открыл кабинет — видно тренеру (3.7). */
+    /**
+     * Родитель открыл кабинет — видно тренеру (3.7). Если с прошлого открытия этой ссылки прошло
+     * [CabinetVisitRules.NEW_VISIT_MINUTES] минут и больше — ещё одно посещение в счёт дня клуба (шаг 5.35).
+     * Строка ссылки блокируется: два запроса сразу не посчитают одно посещение дважды.
+     */
     fun opened(c: Connection, access: CabinetAccess) {
-        c.update("UPDATE cabinet_access SET last_opened_at = ? WHERE id = ?", at(now()), access.id)
+        val now = now()
+        val previous = c.queryOne("SELECT last_opened_at FROM cabinet_access WHERE id = ? FOR UPDATE", access.id) {
+            it.getObject(1, OffsetDateTime::class.java)?.toInstant()?.toEpochMilli()
+        }
+        c.update("UPDATE cabinet_access SET last_opened_at = ? WHERE id = ?", at(now), access.id)
+        if (!CabinetVisitRules.newVisit(previous, now)) return
+        c.update(
+            """
+            INSERT INTO cabinet_visit (coach_id, client_id, day, visits) VALUES (?, ?, ?, 1)
+            ON CONFLICT (coach_id, client_id, day) DO UPDATE SET visits = cabinet_visit.visits + 1
+            """.trimIndent(),
+            access.coachId, access.clientId, java.time.LocalDate.parse(ClubTime.today(now).toString()),
+        )
+    }
+
+    // --- Посещения для админки (шаг 5.35) ---
+
+    /** С какого дня клуба считаются посещения: день обновления сервера, в котором они появились. */
+    fun visitsSince(c: Connection): LocalDate? =
+        c.queryOne("SELECT min(at) FROM cabinet_visit_since") { it.getObject(1, OffsetDateTime::class.java) }
+            ?.let { ClubTime.today(it.toInstant().toEpochMilli()) }
+
+    /**
+     * Кабинеты с действующей ссылкой — тренера [coachId] или всех (null), по тренерам: день выдачи ссылки, последнее
+     * открытие по всем ссылкам клиента и посещения по дням. Имена и «закрыт» ([withNames]) читаются из записей
+     * тренера — только для своих клиентов администратора: данных коллег админка не видит (5.17).
+     */
+    fun visits(c: Connection, coachId: String?, withNames: Boolean = false): Map<String, List<CabinetVisits>> {
+        val only = if (coachId == null) "" else " AND a.coach_id = ?"
+        val args = listOfNotNull(coachId).toTypedArray()
+        val links = c.query(
+            """
+            SELECT a.coach_id, a.client_id, a.created_at,
+                   (SELECT max(b.last_opened_at) FROM cabinet_access b WHERE b.coach_id = a.coach_id AND b.client_id = a.client_id)
+            FROM cabinet_access a WHERE a.revoked_at IS NULL$only
+            """.trimIndent(),
+            *args,
+        ) {
+            Triple(it.getString(1), it.getString(2), it.getObject(3, OffsetDateTime::class.java) to it.getObject(4, OffsetDateTime::class.java))
+        }
+        val days = c.query(
+            "SELECT coach_id, client_id, day, visits FROM cabinet_visit a WHERE true$only",
+            *args,
+        ) { (it.getString(1) to it.getString(2)) to (LocalDate.parse(it.getString(3)) to it.getInt(4)) }
+            .groupBy({ it.first }, { it.second })
+        val cabinetsOn = if (withNames && coachId != null) row(c, coachId, "coach_settings", "coachId", coachId)?.flag("cabinetsEnabled") == true else true
+        return links.map { (coach, client, times) ->
+            val record = if (withNames) row(c, coach, "client", "id", client) else null
+            coach to CabinetVisits(
+                clientId = client,
+                issued = ClubTime.today(times.first.toInstant().toEpochMilli()),
+                lastOpened = times.second?.let { ClubTime.now(it.toInstant().toEpochMilli()) },
+                days = days[coach to client].orEmpty().toMap(),
+                name = record?.let(::clientName)?.takeIf { it.isNotBlank() },
+                closed = withNames && (!cabinetsOn || record == null || !record.flag("cabinetEnabled")),
+            )
+        }.groupBy({ it.first }, { it.second })
     }
 
     // --- Согласие (6.1, 3.7) ---

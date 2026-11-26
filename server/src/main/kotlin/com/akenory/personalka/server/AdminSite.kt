@@ -4,6 +4,9 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.account.FeatureGrant
+import com.akenory.personalka.domain.cabinet.CabinetUsage
+import com.akenory.personalka.domain.cabinet.CabinetVisitRules
+import com.akenory.personalka.domain.cabinet.CabinetVisits
 import com.akenory.personalka.domain.format.DateFormat
 import com.akenory.personalka.domain.format.AdminFormat
 import com.akenory.personalka.domain.format.ServerStatus
@@ -113,10 +116,20 @@ class AdminSessions(private val accounts: Accounts, private val random: SecureRa
  * Администратор — только почта из `TRENER_ADMIN_EMAIL` (отметка в базе её не заменит). Пароль и код считаются
  * попытками входа (5 в минуту на почту и на IP), у кода — 5 попыток. Каждый вход и действие пишутся в журнал.
  */
-fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit, server: ServerState) {
+fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit, server: ServerState, cabinets: Cabinets) {
     val accounts = auth.accounts
     val codes = auth.codes
     val sessions = AdminSessions(accounts)
+
+    // Кабинеты тренера (шаг 5.35): у своих клиентов администратора — с именами, у коллег — только числа.
+    fun cabinetsOf(c: Connection, session: AdminSession, coachId: String): AdminCabinets {
+        val own = coachId == session.coach.id
+        val list = cabinets.visits(c, coachId, withNames = own)[coachId].orEmpty()
+        return AdminCabinets(own, ClubTime.today(cabinets.now()), list, cabinets.visitsSince(c))
+    }
+
+    fun coachPage(c: Connection, session: AdminSession, summary: CoachSummary, grants: List<FeatureGrant>, error: String? = null) =
+        AdminCoachPage(session, summary, grants, error, cabinetsOf(c, session, summary.coach.id))
 
     get(AdminHtml.CSS_PATH) {
         val css = ADMIN_CSS ?: return@get call.respondText("", ContentType.Text.CSS, HttpStatusCode.NotFound)
@@ -129,7 +142,12 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit, server: Se
         val page = database.tx { c ->
             val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
             val coaches = accounts.summaries(c)
-            AdminPage(session, coaches, sessions.recent(c), coaches.associate { it.coach.id to accounts.grants(c, it.coach) }, accounts.defaults(c), server.read())
+            val today = ClubTime.today(cabinets.now())
+            val usage = cabinets.visits(c, null).mapValues { (_, list) -> CabinetVisitRules.usage(list, today) }
+            AdminPage(
+                session, coaches, sessions.recent(c), coaches.associate { it.coach.id to accounts.grants(c, it.coach) }, accounts.defaults(c), server.read(),
+                usage,
+            )
         }
         if (page == null) call.adminHtml { AdminHtml.login(this, null) } else call.adminHtml { AdminHtml.coaches(this, page, ClubTime.now(System.currentTimeMillis())) }
     }
@@ -241,7 +259,7 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit, server: Se
         val page = database.tx { c ->
             val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
             val summary = accounts.summaries(c).firstOrNull { it.coach.id == id }
-            summary?.let { AdminCoachPage(session, it, accounts.grants(c, it.coach)) } ?: false
+            summary?.let { coachPage(c, session, it, accounts.grants(c, it.coach)) } ?: false
         }
         when (page) {
             null -> call.adminHtml { AdminHtml.login(this, null) }
@@ -263,7 +281,7 @@ fun Route.adminSite(database: Database, auth: Auth, limit: RateLimit, server: Se
             val session = sessions.find(c, call.request.cookies[AdminSessions.COOKIE]) ?: return@tx null
             if (!sameText(session.csrf, form["csrf"])) return@tx false
             val summary = accounts.summaries(c).firstOrNull { it.coach.id == id } ?: return@tx true
-            if (badDate) return@tx AdminCoachPage(session, summary, grants, AdminFormat.BAD_DATE)
+            if (badDate) return@tx coachPage(c, session, summary, grants, AdminFormat.BAD_DATE)
             accounts.setGrants(c, id, grants)
             val open = Feature.entries.filter { it in picked }.associateWith { parsed[it] }
             sessions.log(c, session.coach, AdminSessions.FEATURES, summary.coach.displayName + " · " + AdminFormat.features(open), call.clientIp())
@@ -309,10 +327,24 @@ data class AdminPage(
     val defaults: Set<Feature>,
     /** Строка «Сервер» над тренерами (шаг 5.3). */
     val server: ServerStatus,
+    /** Кабинеты каждого тренера — только числа (шаг 5.35); нет ссылок — тренера нет в словаре. */
+    val usage: Map<String, CabinetUsage> = emptyMap(),
 )
 
-/** Страница тренера: его возможности; [error] — что не так с формой. */
-data class AdminCoachPage(val session: AdminSession, val coach: CoachSummary, val grants: List<FeatureGrant>, val error: String? = null)
+/** Страница тренера: его возможности и кабинеты клиентов; [error] — что не так с формой. */
+data class AdminCoachPage(
+    val session: AdminSession,
+    val coach: CoachSummary,
+    val grants: List<FeatureGrant>,
+    val error: String? = null,
+    val cabinets: AdminCabinets,
+)
+
+/**
+ * Кабинеты клиентов тренера (шаг 5.35): [own] — свои клиенты администратора, тогда в [list] есть имена; у коллег —
+ * только числа. [since] — с какого дня считаются посещения.
+ */
+data class AdminCabinets(val own: Boolean, val today: kotlinx.datetime.LocalDate, val list: List<CabinetVisits>, val since: kotlinx.datetime.LocalDate?)
 
 private sealed interface AdminCode {
     data class Ok(val token: String) : AdminCode

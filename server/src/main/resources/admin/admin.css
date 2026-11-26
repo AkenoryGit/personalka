@@ -17,3 +17,5 @@
 .adm-until .inp{height:48px;max-width:220px}
 /* Шаг 5.3: строка «Сервер» над тренерами; при сбое — .msg (цвет ошибки). */
 .adm-srv{margin:0 0 8px;overflow-wrap:anywhere}
+/* Шаг 5.35: кабинеты клиентов — строка под тренером ведёт к списку на его странице. */
+.adm-use{text-decoration:underline;text-underline-offset:3px}
