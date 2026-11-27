@@ -9,6 +9,8 @@ import kotlinx.datetime.minus
  * Кабинет одного клиента в админке (шаг 5.35): [issued] — день выдачи действующей ссылки, [lastOpened] — последнее
  * открытие (по всем ссылкам клиента, по клубу), [days] — посещения по дням клуба; [name] — имя, только у своих
  * клиентов администратора (у коллег — null), [closed] — кабинет выключен у клиента или клиент удалён.
+ * «Фото и видео» (шаг 5.36): [lastMedia] — последний переход по ссылке из кабинета, [media] — переходы по дням,
+ * [mediaShown] — ссылка сейчас есть в кабинете (адрес у клиента и согласие на фото; только у своих клиентов).
  */
 data class CabinetVisits(
     val clientId: String,
@@ -17,13 +19,26 @@ data class CabinetVisits(
     val days: Map<LocalDate, Int>,
     val name: String? = null,
     val closed: Boolean = false,
+    val lastMedia: LocalDateTime? = null,
+    val media: Map<LocalDate, Int> = emptyMap(),
+    val mediaShown: Boolean = false,
 )
 
 /** Как пользуются кабинетом: заходили за [CabinetVisitRules.RECENT_DAYS] дней, давно или ни разу. */
 enum class CabinetUse { ACTIVE, IDLE, NEVER }
 
-/** Строка кабинета: [recent] — посещений за 30 дней, [recentDays] — в сколько разных дней, [total] — всего. */
-data class CabinetUseLine(val visits: CabinetVisits, val use: CabinetUse, val recent: Int, val recentDays: Int, val total: Int)
+/**
+ * Строка кабинета: [recent] — посещений за 30 дней, [recentDays] — в сколько разных дней, [total] — всего;
+ * [mediaRecent] — переходов на «Фото и видео» за 30 дней.
+ */
+data class CabinetUseLine(
+    val visits: CabinetVisits,
+    val use: CabinetUse,
+    val recent: Int,
+    val recentDays: Int,
+    val total: Int,
+    val mediaRecent: Int = 0,
+)
 
 /** Итог кабинетов тренера для строки в админке. */
 data class CabinetUsage(val total: Int, val active: Int, val idle: Int, val never: Int)
@@ -32,6 +47,7 @@ data class CabinetUsage(val total: Int, val active: Int, val idle: Int, val neve
  * Посещения кабинетов (шаг 5.35, просьба Дмитрия 26.11.2026: видеть в админке, кто пользуется кабинетом, а кто нет).
  * Посещение — открытие кабинета по ссылке; повторные открытия меньше чем через [NEW_VISIT_MINUTES] минут после
  * предыдущего — то же посещение (листание графика, обновление страницы). «Как видит родитель» не считается (6.4).
+ * Переходы на «Фото и видео» (шаг 5.36) считаются тем же правилом — по своему времени последнего перехода.
  */
 object CabinetVisitRules {
     const val NEW_VISIT_MINUTES = 30
@@ -53,7 +69,8 @@ object CabinetVisitRules {
     fun line(v: CabinetVisits, today: LocalDate): CabinetUseLine {
         val from = recentFrom(today)
         val recent = v.days.filterKeys { it in from..today }.values.filter { it > 0 }
-        return CabinetUseLine(v, use(v, today), recent.sum(), recent.size, v.days.values.sum())
+        val media = v.media.filterKeys { it in from..today }.values.sum()
+        return CabinetUseLine(v, use(v, today), recent.sum(), recent.size, v.days.values.sum(), media)
     }
 
     fun usage(list: List<CabinetVisits>, today: LocalDate): CabinetUsage {

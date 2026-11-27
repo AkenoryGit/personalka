@@ -118,6 +118,22 @@ class AdminFormatTest {
     }
 
     @Test
+    fun mediaLine() {
+        val opened = LocalDateTime(2026, 11, 25, 21, 14)
+        fun media(last: LocalDateTime?, shown: Boolean, recent: Int, use: CabinetUse = CabinetUse.ACTIVE) = AdminFormat.media(
+            CabinetUseLine(CabinetVisits("c", LocalDate(2026, 10, 1), opened, emptyMap(), lastMedia = last, mediaShown = shown), use, 1, 1, 1, recent),
+            today,
+        )
+        assertEquals("Фото и видео открывали: вчера, 21:14 · 3${NBSP}раза за 30${NBSP}дней", media(opened, shown = true, recent = 3))
+        assertEquals("Фото и видео открывали: вчера, 21:14 · 1${NBSP}раз за 30${NBSP}дней", media(opened, shown = true, recent = 1))
+        // Давно — без числа; ссылку уже убрали, а переход был — время всё равно видно.
+        assertEquals("Фото и видео открывали: 22.10.2025, 09:05", media(LocalDateTime(2025, 10, 22, 9, 5), shown = false, recent = 0))
+        assertEquals("Фото и видео ещё не открывали", media(null, shown = true, recent = 0))
+        assertEquals(null, media(null, shown = false, recent = 0), "ссылки в кабинете нет — строки нет")
+        assertEquals(null, media(null, shown = true, recent = 0, use = CabinetUse.NEVER), "кабинет ни разу не открывали — и так ясно")
+    }
+
+    @Test
     fun cabinetTitlesAndNotes() {
         assertEquals("Заходят · 7", AdminFormat.useTitle(CabinetUse.ACTIVE, 7))
         assertEquals("Давно не заходили · 2", AdminFormat.useTitle(CabinetUse.IDLE, 2))

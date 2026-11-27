@@ -201,7 +201,8 @@ object AdminHtml {
 
     /**
      * «Кабинеты клиентов» на странице тренера (шаг 5.35): итог, у своих клиентов — списки «Заходят», «Давно не
-     * заходили», «Ни разу не открывали» с именами; у коллег — только итог, имён нет (5.17).
+     * заходили», «Ни разу не открывали» с именами и переходами на «Фото и видео» (5.36); у коллег — только итог,
+     * имён нет (5.17).
      */
     private fun FlowContent.cabinets(cab: AdminCabinets) = section("sec") {
         id = CABINETS_ID
@@ -225,6 +226,7 @@ object AdminHtml {
                         span("b") { +(v.name ?: AdminFormat.NO_NAME) }
                         span("mut num") { +CabinetLinkFormat.lastOpened(v.lastOpened, cab.today) }
                         AdminFormat.visits(line)?.let { span("mut num") { +it } }
+                        AdminFormat.media(line, cab.today)?.let { span("mut num") { +it } }
                         if (use == CabinetUse.NEVER) span("mut num") { +AdminFormat.issued(v.issued, cab.today) }
                         if (v.closed) span("mut") { +AdminFormat.CABINET_CLOSED }
                     }
@@ -232,6 +234,7 @@ object AdminHtml {
             }
         }
         p("mut") { +AdminFormat.visitsNote(cab.since) }
+        if (cab.list.any { it.lastMedia != null || it.mediaShown }) p("mut") { +AdminFormat.MEDIA_NOTE }
     }
 
     /** «Открыто: Копия на сервере — до 31.12.2026» (как в «Аккаунте» тренера) или «Ничего не открыто». */

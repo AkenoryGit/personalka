@@ -204,6 +204,24 @@ object AdminFormat {
         "Посещение — открытие кабинета по ссылке; открытия в течение ${CabinetVisitRules.NEW_VISIT_MINUTES}${NBSP}минут — " +
             "одно посещение, «Как видит родитель» не в счёт." + (since?.let { " Посещения считаются с ${DateFormat.full(it)}." } ?: "")
 
+    const val MEDIA_NEVER = "Фото и видео ещё не открывали"
+    const val MEDIA_NOTE =
+        "«Фото и видео» — нажатия на ссылку в кабинете (в течение 30\u00A0минут — одно). Сколько смотрели сам альбом, " +
+            "не видно: он в облаке тренера."
+
+    /**
+     * Переходы на «Фото и видео» (шаг 5.36): «Фото и видео открывали: вчера, 21:14 · 3 раза за 30 дней» (число — когда
+     * были за 30 дней); ссылка в кабинете есть, а не нажимали — [MEDIA_NEVER]; ссылки нет или кабинет ни разу не
+     * открывали (и так ясно) — null.
+     */
+    fun media(line: CabinetUseLine, today: LocalDate): String? {
+        val v = line.visits
+        val last = v.lastMedia ?: return MEDIA_NEVER.takeIf { v.mediaShown && line.use != CabinetUse.NEVER }
+        val count = line.mediaRecent.takeIf { it > 0 }
+            ?.let { DOT + RuText.count(it, "раз", "раза", "раз") + " за ${CabinetVisitRules.RECENT_DAYS}${NBSP}дней" }
+        return "Фото и видео открывали: " + CabinetLinkFormat.moment(last, today) + count.orEmpty()
+    }
+
     private fun visitCount(n: Int): String = RuText.count(n, "посещение", "посещения", "посещений")
 }
 

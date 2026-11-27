@@ -63,7 +63,12 @@ import kotlinx.html.ul
 import kotlinx.html.unsafe
 
 /** Адреса подвала кабинета: политика тренера и отзыв согласия; [revoke] `null` — предпросмотр тренера (6.4), там не нажать. */
-data class CabinetLinks(val policy: String, val revoke: String?)
+data class CabinetLinks(
+    val policy: String,
+    val revoke: String?,
+    /** «Фото и видео» через сервер (шаг 5.36): переход запоминается для админки. В предпросмотре null — прямо на альбом. */
+    val media: String? = null,
+)
 
 /**
  * HTML кабинета родителя (ТЗ 6.3, макеты 0.7): без JavaScript — сворачивание на `<details>`, код — обычной формой;
@@ -138,7 +143,7 @@ object CabinetHtml {
         page.media?.let { media ->
             section("sec") {
                 attributes["aria-label"] = CabinetFormat.MEDIA
-                a(href = media.url, classes = "card media") {
+                a(href = links.media ?: media.url, classes = "card media") {
                     attributes["rel"] = "noopener noreferrer"
                     attributes["target"] = "_blank"
                     unsafe { +PHOTO_ICON }

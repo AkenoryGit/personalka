@@ -611,7 +611,9 @@ class CabinetTest {
         consent(photo, photo = true)
         val shown = client.get("/c/$photo").html()
         assertTrue("Фото и видео" in shown && "Откроется Яндекс Диск" in shown)
-        assertTrue("href=\"https://disk.yandex.ru/d/kQ7x\"" in shown && "rel=\"noopener noreferrer\"" in shown)
+        // Ссылка — через сервер (шаг 5.36): адрес альбома в странице не виден, переход запоминается.
+        assertTrue("href=\"/c/$photo/media\"" in shown && "rel=\"noopener noreferrer\"" in shown)
+        assertFalse("disk.yandex.ru/d/kQ7x" in shown)
         assertTrue(shown.indexOf("Фото и видео") < shown.indexOf("<footer"), "«Фото и видео» — перед подвалом")
         val consents = client.get("/api/v1/cabinets") { header(HttpHeaders.Authorization, "Bearer $token") }.obj()["consents"]!!.jsonArray
         assertEquals(mapOf(childId(0) to "false", childId(1) to "true"), consents.associate { it.jsonObject["client_id"]!!.jsonPrimitive.content to it.jsonObject["photo"]!!.jsonPrimitive.content })
@@ -770,5 +772,57 @@ class CabinetTest {
         assertTrue("Кабинеты: 1 из 1 открывали за 30${RuText.NBSP}дней" in colleague, colleague)
         assertTrue("Имена клиентов коллеги здесь не видны" in colleague)
         listOf("Колесова", "Вера", "Колесов Пётр", "Заходят").forEach { assertFalse(it in colleague, "у коллеги не должно быть «$it»") }
+    }
+
+    @Test
+    fun photoLinkGoesThroughServerAndAdminSeesLastClick() = withServer { db ->
+        val (token, coachId) = signUp(db)
+        client.push(token, data(coachId))
+        client.push(
+            token,
+            (0..3).map { i ->
+                row("client", childId(i)) {
+                    put("lastName", children[i].first); put("firstName", children[i].second); put("cabinetEnabled", 1); put("mediaUrl", "https://disk.yandex.ru/d/kQ7x")
+                }.withTime(clock)
+            },
+        )
+        val direct = createClient { followRedirects = false }
+        val link = client.issue(token, childId(0))
+        consent(link, photo = true)
+        client.get("/c/$link").html()
+
+        val first = direct.get("/c/$link/media")
+        assertEquals(HttpStatusCode.SeeOther, first.status)
+        assertEquals("https://disk.yandex.ru/d/kQ7x", first.headers[HttpHeaders.Location])
+        assertEquals("no-referrer", first.headers["Referrer-Policy"])
+        clock += 10 * 60_000L
+        direct.get("/c/$link/media")
+        suspend fun media() = db.tx { c -> c.query("SELECT day, visits, media FROM cabinet_visit ORDER BY day") { Triple(it.getString(1), it.getInt(2), it.getInt(3)) } }
+        assertEquals(listOf(Triple("2026-10-20", 1, 1)), media(), "нажатия в течение 30 минут — один переход")
+
+        // Без согласия на фото и без введённого кода — обратно в кабинет, переход не пишется.
+        val noPhoto = client.issue(token, childId(1))
+        consent(noPhoto, photo = false)
+        assertEquals("/c/$noPhoto", direct.get("/c/$noPhoto/media").headers[HttpHeaders.Location])
+        val withPin = client.issue(token, childId(2), pin = "4721")
+        assertEquals("/c/$withPin", direct.get("/c/$withPin/media").headers[HttpHeaders.Location])
+        assertEquals(HttpStatusCode.NotFound, direct.get("/c/${"x".repeat(43)}/media").status)
+        assertEquals(listOf(Triple("2026-10-20", 1, 1)), media())
+
+        // Предпросмотр тренера ведёт прямо на альбом: не через сервер и не в счёт (6.4).
+        assertTrue("href=\"https://disk.yandex.ru/d/kQ7x\"" in client.get("/p/${client.previewToken(token)}").html())
+
+        // Открыли кабинет, но на фото не переходили.
+        val opened = client.issue(token, childId(3))
+        consent(opened, photo = true)
+        client.get("/c/$opened").html()
+
+        val cookie = adminCookie(db, coachId)
+        val own = client.get("/admin/coaches/$coachId") { header(HttpHeaders.Cookie, cookie) }.html()
+        listOf(
+            "Фото и видео открывали: сегодня, 15:51 · 1${RuText.NBSP}раз за 30${RuText.NBSP}дней",
+            "Фото и видео ещё не открывали",
+            "Сколько смотрели сам альбом, не видно",
+        ).forEach { assertTrue(it in own, it) }
     }
 }

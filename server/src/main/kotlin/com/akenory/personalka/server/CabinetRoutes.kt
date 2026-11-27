@@ -113,9 +113,29 @@ fun Route.cabinets(database: Database, auth: Auth, cabinets: Cabinets, limit: Ra
                 is CabinetView.Code -> call.cabinetHtml { CabinetHtml.code(this, "/c/$token/pin", page.error, page.blocked) }
                 is CabinetView.Consent -> call.cabinetHtml { CabinetHtml.consent(this, page.screen, "/c/$token/consent", policyPath(page.coachId)) }
                 is CabinetView.Page -> call.cabinetHtml {
-                    CabinetHtml.page(this, page.page, CabinetLinks(policy = policyPath(page.coachId), revoke = "/c/$token/revoke"))
+                    CabinetHtml.page(this, page.page, CabinetLinks(policy = policyPath(page.coachId), revoke = "/c/$token/revoke", media = "/c/$token/media"))
                 }
             }
+        }
+
+        // «Фото и видео» (шаг 5.36): сервер запоминает переход (для админки) и отправляет на альбом в облаке тренера.
+        // Те же проверки, что у страницы: ссылка действует, код введён, есть согласие на фото и адрес http(s);
+        // иначе — обратно в кабинет, он сам покажет код или согласие.
+        get("/media") {
+            if (!call.withinLimit(limit)) return@get
+            val token = call.parameters["token"].orEmpty()
+            val pass = call.request.cookies[PASS_COOKIE]
+            val target = database.tx { c ->
+                val access = cabinets.open(c, accounts, token) ?: return@tx null
+                if (access.pinHash != null && !cabinets.passValid(c, access, pass)) return@tx "/c/$token"
+                val consent = cabinets.consent(c, access) ?: return@tx "/c/$token"
+                val url = cabinets.mediaUrl(c, access, consent) ?: return@tx "/c/$token"
+                cabinets.mediaOpened(c, access)
+                url
+            } ?: return@get call.invalid()
+            call.cabinetHeaders()
+            call.response.header(HttpHeaders.Location, asciiUrl(target))
+            call.respond(HttpStatusCode.SeeOther)
         }
 
         // Согласие (6.1): без JavaScript — кнопка всегда активна, без галочки тот же экран с подсказкой.
@@ -418,6 +438,17 @@ fun ApplicationCall.cabinetHeaders() {
     response.header(HttpHeaders.CacheControl, "private, no-store")
     response.header("X-Content-Type-Options", "nosniff")
     response.header("X-Frame-Options", "DENY")
+}
+
+/**
+ * Адрес для заголовка Location: всё вне видимых ASCII (кириллица в пути, пробелы, переводы строк) — в %XX по UTF-8.
+ * Ссылку на альбом вписывает тренер — так заголовок не сломается и в него ничего не допишешь.
+ */
+internal fun asciiUrl(url: String): String = buildString {
+    for (b in url.toByteArray(Charsets.UTF_8)) {
+        val code = b.toInt() and 0xFF
+        if (code in 0x21..0x7E) append(code.toChar()) else append('%').append("%02X".format(code))
+    }
 }
 
 private suspend fun ApplicationCall.seeOther(token: String) {

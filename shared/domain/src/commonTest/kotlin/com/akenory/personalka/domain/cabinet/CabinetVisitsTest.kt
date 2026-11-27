@@ -52,6 +52,15 @@ class CabinetVisitsTest {
     }
 
     @Test
+    fun mediaClicksInWindow() {
+        val v = cabinet("a", null, LocalDateTime(2026, 11, 26, 7, 40)).copy(
+            lastMedia = LocalDateTime(2026, 11, 25, 21, 14),
+            media = mapOf(LocalDate(2026, 11, 25) to 2, LocalDate(2026, 10, 27) to 1),
+        )
+        assertEquals(2, CabinetVisitRules.line(v, today).mediaRecent, "27.10 — за окном 30 дней")
+    }
+
+    @Test
     fun groupsAndOrder() {
         val list = listOf(
             cabinet("1", "Яковлева Алиса", null, issued = LocalDate(2026, 11, 20)),

@@ -38,15 +38,18 @@ object CabinetLinkFormat {
     fun codeOn(pin: String?): String = if (pin == null) "Спрашивается при входе" else "$pin · спрашивается при входе"
 
     /** «Последний раз открывали: вчера, 21:14»; не открывали — «Ещё не открывали». */
-    fun lastOpened(time: LocalDateTime?, today: LocalDate): String {
-        if (time == null) return NEVER_OPENED
+    fun lastOpened(time: LocalDateTime?, today: LocalDate): String =
+        if (time == null) NEVER_OPENED else "Последний раз открывали: " + moment(time, today)
+
+    /** «сегодня, 21:14», «вчера, 21:14», «вт 18.11, 21:14», прошлый год — «22.10.2025, 21:14». */
+    fun moment(time: LocalDateTime, today: LocalDate): String {
         val day = when {
             time.date == today -> "сегодня"
             time.date.toEpochDays() == today.toEpochDays() - 1 -> "вчера"
             time.date.year == today.year -> DateFormat.short(time.date)
             else -> DateFormat.full(time.date)
         }
-        return "Последний раз открывали: $day, ${DateFormat.time(time.time)}"
+        return "$day, ${DateFormat.time(time.time)}"
     }
 
     // --- «Как видит родитель» (6.4, шаг 2.13б) ---

@@ -4,6 +4,7 @@ import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.account.AccountRules
 import com.akenory.personalka.domain.account.Feature
 import com.akenory.personalka.domain.cabinet.CabinetInput
+import com.akenory.personalka.domain.cabinet.CabinetMediaRules
 import com.akenory.personalka.domain.cabinet.CabinetTraining
 import com.akenory.personalka.domain.cabinet.CabinetVisitRules
 import com.akenory.personalka.domain.cabinet.CabinetVisits
@@ -47,6 +48,15 @@ data class CabinetAccess(
     val pinHash: String?,
     val pinFailures: Int,
     val blockedUntil: Long?,
+)
+
+/** Действующая ссылка для админки: выдана, последнее открытие и переход на «Фото и видео» по всем ссылкам клиента. */
+private data class VisitLink(
+    val coachId: String,
+    val clientId: String,
+    val createdAt: OffsetDateTime,
+    val lastOpened: OffsetDateTime?,
+    val lastMedia: OffsetDateTime?,
 )
 
 /** Ссылка для списка в приложении. */
@@ -269,7 +279,35 @@ class Cabinets(
         )
     }
 
-    // --- Посещения для админки (шаг 5.35) ---
+    /**
+     * Адрес «Фото и видео» клиента [access], если ссылка есть в его кабинете: согласие на фото и адрес http(s) (6.3).
+     */
+    fun mediaUrl(c: Connection, access: CabinetAccess, consent: Consent): String? {
+        val client = row(c, access.coachId, "client", "id", access.clientId) ?: return null
+        return CabinetMediaRules.media(client.textOrNull("mediaUrl"), consent.photo)?.url
+    }
+
+    /**
+     * Переход по «Фото и видео» из кабинета (шаг 5.36): время последнего перехода этой ссылки и, если с прошлого
+     * прошло [CabinetVisitRules.NEW_VISIT_MINUTES] минут и больше, — ещё один переход в счёт дня клуба.
+     */
+    fun mediaOpened(c: Connection, access: CabinetAccess) {
+        val now = now()
+        val previous = c.queryOne("SELECT last_media_at FROM cabinet_access WHERE id = ? FOR UPDATE", access.id) {
+            it.getObject(1, OffsetDateTime::class.java)?.toInstant()?.toEpochMilli()
+        }
+        c.update("UPDATE cabinet_access SET last_media_at = ? WHERE id = ?", at(now), access.id)
+        if (!CabinetVisitRules.newVisit(previous, now)) return
+        c.update(
+            """
+            INSERT INTO cabinet_visit (coach_id, client_id, day, visits, media) VALUES (?, ?, ?, 0, 1)
+            ON CONFLICT (coach_id, client_id, day) DO UPDATE SET media = cabinet_visit.media + 1
+            """.trimIndent(),
+            access.coachId, access.clientId, java.time.LocalDate.parse(ClubTime.today(now).toString()),
+        )
+    }
+
+    // --- Посещения для админки (шаги 5.35, 5.36) ---
 
     /** С какого дня клуба считаются посещения: день обновления сервера, в котором они появились. */
     fun visitsSince(c: Connection): LocalDate? =
@@ -287,28 +325,39 @@ class Cabinets(
         val links = c.query(
             """
             SELECT a.coach_id, a.client_id, a.created_at,
-                   (SELECT max(b.last_opened_at) FROM cabinet_access b WHERE b.coach_id = a.coach_id AND b.client_id = a.client_id)
+                   (SELECT max(b.last_opened_at) FROM cabinet_access b WHERE b.coach_id = a.coach_id AND b.client_id = a.client_id),
+                   (SELECT max(b.last_media_at) FROM cabinet_access b WHERE b.coach_id = a.coach_id AND b.client_id = a.client_id)
             FROM cabinet_access a WHERE a.revoked_at IS NULL$only
             """.trimIndent(),
             *args,
         ) {
-            Triple(it.getString(1), it.getString(2), it.getObject(3, OffsetDateTime::class.java) to it.getObject(4, OffsetDateTime::class.java))
+            VisitLink(
+                it.getString(1), it.getString(2), it.getObject(3, OffsetDateTime::class.java),
+                it.getObject(4, OffsetDateTime::class.java), it.getObject(5, OffsetDateTime::class.java),
+            )
         }
         val days = c.query(
-            "SELECT coach_id, client_id, day, visits FROM cabinet_visit a WHERE true$only",
+            "SELECT coach_id, client_id, day, visits, media FROM cabinet_visit a WHERE true$only",
             *args,
-        ) { (it.getString(1) to it.getString(2)) to (LocalDate.parse(it.getString(3)) to it.getInt(4)) }
-            .groupBy({ it.first }, { it.second })
+        ) { Triple(it.getString(1) to it.getString(2), LocalDate.parse(it.getString(3)), it.getInt(4) to it.getInt(5)) }
+            .groupBy({ it.first }, { it.second to it.third })
         val cabinetsOn = if (withNames && coachId != null) row(c, coachId, "coach_settings", "coachId", coachId)?.flag("cabinetsEnabled") == true else true
-        return links.map { (coach, client, times) ->
-            val record = if (withNames) row(c, coach, "client", "id", client) else null
-            coach to CabinetVisits(
-                clientId = client,
-                issued = ClubTime.today(times.first.toInstant().toEpochMilli()),
-                lastOpened = times.second?.let { ClubTime.now(it.toInstant().toEpochMilli()) },
-                days = days[coach to client].orEmpty().toMap(),
+        // Согласие на фото — последнее согласие клиента, не отозванное (как в приложении, 2.13).
+        val photo = if (withNames && coachId != null) consents(c, coachId).filter { it.photo && it.revokedAt == null }.map { it.clientId }.toSet() else emptySet()
+        fun local(t: OffsetDateTime?) = t?.let { ClubTime.now(it.toInstant().toEpochMilli()) }
+        return links.map { link ->
+            val record = if (withNames) row(c, link.coachId, "client", "id", link.clientId) else null
+            val counts = days[link.coachId to link.clientId].orEmpty()
+            link.coachId to CabinetVisits(
+                clientId = link.clientId,
+                issued = ClubTime.today(link.createdAt.toInstant().toEpochMilli()),
+                lastOpened = local(link.lastOpened),
+                days = counts.filter { it.second.first > 0 }.associate { it.first to it.second.first },
                 name = record?.let(::clientName)?.takeIf { it.isNotBlank() },
                 closed = withNames && (!cabinetsOn || record == null || !record.flag("cabinetEnabled")),
+                lastMedia = local(link.lastMedia),
+                media = counts.filter { it.second.second > 0 }.associate { it.first to it.second.second },
+                mediaShown = record != null && link.clientId in photo && CabinetMediaRules.media(record.textOrNull("mediaUrl"), true) != null,
             )
         }.groupBy({ it.first }, { it.second })
     }
