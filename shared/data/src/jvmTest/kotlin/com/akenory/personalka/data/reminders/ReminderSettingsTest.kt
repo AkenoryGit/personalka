@@ -64,6 +64,20 @@ class ReminderSettingsTest {
     }
 
     @Test
+    fun confirmSwitchAndThreshold() = runBlocking {
+        // Шаг 5.37: по умолчанию «Уточнить, придёт ли» включено и ниже 75 %, как было; порог — только из чипов.
+        assertEquals(true, repo.prefs.first().confirm)
+        assertEquals(75, repo.prefs.first().confirmBelow)
+        repo.saveConfirmBelow(50)
+        repo.saveConfirm(false)
+        val prefs = repo.prefs.first()
+        assertEquals(false, prefs.confirm)
+        assertEquals(50, prefs.confirmBelow)
+        assertFailsWith<IllegalArgumentException> { repo.saveConfirmBelow(55) }
+        Unit
+    }
+
+    @Test
     fun followupDaysOnlyFromChips() {
         assertFailsWith<IllegalArgumentException> { runBlocking { repo.saveFollowupDays(10) } }
     }

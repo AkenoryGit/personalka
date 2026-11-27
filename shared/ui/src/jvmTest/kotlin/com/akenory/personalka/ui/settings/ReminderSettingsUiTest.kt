@@ -107,6 +107,24 @@ class ReminderSettingsUiTest {
     }
 
     @Test
+    fun confirmThresholdChipsUnderReliability() = runComposeUiTest {
+        // Шаг 5.37: «Уточнить, придёт ли» включено, порог 75 %; выбрать 50 %, выключить — чипов нет; без надёжности — и строки нет.
+        openReminders()
+        onNodeWithTag(CONFIRM_SWITCH_TAG).performScrollTo().assertIsOn()
+        onNodeWithTag(confirmBelowTag(75)).performScrollTo().onChild().assertIsSelected()
+        onNodeWithTag(confirmBelowTag(50)).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { saved().confirmBelow == 50 }
+
+        onNodeWithTag(CONFIRM_SWITCH_TAG).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { !saved().confirm }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(confirmBelowTag(50))).fetchSemanticsNodes().isEmpty() }
+
+        onNodeWithTag(RELIABILITY_SWITCH_TAG).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { !saved().reliability }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(CONFIRM_SWITCH_TAG)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
     fun moreHoldsInstantAndDayPlan() = runComposeUiTest {
         openReminders(access)
         onNodeWithTag(DIARY_SWITCH_TAG).performClick()

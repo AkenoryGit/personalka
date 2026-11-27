@@ -72,6 +72,20 @@ class ReliabilityTest {
     }
 
     @Test
+    fun askBelowChosenThreshold() {
+        // Шаг 5.37: порог «Уточнить, придёт ли» — из настроек; по умолчанию 75, как было (красная).
+        assertEquals(75, ReliabilityRules.CONFIRM_DEFAULT)
+        val sixty = Reliability(6, 4)
+        assertTrue(ReliabilityRules.ask(sixty))
+        assertFalse(ReliabilityRules.ask(sixty, 50), "60 % при пороге 50 — не спрашивать")
+        assertTrue(ReliabilityRules.ask(Reliability(4, 6), 50))
+        assertFalse(ReliabilityRules.ask(Reliability(5, 5), 50), "ровно 50 % — не ниже 50")
+        assertTrue(ReliabilityRules.ask(Reliability(8, 2), 90), "жёлтый — тоже, если порог выше")
+        assertFalse(ReliabilityRules.ask(Reliability(1, 3), 90), "новый — никогда")
+        assertTrue(ReliabilityRules.CONFIRM_DEFAULT in ReliabilityRules.CONFIRM_CHOICES)
+    }
+
+    @Test
     fun lessThanFiveIsNew() {
         val r = ReliabilityRules.of((0 until 4).map { pt(it, came = it != 0) })
         assertTrue(r.isNew)

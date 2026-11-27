@@ -209,7 +209,7 @@ class HomeUiTest {
         awaitNode(hasTestTag(todoTag(TodoKind.CONFIRM_VISIT)))
         onNodeWithTag(todoTag(TodoKind.CONFIRM_VISIT)).performClick()
         val panel = hasAnyAncestor(hasTestTag(todoPanelTag(TodoKind.CONFIRM_VISIT)))
-        awaitNode(hasText(TodoListFormat.CONFIRM_WHY) and panel)
+        awaitNode(hasText(TodoListFormat.confirmWhy(75)) and panel)
         onNode(hasText(s("Орлов_М.")) and panel).assertIsDisplayed()
         onNode(hasText("сегодня 17:00") and panel).assertIsDisplayed()
         onNode(hasText(s("Надёжность 60_% · 4_отмены из 10")) and panel).assertIsDisplayed()
@@ -224,6 +224,29 @@ class HomeUiTest {
         onNodeWithTag(confirmNotComingTag(belov)).performClick()
         awaitNode(hasTestTag(CANCEL_PANEL_TAG))
         assertEquals(0, onAllNodes(hasTestTag(todoPanelTag(TodoKind.CONFIRM_VISIT))).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun confirmThresholdAndSwitchFromSettings() = runComposeUiTest {
+        // Шаг 5.37: порог 60 % — Орлов (50 %) остаётся, Белов (70 %) уходит; выключатель убирает пункт совсем.
+        val orlov = client("Орлов", "Максим")
+        val belov = client("Белов", "Кирилл")
+        (1..10).forEach { past(orlov, it, came = it > 5) }
+        (1..10).forEach { past(belov, it, came = it > 3, time = "12:00") }
+        training("17:00", orlov)
+        training("18:30", belov)
+        runBlocking { calendar.reminders.saveConfirmBelow(60) }
+        openHome()
+
+        awaitNode(hasTestTag(todoTag(TodoKind.CONFIRM_VISIT)))
+        onNodeWithTag(todoTag(TodoKind.CONFIRM_VISIT)).performClick()
+        val panel = hasAnyAncestor(hasTestTag(todoPanelTag(TodoKind.CONFIRM_VISIT)))
+        awaitNode(hasText(TodoListFormat.confirmWhy(60)) and panel)
+        onNode(hasText(s("Надёжность 50_% · 5_отмен из 10")) and panel).assertIsDisplayed()
+        assertEquals(0, onAllNodes(hasText(s("Белов_К.")) and panel).fetchSemanticsNodes().size, "70 % — не ниже 60")
+
+        runBlocking { calendar.reminders.saveConfirm(false) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(todoTag(TodoKind.CONFIRM_VISIT))).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test

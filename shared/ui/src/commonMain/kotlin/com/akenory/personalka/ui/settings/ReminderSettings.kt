@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.akenory.personalka.data.reminders.DiaryPrefs
 import com.akenory.personalka.data.reminders.ReminderSettingsRepository
+import com.akenory.personalka.domain.client.ReliabilityRules
 import com.akenory.personalka.domain.format.ReminderFormat
 import com.akenory.personalka.domain.reminder.ReminderRules
 import com.akenory.personalka.ui.components.OutlineButton
@@ -58,6 +59,8 @@ internal const val DIGEST_TAG = "reminders-digest"
 internal const val DIGEST_TIME_TAG = "reminders-digest-time"
 internal const val FOLLOWUP_TAG = "reminders-followup"
 internal const val RELIABILITY_SWITCH_TAG = "reminders-reliability"
+internal const val CONFIRM_SWITCH_TAG = "reminders-confirm"
+internal fun confirmBelowTag(percent: Int) = "confirm-below-$percent"
 internal const val MORE_TAG = "reminders-more"
 internal const val INSTANT_DIARY_TAG = "reminders-instant-diary"
 internal const val INSTANT_GROUP_TAG = "reminders-instant-group"
@@ -141,6 +144,16 @@ internal fun ReminderSettingsScreen(
                 }
                 // Надёжность клиентов (4.18, шаг 3.14а): выключена — её не видно нигде.
                 SwitchRow(ReminderFormat.RELIABILITY, loaded.reliability, { on -> save { saveReliability(on) } }, Modifier.testTag(RELIABILITY_SWITCH_TAG), ReminderFormat.RELIABILITY_NOTE)
+                // «Уточнить, придёт ли» (шаг 5.37): выключатель и порог — только при включённой надёжности (10.7).
+                if (loaded.reliability) {
+                    SwitchRow(ReminderFormat.CONFIRM, loaded.confirm, { on -> save { saveConfirm(on) } }, Modifier.testTag(CONFIRM_SWITCH_TAG), ReminderFormat.CONFIRM_NOTE)
+                    if (loaded.confirm) {
+                        SectionLabel(ReminderFormat.CONFIRM_BELOW, Modifier.padding(top = 0.dp))
+                        Chips(ReliabilityRules.CONFIRM_CHOICES, loaded.confirmBelow, ReminderFormat::percent, ::confirmBelowTag) { percent ->
+                            save { saveConfirmBelow(percent) }
+                        }
+                    }
+                }
                 if (reminders != null) {
                     // «Аванс» 25-го в 19:00 (5.19) — по умолчанию включён, поэтому не под «Другими уведомлениями».
                     SwitchRow(

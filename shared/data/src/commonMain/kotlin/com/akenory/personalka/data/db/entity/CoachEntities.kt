@@ -57,6 +57,10 @@ data class CoachSettingsEntity(
     val coCoachingEnabled: Boolean = false,
     /** Надёжность клиентов (4.18): включена — видна в карточках, календаре и на «Главной». С версии 14 базы. */
     val reliabilityEnabled: Boolean = true,
+    /** «Уточнить, придёт ли» в «Нужно сделать» (версия 25, шаг 5.37): включено у всех, как было до шага. */
+    val confirmEnabled: Boolean = true,
+    /** Порог «Уточнить, придёт ли»: надёжность ниже стольких процентов — один из `ReliabilityRules.CONFIRM_CHOICES`. */
+    val confirmBelow: Int = 75,
     /** Часы сетки календаря и рамки поиска слотов; по умолчанию — часы клуба. */
     val workDayStart: LocalTime = LocalTime(7, 0),
     val workDayEnd: LocalTime = LocalTime(23, 0),

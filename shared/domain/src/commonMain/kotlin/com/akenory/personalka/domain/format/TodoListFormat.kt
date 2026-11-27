@@ -2,7 +2,6 @@ package com.akenory.personalka.domain.format
 
 import com.akenory.personalka.domain.client.Reliability
 import com.akenory.personalka.domain.client.FollowupRules
-import com.akenory.personalka.domain.client.ReliabilityRules
 import com.akenory.personalka.domain.format.RuText.NBSP
 import com.akenory.personalka.domain.group.GroupAbsence
 import com.akenory.personalka.domain.money.SptCase
@@ -17,10 +16,11 @@ import kotlinx.datetime.daysUntil
 object TodoListFormat {
     private const val DOT = " · "
 
-    /** «Уточнить, придёт ли»: кто часто отменяет и сегодня придёт. */
-    val CONFIRM_WHY: String =
-        "Эти клиенты часто отменяют — надёжность ниже ${ReliabilityRules.MIDDLE_FROM}$NBSP%. Сегодня у них тренировка: " +
-            "напишите или позвоните, точно ли придут, чтобы время не пропало. Ответ отметьте здесь."
+    /** «Уточнить, придёт ли»: кто часто отменяет и сегодня придёт; [below] — порог из настроек (шаг 5.37). */
+    fun confirmWhy(below: Int): String =
+        "Эти клиенты часто отменяют — надёжность ниже $below$NBSP%. Сегодня у них тренировка: " +
+            "напишите или позвоните, точно ли придут, чтобы время не пропало. Ответ отметьте здесь. " +
+            "Порог и выключатель — в «Настройки → Дневник и напоминания»."
 
     const val COMING = "Придёт"
     const val NOT_COMING = "Не придёт"

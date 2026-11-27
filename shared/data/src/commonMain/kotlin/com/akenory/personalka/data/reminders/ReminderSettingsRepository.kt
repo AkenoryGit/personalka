@@ -3,6 +3,7 @@ package com.akenory.personalka.data.reminders
 import com.akenory.personalka.data.db.PersonalkaDatabase
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
 import com.akenory.personalka.domain.client.FollowupRules
+import com.akenory.personalka.domain.client.ReliabilityRules
 import com.akenory.personalka.domain.reminder.ReminderRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -19,6 +20,9 @@ data class DiaryPrefs(
     val followup: Boolean = true,
     val followupDays: Int = FollowupRules.DEFAULT_DAYS,
     val reliability: Boolean = true,
+    /** «Уточнить, придёт ли» (шаг 5.37): включено ли и ниже какого процента надёжности. */
+    val confirm: Boolean = true,
+    val confirmBelow: Int = ReliabilityRules.CONFIRM_DEFAULT,
 )
 
 /**
@@ -45,6 +49,8 @@ class ReminderSettingsRepository internal constructor(private val db: Personalka
                 s.followupEnabled,
                 s.followupDays,
                 s.reliabilityEnabled,
+                s.confirmEnabled,
+                s.confirmBelow,
             )
         }
     }
@@ -67,6 +73,13 @@ class ReminderSettingsRepository internal constructor(private val db: Personalka
     suspend fun saveFollowup(on: Boolean) = update { it.copy(followupEnabled = on) }
 
     suspend fun saveReliability(on: Boolean) = update { it.copy(reliabilityEnabled = on) }
+
+    suspend fun saveConfirm(on: Boolean) = update { it.copy(confirmEnabled = on) }
+
+    suspend fun saveConfirmBelow(percent: Int) {
+        require(percent in ReliabilityRules.CONFIRM_CHOICES) { "Порог «Уточнить, придёт ли»: $percent" }
+        update { it.copy(confirmBelow = percent) }
+    }
 
     suspend fun saveFollowupDays(days: Int) {
         require(days in ReminderRules.FOLLOWUP_DAYS) { "Срок «без записи»: $days" }

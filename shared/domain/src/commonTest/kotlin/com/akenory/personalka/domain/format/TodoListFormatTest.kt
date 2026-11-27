@@ -14,7 +14,8 @@ class TodoListFormatTest {
 
     @Test
     fun confirm() {
-        assertTrue(TodoListFormat.CONFIRM_WHY.contains(s("ниже 75_%")))
+        assertTrue(TodoListFormat.confirmWhy(75).contains(s("ниже 75_%")))
+        assertTrue(TodoListFormat.confirmWhy(50).contains(s("ниже 50_%")), "порог из настроек (шаг 5.37)")
         assertEquals("сегодня 17:00", TodoListFormat.today(LocalDateTime(2026, 10, 20, 17, 0)))
         assertEquals("ПТ · ББ", TodoListFormat.typePlace("ПТ", "ББ"))
         assertEquals("ПТ", TodoListFormat.typePlace("ПТ", ""))

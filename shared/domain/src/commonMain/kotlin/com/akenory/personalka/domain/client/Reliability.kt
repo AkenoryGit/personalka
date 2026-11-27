@@ -123,6 +123,18 @@ object ReliabilityRules {
 
     fun rareInGroup(r: Reliability?): Boolean = r != null && r.total >= GROUP_MIN && (r.percent ?: 100) < GROUP_LOW
 
-    /** Спросить, придёт ли: надёжность красная. */
-    fun ask(reliability: Reliability?): Boolean = reliability?.level == ReliabilityLevel.LOW
+    /** Порог «Уточнить, придёт ли» по умолчанию — граница красного, как было до шага 5.37. */
+    const val CONFIRM_DEFAULT = MIDDLE_FROM
+
+    /** Чипы порога в «Настройки → Дневник и напоминания» (шаг 5.37): каждый тренер выбирает свой. */
+    val CONFIRM_CHOICES = listOf(40, 50, 60, 75, 90)
+
+    /**
+     * Спросить, придёт ли: надёжность посчитана (не «новый») и ниже [below] % — порога из настроек тренера
+     * (шаг 5.37; до него — всегда красная, ниже 75 %). Цвет надёжности от порога не зависит.
+     */
+    fun ask(reliability: Reliability?, below: Int = CONFIRM_DEFAULT): Boolean {
+        val percent = reliability?.percent ?: return false
+        return percent < below
+    }
 }

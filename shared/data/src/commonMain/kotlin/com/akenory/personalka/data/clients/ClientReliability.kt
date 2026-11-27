@@ -48,6 +48,18 @@ class ClientReliability internal constructor(db: PersonalkaDatabase) {
     val enabled: Flow<Boolean> = coaches.observeSettings().map { it?.reliabilityEnabled ?: true }.distinctUntilChanged()
 
     /**
+     * Порог «Уточнить, придёт ли» (шаг 5.37): надёжность ниже стольких процентов. Пункт выключен или выключена вся
+     * надёжность — null; настроек ещё нет — как по умолчанию.
+     */
+    val confirmBelow: Flow<Int?> = coaches.observeSettings().map { s ->
+        when {
+            s == null -> ReliabilityRules.CONFIRM_DEFAULT
+            !s.reliabilityEnabled || !s.confirmEnabled -> null
+            else -> s.confirmBelow
+        }
+    }.distinctUntilChanged()
+
+    /**
      * Надёжность всех клиентов, у кого есть ПТ, сплиты или мини-группы; у кого их нет — в карте его нет. Выключена
      * в настройках — карта пустая: надёжности не видно нигде.
      */
@@ -81,14 +93,15 @@ class ClientReliability internal constructor(db: PersonalkaDatabase) {
 
     /**
      * «Уточнить, придёт ли» на «Главной»: сегодняшние ещё не начавшиеся ПТ, сплиты и мини-группы, где клиента ждут,
-     * а его надёжность красная. По началу. Ответивший «Придёт» на это начало тренировки — не в списке (шаг 3.16).
+     * а его надёжность ниже порога из настроек ([confirmBelow]; до шага 5.37 — красная). По началу. Ответивший
+     * «Придёт» на это начало тренировки — не в списке (шаг 3.16). Пункт выключен — пусто.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun confirm(now: LocalDateTime): Flow<List<ConfirmVisit>> = enabled.flatMapLatest { on ->
-        if (on) confirmOn(now) else flowOf(emptyList())
+    fun confirm(now: LocalDateTime): Flow<List<ConfirmVisit>> = confirmBelow.flatMapLatest { below ->
+        if (below != null) confirmOn(now, below) else flowOf(emptyList())
     }
 
-    private fun confirmOn(now: LocalDateTime): Flow<List<ConfirmVisit>> = combine(trainings.observeReliabilityRows(), clients.observeAllClients()) { rows, all ->
+    private fun confirmOn(now: LocalDateTime, below: Int): Flow<List<ConfirmVisit>> = combine(trainings.observeReliabilityRows(), clients.observeAllClients()) { rows, all ->
         val byClient = rows.groupBy({ it.clientId }, { it.visit() })
         val names = all.filter { it.status == ClientStatus.ACTIVE }.associateBy { it.id }
         rows.asSequence()
@@ -98,7 +111,7 @@ class ClientReliability internal constructor(db: PersonalkaDatabase) {
             .filter { it.confirmedStart != it.start }
             .mapNotNull { row ->
                 val reliability = ReliabilityRules.of(byClient[row.clientId].orEmpty())
-                if (!ReliabilityRules.ask(reliability)) return@mapNotNull null
+                if (!ReliabilityRules.ask(reliability, below)) return@mapNotNull null
                 val c = names[row.clientId] ?: return@mapNotNull null
                 ConfirmVisit(
                     clientId = row.clientId,

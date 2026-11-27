@@ -76,6 +76,13 @@ object ReminderFormat {
     const val RELIABILITY = "Надёжность клиентов"
     const val RELIABILITY_NOTE = "Сколько из последних тренировок клиент пришёл — в карточках и календаре. Видна только вам"
     const val FOLLOWUP_DAYS = "Был на тренировке за последние"
+    const val CONFIRM = "Уточнить, придёт ли"
+    const val CONFIRM_NOTE =
+        "Попадают в «Нужно сделать», если сегодня у клиента ПТ, сплит или мини-группа, а его надёжность ниже порога"
+    const val CONFIRM_BELOW = "Надёжность ниже"
+
+    /** «50 %» на чипе порога «Уточнить, придёт ли». */
+    fun percent(n: Int): String = "$n$NBSP%"
     const val MORE = "Другие уведомления"
     const val INSTANT_DIARY = "Дневник сразу после тренировки"
     const val INSTANT_DIARY_NOTE = "Уведомление через 15 минут после конца, если дневник не заполнен. Без него напомнит только вечерняя сводка"

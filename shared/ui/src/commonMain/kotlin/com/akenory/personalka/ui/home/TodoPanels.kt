@@ -35,6 +35,7 @@ import com.akenory.personalka.data.clients.FollowupRow
 import com.akenory.personalka.data.groups.GroupRepository
 import com.akenory.personalka.data.money.SptWaiting
 import com.akenory.personalka.domain.cabinet.ConsentDue
+import com.akenory.personalka.domain.client.ReliabilityRules
 import com.akenory.personalka.domain.format.CabinetLinkFormat
 import com.akenory.personalka.domain.format.CalendarFormat
 import com.akenory.personalka.domain.format.FollowupFormat
@@ -139,7 +140,8 @@ internal fun TodoListPanel(
         }
         TodoKind.CONFIRM_VISIT -> {
             val list by remember(clients, now) { clients.reliability.confirm(now) }.collectAsState(initial = null)
-            ListPanel(kind, title, TodoListFormat.CONFIRM_WHY, list, onClose) { visits ->
+            val below by remember(clients) { clients.reliability.confirmBelow }.collectAsState(initial = null)
+            ListPanel(kind, title, TodoListFormat.confirmWhy(below ?: ReliabilityRules.CONFIRM_DEFAULT), list, onClose) { visits ->
                 ConfirmList(visits, clients, messages, scope, onClient, onCard = { key -> onClose(); onCard(key) })
             }
         }

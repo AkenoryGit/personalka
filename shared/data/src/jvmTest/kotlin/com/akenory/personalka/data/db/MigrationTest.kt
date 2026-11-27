@@ -787,8 +787,40 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion24() {
-        assertEquals(24, PersonalkaDatabase.VERSION)
+    fun version24AsksToConfirmBelow75AsBefore(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v24", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шага 5.16: порога «Уточнить, придёт ли» нет — спрашивали всегда ниже 75 %.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 24)
+                raw.exec(
+                    "INSERT INTO coach_settings (id, cancelNoticeMinutes, diaryEnabled, digestEnabled, digestTime, instantDiary, instantGroup, " +
+                        "followupEnabled, followupDays, cabinetsEnabled, cabinetGroupDiary, coCoachingEnabled, reliabilityEnabled, workDayStart, " +
+                        "workDayEnd, dragStepMinutes, seriesHorizonWeeks, upcomingInCard, autoDonePersonal, weekViewDays, backupFolderUri, " +
+                        "backupFrequency, workSchedule, personalEnabled, personalColor, personalColor2, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('s1', 60, 0, 0, '21:00', 0, 0, 0, 30, 0, 0, 0, 1, '07:00', '23:00', 15, 8, 1, 1, 3, NULL, 'DAILY', NULL, 1, 'pink', '', " +
+                        "'c1', 1, 1, 1, NULL)",
+                )
+            }
+            val db = personalkaDatabase(path)
+            try {
+                val settings = db.coachDao().settings("c1")!!
+                assertTrue(settings.confirmEnabled, "«Уточнить, придёт ли» включено, как было")
+                assertEquals(75, settings.confirmBelow)
+                assertEquals("pink", settings.personalColor, "Остальные настройки не тронуты")
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion25() {
+        assertEquals(25, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }
