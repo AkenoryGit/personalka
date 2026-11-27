@@ -34,6 +34,7 @@ import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.MessageState
 import com.akenory.personalka.ui.components.hideKeyboardOnTap
+import com.akenory.personalka.ui.competitions.CompetitionRoute
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.home.homeTodos
 import com.akenory.personalka.ui.reminders.AppLink
@@ -457,7 +458,7 @@ fun App(
                         onNewTraining = { form = TrainingFormKey.new() },
                         hideFab = card != null && shell.section == Section.CALENDAR || homeCard != null && shell.section == Section.HOME,
                         immersive = when (shell.section) {
-                            Section.MORE -> shell.top(Section.MORE).let { SettingsRoute.isForm(it) || GroupRoute.isForm(it) }
+                            Section.MORE -> shell.top(Section.MORE).let { SettingsRoute.isForm(it) || GroupRoute.isForm(it) || CompetitionRoute.isForm(it) }
                             Section.CLIENTS -> ClientRoute.isForm(shell.top(Section.CLIENTS))
                             else -> false
                         },

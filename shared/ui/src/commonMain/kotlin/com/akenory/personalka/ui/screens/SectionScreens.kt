@@ -54,6 +54,7 @@ import com.akenory.personalka.data.prefs.DevicePrefs
 import com.akenory.personalka.data.settings.SettingsRepository
 import com.akenory.personalka.domain.cabinet.ConsentDue
 import com.akenory.personalka.domain.calendar.ZoneKind
+import com.akenory.personalka.domain.format.CompetitionFormat
 import com.akenory.personalka.domain.format.MoreFormat
 import com.akenory.personalka.domain.format.ReportFormat
 import com.akenory.personalka.domain.format.TourFormat
@@ -66,6 +67,8 @@ import com.akenory.personalka.ui.clients.ClientRoute
 import com.akenory.personalka.ui.clients.ClientsScreen
 import com.akenory.personalka.ui.clients.rememberClientListState
 import com.akenory.personalka.ui.components.MessageState
+import com.akenory.personalka.ui.competitions.CompetitionRoute
+import com.akenory.personalka.ui.competitions.CompetitionsScreen
 import com.akenory.personalka.ui.groups.GroupRoute
 import com.akenory.personalka.ui.groups.GroupsScreen
 import com.akenory.personalka.ui.home.HomeMoney
@@ -327,6 +330,7 @@ fun SectionScreen(
                 route == MoreItem.ABOUT.route -> AboutScreen(versionName, theme, onTheme, about, shareText, messages, scope, onBack)
                 SettingsRoute.isSettings(route) -> SettingsScreen(route, shell, settings, calendar, now, messages, scope, onForm, onBack, backup, reminders, notifications, account, sync, cabinets != null, watch)
                 GroupRoute.isGroups(route) -> GroupsScreen(route, shell, groups, clients, settings, messages, scope, now, onBack)
+                CompetitionRoute.isCompetitions(route) -> CompetitionsScreen(route, shell, clients, messages, scope, now, onBack, shareText)
                 route == MoreItem.RECONCILE.route -> ReconcileScreen(settings, now.date, messages, scope, onBack, shareText, backup?.files) { id ->
                     shell.open(Report1cRoute.of(id))
                 }
@@ -376,6 +380,8 @@ enum class MoreItem(
 ) {
     // У «Групп» с шага 1.8 свой экран (ui/groups).
     GROUPS(GroupRoute.LIST, MoreFormat.GROUPS, MoreFormat.GROUPS_NOTE, PIcons.Groups, MoreGroup.WORK),
+    // «Соревнования» (5.21, шаг 5.39) — свой экран (ui/competitions): кто едет, что собрать, заявка и итоги.
+    COMPETITIONS(CompetitionRoute.LIST, CompetitionFormat.TITLE, CompetitionFormat.MORE_NOTE, PIcons.Trophy, MoreGroup.WORK),
     // «Свободные слоты» (4.13, 5.13, шаг 4.3) — свой экран (ui/slots).
     SLOTS(SlotsRoute.ROOT, MoreFormat.SLOTS, MoreFormat.SLOTS_NOTE, PIcons.EventAvailable, MoreGroup.WORK),
     // «Сверки» (5.14, шаг 3.9в) — свой экран (ui/reconcile): месяц зарплаты, дежурства, с шага 4.2 — отчёт 1С.
@@ -410,6 +416,7 @@ private val MoreItem.place: PlaceColor?
         MoreItem.SLOTS, MoreItem.PLACES -> PlaceColor.BLUE
         MoreItem.RECONCILE -> PlaceColor.BROWN
         MoreItem.REPORTS -> PlaceColor.PINK
+        MoreItem.COMPETITIONS -> PlaceColor.INDIGO
         MoreItem.VACATION -> PlaceColor.AMBER
         MoreItem.CALENDAR, MoreItem.REMINDERS -> PlaceColor.INDIGO
         else -> null

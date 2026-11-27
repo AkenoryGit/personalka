@@ -234,7 +234,7 @@ fun ResultFormPanel(
 }
 
 /** В поле хранятся только цифры, видно время: «10317» → «1:03,17»; курсор встаёт между теми же цифрами. */
-private object TimeTransformation : VisualTransformation {
+internal object TimeTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val digits = text.text
         val shown = ResultTime.typed(digits)
