@@ -93,6 +93,30 @@ class SyncRepositoryTest {
     }
 
     @Test
+    fun afterAppUpdatePullStartsOverOnce(): Unit = runBlocking {
+        // Шаг 5.38: прежняя версия пропускала строки незнакомых таблиц (соревнования), а номер уходил дальше.
+        val (a, b) = twoPhones()
+        a.clients.upsertClient(Samples.client("Лебедева", "Ксения"))
+        assertTrue(a.sync.connect())
+        assertTrue(b.sync.connect(takeFromServer = true))
+        now += 60_000
+        val skipped = Samples.client("Орлова", "Ева")
+        a.clients.upsertClient(skipped)
+        assertTrue(a.sync.sync())
+        // Планшет «уже получил» эту строку, но пропустил её.
+        b.prefs.putString(SyncRepository.SINCE, server.rows.values.maxOf { it.seq }.toString())
+        b.prefs.putString(SyncRepository.SCHEMA, SyncRules.SCHEMA_VERSION.toString())
+        assertTrue(b.sync.sync())
+        assertNull(b.clients.client(skipped.id), "Та же версия — получение не начинается заново")
+        // Приложение обновилось: версия, с которой получали, старше — один раз с начала.
+        b.prefs.putString(SyncRepository.SCHEMA, (SyncRules.SCHEMA_VERSION - 1).toString())
+        assertTrue(b.sync.sync())
+        assertEquals("Ева", b.clients.client(skipped.id)?.firstName, "После обновления пропущенное пришло")
+        assertEquals(SyncRules.SCHEMA_VERSION.toString(), b.prefs.string(SyncRepository.SCHEMA))
+        assertEquals(0, b.db.syncDao().pending(), "Пришедшее заново назад не отправляется")
+    }
+
+    @Test
     fun rowThatDoesNotFitTheBaseStopsTheExchangeInsteadOfCrashing(): Unit = runBlocking {
         val (a, b) = twoPhones()
         val client = Samples.client("Лебедева", "Ксения")

@@ -380,8 +380,13 @@ class SyncRepository(
         )
     }
 
-    /** Всё новое — страницами; номер последнего полученного запоминается после каждой. 410 — с начала (7.2, п. 6). */
+    /**
+     * Всё новое — страницами; номер последнего полученного запоминается после каждой. 410 — с начала (7.2, п. 6).
+     * Приложение обновилось (версия схемы новее той, с которой получали, шаг 5.38) — тоже с начала, один раз:
+     * прежняя версия пропускала строки незнакомых таблиц и столбцов, а номер ушёл дальше.
+     */
     private suspend fun pull(token: String) {
+        if (prefs.string(SCHEMA)?.toIntOrNull() != SyncRules.SCHEMA_VERSION) prefs.pullFromStart()
         var restarted = false
         while (true) {
             val since = prefs.string(SINCE)?.toLongOrNull() ?: 0
@@ -476,6 +481,9 @@ class SyncRepository(
         /** Номер последнего полученного изменения (`seq`). */
         const val SINCE = "sync.since"
 
+        /** Версия схемы, с которой телефон получает изменения (шаг 5.38): другая — получение с начала. */
+        const val SCHEMA = "sync.schema"
+
         /** Момент последнего полного обмена. */
         const val LAST = "sync.last"
 
@@ -502,5 +510,11 @@ class SyncRepository(
     }
 }
 
-/** Получать изменения с самого начала: после восстановления из копии, при подключении и отключении сервера. */
-internal fun DevicePrefs.pullFromStart() = putString(SyncRepository.SINCE, "0")
+/**
+ * Получать изменения с самого начала: после восстановления из копии, при подключении и отключении сервера, после
+ * обновления приложения. Запоминает и версию схемы — с ней получение идёт с начала.
+ */
+internal fun DevicePrefs.pullFromStart() {
+    putString(SyncRepository.SINCE, "0")
+    putString(SyncRepository.SCHEMA, SyncRules.SCHEMA_VERSION.toString())
+}

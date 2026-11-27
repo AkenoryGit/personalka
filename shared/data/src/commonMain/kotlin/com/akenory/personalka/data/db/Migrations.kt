@@ -6,7 +6,7 @@ import com.akenory.personalka.domain.model.TrainingKind
 import com.akenory.personalka.domain.reference.ReferenceRules
 
 /** Переходы базы со старых версий: телефон с прежней сборкой открывает базу без потерь. */
-internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20, Migration20To21, Migration21To22, Migration22To23, Migration23To24, Migration24To25)
+internal val PersonalkaMigrations: Array<Migration> = arrayOf(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14, Migration14To15, Migration15To16, Migration16To17, Migration17To18, Migration18To19, Migration19To20, Migration20To21, Migration21To22, Migration22To23, Migration23To24, Migration24To25, Migration25To26)
 
 /**
  * Что сделать с базой старой версии перед первым переходом (ТЗ 10.2): копия всех таблиц ([connection] — база ещё
@@ -347,6 +347,37 @@ internal object Migration24To25 : Migration(24, 25) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.exec("ALTER TABLE `coach_settings` ADD COLUMN `confirmEnabled` INTEGER NOT NULL DEFAULT 1")
         connection.exec("ALTER TABLE `coach_settings` ADD COLUMN `confirmBelow` INTEGER NOT NULL DEFAULT 75")
+    }
+}
+
+/**
+ * 25 → 26 (шаг 5.38): соревнования (ТЗ 5.21) — соревнования, участники и старты. Новые таблицы пустые; триггеры
+ * очереди изменений ставятся при открытии базы ([SyncOutbox]).
+ */
+internal object Migration25To26 : Migration(25, 26) {
+    private const val SYNC = "`coachId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+        "`version` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))"
+
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `competition` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `date` TEXT NOT NULL, " +
+                "`poolM` INTEGER NOT NULL, `place` TEXT, `rules` TEXT NOT NULL, `items` TEXT NOT NULL, $SYNC",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_competition_date` ON `competition` (`date`)")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `competition_entry` (`id` TEXT NOT NULL, `competitionId` TEXT NOT NULL, " +
+                "`clientId` TEXT NOT NULL, `handedIn` TEXT NOT NULL, $SYNC",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_competition_entry_competitionId` ON `competition_entry` (`competitionId`)")
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_competition_entry_clientId` ON `competition_entry` (`clientId`)")
+        connection.exec(
+            "CREATE TABLE IF NOT EXISTS `competition_start` (`id` TEXT NOT NULL, `competitionId` TEXT NOT NULL, " +
+                "`entryId` TEXT NOT NULL, `clientId` TEXT NOT NULL, `style` TEXT NOT NULL, `distanceM` INTEGER NOT NULL, " +
+                "`entryCs` INTEGER, `resultCs` INTEGER, `place` INTEGER, `resultId` TEXT, $SYNC",
+        )
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_competition_start_entryId` ON `competition_start` (`entryId`)")
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_competition_start_competitionId` ON `competition_start` (`competitionId`)")
+        connection.exec("CREATE INDEX IF NOT EXISTS `index_competition_start_clientId` ON `competition_start` (`clientId`)")
     }
 }
 

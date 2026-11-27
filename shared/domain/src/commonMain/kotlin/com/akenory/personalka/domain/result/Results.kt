@@ -163,6 +163,14 @@ object ResultRules {
         return (best - timeCs).takeIf { it > 0 }
     }
 
+    /**
+     * Лучший результат на дистанции [event] (стиль, метры и бассейн) за всё время до дня [before] — заявочное время
+     * соревнования (5.21): результаты самого соревнования и после него не в счёт. Одинаковое время — показанное раньше.
+     */
+    fun best(results: List<ResultItem>, event: SwimEvent, before: LocalDate): ResultItem? =
+        results.filter { it.event == event && it.date < before }
+            .minWithOrNull(compareBy<ResultItem>({ it.timeCs }, { it.date }, { it.id }))
+
     /** Дистанции для графика в бассейне [poolM]: те, где результатов два и больше, по порядку [ORDER]. */
     fun chartEvents(results: List<ResultItem>, poolM: Int): List<SwimEvent> =
         results.filter { it.event.poolM == poolM }

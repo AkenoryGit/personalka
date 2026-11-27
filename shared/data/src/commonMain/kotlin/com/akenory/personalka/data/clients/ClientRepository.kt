@@ -26,6 +26,7 @@ import com.akenory.personalka.data.series.toSeries
 import com.akenory.personalka.data.series.write
 import com.akenory.personalka.domain.ClubTime
 import com.akenory.personalka.domain.Ids
+import com.akenory.personalka.data.competitions.CompetitionRepository
 import com.akenory.personalka.domain.client.AvatarLook
 import com.akenory.personalka.domain.client.AvatarRules
 import com.akenory.personalka.domain.client.ClientDraft
@@ -36,6 +37,7 @@ import com.akenory.personalka.domain.client.Relations
 import com.akenory.personalka.domain.client.RelativeLink
 import com.akenory.personalka.domain.client.ScheduleLine
 import com.akenory.personalka.domain.client.StoredRelation
+import com.akenory.personalka.domain.competition.CompetitionRules
 import com.akenory.personalka.domain.format.ClientFormat
 import com.akenory.personalka.domain.group.GroupRules
 import com.akenory.personalka.domain.group.MemberChange
@@ -107,9 +109,13 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
     private val trainings = db.trainingDao()
     private val reference = db.referenceDao()
     private val coaches = db.coachDao()
+    private val competitionRows = db.competitionDao()
 
     /** Результаты клиентов (шаг 2.3, ТЗ 5.11). */
     val results: ResultRepository = ResultRepository(db, clock)
+
+    /** Соревнования (5.21, шаг 5.38): участники — клиенты, результаты стартов — в их карточках. */
+    val competitions: CompetitionRepository = CompetitionRepository(db, clock)
 
     /** «Без записи» (4.15): список, метка «Нет записи», «Написал» и «Пауза до…». */
     val followup = ClientFollowup(db, clock)
@@ -234,6 +240,19 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
      * Все места, где заводится клиент, спрашивают его — дубль не появится незаметно.
      */
     suspend fun similar(name: ClientName, except: String? = null): ClientEntity? = db.similarClient(name, except)
+
+    /**
+     * «Год и пол» в подборе участников соревнования (5.21): дата рождения и пол пишутся в карточку, остальное не
+     * меняется; взрослый ли — по дате, как в форме клиента.
+     */
+    suspend fun saveBirthAndSex(id: String, birthDate: LocalDate?, sex: Sex?) {
+        val client = clients.client(id) ?: return
+        val now = clock()
+        val today = ClubTime.today(now)
+        clients.upsertClient(
+            client.copy(birthDate = birthDate, sex = sex, isAdult = ClientRules.isAdult(birthDate, client.isAdult, today), sync = client.sync.touched(now)),
+        )
+    }
 
     /** Правка из «Изменить». Поля, которых нет в форме (1С, кабинет), не трогаются. */
     suspend fun update(id: String, draft: ClientDraft) {
@@ -397,6 +416,21 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
             trainings.sptCasesOf(goneId).forEach { trainings.upsertSptCase(it.copy(clientId = keepId, sync = it.sync.touched(now))) }
             clients.membershipsOf(goneId).forEach { clients.upsertGroupMember(it.copy(clientId = keepId, sync = it.sync.touched(now))) }
             clients.waitEntriesOf(goneId).forEach { clients.upsertWaitEntry(it.copy(clientId = keepId, sync = it.sync.touched(now))) }
+            // Соревнования (5.21): участие переходит к оставшемуся; оба участвовали — отметки и старты складываются.
+            val keepEntries = competitionRows.entriesOfClient(keepId).associateBy { it.competitionId }
+            competitionRows.entriesOfClient(goneId).forEach { e ->
+                val mine = keepEntries[e.competitionId]
+                val starts = competitionRows.startRowsOf(e.id).filter { it.sync.deletedAt == null }
+                if (mine == null) {
+                    competitionRows.upsertEntry(e.copy(clientId = keepId, sync = e.sync.touched(now)))
+                    starts.forEach { competitionRows.upsertStart(it.copy(clientId = keepId, sync = it.sync.touched(now))) }
+                } else {
+                    val handed = CompetitionRules.decodeHanded(mine.handedIn) + CompetitionRules.decodeHanded(e.handedIn)
+                    competitionRows.upsertEntry(mine.copy(handedIn = CompetitionRules.encodeHanded(handed), sync = mine.sync.touched(now)))
+                    starts.forEach { competitionRows.upsertStart(it.copy(entryId = mine.id, clientId = keepId, sync = it.sync.touched(now))) }
+                    competitionRows.upsertEntry(e.copy(sync = e.sync.deleted(now)))
+                }
+            }
 
             val keepRelations = clients.relationsOf(keepId)
             val goneRelations = clients.relationsOf(goneId)
@@ -426,7 +460,7 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
 
     /**
      * «Удалить полностью» (5.9, 3.1, 10.3): данные клиента стираются сразу — карточка, результаты, связи,
-     * лист ожидания, стартовые, место в группах и сериях. Тренировки, которые ещё не начались, — без него:
+     * лист ожидания, стартовые, место в группах и сериях, участие в соревнованиях (5.21). Тренировки, которые ещё не начались, — без него:
      * осталось пусто (не группа) — удаляется и тренировка. Прошедшие остаются для зарплаты без имени и без
      * записей о клиенте: стёрты поведение и причина отмены, а у тренировки только с ним — план и факт.
      * Серия, где больше никого нет, заканчивается вчера.
@@ -470,6 +504,8 @@ class ClientRepository(private val db: PersonalkaDatabase, private val clock: ()
             schedule.eraseSeriesClientsOf(id)
             trainings.eraseResultsOf(id)
             trainings.eraseSptCasesOf(id)
+            competitionRows.eraseStartsOf(id)
+            competitionRows.eraseEntriesOf(id)
             clients.eraseWaitEntriesOf(id)
             clients.eraseMembershipsOf(id)
             clients.eraseRelationsOf(id)

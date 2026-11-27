@@ -9,6 +9,7 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.akenory.personalka.data.db.dao.ClientDao
 import com.akenory.personalka.data.db.dao.CoachDao
+import com.akenory.personalka.data.db.dao.CompetitionDao
 import com.akenory.personalka.data.db.dao.MoneyDao
 import com.akenory.personalka.data.db.dao.ReferenceDao
 import com.akenory.personalka.data.db.dao.Report1cDao
@@ -23,6 +24,9 @@ import com.akenory.personalka.data.db.entity.ClientRelationEntity
 import com.akenory.personalka.data.db.entity.ClubRateGridEntity
 import com.akenory.personalka.data.db.entity.CoachEntity
 import com.akenory.personalka.data.db.entity.CoachSettingsEntity
+import com.akenory.personalka.data.db.entity.CompetitionEntity
+import com.akenory.personalka.data.db.entity.CompetitionEntryEntity
+import com.akenory.personalka.data.db.entity.CompetitionStartEntity
 import com.akenory.personalka.data.db.entity.ColleagueEntity
 import com.akenory.personalka.data.db.entity.ColleagueSchemeVersionEntity
 import com.akenory.personalka.data.db.entity.ColleagueSettlementEntity
@@ -103,12 +107,16 @@ import kotlin.coroutines.CoroutineContext
         ClientAlias1cEntity::class,
         ReconciliationEntity::class,
         ReconciliationItemEntity::class,
+        // 3.5, шаг 5.38 — соревнования (5.21)
+        CompetitionEntity::class,
+        CompetitionEntryEntity::class,
+        CompetitionStartEntity::class,
         // 3.8 — только для телефона
         SyncOutboxEntity::class,
     ],
     // Число, а не PersonalkaDatabase.VERSION: KSP не разбирает ссылку класса на свою же константу.
     // VERSION ниже должна совпадать — это проверяет тест.
-    version = 25,
+    version = 26,
     exportSchema = true,
 )
 @ColumnTypeConverters(Converters::class)
@@ -122,6 +130,7 @@ abstract class PersonalkaDatabase : RoomDatabase() {
     abstract fun syncDao(): SyncDao
     abstract fun moneyDao(): MoneyDao
     abstract fun report1cDao(): Report1cDao
+    abstract fun competitionDao(): CompetitionDao
 
     companion object {
         /**
@@ -141,9 +150,10 @@ abstract class PersonalkaDatabase : RoomDatabase() {
          * 23 — переход цвета личных дел ([Migration22To23], шаг 5.14е).
          * 24 — переход своего цвета дежурства ([Migration23To24], шаг 5.16).
          * 25 — «Уточнить, придёт ли»: выключатель и порог ([Migration24To25], шаг 5.37).
+         * 26 — соревнования: соревнования, участники и старты ([Migration25To26], шаг 5.38).
          * Перед переходом на новую версию — копия ([BeforeMigration], шаг 2.7б).
          */
-        const val VERSION = 25
+        const val VERSION = 26
         const val FILE_NAME = "personalka.db"
     }
 }

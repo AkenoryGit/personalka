@@ -2,8 +2,12 @@ package com.akenory.personalka.data.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.akenory.personalka.data.db.entity.ClientAlias1cEntity
+import com.akenory.personalka.data.db.entity.CompetitionEntity
+import com.akenory.personalka.data.db.entity.CompetitionEntryEntity
+import com.akenory.personalka.data.db.entity.CompetitionStartEntity
 import com.akenory.personalka.domain.model.Owner
 import com.akenory.personalka.domain.model.ParticipationStatus
+import com.akenory.personalka.domain.model.SwimStyle
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -819,8 +823,42 @@ class MigrationTest {
     }
 
     @Test
-    fun newDatabaseIsVersion25() {
-        assertEquals(25, PersonalkaDatabase.VERSION)
+    fun version25GetsEmptyCompetitionTables(): Unit = runBlocking {
+        val file = File.createTempFile("personalka-v25", ".db")
+        file.delete()
+        val path = file.absolutePath
+        try {
+            // База шага 5.37: соревнований нет; результаты клиента остаются как были.
+            BundledSQLiteDriver().open(path).useConnection { raw ->
+                createVersion(raw, 25)
+                raw.exec(
+                    "INSERT INTO result (id, clientId, date, style, distanceM, poolM, timeCs, kind, eventName, note, coachId, createdAt, updatedAt, version, deletedAt) " +
+                        "VALUES ('r1', 'k1', '2026-10-10', 'FREESTYLE', 50, 50, 3812, 'TRAINING', NULL, NULL, 'c1', 1, 1, 1, NULL)",
+                )
+            }
+            val db = personalkaDatabase(path)
+            try {
+                val dao = db.competitionDao()
+                assertTrue(dao.observeCompetitions().first().isEmpty(), "Соревнований после перехода нет")
+                assertEquals(listOf(3812), dao.observeResults().first().map { it.timeCs }, "Результаты не тронуты")
+                dao.upsertCompetition(
+                    CompetitionEntity("m1", SyncFields.new("c1", 2), "Кубок города", LocalDate(2026, 12, 12), 50, rules = "M 2010 2015"),
+                )
+                dao.upsertEntry(CompetitionEntryEntity("e1", SyncFields.new("c1", 2), "m1", "k1"))
+                dao.upsertStart(CompetitionStartEntity("s1", SyncFields.new("c1", 2), "m1", "e1", "k1", SwimStyle.FREESTYLE, 50))
+                assertEquals("M 2010 2015", dao.competition("m1")?.rules)
+                assertEquals(1, dao.observeStarts().first().size)
+            } finally {
+                db.close()
+            }
+        } finally {
+            deleteDatabase(path)
+        }
+    }
+
+    @Test
+    fun newDatabaseIsVersion26() {
+        assertEquals(26, PersonalkaDatabase.VERSION)
         assertTrue((1..16).all { schemaFile(it).exists() }, "Схемы версий 1–16 хранятся: по ним строятся переходы")
     }
 }
